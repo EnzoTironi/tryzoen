@@ -1,0 +1,61 @@
+/**
+ * Host compile surface for `@zoen/operon`.
+ *
+ * Import types and the in-memory store from here in application code that is
+ * not the Effect runtime. `server/runtime.ts` must not provide this package
+ * until Mem0 is removed in the same change.
+ */
+export {
+  ActionLifecycleRejected,
+  ConcurrentModificationError,
+  HostScopedRecallCache,
+  IngestRejected,
+  InMemoryActionLifecycle,
+  InMemoryAuthority,
+  InMemoryObjectStore,
+  InMemorySourceIngest,
+  InMemoryWhatsApp,
+  InMemoryJ1Workflow,
+  J1WorkflowRejected,
+  InMemoryHostExperience,
+  ExperienceRejected,
+  InMemoryRoutines,
+  RoutinesRejected,
+  MailRejected,
+  InMemoryMail,
+  ObjectInstanceSchema,
+  acceptActionInput,
+  actionDefSchema,
+  bindChatYes,
+  classifyLocator,
+  deliveryFulfillment,
+  replyLengthPolicy,
+  pollInbox,
+  mailOutcome,
+  selectConnectedAccount,
+  whatsAppSendClaim,
+  claimSchema,
+  corroboratingProviderIds,
+  definitionArtifactSchema,
+  defineObjectType,
+  defineProperty,
+  evaluateEvidence,
+  evidenceObservationsFromRecall,
+  j1DefinitionArtifact,
+  objectTypeIdSchema,
+  projectActionSurfaces,
+  projectObjectSection,
+  projectScopedSection,
+  refuseIncomingRequestAutoAccept,
+  selectHostScopedContext,
+  selectRelevantContext,
+} from "@zoen/operon";
+export type {
+  ActionDef,
+  ActionHostBinding,
+  Claim,
+  DefinitionArtifact,
+  ObjectSnapshot,
+  SourceOccurrence,
+  SourceReference,
+} from "@zoen/operon";
