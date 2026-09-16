@@ -32,9 +32,13 @@ export function getLatestTurnFailure(
     if (!event) continue;
 
     if (isTurnFailureEvent(event) && event.type === "turn.failed") {
-      return event.data.code === "MODEL_CALL_FAILED"
-        ? modelAccessFailureMessage(event.data.message)
-        : event.data.message;
+      if (event.data.code === "MODEL_CALL_FAILED") {
+        return modelAccessFailureMessage(event.data.message);
+      }
+      if (event.data.code === "MODEL_SELECTION_FAILED") {
+        return chatFailureCopy.modelRejected;
+      }
+      return event.data.message;
     }
     if (
       event.type === "turn.completed" ||
@@ -54,7 +58,7 @@ function modelAccessFailureMessage(detail: string) {
     return chatFailureCopy.modelCredits;
   }
   if (
-    /unauthori[sz]ed|authentication|invalid.*(?:key|token)|\b40[13]\b/iu.test(
+    /unauthori[sz]ed|authentication|invalid.*(?:key|token)|no credentials|\b40[13]\b/iu.test(
       detail
     )
   ) {

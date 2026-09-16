@@ -85,4 +85,44 @@ describe("turn failures", () => {
     expect(getLatestTurnFailure(events)).not.toContain("401");
     expect(getLatestTurnFailure(events)).not.toContain("api key");
   });
+
+  it("surfaces a failed workspace model selection without the reconnect payload", () => {
+    const events = [
+      {
+        data: {
+          code: "MODEL_SELECTION_FAILED",
+          message: "Reconnect the model account in Connections to continue.",
+          sequence: 1,
+          turnId: "turn-4",
+        },
+        meta: { at: "2026-09-16T11:48:00.000Z", id: "failed" },
+        type: "turn.failed",
+      },
+    ] satisfies MessageStreamEvent[];
+
+    expect(getLatestTurnFailure(events)).toBe(
+      "The model provider rejected this request. Check the configured model connection."
+    );
+    expect(getLatestTurnFailure(events)).not.toContain("Reconnect");
+  });
+
+  it("surfaces missing gateway credentials as a rejected connection", () => {
+    const events = [
+      {
+        data: {
+          code: "MODEL_CALL_FAILED",
+          message: "AI Gateway received no credentials.",
+          sequence: 1,
+          turnId: "turn-5",
+        },
+        meta: { at: "2026-09-16T11:58:00.000Z", id: "failed" },
+        type: "turn.failed",
+      },
+    ] satisfies MessageStreamEvent[];
+
+    expect(getLatestTurnFailure(events)).toBe(
+      "The model provider rejected this request. Check the configured model connection."
+    );
+    expect(getLatestTurnFailure(events)).not.toContain("AI Gateway");
+  });
 });
