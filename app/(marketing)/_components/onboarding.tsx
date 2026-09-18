@@ -77,6 +77,7 @@ export function OnboardingTrigger({
   children,
   ...props
 }: Omit<ButtonProps, "render" | "nativeButton">) {
+  const { t } = useI18n();
   const destinations = useContext(OnboardingContext);
   const href = conversationStartHref(destinations);
   return (
@@ -84,7 +85,11 @@ export function OnboardingTrigger({
       {...props}
       nativeButton={false}
       render={
-        href === "/get-started" ? <Link href={href} /> : <a href={href} />
+        href === "/get-started" ? (
+          <Link href={href} />
+        ) : (
+          <a aria-label={t("Começar")} href={href} />
+        )
       }
     >
       {children}

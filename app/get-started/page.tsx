@@ -1,7 +1,9 @@
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { WEEKEND_IMESSAGE_URL } from "../../server/channels/destination";
+import { OnboardingShell } from "@web/auth/onboarding/shell";
+import { weekendPublicDestinations } from "../../server/channels/destination";
+import { GetStartedPanel } from "./_components/get-started-panel";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -13,5 +15,15 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function GetStartedPage() {
-  redirect(WEEKEND_IMESSAGE_URL);
+  const destinations = weekendPublicDestinations;
+  if (destinations.imessage) redirect(destinations.imessage);
+  return (
+    <OnboardingShell>
+      <GetStartedPanel
+        whatsappUrl={destinations.whatsapp}
+        telegramUrl={destinations.telegram}
+        imessageUrl={destinations.imessage}
+      />
+    </OnboardingShell>
+  );
 }

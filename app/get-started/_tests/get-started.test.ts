@@ -83,7 +83,9 @@ describe("conversation entry", () => {
     );
   });
   it("sends every public start to the weekend iMessage draft", () => {
-    expect(() => GetStartedPage()).toThrow("redirect");
+    expect(() => {
+      GetStartedPage();
+    }).toThrow("redirect");
     expect(redirect).toHaveBeenCalledWith(
       "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen"
     );
