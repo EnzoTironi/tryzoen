@@ -1,11 +1,9 @@
-import { Effect } from "effect";
-import { conversationDestinations } from "../../server/channels/destination";
+import { weekendPublicDestinations } from "../../server/channels/destination";
 import { OnboardingProvider } from "./_components/onboarding";
 
-export default async function MarketingLayout({ children }: LayoutProps<"/">) {
-  const destinations = await Effect.runPromise(conversationDestinations);
+export default function MarketingLayout({ children }: LayoutProps<"/">) {
   return (
-    <OnboardingProvider destinations={destinations}>
+    <OnboardingProvider destinations={weekendPublicDestinations}>
       {children}
     </OnboardingProvider>
   );

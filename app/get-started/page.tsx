@@ -1,9 +1,8 @@
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Effect } from "effect";
 import { OnboardingShell } from "@web/auth/onboarding/shell";
-import { conversationDestinations } from "../../server/channels/destination";
+import { weekendPublicDestinations } from "../../server/channels/destination";
 import { GetStartedPanel } from "./_components/get-started-panel";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -15,24 +14,9 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function GetStartedPage({
-  searchParams,
-}: PageProps<"/get-started">) {
-  const params = await searchParams;
-  if (params.channel === undefined)
-    redirect("/sign-in?callbackUrl=%2Fonboarding");
-  const destinations = await Effect.runPromise(conversationDestinations);
-  const destination =
-    params.channel === "imessage"
-      ? destinations.imessage
-      : params.channel === "telegram"
-        ? destinations.telegram
-        : params.channel === "whatsapp"
-          ? (destinations.whatsapp ??
-            destinations.telegram ??
-            destinations.imessage)
-          : null;
-  if (destination) redirect(destination);
+export default function GetStartedPage() {
+  const destinations = weekendPublicDestinations;
+  if (destinations.imessage) redirect(destinations.imessage);
   return (
     <OnboardingShell>
       <GetStartedPanel
