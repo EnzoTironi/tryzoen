@@ -35,6 +35,19 @@ function ChannelIcon({
   );
 }
 
+function conversationStartHref(
+  destinations: Effect.Success<typeof conversationDestinations> | null
+) {
+  if (
+    destinations?.imessage &&
+    destinations.whatsapp === null &&
+    destinations.telegram === null
+  ) {
+    return destinations.imessage;
+  }
+  return "/get-started";
+}
+
 export function ConversationIcons() {
   const { t } = useI18n();
   const destinations = useContext(OnboardingContext);
@@ -42,23 +55,14 @@ export function ConversationIcons() {
     <nav aria-label={t("Escolha seu mensageiro")} className={styles.icons}>
       {channels.map((channel) => {
         const destination = destinations?.[channel.id];
-        return destination ? (
+        if (!destination) return null;
+        return (
           <Button
             aria-label={channel.label}
             className={styles.iconButton}
             key={channel.id}
             nativeButton={false}
             render={<a aria-label={channel.label} href={destination} />}
-            size="icon"
-          >
-            <ChannelIcon channel={channel} />
-          </Button>
-        ) : (
-          <Button
-            aria-label={channel.label}
-            className={styles.iconButton}
-            disabled
-            key={channel.id}
             size="icon"
           >
             <ChannelIcon channel={channel} />
@@ -73,11 +77,15 @@ export function OnboardingTrigger({
   children,
   ...props
 }: Omit<ButtonProps, "render" | "nativeButton">) {
+  const destinations = useContext(OnboardingContext);
+  const href = conversationStartHref(destinations);
   return (
     <Button
       {...props}
       nativeButton={false}
-      render={<Link href="/get-started" />}
+      render={
+        href === "/get-started" ? <Link href={href} /> : <a href={href} />
+      }
     >
       {children}
     </Button>

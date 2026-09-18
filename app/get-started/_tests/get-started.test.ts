@@ -73,82 +73,20 @@ describe("conversation entry", () => {
     });
     expect(result.authorization.url).toBe("https://t.me/companion_test_bot");
     expect(result.authorization.installationId).toBe("test-bot-id");
-  });
-  it("opens the configured WhatsApp when explicitly selected", async () => {
-    channelConfig.KAPSO_PHONE_NUMBER_ID = "";
-    await expect(
-      GetStartedPage({
-        params: Promise.resolve({}),
-        searchParams: Promise.resolve({ channel: "whatsapp" }),
-      })
-    ).rejects.toThrow("redirect");
-    expect(redirect).toHaveBeenCalledWith(
-      "https://wa.me/15551234567?text=Oi%2C+Zoen%21"
+    expect(actual.weekendPublicDestinations).toEqual({
+      whatsapp: null,
+      telegram: null,
+      imessage: actual.WEEKEND_IMESSAGE_URL,
+    });
+    expect(actual.WEEKEND_IMESSAGE_URL).toBe(
+      "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen"
     );
   });
-  it("honors the Telegram choice", async () => {
-    await expect(
-      GetStartedPage({
-        params: Promise.resolve({}),
-        searchParams: Promise.resolve({ channel: "telegram" }),
-      })
-    ).rejects.toThrow("redirect");
-    expect(redirect).toHaveBeenCalledWith("https://t.me/companion_test_bot");
-  });
-  it("opens Messages at the configured number without adding message content", async () => {
-    channelConfig.LINQ_CONNECTOR = "linq/synthetic-test";
-    await expect(
-      GetStartedPage({
-        params: Promise.resolve({}),
-        searchParams: Promise.resolve({ channel: "imessage" }),
-      })
-    ).rejects.toThrow("redirect");
-    expect(redirect).toHaveBeenCalledWith("sms:+15557654321");
-  });
-  it("keeps iMessage unavailable until Linq is activated, even with a marketing number", async () => {
-    const page = await GetStartedPage({
-      params: Promise.resolve({}),
-      searchParams: Promise.resolve({ channel: "imessage" }),
-    });
-    expect(redirect).not.toHaveBeenCalled();
-    expect(renderToStaticMarkup(page)).not.toContain('href="sms:');
-  });
-  it("starts a single account flow before linking messengers", async () => {
-    await expect(
-      GetStartedPage({
-        params: Promise.resolve({}),
-        searchParams: Promise.resolve({}),
-      })
-    ).rejects.toThrow("redirect");
-    expect(redirect).toHaveBeenCalledWith("/sign-in?callbackUrl=%2Fonboarding");
-  });
-  it("never treats a query parameter as a redirect destination", async () => {
-    const page = await GetStartedPage({
-      params: Promise.resolve({}),
-      searchParams: Promise.resolve({
-        channel: "https://example.com",
-        callbackUrl: "https://example.com",
-      }),
-    });
-    expect(redirect).not.toHaveBeenCalled();
-    const html = renderToStaticMarkup(page);
-    expect(html).toContain("Abrir WhatsApp");
-    expect(html).not.toContain("example.com");
-  });
-  it("shows an honest unavailable state for missing or malformed destinations", async () => {
-    channelConfig.KAPSO_PHONE_NUMBER = "+15551234567/evil";
-    channelConfig.TELEGRAM_BOT_USERNAME = "";
-    channelConfig.LINQ_PHONE_NUMBER = "+15557654321?body=evil";
-    const page = await GetStartedPage({
-      params: Promise.resolve({}),
-      searchParams: Promise.resolve({ channel: "whatsapp" }),
-    });
-    expect(redirect).not.toHaveBeenCalled();
-    const html = renderToStaticMarkup(page);
-    expect(html).toContain("A conversa ainda não está disponível");
-    expect(html).not.toContain("wa.me");
-    expect(html).not.toContain("t.me/");
-    expect(html).not.toContain("sms:");
+  it("sends every public start to the weekend iMessage draft", () => {
+    expect(() => GetStartedPage()).toThrow("redirect");
+    expect(redirect).toHaveBeenCalledWith(
+      "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen"
+    );
   });
   it("offers direct conversation links without a signup form or pricing page", () => {
     const html = renderToStaticMarkup(

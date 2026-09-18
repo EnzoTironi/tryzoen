@@ -79,3 +79,16 @@ export const conversationDestinations = Effect.all({
     Effect.catch(() => Effect.succeed(null))
   ),
 });
+
+/**
+ * Temporary public CTA for this weekend (remove after 2026-09-21).
+ * Every marketing start opens this iMessage draft to the agent-index setup.
+ */
+export const WEEKEND_IMESSAGE_URL =
+  "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen";
+
+export const weekendPublicDestinations = {
+  whatsapp: null,
+  telegram: null,
+  imessage: WEEKEND_IMESSAGE_URL,
+} satisfies Effect.Success<typeof conversationDestinations>;
