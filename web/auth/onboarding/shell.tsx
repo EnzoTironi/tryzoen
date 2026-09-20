@@ -21,11 +21,7 @@ export function OnboardingShell({
     <div className={styles.shell}>
       <Sky phase={sky} />
       <header className={styles.header}>
-        <Link
-          href="/welcome"
-          className={styles.brand}
-          aria-label={t("Zoen — início")}
-        >
+        <Link href="/" className={styles.brand} aria-label={t("Zoen — início")}>
           <Logo /> <span>Zoen</span>
         </Link>
         <div className={styles.language}>

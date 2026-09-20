@@ -53,7 +53,7 @@
 .landingShell > header nav {
   display: none;
 }
-.landingShell > header a[href="/welcome"] {
+.landingShell > header a[href="/"] {
   font-size: 1.55rem;
   letter-spacing: -0.05em;
   gap: 10px;
@@ -111,7 +111,7 @@
   .landingShell > header > div:first-child > div {
     padding-left: 16px;
   }
-  .landingShell > header a[href="/welcome"] {
+  .landingShell > header a[href="/"] {
     font-size: 1.25rem;
     gap: 9px;
   }

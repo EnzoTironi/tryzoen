@@ -58,8 +58,9 @@ copy. Do **not** market messenger-first account creation; Google is required.
 - Not an account merge between two separately provisioned identities. The
   remaining split-pilot join is the explicit archive path, not ordinary
   first-run.
-- Public marketing packaging lives at `/welcome` and `/docs`
-  (C-PACK). Unauthenticated `/` redirects to `/welcome`.
+- Public marketing packaging lives at `https://tryzoen.com/` and `/docs`
+  (C-PACK). `/welcome` permanently redirects to `/`. The product app is
+  `https://app.tryzoen.com`.
 
 ## Acceptance (product)
 
@@ -74,7 +75,7 @@ copy. Do **not** market messenger-first account creation; Google is required.
 
 ## Zoen public deployment
 
-The public marketing origin is `https://zoen.tironi.xyz`. Use
+The public marketing origin is `https://tryzoen.com`. Use
 `MARKETING_WHATSAPP_NUMBER`, `MARKETING_TELEGRAM_USERNAME` and
 `MARKETING_IMESSAGE_NUMBER` to configure the website conversation links independently
 from the existing channel installation. Each value is validated before becoming a

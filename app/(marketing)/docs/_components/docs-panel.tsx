@@ -64,7 +64,7 @@ export function DocsPanel() {
               <OnboardingTrigger>{t("Começar agora")}</OnboardingTrigger>
               <Button
                 nativeButton={false}
-                render={<Link href="/welcome" />}
+                render={<Link href="/" />}
                 variant="outline"
               >
                 {t("Voltar ao produto")}

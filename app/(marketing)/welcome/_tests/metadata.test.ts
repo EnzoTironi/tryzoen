@@ -21,12 +21,12 @@ describe("welcome generateMetadata", () => {
 
     expect(metadata.title).toBe("Zoen — sua vida tem companhia");
     expect(metadata.alternates).toEqual({
-      canonical: "https://zoen.tironi.xyz/welcome",
+      canonical: "https://tryzoen.com/",
     });
     expect(metadata.openGraph).toMatchObject({
       title: zoenSocialTitle,
       description: zoenSocialDescription,
-      url: "https://zoen.tironi.xyz/welcome",
+      url: "https://tryzoen.com/",
       type: "website",
       siteName: "Zoen",
     });

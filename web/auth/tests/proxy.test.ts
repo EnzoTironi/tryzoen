@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/require-mock-type-parameters -- The auth mock implements only the proxy boundary exercised here. */
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { getAuthSession } from "@db/services/auth/session";
 import { config, proxy } from "../../../proxy";
 
 const mocks = vi.hoisted(() => ({
-  getAuthSession: vi.fn<typeof getAuthSession>(),
+  getAuthSession: vi.fn(),
 }));
 
 vi.mock("@db/services/auth/session", () => ({
@@ -92,9 +93,9 @@ describe("auth proxy matcher", () => {
     expect(getAuthSession).not.toHaveBeenCalled();
   });
 
-  it("allows marketing welcome, pricing, and docs without a browser session", async () => {
+  it("allows marketing pricing and docs without a browser session", async () => {
     const responses = await Promise.all(
-      (["/welcome", "/pricing", "/docs"] as const).map((path) =>
+      (["/pricing", "/docs"] as const).map((path) =>
         proxy(new NextRequest(`https://example.com${path}`))
       )
     );
@@ -104,12 +105,98 @@ describe("auth proxy matcher", () => {
     expect(getAuthSession).not.toHaveBeenCalled();
   });
 
-  it("sends unauthenticated home visitors to the marketing landing", async () => {
+  it("serves the marketing landing at / on a combined local host", async () => {
     const response = await proxy(new NextRequest("https://example.com/"));
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-rewrite")).toBe(
       "https://example.com/welcome"
     );
+    expect(getAuthSession).toHaveBeenCalledOnce();
+  });
+
+  it("lets an authenticated visitor keep the workspace on a combined host", async () => {
+    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } });
+    const response = await proxy(new NextRequest("https://example.com/"));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.has("location")).toBe(false);
+  });
+
+  it("permanently folds /welcome into / on a combined local host", async () => {
+    const response = await proxy(
+      new NextRequest("https://example.com/welcome?x=1")
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://example.com/?x=1");
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("sends legacy marketing home to tryzoen.com and app paths to the app host", async () => {
+    const welcome = await proxy(
+      new NextRequest("https://zoen.tironi.xyz/welcome?x=1")
+    );
+    expect(welcome.status).toBe(308);
+    expect(welcome.headers.get("location")).toBe("https://tryzoen.com/?x=1");
+
+    const signIn = await proxy(
+      new NextRequest("https://zoen.tironi.xyz/sign-in?callbackUrl=%2Fchat")
+    );
+    expect(signIn.status).toBe(308);
+    expect(signIn.headers.get("location")).toBe(
+      "https://app.tryzoen.com/sign-in?callbackUrl=%2Fchat"
+    );
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("rewrites the apex landing and sends apex app paths to app.tryzoen.com", async () => {
+    const home = await proxy(new NextRequest("https://tryzoen.com/?ref=1"));
+    expect(home.status).toBe(200);
+    expect(home.headers.get("x-middleware-rewrite")).toBe(
+      "https://tryzoen.com/welcome?ref=1"
+    );
+
+    const signIn = await proxy(new NextRequest("https://tryzoen.com/sign-in"));
+    expect(signIn.status).toBe(308);
+    expect(signIn.headers.get("location")).toBe(
+      "https://app.tryzoen.com/sign-in"
+    );
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the authenticated app home on app.tryzoen.com", async () => {
+    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } });
+    const response = await proxy(new NextRequest("https://app.tryzoen.com/"));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.has("location")).toBe(false);
+  });
+
+  it("sends signed-out app home and marketing paths to the apex", async () => {
+    const home = await proxy(new NextRequest("https://app.tryzoen.com/"));
+    expect(home.status).toBe(308);
+    expect(home.headers.get("location")).toBe("https://tryzoen.com/");
+
+    const docs = await proxy(new NextRequest("https://app.tryzoen.com/docs"));
+    expect(docs.status).toBe(308);
+    expect(docs.headers.get("location")).toBe("https://tryzoen.com/docs");
+  });
+
+  it("honors Host when the request URL is a loopback or Fly address", async () => {
+    const response = await proxy(
+      new NextRequest("http://127.0.0.1:3010/welcome?x=1", {
+        headers: { host: "zoen.tironi.xyz" },
+      })
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://tryzoen.com/?x=1");
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("does not relocate Eve health on the legacy host", async () => {
+    const response = await proxy(
+      new NextRequest("https://zoen.tironi.xyz/eve/v1/health")
+    );
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.has("location")).toBe(false);
+    expect(getAuthSession).not.toHaveBeenCalled();
   });
 
   it("allows the document icon and favicon without a browser session", async () => {

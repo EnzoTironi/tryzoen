@@ -14,7 +14,7 @@ import styles from "./marketing-shell.module.css";
 import { OnboardingTrigger } from "./onboarding";
 
 const nav = [
-  { href: "/welcome", label: "Produto" },
+  { href: "/", label: "Produto" },
   { href: "/docs", label: "Guia" },
 ] as const;
 
@@ -52,7 +52,7 @@ export function MarketingShell({
     >
       <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <MarketingFrame className="flex h-16 items-center justify-between gap-4">
-          <Link className="flex items-center gap-2 type-label" href="/welcome">
+          <Link className="flex items-center gap-2 type-label" href="/">
             <Logo />
             <span>Zoen</span>
           </Link>
@@ -104,10 +104,7 @@ export function MarketingShell({
         <Separator />
         <MarketingFrame className="flex flex-col gap-8 py-12 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex max-w-sm flex-col gap-2">
-            <Link
-              className="flex items-center gap-2 type-label"
-              href="/welcome"
-            >
+            <Link className="flex items-center gap-2 type-label" href="/">
               <Logo />
               <span>Zoen</span>
             </Link>
@@ -123,7 +120,7 @@ export function MarketingShell({
             </p>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 type-caption text-muted-foreground">
-            <Link className="hover:text-foreground" href="/welcome">
+            <Link className="hover:text-foreground" href="/">
               {t("Produto")}
             </Link>
             <Link className="hover:text-foreground" href="/docs">
@@ -158,7 +155,7 @@ function NavItem({
 }) {
   const { t } = useI18n();
   const isActive =
-    (active === "product" && item.href === "/welcome") ||
+    (active === "product" && item.href === "/") ||
     (active === "docs" && item.href === "/docs");
   return (
     <Button

@@ -6,6 +6,9 @@
 set -euo pipefail
 
 BASE_URL="${COMPANION_UPTIME_BASE_URL:-https://zoen.tironi.xyz}"
+# Legacy default stays zoen.tironi.xyz so the probe works before tryzoen.com DNS
+# is live. After the apex answers HTTPS, set COMPANION_UPTIME_BASE_URL to
+# https://tryzoen.com (landing at /) or https://app.tryzoen.com (health only).
 ALERT=1
 QUIET=0
 
@@ -14,7 +17,7 @@ usage() {
 Usage: scripts/companion-uptime-probe.sh [--no-alert] [--quiet]
 
 Probes:
-  GET  $BASE_URL/welcome                     expect HTTP 200
+  GET  $BASE_URL/welcome                     expect HTTP 200 (apex) or 308 (legacy)
   GET  $BASE_URL/eve/v1/health               expect HTTP 200
   POST $BASE_URL/api/channels/telegram       unsigned JSON → expect HTTP 401
   POST $BASE_URL/api/channels/kapso          unsigned JSON → expect HTTP 401
@@ -66,8 +69,10 @@ failures=()
 check_welcome() {
   local code
   code="$(http_code GET "${BASE_URL}/welcome")"
-  if [[ "$code" != "200" ]]; then
-    failures+=("GET /welcome → ${code} (expected 200)")
+  # Apex serves the landing at / and 308s /welcome there. Legacy hosts 308
+  # /welcome to https://tryzoen.com/. Combined local hosts also 308 to /.
+  if [[ "$code" != "200" && "$code" != "308" && "$code" != "301" ]]; then
+    failures+=("GET /welcome → ${code} (expected 200 or 308)")
   elif [[ "$QUIET" -eq 0 ]]; then
     echo "ok welcome=${code}"
   fi
