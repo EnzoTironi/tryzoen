@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { zoenSocialDescription, zoenSocialImageUrl, zoenSocialTitle } from "../../social";
+import {
+  zoenSocialDescription,
+  zoenSocialImageUrl,
+  zoenSocialTitle,
+} from "../../social";
 
 vi.mock("@web/i18n/server", () => ({
   getI18n: async () => ({
