@@ -48,7 +48,7 @@ NODE_ENV=production pnpm build
 pnpm start --port 3000
 ```
 
-Open `http://localhost:3000/welcome`. These synthetic credentials do not enable
+Open `http://localhost:3000/`. These synthetic credentials do not enable
 model access, external messenger delivery or real sign-in confirmation. Browser
 verification uses disposable Better Auth accounts from the runtime fixture.
 For development in the same shell, stop the built server and use

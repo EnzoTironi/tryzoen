@@ -32,6 +32,8 @@ export const hosted = Effect.gen(function* () {
     ? production.memory.app
     : `zoen-memory-${policy.stage}`;
   const hostname = prod ? production.hostname : `${webName}.fly.dev`;
+  const appHostname = prod ? production.appHostname : hostname;
+  const appOrigin = `https://${appHostname}`;
 
   const postgresApp = yield* Fly.App("PostgresApp", {
     name: pgName,
@@ -203,7 +205,7 @@ export const hosted = Effect.gen(function* () {
     stage: policy.stage,
     provision: vaultSecrets,
     databaseHost: databases.host,
-    issuer: `https://${hostname}/api/auth`,
+    issuer: `${appOrigin}/api/auth`,
     databaseRelease: databases.release,
   });
 
@@ -308,8 +310,8 @@ export const hosted = Effect.gen(function* () {
       ZOEN_BETA_IDENTITIES: yield* Config.string("ZOEN_BETA_IDENTITIES").pipe(
         Config.withDefault("")
       ),
-      BETTER_AUTH_URL: `https://${hostname}`,
-      COMPANION_PUBLIC_BASE_URL: `https://${hostname}`,
+      BETTER_AUTH_URL: appOrigin,
+      COMPANION_PUBLIC_BASE_URL: appOrigin,
       WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:3000",
       ZOEN_MEM0_URL: `http://${memoryName}.internal:8000`,
       ZOEN_MATRIX_URL: `http://${matrixSecrets.name}.internal:8008`,
@@ -403,8 +405,8 @@ export const hosted = Effect.gen(function* () {
       proxied: false,
     }).pipe(adopt(true), retain(true));
     yield* ReconcileChannelWebhooks({
-      baseUrl: `https://${hostname}`,
-      legacyBaseUrl: "https://companion.tironi.xyz",
+      baseUrl: appOrigin,
+      legacyBaseUrl: `https://${hostname}`,
       machine: web.machineId,
       release: webImage,
       credentialVersion: webSecrets,
@@ -412,7 +414,8 @@ export const hosted = Effect.gen(function* () {
   }
   return {
     stage: policy.stage,
-    url: `https://${hostname}`,
+    url: appOrigin,
+    marketingUrl: `https://${prod ? production.marketingHostname : hostname}`,
     postgres: postgres.machineId,
     memory: memory.machineId,
     matrix: matrix.machineId,

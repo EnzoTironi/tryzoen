@@ -57,7 +57,7 @@ export function GetStartedPanel({
       ) : (
         <Button
           nativeButton={false}
-          render={<Link href="/welcome" />}
+          render={<Link href="/" />}
           size="lg"
           className="w-full"
         >

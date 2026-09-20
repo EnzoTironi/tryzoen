@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthSession } from "@db/services/auth/session";
+import {
+  isAppHost,
+  isMarketingHost,
+  publicHostRedirect,
+  companionPublicOrigin,
+} from "@app/(marketing)/public-origin";
 
 const publicExact = new Set([
   "/sign-in",
@@ -32,8 +38,27 @@ function isPublicPath(pathname: string) {
   return false;
 }
 
+function rewriteLanding(request: NextRequest) {
+  const url = new URL("/welcome", request.url);
+  url.search = request.nextUrl.search;
+  return NextResponse.rewrite(url);
+}
+
 export async function proxy(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+  const { pathname, hostname, search } = request.nextUrl;
+
+  const relocated = publicHostRedirect(hostname, pathname, search);
+  if (relocated) return NextResponse.redirect(relocated, 308);
+
+  if (pathname === "/welcome") {
+    const home = new URL("/", request.url);
+    home.search = search;
+    return NextResponse.redirect(home, 308);
+  }
+
+  if (pathname === "/" && isMarketingHost(hostname)) {
+    return rewriteLanding(request);
+  }
 
   if (isPublicPath(pathname)) {
     return NextResponse.next();
@@ -49,9 +74,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request: { headers } });
   }
 
-  // Unauthenticated visitors hitting home see the marketing landing.
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/welcome", request.url));
+    if (isAppHost(hostname)) {
+      return NextResponse.redirect(`${companionPublicOrigin}/${search}`, 308);
+    }
+    return rewriteLanding(request);
   }
 
   const signInUrl = new URL("/sign-in", request.url);

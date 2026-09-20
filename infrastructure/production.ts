@@ -3,6 +3,8 @@ export const production = {
   region: "gru",
   organization: "enzo-tironi-287",
   hostname: "zoen.tironi.xyz",
+  marketingHostname: "tryzoen.com",
+  appHostname: "app.tryzoen.com",
   database: {
     app: "companion-pg-prod",
     machine: "48e7799a470d28",

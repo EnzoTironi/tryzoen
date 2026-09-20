@@ -136,8 +136,8 @@ real secrets in this file or in commits.
 | Name                                   | Role                                                                         |
 | -------------------------------------- | ---------------------------------------------------------------------------- |
 | `BETTER_AUTH_SECRET`                   | Auth signing secret                                                          |
-| `BETTER_AUTH_URL`                      | Public application origin                                                    |
-| `COMPANION_PUBLIC_BASE_URL`            | Public HTTPS origin (webhooks; interim live: `https://companion.tironi.xyz`) |
+| `BETTER_AUTH_URL`                      | Public product-app origin (hosted: `https://app.tryzoen.com`)                |
+| `COMPANION_PUBLIC_BASE_URL`            | Public HTTPS origin for webhooks (hosted: same as `BETTER_AUTH_URL`)         |
 | `DATABASE_URL`                         | App Postgres URL                                                             |
 | `DATABASE_URL_UNPOOLED`                | Unpooled / migrate-friendly Postgres URL                                     |
 | `WORKFLOW_POSTGRES_URL`                | Optional Eve Workflow DB (else `DATABASE_URL`)                               |
@@ -262,10 +262,11 @@ blocker notes:
 
 → **[infrastructure/ingress/README.md](../infrastructure/ingress/README.md)**
 
-**Current interim public base (2026-09-10):** `https://companion.tironi.xyz`
-(named Cloudflare Tunnel on the EnzoTironi account). Telegram + Kapso standing
-webhooks already target that origin via `pnpm ingress:set-webhooks`. Set
-`COMPANION_PUBLIC_BASE_URL=https://companion.tironi.xyz` on the Mac runtime.
+**Current hosted public base:** marketing `https://tryzoen.com`, product and
+webhooks `https://app.tryzoen.com`. Set `BETTER_AUTH_URL` and
+`COMPANION_PUBLIC_BASE_URL` to the app origin. See
+[ops/tryzoen-domain.md](ops/tryzoen-domain.md). Local / Mac installs still use
+their own public origin.
 
 `app.zoen.space` remains **Fly DNS for the Zoen product site** — do **not**
 point it at the Companion tunnel. A zoen.space Companion hostname cutover is

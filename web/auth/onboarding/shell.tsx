@@ -22,7 +22,7 @@ export function OnboardingShell({
       <Sky phase={sky} />
       <header className={styles.header}>
         <Link
-          href="/welcome"
+          href="/"
           className={styles.brand}
           aria-label={t("Zoen — início")}
         >

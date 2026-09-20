@@ -1,10 +1,14 @@
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
-import { companionCanonicalPath, companionPublicHost } from "../public-origin";
+import {
+  companionCanonicalPath,
+  companionPublicHost,
+  companionPublicOrigin,
+} from "../public-origin";
 import { zoenSocialMetadata } from "../social";
 import { MarketingLanding } from "./_components/marketing-landing";
 
-const canonical = companionCanonicalPath("/welcome");
+const canonical = companionCanonicalPath("/");
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -14,10 +18,11 @@ export async function generateMetadata(): Promise<Metadata> {
     { host: companionPublicHost }
   );
   return {
+    metadataBase: new URL(companionPublicOrigin),
     title,
     description,
     alternates: { canonical },
-    ...zoenSocialMetadata({ path: "/welcome" }),
+    ...zoenSocialMetadata({ path: "/" }),
   };
 }
 

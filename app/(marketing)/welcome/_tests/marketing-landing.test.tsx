@@ -54,8 +54,9 @@ describe("marketing landing", () => {
         <MarketingLanding />
       </OnboardingProvider>
     );
-    expect(html).toContain("zoen.tironi.xyz");
-    expect(html).toContain("https://zoen.tironi.xyz");
+    expect(html).toContain("tryzoen.com");
+    expect(html).toContain("https://tryzoen.com");
+    expect(html).not.toContain("zoen.tironi.xyz");
     expect(html).not.toContain("zoen.space");
     expect(html).not.toContain("poke.com");
     expect(html).not.toContain("Ver todos os planos");

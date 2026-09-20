@@ -16,7 +16,7 @@ providers. PostgreSQL is self-hosted; no managed Postgres product is provisioned
 | Private WhatsApp bridge  | zoen-whatsapp-tironi, gru, 1 shared CPU / 512 MB; mautrix-whatsapp v0.2608.0, restricted database zoen_whatsapp; not started in CI |
 | Memory persistence       | PostgreSQL database zoen_memory and separate login; stateless API without a local memory volume                                    |
 | Backups                  | Private Tigris bucket, pgBackRest client-side AES-256 encryption, continuous WAL archive                                           |
-| Domain                   | Cloudflare A + AAAA records and Fly TLS certificate for zoen.tironi.xyz                                                            |
+| Domain                   | Alchemy still manages Cloudflare A + AAAA + Fly TLS for zoen.tironi.xyz. Public split is tryzoen.com (marketing) + app.tryzoen.com (product); see [docs/ops/tryzoen-domain.md](../docs/ops/tryzoen-domain.md). |
 | Infrastructure state     | Alchemy Cloudflare remote state, encrypted with a separate key in Cloudflare Secrets Store                                         |
 
 All machines remain running. PostgreSQL, memory, Matrix and the WhatsApp bridge have no public service or IP.

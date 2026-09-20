@@ -8,15 +8,15 @@ import {
 
 describe("marketing social metadata", () => {
   it("uses an absolute HTTPS image and a large Twitter card", () => {
-    const metadata = zoenSocialMetadata({ path: "/welcome" });
+    const metadata = zoenSocialMetadata({ path: "/" });
 
     expect(zoenSocialImageUrl).toBe(
-      "https://zoen.tironi.xyz/marketing/zoen-running.jpg"
+      "https://tryzoen.com/marketing/zoen-running.jpg"
     );
     expect(metadata.openGraph).toMatchObject({
       title: zoenSocialTitle,
       description: zoenSocialDescription,
-      url: "https://zoen.tironi.xyz/welcome",
+      url: "https://tryzoen.com/",
       type: "website",
       siteName: "Zoen",
       images: [
@@ -56,7 +56,7 @@ describe("marketing social metadata", () => {
     expect(metadata.openGraph).toMatchObject({
       title: "Guia — primeiros passos | Zoen",
       description: "Como começar no Zoen.",
-      url: "https://zoen.tironi.xyz/docs",
+      url: "https://tryzoen.com/docs",
     });
     expect(metadata.twitter).toMatchObject({
       card: "summary_large_image",

@@ -10,6 +10,7 @@ docs and scripts only — never secret values in git, PRs, logs, or chat.
 | O02 | [WhatsApp Meta + Kapso activation](whatsapp-meta-activation.md)                                                        | Enzo (Meta/Kapso) |
 | —   | [Enzo live blockers](enzo-live-actions.md) (DNS + G03 Telegram group)                                                  | Enzo only         |
 | H01 | [Hosted Fly cutover](hosted-fly.md) — Alchemy Docker PG + Fly compute                                                  | Enzo (deploy/DNS) |
+| —   | [tryzoen.com domain split](tryzoen-domain.md) — apex marketing, `app.tryzoen.com`, legacy 308s                         | Enzo (DNS/certs)  |
 | —   | [Prod uptime + backup](prod-uptime-checklist.md) — **push alert** + health, pg_dump, rollback                          | Ops / Enzo        |
 
 **Ingress status (2026-09-10 ~16:50 PT):** Companion channel public base is interim
