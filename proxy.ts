@@ -24,6 +24,13 @@ const publicExact = new Set([
   "/eve/v1/dev/schedules/dynamic",
 ]);
 
+/** X, iMessage (facebookexternalhit), and Facebook scrapers. */
+const linkPreviewCrawler = /Twitterbot|facebookexternalhit|Facebot/i;
+
+function isLinkPreviewCrawler(request: NextRequest) {
+  return linkPreviewCrawler.test(request.headers.get("user-agent") ?? "");
+}
+
 function isPublicPath(pathname: string) {
   if (publicExact.has(pathname)) return true;
   if (pathname.startsWith("/api/auth/")) return true;
@@ -56,6 +63,19 @@ function rewriteLanding(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hostname = requestHostname(request);
+
+  if (pathname === "/welcome" && isLinkPreviewCrawler(request)) {
+    if (
+      isMarketingHost(hostname) ||
+      publicHostRedirect(hostname, pathname, search) === undefined
+    ) {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(
+      `${companionPublicOrigin}/welcome${search}`,
+      308
+    );
+  }
 
   const relocated = publicHostRedirect(hostname, pathname, search);
   if (relocated) return NextResponse.redirect(relocated, 308);
