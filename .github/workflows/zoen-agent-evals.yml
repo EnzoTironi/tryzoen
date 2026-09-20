@@ -53,7 +53,7 @@ jobs:
       ZOEN_MATRIX_SERVER_NAME: matrix.zoen.test
       ZOEN_MATRIX_AS_TOKEN: synthetic-native-matrix-appservice-token-2026
       ZOEN_MATRIX_HS_TOKEN: synthetic-native-matrix-homeserver-token-2026
-      CODEX_HOME: ${{ runner.temp }}/zoen-eval-codex
+      CODEX_HOME: /tmp/zoen-eval-codex
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
