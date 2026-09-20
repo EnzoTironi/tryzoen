@@ -11,8 +11,13 @@ describe("marketing social metadata", () => {
     const metadata = zoenSocialMetadata({ path: "/" });
 
     expect(zoenSocialImageUrl).toBe(
-      "https://tryzoen.com/marketing/zoen-running.jpg"
+      "https://tryzoen.com/marketing/zoen-running.jpg?v=20260920"
     );
+    expect(zoenSocialDescription).toBe(
+      "iMessage + SMS. One little monster who builds software. Free. No credit card. Just text."
+    );
+    expect(zoenSocialDescription).not.toMatch(/WhatsApp|Telegram|100 bucks|—/);
+    expect(zoenSocialImageUrl.startsWith("https://tryzoen.com/")).toBe(true);
     expect(metadata.openGraph).toMatchObject({
       title: zoenSocialTitle,
       description: zoenSocialDescription,
