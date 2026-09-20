@@ -119,6 +119,28 @@ Local/dev stages use Docker through `local.ts`, preserving the existing
 CompanionLocal stack and volumes. They do not use the hosted production database.
 `alchemy.fly-postgres.run.ts` remains a compatibility alias for the unified stack.
 
+## Native Codex authentication
+
+The web image installs the official Codex CLI, pinned to `0.155.1`. Eve's native
+`chatgpt()` model uses its app-server authentication. `CODEX_HOME` points to
+`/root/.eve/auth/codex` on the encrypted retained `model_auth` volume, with
+`cli_auth_credentials_store="file"` in its configuration. The production model
+remains `gpt-5.6-luna`.
+
+`CODEX_AUTH_JSON` must contain the complete native `auth.json` from a managed
+ChatGPT login (`auth_mode: "chatgpt"` and access, refresh and ID tokens). The
+entrypoint validates the seed before replacing any retained login, writes it
+with mode 600 only when absent or the deployment seed changes, and removes the
+seed from its environment. Codex owns refresh; restarting with the same seed
+preserves the renewed file. An unavailable native login prevents startup when
+either configured model uses `codex-local`.
+
+Use a dedicated login for production. Follow the official
+[headless authentication instructions](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)
+to prepare the native credential and transfer it through the protected
+`ZOEN_PRODUCTION_ENV` configuration. Never bake credentials into images or print
+them in logs. The obsolete Eve plaintext credential seed is no longer consumed.
+
 ## Backups and recovery
 
 Account erasure uses a separate private Tigris bucket, retained by Alchemy.
@@ -177,7 +199,8 @@ Runtime tests migrate twice as the migrator, execute as the restricted applicati
 role, deliver an actual Graphile HTTP job, and exercise a real private Synapse.
 
 `Zoen infrastructure` runs only on main, serializes deployments and requires a
-successful complete Checks run on the exact commit before a production deploy.
+successful complete Checks run and native launch eval run on the exact commit
+before a production deploy.
 Every deployment ends with an isolated production recovery drill. The same drill
 runs every Sunday at 04:47 UTC, after the scheduled full backup. Temporary recovery
 resources are removed even if verification fails.
@@ -186,6 +209,16 @@ Its protected configuration is supplied by `ZOEN_PRODUCTION_ENV` and
 and Vaultwarden apps; no application secrets are required by its probe.
 Rotate Fly deploy/probe tokens before their 90-day expiry. State and backup
 credentials are never included in uploaded artifacts.
+
+`Zoen native agent evals` is manually dispatched and uses an isolated `CODEX_HOME`.
+Before **each** dispatch, create a fresh dedicated managed Codex login and replace
+`CODEX_AUTH_JSON` inside the protected `ZOEN_EVAL_PROVIDERS` repository secret,
+preserving its `KERNEL_API_KEY`. The runner discards that CI grant after the run;
+it has no secret-write permission and does not maintain reusable CI credentials.
+Never copy an active desktop or production refresh grant into CI. Production
+refresh remains independent on its retained volume. This follows the official
+[one-grant-per-stream requirement](https://learn.chatgpt.com/docs/auth/ci-cd-auth)
+without adding a secret writer or storing auth in build artifacts.
 
 ## Matrix operations
 

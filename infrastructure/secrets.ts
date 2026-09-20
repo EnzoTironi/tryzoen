@@ -29,7 +29,6 @@ export const webSecretNames = [
   "TELEGRAM_WEBHOOK_SECRET",
   "OPENROUTER_API_KEY",
   "AI_GATEWAY_API_KEY",
-  "CHATGPT_AUTH_JSON",
   "CODEX_AUTH_JSON",
   "ZOEN_MEM0_API_KEY",
 ] as const;

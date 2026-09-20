@@ -217,38 +217,11 @@ Prefer **`deploy-dry` + PR** before the first live `fly deploy`. Keep Mac
 `launch-companion-prod` / cloudflared LaunchAgents loaded until ingress is
 retargeted and health-checked.
 
-## Codex / ChatGPT auth on Fly (Spark)
+## Current model authentication
 
-Live Companion on Fly can use **`codex-local`** with model **`gpt-5.3-codex-spark`**.
-Auth must exist on the Machine filesystem before `pnpm start`; do **not** bake tokens
-into the image.
-
-| Secret name         | Written by [`scripts/fly-entrypoint.sh`](../../scripts/fly-entrypoint.sh) |
-| ------------------- | ------------------------------------------------------------------------- |
-| `CHATGPT_AUTH_JSON` | `/root/.eve/auth/chatgpt.json` (chmod 600)                                |
-| `CODEX_AUTH_JSON`   | `/root/.codex/auth.json` (chmod 600)                                      |
-
-Refresh from the Mac operator machine (values never committed / never printed):
-
-```sh
-# Shape only — run locally; do not paste JSON into git/PRs/chat:
-# fly secrets set -a companion-tironi \
-#   CHATGPT_AUTH_JSON="$(cat ~/.eve/auth/chatgpt.json)" \
-#   CODEX_AUTH_JSON="$(cat ~/.codex/auth.json)"
-# Prefer sourcing from Mac ~/.codex/auth.json (and Eve chatgpt.json if present).
-./scripts/fly-companion.sh secrets-check   # names only
-```
-
-A plain `CMD ["pnpm", "start", …]` without the entrypoint drops these files on
-redeploy even when the Fly secrets remain set.
-
-If a Machine still has an inline `init.cmd` override (e.g. from a one-off
-`fly machine update -C '…'`), clear it after deploying an image that includes
-`scripts/fly-entrypoint.sh` so the image `CMD` wins:
-
-```sh
-fly machine update <machine-id> -a companion-tironi -C '' -y
-```
+For native Codex installation, credential bootstrap and refresh persistence, use
+the [current infrastructure runbook](../../infrastructure/README.md#native-codex-authentication).
+The historical secrets and cutover commands above are not the current deployment contract.
 
 ### Eve bash sandbox (`just-bash`)
 

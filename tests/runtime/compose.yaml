@@ -38,6 +38,8 @@ services:
       ]
     ports:
       - "127.0.0.1:18008:8008"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - matrix:/data
       - ./matrix:/config:ro
