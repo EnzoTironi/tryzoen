@@ -1,10 +1,9 @@
 import { getI18n } from "@web/i18n/server";
 import { PlusIcon } from "lucide-react";
 import styles from "../_components/panel.module.css";
-import { Effect, Result } from "effect";
-import Link from "next/link";
+
+import { PanelLink } from "../_components/panel-link";
 import { ReminderList } from "./reminder-list";
-import { serverRuntime } from "../../../server/runtime";
 import { listReminders } from "../../../server/schedules/queries";
 import { requireRequestScope } from "@web/auth/request-scope";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
@@ -13,12 +12,13 @@ import { Button } from "@web/components/ui/button";
 export default async function RemindersPage() {
   const { t } = await getI18n();
   const scope = await requireRequestScope();
-  const result = await serverRuntime.runPromise(
-    listReminders(scope).pipe(Effect.result)
+  const result = await Promise.try(async () => listReminders(scope)).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error })
   );
   return (
     <div className={styles.page}>
-      {(Result.isFailure(result) || result.success.reminders.length > 0) && (
+      {(!result.ok || result.value.reminders.length > 0) && (
         <header className={styles.pageHeader}>
           <div>
             <h1 className="type-page-title">{t("Já está combinado.")}</h1>
@@ -28,14 +28,14 @@ export default async function RemindersPage() {
           </div>
           <Button
             nativeButton={false}
-            render={<Link href="/chat?starter=reminder" />}
+            render={<PanelLink href="/chat?starter=reminder" />}
             variant="outline"
           >
             <PlusIcon aria-hidden="true" /> {t("Criar automação")}
           </Button>
         </header>
       )}
-      {Result.isFailure(result) ? (
+      {!result.ok ? (
         <Alert variant="destructive">
           <AlertTitle>
             {t("Não foi possível carregar as automações")}
@@ -47,7 +47,7 @@ export default async function RemindersPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <ReminderList {...result.success} />
+        <ReminderList {...result.value} />
       )}
     </div>
   );

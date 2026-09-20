@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Effect } from "effect";
 import { Button } from "@web/components/ui/button";
 import { GoogleIcon } from "@web/components/ui/google-icon";
 import { useI18n } from "@web/i18n/context";
@@ -25,23 +24,19 @@ export function GoogleSignInButton({
         onClick={() => {
           setFailed(false);
           startTransition(async () => {
-            await Effect.runPromise(
-              Effect.tryPromise(() =>
-                authClient.signIn.social({
-                  provider: "google",
-                  callbackURL: safeCallbackUrl(callbackUrl),
-                  errorCallbackURL: `/sign-in?error=google&callbackUrl=${encodeURIComponent(safeCallbackUrl(callbackUrl))}`,
-                })
-              ).pipe(
-                Effect.match({
-                  onFailure: () => {
-                    setFailed(true);
-                  },
-                  onSuccess: (result) => {
-                    setFailed(Boolean(result.error));
-                  },
-                })
-              )
+            await Promise.try(async () => {
+              return await authClient.signIn.social({
+                provider: "google",
+                callbackURL: safeCallbackUrl(callbackUrl),
+                errorCallbackURL: `/sign-in?error=google&callbackUrl=${encodeURIComponent(safeCallbackUrl(callbackUrl))}`,
+              });
+            }).then(
+              (result) => {
+                setFailed(Boolean(result.error));
+              },
+              () => {
+                setFailed(true);
+              }
             );
           });
         }}

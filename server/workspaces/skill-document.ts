@@ -1,15 +1,15 @@
-import { Schema } from "effect";
+import { z } from "zod";
+
 import { WorkspacePathSchema } from "./git";
 
 const toolId = /^[a-z][a-zA-Z0-9._-]{0,79}$/;
 const frontmatter = /^---\r?\nrequires:\s*\[(?<list>[^\]]*)\]\s*\r?\n---\r?\n/;
 
-export const SkillProposalPath = WorkspacePathSchema.check(
-  Schema.isPattern(/^proposals\/skills\/.+\.md$/u)
+export const SkillProposalPath = WorkspacePathSchema.regex(
+  /^proposals\/skills\/.+\.md$/u
 );
-export const PublishedSkillPath = WorkspacePathSchema.check(
-  Schema.isPattern(/^skills\/.+\.md$/u)
-);
+export const PublishedSkillPath =
+  WorkspacePathSchema.regex(/^skills\/.+\.md$/u);
 
 export function isSkillContentPath(path: string) {
   return path.startsWith("skills/") || path.startsWith("proposals/skills/");
@@ -48,6 +48,6 @@ export function parseSkillDocument(content: string) {
   };
 }
 
-export const SkillDocumentSchema = Schema.String.check(
-  Schema.makeFilter((content) => parseSkillDocument(content) !== null)
-);
+export const SkillDocumentSchema = z
+  .string()
+  .refine((content) => parseSkillDocument(content) !== null);

@@ -1,30 +1,27 @@
-import { Effect } from "effect";
+import { withSignal } from "../../../../server/operations/async";
 import {
-  type AccountDeletionError,
+  AccountDeletionError,
   requestAccountDeletionFromHeaders,
 } from "../../../../server/accounts/deletion";
-import { serverRuntime } from "../../../../server/runtime";
 
 export function POST(request: Request) {
-  return serverRuntime.runPromise(
-    requestAccountDeletionFromHeaders(request.headers).pipe(
-      Effect.map(
-        (body) =>
-          new Response(JSON.stringify(body, null, 2), {
-            status: 200,
-            headers: {
-              "cache-control": "private, no-store",
-              "content-type": "application/json; charset=utf-8",
-              "x-content-type-options": "nosniff",
-            },
-          })
-      ),
-      Effect.catchTag("AccountDeletionError", (error) =>
-        Effect.succeed(accountDeletionErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  return withSignal(request.signal, async () => {
+    try {
+      const body = await requestAccountDeletionFromHeaders(request.headers);
+      return new Response(JSON.stringify(body, null, 2), {
+        status: 200,
+        headers: {
+          "cache-control": "private, no-store",
+          "content-type": "application/json; charset=utf-8",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    } catch (error) {
+      if (error instanceof AccountDeletionError)
+        return accountDeletionErrorResponse(error);
+      throw error;
+    }
+  });
 }
 
 function accountDeletionErrorResponse(error: AccountDeletionError) {

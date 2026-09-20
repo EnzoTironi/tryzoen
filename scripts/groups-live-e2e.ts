@@ -6,8 +6,7 @@
  *   pnpm exec tsx --env-file=.env.local scripts/groups-live-e2e.ts
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
-import { Effect } from "effect";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { runTelegramGroupMentionHarness } from "../server/channels/groups-e2e-harness";
 
 const OUT = "/tmp/companion-groups-live-e2e";
@@ -197,14 +196,12 @@ if (!groupUpdate) {
   if (message?.date && Math.abs(nowMs / 1000 - message.date) > 86_000) {
     message.date = Math.floor(nowMs / 1000);
   }
-  const result = await Effect.runPromise(
-    runTelegramGroupMentionHarness({
-      update: groupUpdate,
-      installation: { botId, botUsername },
-      nowMs,
-      identityId: "22222222-2222-4222-8222-222222222222",
-    })
-  );
+  const result = await runTelegramGroupMentionHarness({
+    update: groupUpdate,
+    installation: { botId, botUsername },
+    nowMs,
+    identityId: "22222222-2222-4222-8222-222222222222",
+  });
   harnessAccepted = result.accepted;
   writeFileSync(
     `${OUT}/24-live-harness-result.json`,

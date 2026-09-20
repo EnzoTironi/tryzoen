@@ -1,8 +1,8 @@
+import { z } from "zod";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import type { getVercelOidcToken } from "@vercel/oidc";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import { ConfigProvider, Effect, Schema } from "effect";
+
 import { afterEach, expect, test, vi } from "vitest";
 import { readVerifiedInternalCallback } from "../../../server/internal/callback-auth";
 
@@ -10,6 +10,21 @@ const mocks = vi.hoisted(() => ({
   getToken: vi.fn<typeof getVercelOidcToken>(),
 }));
 vi.mock("@vercel/oidc", () => ({ getVercelOidcToken: mocks.getToken }));
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, key): unknown {
+        if (
+          ["VERCEL_ENV", "VERCEL_URL", "BETTER_AUTH_URL"].includes(String(key))
+        )
+          return process.env[String(key)];
+        return Reflect.get(target, key);
+      },
+    }),
+  };
+});
 import { postInternalRequest } from "@agent/lib/internal-request";
 
 afterEach(() => {
@@ -51,20 +66,6 @@ test("preserves the Vercel deployment destination and both OIDC headers", async 
 });
 
 const route = "/internal/scheduled-run/report";
-const run = <A, E>(
-  effect: Effect.Effect<A, E, ResolvedInstallationSecrets>,
-  config: Record<string, string>
-) =>
-  Effect.runPromise(
-    effect.pipe(
-      Effect.provide(ResolvedInstallationSecrets.layer),
-      Effect.provideService(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.fromUnknown(config)
-      )
-    )
-  );
-
 test("production-local client signs real HTTP requests and refuses redirects", async () => {
   let origin = "";
   let requests = 0;
@@ -89,14 +90,11 @@ test("production-local client signs real HTTP requests and refuses redirects", a
         headers,
         body: payload,
       });
-      void run(
-        readVerifiedInternalCallback(
-          input,
-          incoming.url === "/internal/scheduled-run/respond"
-            ? "/internal/scheduled-run/respond"
-            : route
-        ),
-        { BETTER_AUTH_URL: origin }
+      void readVerifiedInternalCallback(
+        input,
+        incoming.url === "/internal/scheduled-run/respond"
+          ? "/internal/scheduled-run/respond"
+          : route
       ).then(
         (raw) => {
           outgoing.writeHead(
@@ -114,9 +112,7 @@ test("production-local client signs real HTTP requests and refuses redirects", a
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = Schema.decodeUnknownSync(
-    Schema.Struct({ port: Schema.Number })
-  )(server.address());
+  const address = z.object({ port: z.number() }).parse(server.address());
   origin = `http://127.0.0.1:${String(address.port)}`;
   vi.stubEnv("BETTER_AUTH_URL", origin);
   vi.stubEnv("VERCEL_ENV", undefined);

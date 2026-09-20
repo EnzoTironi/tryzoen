@@ -1,9 +1,10 @@
-import { serverRuntime } from "../../server/runtime";
+import { withSignal } from "../../server/operations/async";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { requireScheduledChannelOwner } from "../../server/schedules/channel-owner";
 import { defineChannel, POST } from "eve/channels";
 import { parseInputResponses, resolveTextToResponses } from "eve/client";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import { ConfigProvider, Effect, Result, Schema } from "effect";
+
 import {
   InternalCallbackRejected,
   readAuthenticatedInternalCallback,
@@ -17,18 +18,16 @@ import {
   restoreScheduledAgentRunInput,
 } from "@db/services/scheduled-agent-jobs";
 
-const scheduledRunTargetSchema = Schema.Struct({
-  restart: Schema.optionalKey(Schema.Boolean),
-  runId: Schema.String.check(Schema.isUUID()),
+const scheduledRunTargetSchema = z.object({
+  restart: z.optional(z.boolean()),
+  runId: z.uuid(),
 });
 
 export default defineChannel({
   async receive(input, { from }) {
-    const target = await Effect.runPromise(
-      Schema.decodeUnknownEffect(scheduledRunTargetSchema, {
-        onExcessProperty: "error",
-      })(input.target)
-    );
+    const target = await scheduledRunTargetSchema
+      .strict()
+      .parseAsync(input.target);
     const source = from(`scheduled-run:${target.runId}`);
     if (target.restart) {
       await source.reset({
@@ -44,26 +43,23 @@ export default defineChannel({
     POST(
       "/internal/scheduled-run/report",
       async (request, { attachSession, to, waitUntil }) => {
-        return Effect.runPromise(
-          Effect.gen(function* () {
-            const raw = yield* readAuthenticatedInternalCallback(
+        return withSignal(request.signal, async () => {
+          try {
+            const raw = await readAuthenticatedInternalCallback(
               request,
               "/internal/scheduled-run/report"
             );
             if (raw instanceof Response) return raw;
-            const input = yield* Schema.decodeUnknownEffect(
-              Schema.fromJsonString(
-                internalCallbackBodies["/internal/scheduled-run/report"]
-              ),
-              { onExcessProperty: "error" }
-            )(raw.toString("utf8")).pipe(
-              Effect.mapError(
-                () => new InternalCallbackRejected({ status: 400 })
-              )
-            );
-            const channel = yield* Effect.tryPromise(() =>
-              getScheduledReportChannel(input.runId)
-            );
+            const input = await Promise.try(async () =>
+              jsonString(
+                internalCallbackBodies[
+                  "/internal/scheduled-run/report"
+                ].strict()
+              ).parseAsync(raw.toString("utf8"))
+            ).catch(() => {
+              throw new InternalCallbackRejected({ status: 400 });
+            });
+            const channel = await getScheduledReportChannel(input.runId);
             if (channel)
               waitUntil(
                 dispatchScheduledReport(
@@ -73,62 +69,48 @@ export default defineChannel({
                 )
               );
             return new Response(null, { status: 202 });
-          }).pipe(
-            Effect.provide(ResolvedInstallationSecrets.layer),
-            Effect.provideService(
-              ConfigProvider.ConfigProvider,
-              ConfigProvider.fromEnv()
-            ),
-            Effect.catchTag("InternalCallbackRejected", (error) =>
-              Effect.succeed(
-                new Response("Scheduled callback rejected", {
-                  status: error.status,
-                })
-              )
-            )
-          ),
-          { signal: request.signal }
-        );
+          } catch (error) {
+            if (error instanceof InternalCallbackRejected)
+              return new Response("Scheduled callback rejected", {
+                status: error.status,
+              });
+            throw error;
+          }
+        });
       }
     ),
     POST(
       "/internal/scheduled-run/respond",
       async (request, { attachSession }) => {
-        const decoded = await Effect.runPromise(
-          Effect.gen(function* () {
-            const raw = yield* readAuthenticatedInternalCallback(
+        const decoded = await withSignal(request.signal, async () => {
+          return await Promise.try(async () => {
+            const raw = await readAuthenticatedInternalCallback(
               request,
               "/internal/scheduled-run/respond"
             );
             if (raw instanceof Response) return raw;
-            return yield* Schema.decodeUnknownEffect(
-              Schema.fromJsonString(
-                internalCallbackBodies["/internal/scheduled-run/respond"]
-              ),
-              { onExcessProperty: "error" }
-            )(raw.toString("utf8")).pipe(
-              Effect.mapError(
-                () => new InternalCallbackRejected({ status: 400 })
-              )
-            );
-          }).pipe(
-            Effect.provide(ResolvedInstallationSecrets.layer),
-            Effect.provideService(
-              ConfigProvider.ConfigProvider,
-              ConfigProvider.fromEnv()
-            ),
-            Effect.result
-          ),
-          { signal: request.signal }
-        );
-        if (Result.isFailure(decoded)) {
-          const failure = decoded.failure;
+            try {
+              return await jsonString(
+                internalCallbackBodies[
+                  "/internal/scheduled-run/respond"
+                ].strict()
+              ).parseAsync(raw.toString("utf8"));
+            } catch {
+              throw new InternalCallbackRejected({ status: 400 });
+            }
+          }).then(
+            (value) => ({ ok: true as const, value }),
+            (error: unknown) => ({ ok: false as const, error })
+          );
+        });
+        if (!decoded.ok) {
+          const failure = decoded.error;
           const status =
             failure instanceof InternalCallbackRejected ? failure.status : 503;
           return new Response("Scheduled callback rejected", { status });
         }
-        if (decoded.success instanceof Response) return decoded.success;
-        const input = decoded.success;
+        if (decoded.value instanceof Response) return decoded.value;
+        const input = decoded.value;
         const claimed = await claimScheduledAgentRunInput(
           input.runId,
           input.leaseToken
@@ -153,12 +135,10 @@ export default defineChannel({
         try {
           const channel = claimed.job.conversationChannel;
           if (channel === "telegram" || channel === "kapso") {
-            await serverRuntime.runPromise(
-              requireScheduledChannelOwner({
-                ...claimed.job,
-                conversationChannel: channel,
-              })
-            );
+            await requireScheduledChannelOwner({
+              ...claimed.job,
+              conversationChannel: channel,
+            });
           }
           const attributes = {
             conversationChannel: claimed.job.conversationChannel,

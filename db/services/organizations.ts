@@ -1,5 +1,4 @@
 import { and, eq, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
 import {
   db,
   organizationMemberships,
@@ -16,15 +15,33 @@ import {
   RbacDenied,
 } from "@shared/identity/org-rbac";
 
-export class OrganizationMembershipMissing extends Schema.TaggedError<OrganizationMembershipMissing>()(
-  "OrganizationMembershipMissing",
-  { organizationId: Schema.String, userId: Schema.String }
-) {}
+export class OrganizationMembershipMissing extends Error {
+  readonly _tag = "OrganizationMembershipMissing";
+  declare readonly organizationId: string;
+  declare readonly userId: string;
+  constructor(input: {
+    readonly organizationId: string;
+    readonly userId: string;
+  }) {
+    super("OrganizationMembershipMissing");
+    this.name = "OrganizationMembershipMissing";
+    Object.assign(this, input);
+  }
+}
 
-export class WorkspaceMembershipMissing extends Schema.TaggedError<WorkspaceMembershipMissing>()(
-  "WorkspaceMembershipMissing",
-  { workspaceId: Schema.String, userId: Schema.String }
-) {}
+class WorkspaceMembershipMissing extends Error {
+  readonly _tag = "WorkspaceMembershipMissing";
+  declare readonly workspaceId: string;
+  declare readonly userId: string;
+  constructor(input: {
+    readonly workspaceId: string;
+    readonly userId: string;
+  }) {
+    super("WorkspaceMembershipMissing");
+    this.name = "WorkspaceMembershipMissing";
+    Object.assign(this, input);
+  }
+}
 
 async function loadOrgMembership(organizationId: string, userId: string) {
   const rows = await db
@@ -86,146 +103,138 @@ export async function createOrganization(input: {
  * Attach a new company workspace under an org. Caller must be org admin.
  * Seeds the caller as workspace admin.
  */
-export function createCompanyWorkspace(input: {
+export async function createCompanyWorkspace(input: {
   organizationId: string;
   workspaceId: string;
   actorUserId: string;
-}): Effect.Effect<void, RbacDenied | OrganizationMembershipMissing> {
-  return Effect.gen(function* () {
-    const membership = yield* Effect.tryPromise({
-      try: () => loadOrgMembership(input.organizationId, input.actorUserId),
-      catch: () =>
-        new OrganizationMembershipMissing({
-          organizationId: input.organizationId,
-          userId: input.actorUserId,
-        }),
+}): Promise<void> {
+  const membership = await Promise.try(async () =>
+    loadOrgMembership(input.organizationId, input.actorUserId)
+  ).catch(() => {
+    throw new OrganizationMembershipMissing({
+      organizationId: input.organizationId,
+      userId: input.actorUserId,
     });
-    if (membership === undefined) {
-      yield* Effect.fail(
-        new OrganizationMembershipMissing({
-          organizationId: input.organizationId,
-          userId: input.actorUserId,
-        })
-      );
-      return;
-    }
+  });
+  if (membership === undefined) {
+    await Promise.reject(
+      new OrganizationMembershipMissing({
+        organizationId: input.organizationId,
+        userId: input.actorUserId,
+      })
+    );
+    return;
+  }
 
-    yield* assertCanManageMembers(membership.role);
-    yield* assertWorkspaceRoleForKind("company", "admin");
+  await assertCanManageMembers(membership.role);
+  await assertWorkspaceRoleForKind("company", "admin");
 
-    const createdAt = new Date();
-    yield* Effect.tryPromise({
-      try: () =>
-        db.transaction(async (tx) => {
-          await tx.insert(workspaces).values({
-            id: input.workspaceId,
-            createdAt,
-            organizationId: input.organizationId,
-          });
-          await tx.insert(workspaceMemberships).values({
-            workspaceId: input.workspaceId,
-            userId: input.actorUserId,
-            role: "admin",
-            createdAt,
-          });
-        }),
-      catch: () =>
-        new RbacDenied({
-          reason: "invalid_role",
-          message: "Failed to create company workspace.",
-        }),
+  const createdAt = new Date();
+  await Promise.try(async () =>
+    db.transaction(async (tx) => {
+      await tx.insert(workspaces).values({
+        id: input.workspaceId,
+        createdAt,
+        organizationId: input.organizationId,
+      });
+      await tx.insert(workspaceMemberships).values({
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        role: "admin",
+        createdAt,
+      });
+    })
+  ).catch(() => {
+    throw new RbacDenied({
+      reason: "invalid_role",
+      message: "Failed to create company workspace.",
     });
   });
 }
 
 /** Org admin adds/updates an org member role (member cannot elevate). */
-export function setOrganizationMemberRole(input: {
+export async function setOrganizationMemberRole(input: {
   organizationId: string;
   actorUserId: string;
   targetUserId: string;
   role: CompanyRole;
-}): Effect.Effect<void, RbacDenied | OrganizationMembershipMissing> {
-  return Effect.gen(function* () {
-    const actor = yield* Effect.promise(() =>
-      loadOrgMembership(input.organizationId, input.actorUserId)
+}): Promise<void> {
+  const actor = await loadOrgMembership(
+    input.organizationId,
+    input.actorUserId
+  );
+  if (actor === undefined) {
+    await Promise.reject(
+      new OrganizationMembershipMissing({
+        organizationId: input.organizationId,
+        userId: input.actorUserId,
+      })
     );
-    if (actor === undefined) {
-      yield* Effect.fail(
-        new OrganizationMembershipMissing({
-          organizationId: input.organizationId,
-          userId: input.actorUserId,
-        })
-      );
-      return;
-    }
+    return;
+  }
 
-    yield* assertCanAssignRole(actor.role, input.role);
+  await assertCanAssignRole(actor.role, input.role);
 
-    const createdAt = new Date();
-    yield* Effect.promise(async () => {
-      await db
-        .insert(organizationMemberships)
-        .values({
-          organizationId: input.organizationId,
-          userId: input.targetUserId,
-          role: input.role,
-          createdAt,
-        })
-        .onConflictDoUpdate({
-          target: [
-            organizationMemberships.organizationId,
-            organizationMemberships.userId,
-          ],
-          set: { role: input.role },
-        });
-    });
-  });
+  const createdAt = new Date();
+  await (async () => {
+    await db
+      .insert(organizationMemberships)
+      .values({
+        organizationId: input.organizationId,
+        userId: input.targetUserId,
+        role: input.role,
+        createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [
+          organizationMemberships.organizationId,
+          organizationMemberships.userId,
+        ],
+        set: { role: input.role },
+      });
+  })();
 }
 
 /** Workspace admin/owner manages workspace membership (member cannot elevate). */
-export function setWorkspaceMemberRole(input: {
+export async function setWorkspaceMemberRole(input: {
   workspaceId: string;
   actorUserId: string;
   targetUserId: string;
   role: WorkspaceRole;
-}): Effect.Effect<void, RbacDenied | WorkspaceMembershipMissing> {
-  return Effect.gen(function* () {
-    const actor = yield* Effect.promise(() =>
-      loadWorkspaceMembership(input.workspaceId, input.actorUserId)
+}): Promise<void> {
+  const actor = await loadWorkspaceMembership(
+    input.workspaceId,
+    input.actorUserId
+  );
+  if (actor === undefined) {
+    await Promise.reject(
+      new WorkspaceMembershipMissing({
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+      })
     );
-    if (actor === undefined) {
-      yield* Effect.fail(
-        new WorkspaceMembershipMissing({
-          workspaceId: input.workspaceId,
-          userId: input.actorUserId,
-        })
-      );
-      return;
-    }
+    return;
+  }
 
-    const kind = actor.organizationId ? "company" : "personal";
-    yield* assertWorkspaceRoleForKind(kind, input.role);
-    yield* assertCanAssignRole(actor.role, input.role);
+  const kind = actor.organizationId ? "company" : "personal";
+  await assertWorkspaceRoleForKind(kind, input.role);
+  await assertCanAssignRole(actor.role, input.role);
 
-    const createdAt = new Date();
-    yield* Effect.promise(async () => {
-      await db
-        .insert(workspaceMemberships)
-        .values({
-          workspaceId: input.workspaceId,
-          userId: input.targetUserId,
-          role: input.role,
-          createdAt,
-        })
-        .onConflictDoUpdate({
-          target: [
-            workspaceMemberships.workspaceId,
-            workspaceMemberships.userId,
-          ],
-          set: { role: input.role },
-        });
-    });
-  });
+  const createdAt = new Date();
+  await (async () => {
+    await db
+      .insert(workspaceMemberships)
+      .values({
+        workspaceId: input.workspaceId,
+        userId: input.targetUserId,
+        role: input.role,
+        createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceMemberships.workspaceId, workspaceMemberships.userId],
+        set: { role: input.role },
+      });
+  })();
 }
 
 /** Count org admins (used by tests / future last-admin guards). */

@@ -1,7 +1,7 @@
 # Mensageria pessoal: Beeper, mautrix e referência Pally
 
 Decisão proposta para Zoen, atualizada em 14/09/2026. Este documento detalha P06
-do [plano de implementação](plan.md). Nenhuma conta foi conectada ao Pally nem
+do [desenho atual](../../eve/architecture.md). Nenhuma conta foi conectada ao Pally nem
 ponte de usuário instalada para produzir esta análise.
 
 ## O comportamento que queremos oferecer

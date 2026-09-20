@@ -6,7 +6,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { MessageCircleIcon } from "lucide-react";
-import type { Effect } from "effect";
+
 import type { conversationDestinations } from "../../../server/channels/destination";
 import { Button, type ButtonProps } from "@web/components/ui/button";
 import styles from "./onboarding.module.css";
@@ -14,10 +14,10 @@ import styles from "./onboarding.module.css";
 const channels = [
   { id: "whatsapp", label: "WhatsApp", image: "/marketing/whatsapp.avif" },
   { id: "telegram", label: "Telegram", image: "/marketing/telegram.avif" },
-  { id: "imessage", label: "iMessage", image: null },
+  { id: "imessage", label: "Mensagens", image: null },
 ] as const;
 
-const OnboardingContext = createContext<Effect.Success<
+const OnboardingContext = createContext<ReturnType<
   typeof conversationDestinations
 > | null>(null);
 
@@ -36,7 +36,7 @@ function ChannelIcon({
 }
 
 function conversationStartHref(
-  destinations: Effect.Success<typeof conversationDestinations> | null
+  destinations: ReturnType<typeof conversationDestinations> | null
 ) {
   if (
     destinations?.imessage &&
@@ -58,11 +58,11 @@ export function ConversationIcons() {
         if (!destination) return null;
         return (
           <Button
-            aria-label={channel.label}
+            aria-label={t(channel.label)}
             className={styles.iconButton}
             key={channel.id}
             nativeButton={false}
-            render={<a aria-label={channel.label} href={destination} />}
+            render={<a aria-label={t(channel.label)} href={destination} />}
             size="icon"
           >
             <ChannelIcon channel={channel} />
@@ -102,7 +102,7 @@ export function OnboardingProvider({
   destinations,
 }: {
   readonly children: ReactNode;
-  readonly destinations: Effect.Success<typeof conversationDestinations>;
+  readonly destinations: ReturnType<typeof conversationDestinations>;
 }) {
   return <OnboardingContext value={destinations}>{children}</OnboardingContext>;
 }

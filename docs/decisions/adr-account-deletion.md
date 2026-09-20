@@ -21,7 +21,7 @@ WhatsApp shares, erase the personal workspace, keep company workspaces,
 then write a tombstone that is reapplied before traffic after a restore.
 
 The last remaining organization admin cannot delete until they transfer
-admin or close every company workspace through an explicit Effect. The
+admin or close every company workspace through an explicit operation. The
 organization row and append-only audit receipts stay. Imported contacts,
 personal trust and Matrix identity rows for that person are removed.
 Company git and company memberships of others are not.

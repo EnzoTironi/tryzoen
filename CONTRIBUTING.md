@@ -1,8 +1,8 @@
 # Contributing to Zoen
 
 Start with the [README](README.md), relevant [architecture decisions](docs/decisions/),
-the [release map](docs/decisions/adr-customer-platform-release.md) and the
-[launch ledger](docs/decisions/zoen-launch-validation.md). For a substantial
+the [architecture](docs/eve/architecture.md) and
+[rewrite validation](docs/eve/rebuild.md). For a substantial
 feature, open a proposal explaining the user problem and intended boundary.
 
 ## Development
@@ -13,17 +13,17 @@ lockfile. Follow [self-hosting](docs/self-host.md) for local services. Keep secr
 in ignored environment files restricted to their owner. Use synthetic accounts,
 messages and documents in tests and screenshots.
 
-Read `AGENTS.md` for repository conventions. Application effects belong to their
-owning services. Eve owns sessions and execution; product tools and skills belong
-in the owned Executor. Do not add parallel agent loops or bypass workspace
+Read `AGENTS.md` for repository conventions. Product operations belong to their
+owning services as plain async functions with Zod validation. Eve owns sessions,
+execution, native tools, connections, skills and approvals. Do not add parallel agent loops or bypass workspace
 permissions, provider verification or native approval controls.
 
 ## Before opening a pull request
 
 1. Make one coherent change with a clear problem and resulting behavior.
 2. Run `pnpm check --concurrency=1`,
-   `node --env-file=.env.local --run db:check`, `pnpm eval:list` and relevant
-   build/runtime checks. Runtime tests require `companion_runtime_test`; never
+   `pnpm db:check`, `pnpm eval:list` and relevant
+   build/runtime checks. Run `pnpm test:runtime:setup` before the isolated runtime suite; never
    use production. Listing evals is not a live grade.
 3. Cover changed permissions, durable state or failures with regression tests.
    Distinguish fixture results from live-provider evidence.
@@ -31,7 +31,10 @@ permissions, provider verification or native approval controls.
 5. Keep generated traces, credentials, personal content and unrelated formatting
    out of the diff. Preserve dependency pins, provenance and license notices.
 
-Database changes need migrations and an explicit compatibility/recovery plan.
+Zoen is prelaunch with no production users or data. Update internal callers
+atomically and delete obsolete interfaces. Keep the migration chain coherent;
+recreate disposable databases if an applied development baseline is rewritten.
+Baseline consolidation must be explicit, not incidental feature work.
 Dependency changes must pass application and infrastructure audits. Do not
 suppress an advisory or weaken an evaluation just to obtain a green check.
 

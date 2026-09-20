@@ -14,7 +14,7 @@ The recorder masks input fields and blocks credential views, the vault, the diag
 
 OAuth challenges are bound to a current web session and workspace, expire, poll at the provider's interval, and are consumed once. Encrypted credentials are additionally bound to workspace/provider. Refresh occurs under a Postgres row lock so replicas cannot race a rotating token. A changed connection revision invalidates previously selected model clients. Spark is selectable for text; its browser worker uses Luna for images. Grok model access depends on the account's API entitlement.
 
-The installation's ChatGPT credential file lives on an encrypted retained Fly volume. Deployments seed it only when absent or when the deployment secret changes. Restarting the machine preserves the token that Eve refreshed. A deliberate replacement of `CHATGPT_AUTH_JSON` rotates the seed; the startup environment drops that secret after materializing the file. Alchemy owns the volume and its snapshots.
+The installation's native Codex credential file lives at `/root/.eve/auth/codex/auth.json` on an encrypted retained Fly volume. The pinned official Codex CLI owns refresh and Eve uses its app-server authentication. Deployments seed the file only when absent or when `CODEX_AUTH_JSON` changes; an unchanged deployment secret preserves refreshed credentials on restart. The startup environment drops the seed after validating and materializing it. Alchemy owns the volume and its snapshots.
 
 ## Validation
 

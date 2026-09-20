@@ -1,17 +1,19 @@
 "use client";
 
+import { z } from "zod";
+
 import { useI18n } from "@web/i18n/context";
 
 import { useState } from "react";
-import { Option, Schema } from "effect";
+
 import { billingPlanCatalog, type BillingPlanId } from "@shared/billing/plans";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";
 
-const billingRedirectSchema = Schema.Struct({
-  url: Schema.optionalKey(Schema.String),
-  error: Schema.optionalKey(Schema.String),
-  reason: Schema.optionalKey(Schema.String),
+const billingRedirectSchema = z.object({
+  url: z.optional(z.string()),
+  error: z.optional(z.string()),
+  reason: z.optional(z.string()),
 });
 
 async function postBilling(
@@ -28,21 +30,18 @@ async function postBilling(
     body: JSON.stringify(body),
   });
   const raw: unknown = await response.json();
-  const decoded = Schema.decodeUnknownOption(billingRedirectSchema)(raw);
-  if (Option.isNone(decoded) || !decoded.value.url || !response.ok) {
-    if (
-      Option.isSome(decoded) &&
-      decoded.value.reason === "stripe_not_configured"
-    ) {
+  const decoded = billingRedirectSchema.safeParse(raw);
+  if (!decoded.success || !decoded.data.url || !response.ok) {
+    if (decoded.success && decoded.data.reason === "stripe_not_configured") {
       throw new Error("Planos pagos não estão disponíveis no momento.");
     }
     const message =
-      Option.isSome(decoded) && decoded.value.error
-        ? decoded.value.error
+      decoded.success && decoded.data.error
+        ? decoded.data.error
         : "Billing request failed.";
     throw new Error(message);
   }
-  return decoded.value.url;
+  return decoded.data.url;
 }
 
 export function AccountBillingSection({

@@ -1,148 +1,132 @@
+import { z } from "zod";
 import { createHash } from "node:crypto";
-import { Effect, Schema } from "effect";
 import { channelProviderSchema } from "../../shared/identity/channel-auth";
-
-export const IdentityId = Schema.String.check(Schema.isUUID());
-const reference = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(256),
-  Schema.isTrimmed()
-);
-
-export const InputDeliveryReferenceSchema = Schema.Struct({
+export const IdentityId = z.uuid();
+const reference = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
+export const InputDeliveryReferenceSchema = z.strictObject({
   sessionId: reference,
   requestId: reference,
-  revision: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+  revision: z.string().regex(/^[0-9a-f]{64}$/),
 });
-
-export const ClaimChannelInputResponseSchema = Schema.Struct({
-  ...InputDeliveryReferenceSchema.fields,
+export const ClaimChannelInputResponseSchema = z.strictObject({
+  ...InputDeliveryReferenceSchema.shape,
   identityId: IdentityId,
   sourceMessageId: reference,
   turnId: reference,
-  decision: Schema.Literals(["approve", "cancel"]),
+  decision: z.enum(["approve", "cancel"]),
 });
-export type ClaimChannelInputResponse =
-  typeof ClaimChannelInputResponseSchema.Type;
-export const MarkChannelInputResponseSchema = Schema.Struct({
+export type ClaimChannelInputResponse = z.output<
+  typeof ClaimChannelInputResponseSchema
+>;
+export const MarkChannelInputResponseSchema = z.strictObject({
   id: IdentityId,
-  status: Schema.Literals(["accepted", "uncertain"]),
+  status: z.enum(["accepted", "uncertain"]),
 });
-
-export const MessagePayloadSchema = Schema.Struct({
-  inputRequest: Schema.optionalKey(InputDeliveryReferenceSchema),
-  sourceOccurredAtMs: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
-  ),
-  text: Schema.optionalKey(
-    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(16_384))
-  ),
-  attachments: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        id: reference,
-        mediaType: Schema.String.check(
-          Schema.isMinLength(1),
-          Schema.isMaxLength(128)
-        ),
-        name: Schema.optionalKey(reference),
-      })
-    ).check(Schema.isMaxLength(10))
-  ),
-  replyToMessageId: Schema.optionalKey(reference),
-  deliveryTargetId: Schema.optionalKey(reference),
-  conversationScope: Schema.optionalKey(
-    Schema.String.check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(320),
-      Schema.isTrimmed()
-    )
-  ),
-}).check(
-  Schema.makeFilter(
+export const MessagePayloadSchema = z
+  .strictObject({
+    inputRequest: z.optional(InputDeliveryReferenceSchema),
+    sourceOccurredAtMs: z.optional(z.number().int().min(0)),
+    text: z.optional(z.string().min(1).max(16_384)),
+    attachments: z.optional(
+      z
+        .array(
+          z.strictObject({
+            id: reference,
+            mediaType: z.string().min(1).max(128),
+            name: z.optional(reference),
+          })
+        )
+        .max(10)
+    ),
+    replyToMessageId: z.optional(reference),
+    deliveryTargetId: z.optional(reference),
+    conversationScope: z.optional(
+      z
+        .string()
+        .min(1)
+        .max(320)
+        .refine((value) => value === value.trim(), "Expected trimmed text")
+    ),
+  })
+  .refine(
     (message) =>
       Boolean(message.text?.trim()) || (message.attachments?.length ?? 0) > 0,
-    { message: "A message needs text or an attachment reference." }
-  )
-);
-export type MessagePayload = typeof MessagePayloadSchema.Type;
-
-export const AcceptInputSchema = Schema.Struct({
+    {
+      message: "A message needs text or an attachment reference.",
+    }
+  );
+export type MessagePayload = z.output<typeof MessagePayloadSchema>;
+export const AcceptInputSchema = z.strictObject({
   identityId: IdentityId,
   eventId: reference,
   sourceMessageId: reference,
   payload: MessagePayloadSchema,
 });
-export type AcceptInput = typeof AcceptInputSchema.Type;
-export const EnqueueInputSchema = Schema.Struct({
+export type AcceptInput = z.output<typeof AcceptInputSchema>;
+export const EnqueueInputSchema = z.strictObject({
   identityId: IdentityId,
   deliveryKey: reference,
   payload: MessagePayloadSchema,
 });
-export type EnqueueInput = typeof EnqueueInputSchema.Type;
-
-export const ClaimInputSchema = Schema.Struct({
+export type EnqueueInput = z.output<typeof EnqueueInputSchema>;
+export const ClaimInputSchema = z.strictObject({
   identityId: IdentityId,
-  leaseSeconds: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: 300 })
-  ),
+  leaseSeconds: z.number().int().min(1).max(300),
 });
-export type ClaimInput = typeof ClaimInputSchema.Type;
-export const LeaseSchema = Schema.Struct({
+export type ClaimInput = z.output<typeof ClaimInputSchema>;
+export const LeaseSchema = z.strictObject({
   identityId: IdentityId,
   id: IdentityId,
   leaseToken: IdentityId,
 });
-export type Lease = typeof LeaseSchema.Type;
-
-const actorPrincipal = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(256),
-  Schema.isTrimmed()
-);
-const resolutionNote = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(200),
-  Schema.isTrimmed()
-);
-const providerMessageId = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(512),
-  Schema.isTrimmed()
-);
-
-const OutboxResolutionDecisionSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("mark_delivered"),
+export type Lease = z.output<typeof LeaseSchema>;
+const actorPrincipal = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
+const resolutionNote = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
+const providerMessageId = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
+const OutboxResolutionDecisionSchema = z.union([
+  z.strictObject({
+    kind: z.literal("mark_delivered"),
     providerMessageId,
   }),
-  Schema.Struct({
-    kind: Schema.Literal("cancel"),
-    reason: Schema.Literals([
-      "operator_cancelled",
-      "duplicate_confirmed",
-      "abandoned",
-    ]),
+  z.strictObject({
+    kind: z.literal("cancel"),
+    reason: z.enum(["operator_cancelled", "duplicate_confirmed", "abandoned"]),
   }),
-  Schema.Struct({
-    kind: Schema.Literal("authorize_retry"),
-    acknowledgment: Schema.Literal("duplicate_delivery_risk_accepted"),
+  z.strictObject({
+    kind: z.literal("authorize_retry"),
+    acknowledgment: z.literal("duplicate_delivery_risk_accepted"),
   }),
 ]);
-export type OutboxResolutionDecision =
-  typeof OutboxResolutionDecisionSchema.Type;
-
-export const ResolveOutboxUncertainSchema = Schema.Struct({
+export type OutboxResolutionDecision = z.output<
+  typeof OutboxResolutionDecisionSchema
+>;
+export const ResolveOutboxUncertainSchema = z.strictObject({
   identityId: IdentityId,
   id: IdentityId,
   decision: OutboxResolutionDecisionSchema,
   actorPrincipalId: actorPrincipal,
-  note: Schema.optionalKey(resolutionNote),
+  note: z.optional(resolutionNote),
 });
-export type ResolveOutboxUncertainInput =
-  typeof ResolveOutboxUncertainSchema.Type;
-
-export const DeliveryFailureSchema = Schema.Literals([
+export type ResolveOutboxUncertainInput = z.output<
+  typeof ResolveOutboxUncertainSchema
+>;
+export const DeliveryFailureSchema = z.enum([
   "adapter_rejected",
   "adapter_unavailable",
   "adapter_rate_limited",
@@ -150,9 +134,8 @@ export const DeliveryFailureSchema = Schema.Literals([
   "lease_expired",
   "identity_revoked",
 ]);
-export type DeliveryFailure = typeof DeliveryFailureSchema.Type;
-
-const MessageStatus = Schema.Literals([
+export type DeliveryFailure = z.output<typeof DeliveryFailureSchema>;
+const MessageStatus = z.enum([
   "queued",
   "dispatching",
   "accepted",
@@ -161,102 +144,129 @@ const MessageStatus = Schema.Literals([
   "failed",
   "cancelled",
 ]);
-export const NativeInboxContentSchema = Schema.Union([
-  Schema.NonEmptyString,
-  Schema.Array(
-    Schema.Struct({ type: Schema.Literal("text"), text: Schema.NonEmptyString })
-  ).check(Schema.isMinLength(1)),
-]).annotate({ parseOptions: { onExcessProperty: "error" } });
-export const NativeInboxHandoffSchema = Schema.Struct({
-  protocol: Schema.Literal("eve-keyed-input-v1"),
-  inputId: IdentityId,
-  channel: channelProviderSchema,
-  // A private identity or an exact group conversation. The channel boundary
-  // validates this persisted address against the verified source before send.
-  address: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(320),
-    Schema.isTrimmed()
-  ),
-  principalId: Schema.NonEmptyString,
-  content: Schema.NullOr(NativeInboxContentSchema),
-}).annotate({ parseOptions: { onExcessProperty: "error" } });
-export const ChannelTranscriptSchema = Schema.String.check(
-  Schema.isTrimmed(),
-  Schema.isMinLength(1),
-  Schema.isMaxLength(3000),
-  Schema.makeFilter((text) => text.isWellFormed())
-);
-export const PrepareInboxHandoffSchema = Schema.Struct({
+export const NativeInboxContentSchema = z.union([
+  z.string().min(1),
+  z
+    .array(
+      z.strictObject({
+        type: z.literal("text"),
+        text: z.string().min(1),
+      })
+    )
+    .min(1),
+]);
+export const NativeInboxHandoffSchema = z
+  .strictObject({
+    protocol: z.literal("eve-keyed-input-v1"),
+    inputId: IdentityId,
+    channel: channelProviderSchema,
+    // A private identity or an exact group conversation. The channel boundary
+    // validates this persisted address against the verified source before send.
+    address: z
+      .string()
+      .min(1)
+      .max(320)
+      .refine((value) => value === value.trim(), "Expected trimmed text"),
+    principalId: z.string().min(1),
+    content: z.nullable(NativeInboxContentSchema),
+  })
+  .strict();
+export const ChannelTranscriptSchema = z
+  .string()
+  .refine((value) => value === value.trim(), "Expected trimmed text")
+  .min(1)
+  .max(3000)
+  .refine((text) => text.isWellFormed());
+export const PrepareInboxHandoffSchema = z.strictObject({
   lease: LeaseSchema,
   content: NativeInboxContentSchema,
-  transcripts: Schema.Array(ChannelTranscriptSchema).check(
-    Schema.isMaxLength(10)
-  ),
+  transcripts: z.array(ChannelTranscriptSchema).max(10),
 });
-
-const MessageReceiptSchema = Schema.Struct({
+const MessageReceiptSchema = z.strictObject({
   id: IdentityId,
   identityId: IdentityId,
   key: reference,
-  sourceMessageId: Schema.NullOr(reference),
+  sourceMessageId: z.nullable(reference),
   payload: MessagePayloadSchema,
-  nativeInput: Schema.NullOr(NativeInboxHandoffSchema),
+  nativeInput: z.nullable(NativeInboxHandoffSchema),
   status: MessageStatus,
-  attempts: Schema.Int,
-  leaseToken: Schema.NullOr(IdentityId),
-  leaseExpiresAt: Schema.NullOr(Schema.String),
-  resultId: Schema.NullOr(Schema.String),
-  lastError: Schema.NullOr(Schema.String),
+  attempts: z.number().int(),
+  leaseToken: z.nullable(IdentityId),
+  leaseExpiresAt: z.nullable(z.string()),
+  resultId: z.nullable(z.string()),
+  lastError: z.nullable(z.string()),
 });
-export const MessageClaimSchema = Schema.Struct({
-  ...MessageReceiptSchema.fields,
-  status: Schema.Literal("dispatching"),
+export const MessageClaimSchema = z.strictObject({
+  ...MessageReceiptSchema.shape,
+  status: z.literal("dispatching"),
   leaseToken: IdentityId,
-  leaseExpiresAt: Schema.String,
+  leaseExpiresAt: z.string(),
 });
-export type MessageClaim = typeof MessageClaimSchema.Type;
-
-export class InvalidMessage extends Schema.TaggedError<InvalidMessage>()(
-  "InvalidMessage",
-  { message: Schema.String }
-) {}
-export class IdentityInactive extends Schema.TaggedError<IdentityInactive>()(
-  "IdentityInactive",
-  { identityId: IdentityId }
-) {}
-export class PayloadConflict extends Schema.TaggedError<PayloadConflict>()(
-  "PayloadConflict",
-  { id: IdentityId }
-) {}
-export class LeaseLost extends Schema.TaggedError<LeaseLost>()("LeaseLost", {
-  id: IdentityId,
-}) {}
-export class OutboxResolutionRejected extends Schema.TaggedError<OutboxResolutionRejected>()(
-  "OutboxResolutionRejected",
-  {
-    id: IdentityId,
-    reason: Schema.Literals(["not_uncertain", "conflict", "identity_inactive"]),
+export type MessageClaim = z.output<typeof MessageClaimSchema>;
+export class InvalidMessage extends Error {
+  readonly _tag = "InvalidMessage";
+  constructor(input: { readonly message: string }) {
+    super(input.message);
+    this.name = "InvalidMessage";
+    Object.assign(this, input);
   }
-) {}
-export class MessagingStorageError extends Schema.TaggedError<MessagingStorageError>()(
-  "MessagingStorageError",
-  { message: Schema.String }
-) {}
-
-export type MessagingError =
-  | InvalidMessage
-  | IdentityInactive
-  | PayloadConflict
-  | LeaseLost
-  | OutboxResolutionRejected
-  | MessagingStorageError;
-
-export const decodeInput = <S extends Schema.Constraint>(schema: S) =>
-  Schema.decodeUnknownEffect(schema, { onExcessProperty: "error" });
-
+}
+export class IdentityInactive extends Error {
+  readonly _tag = "IdentityInactive";
+  declare readonly identityId: z.output<typeof IdentityId>;
+  constructor(input: { readonly identityId: z.output<typeof IdentityId> }) {
+    super("IdentityInactive");
+    this.name = "IdentityInactive";
+    Object.assign(this, input);
+  }
+}
+export class PayloadConflict extends Error {
+  readonly _tag = "PayloadConflict";
+  declare readonly id: z.output<typeof IdentityId>;
+  constructor(input: { readonly id: z.output<typeof IdentityId> }) {
+    super("PayloadConflict");
+    this.name = "PayloadConflict";
+    Object.assign(this, input);
+  }
+}
+export class LeaseLost extends Error {
+  readonly _tag = "LeaseLost";
+  declare readonly id: z.output<typeof IdentityId>;
+  constructor(input: { readonly id: z.output<typeof IdentityId> }) {
+    super("LeaseLost");
+    this.name = "LeaseLost";
+    Object.assign(this, input);
+  }
+}
+export class OutboxResolutionRejected extends Error {
+  readonly _tag = "OutboxResolutionRejected";
+  declare readonly id: z.output<typeof IdentityId>;
+  declare readonly reason: "not_uncertain" | "conflict" | "identity_inactive";
+  constructor(input: {
+    readonly id: z.output<typeof IdentityId>;
+    readonly reason: "not_uncertain" | "conflict" | "identity_inactive";
+  }) {
+    super("OutboxResolutionRejected");
+    this.name = "OutboxResolutionRejected";
+    Object.assign(this, input);
+  }
+}
+export class MessagingStorageError extends Error {
+  readonly _tag = "MessagingStorageError";
+  constructor(input: { readonly message: string }) {
+    super(input.message);
+    this.name = "MessagingStorageError";
+    Object.assign(this, input);
+  }
+}
+export const decodeInput =
+  <S extends z.ZodType>(schema: S) =>
+  (input: unknown) =>
+    schema.parseAsync(input);
 export const invalidInput = () =>
-  new InvalidMessage({ message: "Invalid messaging input." });
+  new InvalidMessage({
+    message: "Invalid messaging input.",
+  });
 
 // The domain has a fixed set of object keys. Reconstructing those keys in this
 // order canonicalizes JSON objects without changing meaningful array order.
@@ -285,10 +295,14 @@ export function canonicalPayload(payload: MessagePayload) {
     hash: createHash("sha256").update(JSON.stringify(normalized)).digest("hex"),
   };
 }
-
-export const decodeReceipt = Effect.fn("Messaging.decodeReceipt")(
-  Schema.decodeUnknownEffect(MessageReceiptSchema),
-  Effect.mapError(
-    () => new MessagingStorageError({ message: "Invalid messaging record." })
-  )
-);
+export const decodeReceipt = async (
+  ...args: Parameters<typeof MessageReceiptSchema.parseAsync>
+) => {
+  try {
+    return await MessageReceiptSchema.parseAsync(...args);
+  } catch {
+    throw new MessagingStorageError({
+      message: "Invalid messaging record.",
+    });
+  }
+};

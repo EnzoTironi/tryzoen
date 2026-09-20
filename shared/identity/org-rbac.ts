@@ -1,23 +1,34 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 
 /** Company control-plane roles (org + company workspace). */
-const companyRoleSchema = Schema.Literals(["admin", "member"]);
-export type CompanyRole = typeof companyRoleSchema.Type;
+const companyRoleSchema = z.enum(["admin", "member"]);
+export type CompanyRole = z.output<typeof companyRoleSchema>;
 
 /** Workspace membership roles including personal `owner`. */
-const workspaceRoleSchema = Schema.Literals(["owner", "admin", "member"]);
-export type WorkspaceRole = typeof workspaceRoleSchema.Type;
-
-export class RbacDenied extends Schema.TaggedError<RbacDenied>()("RbacDenied", {
-  reason: Schema.Literals([
-    "not_admin",
-    "cannot_elevate",
-    "personal_owner_only",
-    "invalid_role",
-    "last_admin",
-  ]),
-  message: Schema.String,
-}) {}
+const workspaceRoleSchema = z.enum(["owner", "admin", "member"]);
+export type WorkspaceRole = z.output<typeof workspaceRoleSchema>;
+export class RbacDenied extends Error {
+  readonly _tag = "RbacDenied";
+  declare readonly reason:
+    | "not_admin"
+    | "cannot_elevate"
+    | "personal_owner_only"
+    | "invalid_role"
+    | "last_admin";
+  constructor(input: {
+    readonly reason:
+      | "not_admin"
+      | "cannot_elevate"
+      | "personal_owner_only"
+      | "invalid_role"
+      | "last_admin";
+    readonly message: string;
+  }) {
+    super(input.message);
+    this.name = "RbacDenied";
+    Object.assign(this, input);
+  }
+}
 
 /** Personal sole controller or company admin may manage workspace members. */
 export function canManageMembers(role: WorkspaceRole | CompanyRole): boolean {
@@ -39,35 +50,31 @@ export function canAssignRole(
   }
   return true;
 }
-
 export function assertCanManageMembers(
   actorRole: WorkspaceRole | CompanyRole
-): Effect.Effect<void, RbacDenied> {
+): Promise<void> {
   return canManageMembers(actorRole)
-    ? Effect.void
-    : Effect.fail(
+    ? Promise.resolve()
+    : Promise.reject(
         new RbacDenied({
           reason: "not_admin",
           message: "Only an admin (or personal owner) can manage members.",
         })
       );
 }
-
-export function assertCanAssignRole(
+export async function assertCanAssignRole(
   actorRole: WorkspaceRole | CompanyRole,
   targetRole: WorkspaceRole | CompanyRole
-): Effect.Effect<void, RbacDenied> {
-  return Effect.gen(function* () {
-    yield* assertCanManageMembers(actorRole);
-    if (!canAssignRole(actorRole, targetRole)) {
-      yield* Effect.fail(
-        new RbacDenied({
-          reason: "cannot_elevate",
-          message: "Members cannot elevate roles; only admins may grant admin.",
-        })
-      );
-    }
-  });
+): Promise<void> {
+  await assertCanManageMembers(actorRole);
+  if (!canAssignRole(actorRole, targetRole)) {
+    await Promise.reject(
+      new RbacDenied({
+        reason: "cannot_elevate",
+        message: "Members cannot elevate roles; only admins may grant admin.",
+      })
+    );
+  }
 }
 
 /**
@@ -77,11 +84,11 @@ export function assertCanAssignRole(
 export function assertWorkspaceRoleForKind(
   kind: "personal" | "company",
   role: WorkspaceRole
-): Effect.Effect<void, RbacDenied> {
+): Promise<void> {
   if (kind === "personal") {
     return role === "owner"
-      ? Effect.void
-      : Effect.fail(
+      ? Promise.resolve()
+      : Promise.reject(
           new RbacDenied({
             reason: "personal_owner_only",
             message: "Personal workspaces use the owner role only.",
@@ -89,16 +96,13 @@ export function assertWorkspaceRoleForKind(
         );
   }
   if (role === "owner") {
-    return Effect.fail(
-      new RbacDenied({
-        reason: "invalid_role",
-        message: "Company workspaces use admin or member roles, not owner.",
-      })
-    );
+    throw new RbacDenied({
+      reason: "invalid_role",
+      message: "Company workspaces use admin or member roles, not owner.",
+    });
   }
-  return Effect.void;
+  return Promise.resolve();
 }
-
 export function rbacFailureMessage(error: RbacDenied): string {
   return error.message;
 }

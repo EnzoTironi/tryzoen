@@ -5,7 +5,7 @@
 - **Decision:** Keep Better Auth Google as the **identity** provider; keep C01
   `organizations` / `organization_memberships` as the **company membership**
   source of truth. Ship an invite acceptance path usable for org members,
-  append-only audit receipts for sensitive org admin actions, and Effect-safe
+  append-only audit receipts for sensitive org admin actions, and authorized
   **fail-closed** org erasure/retention gates beyond personal online wipe.
 - **Worker:** C02-SSO — SSO/invite + audit receipts + erasure policy gates
 
@@ -41,7 +41,7 @@
      request + denial receipts. No claim of full org delete.
    - Personal wipe remains limited to personal memory + sessions (C01/privacy).
 4. **Migration** `0030_org-sso-audit-erasure` adds invite + audit tables with
-   `NOT VALID` + `VALIDATE` checks (Effect-safe adoption).
+   `NOT VALID` + `VALIDATE` checks (authorized adoption).
 
 ## Alternatives considered
 

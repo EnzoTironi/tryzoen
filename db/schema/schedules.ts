@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import { relations, sql } from "drizzle-orm";
 import type { InputRequest } from "eve/client";
 import {
@@ -15,8 +16,8 @@ import {
 } from "drizzle-orm/pg-core";
 import { workspaceMemberships } from "./workspaces";
 import { channelOutbox } from "./messaging";
-import { scheduledConversationChannelSchema } from "@shared/schedules/conversation";
-import { scheduledReportStatusSchema } from "@shared/schedules/report-status";
+import type { scheduledConversationChannelSchema } from "@shared/schedules/conversation";
+import type { scheduledReportStatusSchema } from "@shared/schedules/report-status";
 
 export const scheduledAgentJobs = pgTable(
   "scheduled_agent_jobs",
@@ -25,9 +26,9 @@ export const scheduledAgentJobs = pgTable(
     workspaceId: text("workspace_id").notNull(),
     createdByUserId: text("created_by_user_id").notNull(),
     prompt: text("prompt").notNull(),
-    conversationChannel: text("conversation_channel", {
-      enum: scheduledConversationChannelSchema.literals,
-    }).notNull(),
+    conversationChannel: text("conversation_channel")
+      .$type<z.output<typeof scheduledConversationChannelSchema>>()
+      .notNull(),
     conversationId: text("conversation_id").notNull(),
     replyAnchorMessageId: text("reply_anchor_message_id"),
     timing: jsonb("timing").notNull(),
@@ -136,9 +137,8 @@ export const scheduledAgentRuns = pgTable(
       readonly InputRequest[]
     >(),
     outcome: jsonb("outcome"),
-    reportStatus: text("report_status", {
-      enum: scheduledReportStatusSchema.literals,
-    })
+    reportStatus: text("report_status")
+      .$type<z.output<typeof scheduledReportStatusSchema>>()
       .notNull()
       .default("not_ready"),
     reportSequence: integer("report_sequence").notNull().default(0),

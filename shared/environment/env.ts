@@ -1,5 +1,5 @@
+import { Secret } from "@shared/environment/secret";
 import { createEnv } from "@t3-oss/env-nextjs";
-import { Effect, Schema } from "effect";
 import { z } from "zod";
 import { isE164PhoneNumber } from "@shared/identity/phone-number";
 import { databaseUrlSchema } from "@shared/environment/database-url";
@@ -68,21 +68,62 @@ function installationSecretWithLocalDefault<
 
 export const env = createEnv({
   server: {
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    EVE_NEXT_PRODUCTION_PORT: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .default(4274),
+    WORKFLOW_POSTGRES_WORKER_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(4),
+    WORKFLOW_POSTGRES_MAX_POOL_SIZE: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10),
+    DATABASE_URL_UNPOOLED: databaseUrlSchema.optional(),
+    ZOEN_DATABASE_HOST: requiredValue.optional(),
+    POSTGRES_DB: requiredValue.optional(),
+    ZOEN_MIGRATION_DATABASE_PASSWORD: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
     // Required
     DATABASE_URL: databaseUrlSchema,
-    KERNEL_API_KEY: requiredValue.optional(),
-    COMPANION_MODEL_PROVIDER: Schema.toStandardSchemaV1(
-      Schema.optional(installationModelProviderSchema)
-    ),
-    COMPANION_CODEX_MODEL: Schema.toStandardSchemaV1(
-      Schema.optional(codexModelSchema)
-    ),
-    COMPANION_BROWSER_MODEL_PROVIDER: Schema.toStandardSchemaV1(
-      Schema.optional(browserModelProviderSchema)
-    ),
-    COMPANION_BROWSER_MODEL: Schema.toStandardSchemaV1(
-      Schema.optional(browserModelSchema)
-    ),
+    KERNEL_API_KEY: z.string().optional(),
+    OPENROUTER_API_KEY: requiredValue
+      .refine((value) => value === value.trim(), "Expected an unpadded API key")
+      .transform((value) => new Secret(value))
+      .optional(),
+    AI_GATEWAY_API_KEY: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
+    TELEGRAM_BOT_TOKEN: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
+    TELEGRAM_WEBHOOK_SECRET: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
+    KAPSO_WEBHOOK_SECRET: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
+    TELEGRAM_BOT_ID: requiredValue.optional(),
+    TELEGRAM_BOT_USERNAME: requiredValue.optional(),
+    KAPSO_API_KEY: requiredValue
+      .transform((value) => new Secret(value))
+      .optional(),
+    KAPSO_PHONE_NUMBER: requiredValue.optional(),
+    KAPSO_PHONE_NUMBER_ID: requiredValue.optional(),
+    COMPANION_FFPROBE_PATH: requiredValue.default("ffprobe"),
+    COMPANION_TRANSCRIPTION_MODEL: requiredValue.optional(),
+    PATH: z.string().optional(),
+    COMPANION_MODEL_PROVIDER: z.optional(installationModelProviderSchema),
+    COMPANION_CODEX_MODEL: z.optional(codexModelSchema),
+    COMPANION_BROWSER_MODEL_PROVIDER: z.optional(browserModelProviderSchema),
+    COMPANION_BROWSER_MODEL: z.optional(browserModelSchema),
     MARKETING_WHATSAPP_NUMBER: requiredValue.optional(),
     MARKETING_TELEGRAM_USERNAME: requiredValue.optional(),
     MARKETING_IMESSAGE_NUMBER: requiredValue.optional(),
@@ -105,24 +146,23 @@ export const env = createEnv({
     // Optional
     BLOB_READ_WRITE_TOKEN: requiredValue.optional(),
     BLOB_STORE_ID: requiredValue.optional(),
+    ZOEN_EVAL_REPORT: requiredValue.optional(),
     ZOEN_MEM0_URL: z.url().optional(),
     ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
     ZOEN_ERASURE_JOURNAL_ENDPOINT: z
       .url()
       .default("https://fly.storage.tigris.dev"),
-    ZOEN_ERASURE_JOURNAL_ACCESS_KEY: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.NonEmptyString, {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_ERASURE_JOURNAL_ACCESS_KEY: z.optional(
+      z
+        .string()
+        .min(1)
+        .transform((value) => new Secret(value))
     ),
-    ZOEN_ERASURE_JOURNAL_SECRET_KEY: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.NonEmptyString, {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_ERASURE_JOURNAL_SECRET_KEY: z.optional(
+      z
+        .string()
+        .min(1)
+        .transform((value) => new Secret(value))
     ),
     ZOEN_MATRIX_URL: z.url().optional(),
     ZOEN_VAULTWARDEN_URL: z
@@ -132,69 +172,64 @@ export const env = createEnv({
         return url.protocol === "https:" && url.origin === value;
       }, "Vaultwarden requires an HTTPS origin.")
       .optional(),
-    ZOEN_VAULTWARDEN_CLIENT_SECRET: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_VAULTWARDEN_CLIENT_SECRET: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
     ZOEN_MATRIX_SERVER_NAME: z
       .string()
       .regex(/^[a-z0-9.-]+$/)
       .optional(),
-    ZOEN_MATRIX_AS_TOKEN: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_MATRIX_AS_TOKEN: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
-    ZOEN_MATRIX_HS_TOKEN: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_MATRIX_HS_TOKEN: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
     ZOEN_WHATSAPP_BRIDGE_URL: z.url().optional(),
-    ZOEN_WHATSAPP_PROVISIONING_SECRET: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_WHATSAPP_PROVISIONING_SECRET: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
-    ZOEN_WHATSAPP_AS_TOKEN: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_WHATSAPP_AS_TOKEN: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
-    ZOEN_WHATSAPP_HS_TOKEN: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_WHATSAPP_HS_TOKEN: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
-    ZOEN_MEM0_API_KEY: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.String.check(Schema.isMinLength(32)), {
-          disallowEncode: true,
-        })
-      )
+    ZOEN_MEM0_API_KEY: z.optional(
+      z
+        .string()
+        .min(32)
+        .transform((value) => new Secret(value))
     ),
-    GOOGLE_CLIENT_ID: Schema.toStandardSchemaV1(
-      Schema.optional(Schema.NonEmptyString.check(Schema.isTrimmed()))
+    GOOGLE_CLIENT_ID: z.optional(
+      z
+        .string()
+        .min(1)
+        .refine((value) => value === value.trim(), "Expected trimmed text")
     ),
-    GOOGLE_CLIENT_SECRET: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.NonEmptyString, {
-          disallowEncode: true,
-        })
-      )
+    GOOGLE_CLIENT_SECRET: z.optional(
+      z
+        .string()
+        .min(1)
+        .transform((value) => new Secret(value))
     ),
 
     ZOEN_REGISTRATION_MODE: z.enum(["open", "closed"]).default("open"),
@@ -230,35 +265,32 @@ export const env = createEnv({
           ),
         "Use comma-separated telegram:ID, kapso:NUMBER or google:EMAIL identities"
       ),
-    ZOEN_BILLING_MODE: Schema.toStandardSchemaV1(
-      Schema.Literals(["free-beta", "paid"]).pipe(
-        Schema.withDecodingDefault(Effect.succeed("free-beta" as const))
-      )
-    ),
+    ZOEN_BILLING_MODE: z.enum(["free-beta", "paid"]).default("free-beta"),
     // Paid billing requires an explicit mode change as well as credentials.
-    STRIPE_SECRET_KEY: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.NonEmptyString, {
-          disallowEncode: true,
-        })
-      )
+    STRIPE_SECRET_KEY: z.optional(
+      z
+        .string()
+        .min(1)
+        .transform((value) => new Secret(value))
     ),
-    STRIPE_WEBHOOK_SECRET: Schema.toStandardSchemaV1(
-      Schema.optional(
-        Schema.RedactedFromValue(Schema.NonEmptyString, {
-          disallowEncode: true,
-        })
-      )
+    STRIPE_WEBHOOK_SECRET: z.optional(
+      z
+        .string()
+        .min(1)
+        .transform((value) => new Secret(value))
     ),
-    STRIPE_PRICE_PRO: Schema.toStandardSchemaV1(
-      Schema.optional(Schema.NonEmptyString.check(Schema.isTrimmed()))
+    STRIPE_PRICE_PRO: z.optional(
+      z
+        .string()
+        .min(1)
+        .refine((value) => value === value.trim(), "Expected trimmed text")
     ),
-    STRIPE_PRICE_ORG_SEAT: Schema.toStandardSchemaV1(
-      Schema.optional(Schema.NonEmptyString.check(Schema.isTrimmed()))
+    STRIPE_PRICE_ORG_SEAT: z.optional(
+      z
+        .string()
+        .min(1)
+        .refine((value) => value === value.trim(), "Expected trimmed text")
     ),
-    OPERON_HOME: requiredValue.optional(),
-    OPERON_DATABASE_URL: requiredValue.optional(),
-    OPERON_BUILDER_ENABLED: z.enum(["true", "false"]).optional(),
     LINQ_CONNECTOR: requiredValue.optional(),
     LINQ_PHONE_NUMBER: requiredValue
       .refine(

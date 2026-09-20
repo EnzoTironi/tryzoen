@@ -1,8 +1,11 @@
 "use client";
 
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
+
 import { useState } from "react";
 import { NetworkIcon, PlusIcon } from "lucide-react";
-import { Exit, Schema } from "effect";
+
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
@@ -28,7 +31,7 @@ export default function WorkspaceKnowledgePage() {
   const [adding, setAdding] = useState(false);
   const [parseError, setParseError] = useState(false);
   const graph = state.data?.graph;
-  const save = (next: typeof OntologySchema.Type) =>
+  const save = (next: z.output<typeof OntologySchema>) =>
     publish
       .mutateAsync({
         graph: next,
@@ -132,9 +135,11 @@ export default function WorkspaceKnowledgePage() {
                         key={action.id}
                         onSubmit={(event) => {
                           event.preventDefault();
-                          const value = Schema.decodeUnknownSync(Schema.String)(
-                            new FormData(event.currentTarget).get("value")
-                          );
+                          const value = z
+                            .string()
+                            .parse(
+                              new FormData(event.currentTarget).get("value")
+                            );
                           const property = graph.types
                             .find((type) => type.id === entity.type)
                             ?.properties.find(
@@ -153,7 +158,7 @@ export default function WorkspaceKnowledgePage() {
                               operationId: crypto.randomUUID(),
                               expectedRevision: state.data.revision,
                             })
-                            .then(() => state.refetch())
+                            .then(async () => state.refetch())
                             .catch(() => undefined);
                         }}
                       >
@@ -205,7 +210,7 @@ export default function WorkspaceKnowledgePage() {
               graph={graph}
               pending={publish.isPending}
               onSave={(next) =>
-                save(next).then(() => {
+                save(next).then(async () => {
                   setAdding(false);
                   return undefined;
                 })
@@ -223,18 +228,16 @@ export default function WorkspaceKnowledgePage() {
                 onSubmit={(event) => {
                   event.preventDefault();
                   setParseError(false);
-                  const parsed = Schema.decodeUnknownExit(
-                    Schema.fromJsonString(OntologySchema)
-                  )(
-                    Schema.decodeUnknownSync(Schema.String)(
-                      new FormData(event.currentTarget).get("graph")
-                    )
+                  const parsed = jsonString(OntologySchema).safeParse(
+                    z
+                      .string()
+                      .parse(new FormData(event.currentTarget).get("graph"))
                   );
-                  if (Exit.isFailure(parsed)) {
+                  if (!parsed.success) {
                     setParseError(true);
                     return;
                   }
-                  void save(parsed.value).catch(() => undefined);
+                  void save(parsed.data).catch(() => undefined);
                 }}
               >
                 <Textarea

@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { validateAudioDuration } from "../../server/channels/media/transcription";
 
@@ -23,19 +22,17 @@ function silentWav(seconds: number) {
 describe("audio preflight with the installed ffprobe binary", () => {
   it("reads the real duration of a generated PCM WAV", async () => {
     await expect(
-      Effect.runPromise(validateAudioDuration(silentWav(1), "audio/wav"))
+      validateAudioDuration(silentWav(1), "audio/wav")
     ).resolves.toBe(1);
   });
   it("rejects a real WAV over two minutes before transcription", async () => {
     await expect(
-      Effect.runPromise(validateAudioDuration(silentWav(121), "audio/wav"))
+      validateAudioDuration(silentWav(121), "audio/wav")
     ).rejects.toMatchObject({ reason: "duration_limit" });
   });
   it("rejects invalid audio without treating the extension or MIME as proof", async () => {
     await expect(
-      Effect.runPromise(
-        validateAudioDuration(Buffer.from("not audio"), "audio/ogg")
-      )
+      validateAudioDuration(Buffer.from("not audio"), "audio/ogg")
     ).rejects.toMatchObject({ reason: "invalid_media" });
   });
 });

@@ -258,7 +258,7 @@ describe("migration deployment policy", () => {
 
     expect(packageManifest.scripts["build:vercel"]).toBe("next build");
     expect(packageManifest.scripts["db:check"]).toBe(
-      "drizzle-kit check --config db/drizzle.config.ts"
+      "drizzle-kit check --dialect postgresql --out db/migrations"
     );
     expect(packageManifest.scripts["db:generate"]).toBe(
       "drizzle-kit generate --config db/drizzle.config.ts"

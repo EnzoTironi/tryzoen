@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
-import { Predicate } from "effect";
+
 import { withModelDeadline } from "../model-deadline";
 
 afterEach(() => vi.restoreAllMocks());
@@ -32,7 +32,7 @@ test.each(["deadline", "cancellation"] as const)(
       }),
     });
     const model = withModelDeadline(underlying);
-    if (Predicate.isString(model)) throw new Error("Expected a concrete model");
+    if (typeof model === "string") throw new Error("Expected a concrete model");
     expect(model).toMatchObject({
       provider: underlying.provider,
       modelId: underlying.modelId,
@@ -64,7 +64,7 @@ test("forwards an already cancelled turn to the provider without replacing its r
     },
   });
   const model = withModelDeadline(underlying);
-  if (Predicate.isString(model)) throw new Error("Expected a concrete model");
+  if (typeof model === "string") throw new Error("Expected a concrete model");
   await expect(
     model.doGenerate({ prompt: [], abortSignal: parent.signal })
   ).rejects.toBe(reason);

@@ -1,193 +1,196 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
+import { z } from "zod";
 import { requireServerPort } from "./server-ports.ts";
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Effect, FileSystem, Schedule, Schema } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-class ServerStopped extends Schema.TaggedError<ServerStopped>()(
-  "ServerStopped",
-  {
-    message: Schema.String,
-  }
-) {}
-
-const start = Command.make(
-  "start",
-  {
-    port: Flag.integer("port").pipe(
-      Flag.withSchema(Config.Port),
-      Flag.withFallbackConfig(Config.port("PORT")),
-      Flag.withDefault(3000)
-    ),
-    hostname: Flag.string("hostname").pipe(Flag.withDefault("127.0.0.1")),
-    evePort: Flag.integer("eve-port").pipe(
-      Flag.withSchema(Config.Port),
-      Flag.withFallbackConfig(Config.port("EVE_NEXT_PRODUCTION_PORT")),
-      Flag.withDefault(4274)
-    ),
+const { values } = parseArgs({
+  options: {
+    port: { type: "string" },
+    hostname: { type: "string", default: "127.0.0.1" },
+    "eve-port": { type: "string" },
+    help: { type: "boolean", short: "h" },
   },
-  Effect.fn("startCompanion")(function* ({ evePort, hostname, port }) {
-    if (port === evePort) {
-      return yield* new ServerStopped({
-        message:
-          "Web and Eve ports must differ. Use --port 3000 --eve-port 4274.",
-      });
-    }
-    const fs = yield* FileSystem.FileSystem;
-    const routes = yield* fs.readFileString(".next/routes-manifest.json").pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              rewrites: Schema.Struct({
-                beforeFiles: Schema.Array(
-                  Schema.Struct({
-                    source: Schema.String,
-                    destination: Schema.String,
-                  })
-                ),
-              }),
-            })
-          )
-        )
-      )
+});
+const children = new Map<ChildProcess, Promise<number | null>>();
+const stopping = new AbortController();
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.once(signal, () => {
+    stopping.abort();
+  });
+}
+function launch(args: string[], environment: NodeJS.ProcessEnv) {
+  const child = spawn(process.execPath, args, {
+    env: environment,
+    stdio: "inherit",
+  });
+  const exited = new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  children.set(child, exited);
+  return exited;
+}
+
+try {
+  if (values.help) {
+    console.log(`Run the built Zoen app and Eve runtime.
+
+Options:
+  --port <number>      Web port (PORT or 3000)
+  --hostname <host>    Web host (127.0.0.1)
+  --eve-port <number>  Eve loopback port (EVE_NEXT_PRODUCTION_PORT or 4274)
+
+Examples:
+  pnpm start --port 3000
+  pnpm start --hostname 0.0.0.0
+
+Run database migrations and pnpm build before starting.`);
+  } else {
+    const { env } = await import("../shared/environment/env.ts");
+    // The supervisor forwards the configured environment to its owned processes.
+    // oxlint-disable-next-line eslint/no-restricted-properties
+    const inherited = { ...process.env };
+    const portSchema = z.coerce.number().int().min(1).max(65535);
+    const port = portSchema.parse(values.port ?? env.PORT);
+    const evePort = portSchema.parse(
+      values["eve-port"] ?? env.EVE_NEXT_PRODUCTION_PORT
     );
-    const origin = `http://127.0.0.1:${String(evePort)}`;
-    const requiredRoutes = [
+    if (port === evePort)
+      throw new Error(
+        "Web and Eve ports must differ. Use --port 3000 --eve-port 4274."
+      );
+    const origin = `http://127.0.0.1:${evePort}`;
+    const routes = z
+      .object({
+        rewrites: z.object({
+          beforeFiles: z.array(
+            z.object({ source: z.string(), destination: z.string() })
+          ),
+        }),
+      })
+      .parse(JSON.parse(await readFile(".next/routes-manifest.json", "utf8")));
+    for (const [source, path] of [
       ["/eve/v1/:path+", "/eve/v1/:path+"],
       ["/api/channels/telegram", "/channels/telegram"],
       ["/api/channels/kapso", "/channels/kapso"],
-    ] as const;
-    if (
-      !requiredRoutes.every(([source, path]) =>
-        routes.rewrites.beforeFiles.some(
+    ] as const) {
+      if (
+        !routes.rewrites.beforeFiles.some(
           (route) =>
             route.source === source && route.destination === `${origin}${path}`
         )
-      )
-    ) {
-      return yield* new ServerStopped({
-        message:
-          "Eve port does not match the built web routes. Rebuild with EVE_NEXT_PRODUCTION_PORT set to the desired port.",
-      });
+      ) {
+        throw new Error(
+          "Eve port does not match the built routes. Rebuild with EVE_NEXT_PRODUCTION_PORT set to this port."
+        );
+      }
     }
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const journal = yield* Config.string("ZOEN_ERASURE_JOURNAL_BUCKET").pipe(
-      Config.withDefault("")
-    );
-    if (journal) {
-      const reconciliation = yield* spawner.exitCode(
-        ChildProcess.make(
-          process.execPath,
+    await requireServerPort("127.0.0.1", evePort);
+    await requireServerPort(values.hostname, port);
+    if (env.ZOEN_ERASURE_JOURNAL_BUCKET) {
+      if (
+        (await launch(
           ["--import", "tsx", "scripts/reconcile-account-erasures.ts"],
-          {
-            extendEnv: true,
-            stdout: "inherit",
-            stderr: "inherit",
-          }
-        )
-      );
-      if (reconciliation !== 0)
-        return yield* new ServerStopped({
-          message:
-            "Account erasure reconciliation failed; refusing to serve restored data.",
-        });
+          inherited
+        )) !== 0
+      ) {
+        throw new Error(
+          "Account erasure reconciliation failed; refusing to serve restored data."
+        );
+      }
+      children.clear();
     }
-    yield* requireServerPort("127.0.0.1", evePort);
-    yield* requireServerPort(hostname, port);
-    const capacity = Schema.Int.check(Schema.isGreaterThan(0));
-    const concurrency = yield* Config.schema(
-      capacity,
-      "WORKFLOW_POSTGRES_WORKER_CONCURRENCY"
-    ).pipe(Config.withDefault(4));
-    const poolSize = yield* Config.schema(
-      capacity,
-      "WORKFLOW_POSTGRES_MAX_POOL_SIZE"
-    ).pipe(Config.withDefault(10));
-    const eve = yield* spawner.spawn(
-      ChildProcess.make(process.execPath, [".output/server/index.mjs"], {
-        env: {
-          NODE_ENV: "production",
-          HOST: "127.0.0.1",
-          NITRO_HOST: "127.0.0.1",
-          NITRO_PORT: String(evePort),
-          PORT: String(evePort),
-          WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${String(evePort)}`,
-          WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(concurrency),
-          WORKFLOW_POSTGRES_MAX_POOL_SIZE: String(poolSize),
-        },
-        extendEnv: true,
-        stdout: "inherit",
-        stderr: "inherit",
-        forceKillAfter: "15 seconds",
-      })
-    );
-    const http = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
-    yield* Effect.raceFirst(
-      http
-        .get(`http://127.0.0.1:${String(evePort)}/eve/v1/health`)
-        .pipe(
-          Effect.retry(Schedule.spaced("100 millis")),
-          Effect.timeout("30 seconds")
-        ),
-      eve.exitCode.pipe(
-        Effect.flatMap(
-          (code) =>
-            new ServerStopped({
-              message: `Eve exited before readiness with code ${String(code)}.`,
-            })
-        )
-      )
-    );
-    const web = yield* spawner.spawn(
-      ChildProcess.make(
-        process.execPath,
-        [
-          fileURLToPath(import.meta.resolve("next/dist/bin/next")),
-          "start",
-          "--hostname",
-          hostname,
-          "--port",
-          String(port),
-        ],
-        {
-          env: {
-            NODE_ENV: "production",
-            EVE_NEXT_PRODUCTION_PORT: String(evePort),
-          },
-          extendEnv: true,
-          stdout: "inherit",
-          stderr: "inherit",
-          forceKillAfter: "15 seconds",
-        }
-      )
-    );
-    const code = yield* Effect.raceFirst(eve.exitCode, web.exitCode);
-    return yield* new ServerStopped({
-      message: `A server exited with code ${String(code)}; stopping the companion.`,
+    const eveExited = launch([".output/server/index.mjs"], {
+      ...inherited,
+      NODE_ENV: "production",
+      HOST: "127.0.0.1",
+      NITRO_HOST: "127.0.0.1",
+      NITRO_PORT: String(evePort),
+      PORT: String(evePort),
+      WORKFLOW_LOCAL_BASE_URL: origin,
+      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(
+        env.WORKFLOW_POSTGRES_WORKER_CONCURRENCY
+      ),
+      WORKFLOW_POSTGRES_MAX_POOL_SIZE: String(
+        env.WORKFLOW_POSTGRES_MAX_POOL_SIZE
+      ),
     });
-  }, Effect.scoped)
-).pipe(
-  Command.withDescription(
-    "Run the built companion web app and Eve runtime together."
-  ),
-  Command.withExamples([
-    {
-      command: "pnpm start --port 3000",
-      description: "Start locally after migrations and pnpm build.",
-    },
-    {
-      command: "pnpm start --hostname 0.0.0.0",
-      description: "Expose the web app; Eve stays on loopback.",
-    },
-  ])
-);
-
-start.pipe(
-  Command.run({ version: "0.0.0" }),
-  Effect.provide(FetchHttpClient.layer),
-  Effect.provide(NodeServices.layer),
-  NodeRuntime.runMain
-);
+    await Promise.race([
+      (async () => {
+        const signal = AbortSignal.any([
+          stopping.signal,
+          AbortSignal.timeout(30_000),
+        ]);
+        for (;;) {
+          signal.throwIfAborted();
+          try {
+            if ((await fetch(`${origin}/eve/v1/health`, { signal })).ok) return;
+          } catch {
+            signal.throwIfAborted();
+          }
+          await delay(100, undefined, { signal });
+        }
+      })(),
+      eveExited.then((code) => {
+        throw new Error(`Eve exited before readiness (code ${String(code)}).`);
+      }),
+    ]);
+    const webExited = launch(
+      [
+        fileURLToPath(import.meta.resolve("next/dist/bin/next")),
+        "start",
+        "--hostname",
+        values.hostname,
+        "--port",
+        String(port),
+      ],
+      {
+        ...inherited,
+        NODE_ENV: "production",
+        EVE_NEXT_PRODUCTION_PORT: String(evePort),
+      }
+    );
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        if (stopping.signal.aborted) resolve();
+        else
+          stopping.signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true }
+          );
+      }),
+      Promise.race([eveExited, webExited]).then((code) => {
+        throw new Error(
+          `A server exited (code ${String(code)}); stopping Zoen.`
+        );
+      }),
+    ]);
+  }
+} catch (error) {
+  if (!stopping.signal.aborted) {
+    console.error(error instanceof Error ? error.message : "Startup failed.");
+    process.exitCode = 1;
+  }
+} finally {
+  stopping.abort();
+  await Promise.all(
+    [...children].map(async ([child, exited]) => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill("SIGTERM");
+      const force = setTimeout(() => child.kill("SIGKILL"), 15_000);
+      try {
+        await exited;
+      } catch {
+        process.exitCode = 1;
+      } finally {
+        clearTimeout(force);
+      }
+    })
+  );
+}

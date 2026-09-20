@@ -1,23 +1,21 @@
 import type { RouteHandlerArgs } from "eve/channels";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as Async from "../../../server/operations/async";
 import * as AuthSession from "@db/services/auth/session";
 import * as SessionService from "@db/services/sessions";
 import { authSessionFor } from "@tests/helpers/auth-session";
 import eveChannel, { sessionIdFromPath } from "@agent/channels/eve";
 import * as WorkspaceSession from "../../../server/workspaces/session";
-import { Effect } from "effect";
+
 import { accessScopeForUser } from "@shared/identity/access-scope";
 
 const getAuthSessionMock = vi.spyOn(AuthSession, "getAuthSession");
 const isSessionOwnedMock = vi.spyOn(SessionService, "isSessionOwned");
 // These route guards exercise the pure mocked authority result. Database
 // authorization itself is covered by the real PostgreSQL workspace suite.
-vi.mock("../../../server/runtime", async () => {
-  const effectModule = await import("effect");
-  return { serverRuntime: { runPromise: effectModule.Effect.runPromise } };
-});
+
 vi.spyOn(WorkspaceSession, "resolveWorkspaceActor").mockImplementation(() =>
-  Effect.succeed({
+  Promise.resolve({
     ...accessScopeForUser("better-auth:user-1"),
     authSessionId: "session-user-1",
     role: "owner",
@@ -26,8 +24,8 @@ vi.spyOn(WorkspaceSession, "resolveWorkspaceActor").mockImplementation(() =>
 );
 
 beforeEach(() => {
-  vi.useFakeTimers();
   vi.clearAllMocks();
+  vi.spyOn(Async, "sleep").mockResolvedValue(undefined);
   getAuthSessionMock.mockResolvedValue(
     authSessionFor({
       id: "user-1",
@@ -36,10 +34,6 @@ beforeEach(() => {
     })
   );
   isSessionOwnedMock.mockResolvedValue(false);
-});
-
-afterEach(() => {
-  vi.useRealTimers();
 });
 
 describe("Eve channel authentication", () => {
@@ -60,7 +54,6 @@ describe("Eve channel authentication", () => {
       ),
       unexpectedRouteContext()
     );
-    await vi.runAllTimersAsync();
     const response = await responsePromise;
 
     expect(response.status).toBe(403);
@@ -80,7 +73,6 @@ describe("Eve channel authentication", () => {
       ),
       unexpectedRouteContext()
     );
-    await vi.runAllTimersAsync();
     const response = await responsePromise;
 
     expect(response.status).toBe(403);
@@ -119,7 +111,6 @@ describe("Eve channel authentication", () => {
         new Request(`https://assistant.example${path}`, { method }),
         unexpectedRouteContext()
       );
-      await vi.runAllTimersAsync();
       expect((await pending).status).toBe(403);
       expect(isSessionOwnedMock).toHaveBeenCalledWith(
         expect.objectContaining({ userId: "better-auth:user-1" }),

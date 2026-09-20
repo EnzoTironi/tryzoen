@@ -1,14 +1,14 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import { getAuthSession } from "@db/services/auth/session";
 import {
   BillingCheckoutError,
   createCheckoutSession,
 } from "../../../../server/billing/checkout";
 
-const bodySchema = Schema.Struct({
-  plan: Schema.Literals(["pro", "org"]),
-  organizationId: Schema.optionalKey(Schema.String),
-  seatCount: Schema.optionalKey(Schema.Number),
+const bodySchema = z.object({
+  plan: z.enum(["pro", "org"]),
+  organizationId: z.string().optional(),
+  seatCount: z.number().optional(),
 });
 
 function checkoutErrorResponse(error: BillingCheckoutError) {
@@ -30,30 +30,26 @@ export async function POST(request: Request) {
     return Response.json({ error: "Sign in to upgrade." }, { status: 401 });
   }
 
-  const rawBody: unknown = await request.json().catch(() => null);
-  return Effect.runPromise(
-    Schema.decodeUnknownEffect(bodySchema)(rawBody ?? {}).pipe(
-      Effect.mapError(
-        () =>
-          new BillingCheckoutError({
-            reason: "invalid_plan",
-            message: "Invalid checkout payload.",
-          })
-      ),
-      Effect.flatMap((body) =>
-        createCheckoutSession({
-          userId: session.user.id,
-          email: session.user.email,
-          plan: body.plan,
-          organizationId: body.organizationId,
-          seatCount: body.seatCount,
-        })
-      ),
-      Effect.map((result) => Response.json({ url: result.url })),
-      Effect.catchTag("BillingCheckoutError", (error) =>
-        Effect.succeed(checkoutErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  const body = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!body.success) {
+    return checkoutErrorResponse(
+      new BillingCheckoutError({
+        reason: "invalid_plan",
+        message: "Invalid checkout payload.",
+      })
+    );
+  }
+  try {
+    request.signal.throwIfAborted();
+    const result = await createCheckoutSession({
+      ...body.data,
+      userId: session.user.id,
+      email: session.user.email,
+    });
+    return Response.json({ url: result.url });
+  } catch (error) {
+    if (error instanceof BillingCheckoutError)
+      return checkoutErrorResponse(error);
+    throw error;
+  }
 }

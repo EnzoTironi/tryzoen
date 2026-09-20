@@ -1,16 +1,20 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import {
+  query as dbQuery,
+  transaction as withDatabaseTransaction,
+} from "@db/queries";
+import { sql } from "drizzle-orm";
+import { SqlError } from "../../db/queries";
+import { z } from "zod";
+
 import {
   requireWorkspaceAccess,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 
-export const UsernameSchema = Schema.String.check(
-  Schema.isPattern(/^[a-z][a-z0-9_]{2,29}$/)
-);
-export const DirectoryProfileSchema = Schema.Struct({
+export const UsernameSchema = z.string().regex(/^[a-z][a-z0-9_]{2,29}$/);
+export const DirectoryProfileSchema = z.object({
   username: UsernameSchema,
-  discoverable: Schema.Boolean,
+  discoverable: z.boolean(),
 });
 const reserved = new Set([
   "admin",
@@ -24,71 +28,65 @@ const reserved = new Set([
   "api",
   "root",
 ]);
-class DirectoryError extends Schema.TaggedError<DirectoryError>()(
-  "DirectoryError",
-  {
-    reason: Schema.Literals(["unavailable", "reserved", "invalid"]),
+class DirectoryError extends Error {
+  readonly _tag = "DirectoryError";
+  declare readonly reason: "unavailable" | "reserved" | "invalid";
+  constructor(input: {
+    readonly reason: "unavailable" | "reserved" | "invalid";
+  }) {
+    super("DirectoryError");
+    this.name = "DirectoryError";
+    Object.assign(this, input);
   }
-) {}
+}
 
-export const readDirectoryProfile = Effect.fn("readDirectoryProfile")(
-  function* (actor: typeof WorkspaceActorSchema.Type) {
-    yield* requireWorkspaceAccess(actor);
-    const sql = yield* PgClient.PgClient;
-    const rows =
-      yield* sql`SELECT username, discoverable FROM user_directory WHERE ('better-auth:' || user_id) = ${actor.userId}`;
-    return rows[0]
-      ? yield* Schema.decodeUnknownEffect(DirectoryProfileSchema)(rows[0])
-      : null;
-  }
-);
+export const readDirectoryProfile = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
+) {
+  await requireWorkspaceAccess(actor);
 
-export const saveDirectoryProfile = Effect.fn("saveDirectoryProfile")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    raw: typeof DirectoryProfileSchema.Type
-  ) {
-    const profile = yield* Schema.decodeUnknownEffect(DirectoryProfileSchema)(
-      raw
-    );
-    if (reserved.has(profile.username))
-      return yield* new DirectoryError({ reason: "reserved" });
-    const sql = yield* PgClient.PgClient;
-    return yield* sql
-      .withTransaction(
-        Effect.gen(function* () {
-          yield* requireWorkspaceAccess(actor);
-          if (!actor.authSessionId)
-            return yield* new DirectoryError({ reason: "invalid" });
-          const rows =
-            yield* sql`INSERT INTO user_directory (user_id, username, discoverable)
+  const rows = await dbQuery(
+    sql`SELECT username, discoverable FROM user_directory WHERE ('better-auth:' || user_id) = ${actor.userId}`
+  );
+  return rows[0] ? await DirectoryProfileSchema.parseAsync(rows[0]) : null;
+};
+
+export const saveDirectoryProfile = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof DirectoryProfileSchema>
+) {
+  const profile = await DirectoryProfileSchema.parseAsync(raw);
+  if (reserved.has(profile.username))
+    throw new DirectoryError({ reason: "reserved" });
+
+  try {
+    return await withDatabaseTransaction(async () => {
+      await requireWorkspaceAccess(actor);
+      if (!actor.authSessionId) throw new DirectoryError({ reason: "invalid" });
+      const rows =
+        await dbQuery(sql`INSERT INTO user_directory (user_id, username, discoverable)
       SELECT id, ${profile.username}, ${profile.discoverable} FROM public.user WHERE ('better-auth:' || id) = ${actor.userId}
-      ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username, discoverable = EXCLUDED.discoverable RETURNING username, discoverable`;
-          return yield* Schema.decodeUnknownEffect(DirectoryProfileSchema)(
-            rows[0]
-          );
-        })
-      )
-      .pipe(
-        Effect.catchTag(
-          "SqlError",
-          () => new DirectoryError({ reason: "unavailable" })
-        )
-      );
+      ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username, discoverable = EXCLUDED.discoverable RETURNING username, discoverable`);
+      return await DirectoryProfileSchema.parseAsync(rows[0]);
+    });
+  } catch (error) {
+    if (error instanceof SqlError) {
+      throw new DirectoryError({ reason: "unavailable" });
+    }
+    throw error;
   }
-);
+};
 
-export const searchDirectory = Effect.fn("searchDirectory")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const searchDirectory = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   query: string
 ) {
-  yield* requireWorkspaceAccess(actor);
+  await requireWorkspaceAccess(actor);
   const prefix = query.trim().toLowerCase();
   if (!/^[a-z][a-z0-9_]{1,29}$/.test(prefix)) return [];
-  const sql = yield* PgClient.PgClient;
-  const rows =
-    yield* sql`SELECT username FROM user_directory WHERE discoverable = true AND starts_with(username, ${prefix}) ORDER BY username LIMIT 12`;
-  return yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.Struct({ username: UsernameSchema }))
-  )(rows);
-});
+
+  const rows = await dbQuery(
+    sql`SELECT username FROM user_directory WHERE discoverable = true AND starts_with(username, ${prefix}) ORDER BY username LIMIT 12`
+  );
+  return await z.array(z.object({ username: UsernameSchema })).parseAsync(rows);
+};

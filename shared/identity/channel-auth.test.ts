@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { isValid } from "@shared/validation";
+
 import { describe, expect, it } from "vitest";
 import { channelChallengeSchema } from "./channel-auth";
 
@@ -11,9 +12,9 @@ const challenge = {
 
 describe("channel login links", () => {
   it("accepts channel-matched HTTPS destinations and canonical expiry", () => {
-    expect(Schema.is(channelChallengeSchema)(challenge)).toBe(true);
+    expect(isValid(channelChallengeSchema, challenge)).toBe(true);
     expect(
-      Schema.is(channelChallengeSchema)({
+      isValid(channelChallengeSchema, {
         ...challenge,
         channel: "kapso",
         deepLink: "https://wa.me/15555550100?text=opaque",
@@ -33,7 +34,7 @@ describe("channel login links", () => {
     "https://t.me/Example\nBot",
     "https://t.me/Example\u0000Bot",
   ])("rejects an unsafe or mismatched link: %j", (deepLink) => {
-    expect(Schema.is(channelChallengeSchema)({ ...challenge, deepLink })).toBe(
+    expect(isValid(channelChallengeSchema, { ...challenge, deepLink })).toBe(
       false
     );
   });
@@ -41,9 +42,9 @@ describe("channel login links", () => {
   it.each(["invalid", "2026-02-31T12:00:00.000Z", "2026-09-08", "Infinity"])(
     "rejects invalid expiry: %s",
     (expiresAt) => {
-      expect(
-        Schema.is(channelChallengeSchema)({ ...challenge, expiresAt })
-      ).toBe(false);
+      expect(isValid(channelChallengeSchema, { ...challenge, expiresAt })).toBe(
+        false
+      );
     }
   );
 });

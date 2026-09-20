@@ -1,10 +1,6 @@
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import {
-  executorActionName,
-  executorActionResult,
-} from "@shared/chat/executor";
-import {
   browserActivityKindForTool,
   type BrowserActivityKind,
   sumBrowserActivityDurations,
@@ -57,9 +53,7 @@ export function browserBenchmarkActivity(
         if (action.kind === "load-skill")
           return "Loading the browser procedure";
         if (action.kind === "tool-call")
-          return activityForTool(
-            executorActionName(action.toolName, action.input)
-          );
+          return activityForTool(action.toolName);
         return "Coordinating browser work";
       });
       return [...new Set(activities)].join(" and ");
@@ -67,7 +61,7 @@ export function browserBenchmarkActivity(
     if (event.type === "action.result") {
       const result = event.data.result;
       if (result.kind === "tool-result") {
-        return `Reviewing ${activityForTool(executorActionResult(result.toolName, result.output).toolName).toLowerCase()} result`;
+        return `Reviewing ${activityForTool(result.toolName).toLowerCase()} result`;
       }
     }
     if (event.type === "input.requested") return "Waiting for required input";
@@ -96,7 +90,7 @@ export function browserBenchmarkLiveViewUrl(
     if (event.type !== "action.result") continue;
     const result = event.data.result;
     if (result.kind !== "tool-result") continue;
-    const resolved = executorActionResult(result.toolName, result.output);
+    const resolved = result;
     if (resolved.toolName !== "manage_browsers") continue;
     const parsed = managedBrowserOutputSchema.safeParse(resolved.output);
     if (!parsed.success) continue;
@@ -130,9 +124,7 @@ function activityKindForEvent(
     event.data.actions.map((action) => {
       if (action.kind === "load-skill") return "setup";
       if (action.kind === "tool-call") {
-        return browserActivityKindForTool(
-          executorActionName(action.toolName, action.input)
-        );
+        return browserActivityKindForTool(action.toolName);
       }
       return "other";
     })

@@ -1,5 +1,6 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { asSchema } from "ai";
-import { Predicate, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import messaging from "../../tools/messaging";
 import {
@@ -11,31 +12,40 @@ import {
   serializeInputSchema,
   toInputSchema,
 } from "../../../node_modules/eve/dist/src/tools/schema.js";
-
-const decodeJsonObject = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
-);
+const decodeJsonObject = jsonString(z.record(z.string(), z.json()));
 
 // Real dynamic tools and installed Eve/AI SDK codecs; no provider I/O.
 describe.each(["http", "channel:linq"])("reaction codec for %s", (channel) => {
-  it("preserves defaults, allowed operations and stripping across JSON persistence", async () => {
+  it("preserves defaults, allowed operations and strict input validation across JSON persistence", async () => {
     const handler = messaging.events["turn.started"];
     if (!handler) throw new Error("Messaging turn handler is required.");
     const tools = await handler(
       {},
       {
-        channel: { kind: channel },
+        model: null,
+        channel: {
+          kind: channel,
+        },
         messages: [],
         session: {
           id: "reaction-codec",
-          auth: { current: null, initiator: null },
+          auth: {
+            current: null,
+            initiator: null,
+          },
         },
       }
     );
-    if (!Predicate.isObject(tools) || !("react_to_message" in tools))
+    if (
+      !(typeof tools === "object" && tools !== null) ||
+      !("react_to_message" in tools)
+    )
       throw new Error("Reaction tool is required.");
     const reaction = tools.react_to_message;
-    if (!Predicate.isObject(reaction) || !("inputSchema" in reaction))
+    if (
+      !(typeof reaction === "object" && reaction !== null) ||
+      !("inputSchema" in reaction)
+    )
       throw new Error("Reaction schema is required.");
     const original = reaction.inputSchema;
     expect(isToolSchema(original)).toBe(true);
@@ -44,13 +54,14 @@ describe.each(["http", "channel:linq"])("reaction codec for %s", (channel) => {
     expect(await asSchema(original).jsonSchema).toMatchObject({
       type: "object",
     });
-    const encoded = decodeJsonObject(
+    const encoded = decodeJsonObject.parse(
       JSON.stringify(serializeInputSchema(original))
     );
     expect(encoded).toMatchObject({
       type: "object",
-      additionalProperties: true,
-      properties: { operation: { default: "add" } },
+      properties: {
+        operation: {},
+      },
       required: ["type"],
     });
     const restored = toInputSchema(encoded);
@@ -58,38 +69,78 @@ describe.each(["http", "channel:linq"])("reaction codec for %s", (channel) => {
     expect(await asSchema(restored).jsonSchema).toMatchObject({
       type: "object",
     });
-    expect(serializeInputSchema(restored)).toMatchObject({ type: "object" });
+    expect(serializeInputSchema(restored)).toMatchObject({
+      type: "object",
+    });
     const canonical =
       channel === "channel:linq"
         ? reactToMessageOutputSchema
         : addReactionToMessageOutputSchema;
-    const explicitUndefined = await original["~standard"].validate({
-      type: "heart",
-      operation: undefined,
-    });
-    expect(explicitUndefined.issues?.length).toBeGreaterThan(0);
     const valid = [
-      { type: "thumbs_up" },
-      { type: "thumbs_down" },
-      { type: "heart" },
-      { type: "laugh" },
-      { type: "exclamation" },
-      { type: "question" },
-      { type: "heart", operation: "add", extra: "metadata" },
+      {
+        type: "thumbs_up",
+      },
+      {
+        type: "thumbs_down",
+      },
+      {
+        type: "heart",
+      },
+      {
+        type: "laugh",
+      },
+      {
+        type: "exclamation",
+      },
+      {
+        type: "question",
+      },
+      {
+        type: "heart",
+        operation: "add",
+      },
       ...(channel === "channel:linq"
-        ? [{ type: "heart", operation: "remove" }]
+        ? [
+            {
+              type: "heart",
+              operation: "remove",
+            },
+          ]
         : []),
     ];
     const invalid = [
       null,
       {},
       [],
-      { type: null },
-      { type: "HEART" },
-      { type: " heart " },
-      { type: "heart", operation: null },
-      { type: "heart", operation: "replace" },
-      ...(channel === "http" ? [{ type: "heart", operation: "remove" }] : []),
+      {
+        type: null,
+      },
+      {
+        type: "HEART",
+      },
+      {
+        type: " heart ",
+      },
+      {
+        type: "heart",
+        operation: null,
+      },
+      {
+        type: "heart",
+        operation: "replace",
+      },
+      {
+        type: "heart",
+        extra: true,
+      },
+      ...(channel === "http"
+        ? [
+            {
+              type: "heart",
+              operation: "remove",
+            },
+          ]
+        : []),
     ];
     await Promise.all(
       [toInputSchema(original), restored].flatMap((schema) =>
@@ -102,8 +153,8 @@ describe.each(["http", "channel:linq"])("reaction codec for %s", (channel) => {
               operation: input.operation ?? "add",
               type: input.type,
             });
-            expect(Schema.decodeUnknownSync(canonical)(result.value)).toEqual(
-              Schema.decodeUnknownSync(canonical)(input)
+            expect(canonical.parse(result.value)).toEqual(
+              canonical.parse(input)
             );
           })
           .concat(

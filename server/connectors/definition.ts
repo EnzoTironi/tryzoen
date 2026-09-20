@@ -1,53 +1,57 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-const JsonObject = Schema.Record(Schema.String, Schema.Unknown);
-export const ConnectorOperation = Schema.Struct({
-  id: Schema.NonEmptyString.check(Schema.isMaxLength(120)),
-  name: Schema.NonEmptyString.check(Schema.isMaxLength(80)),
-  description: Schema.NonEmptyString.check(Schema.isMaxLength(500)),
+const JsonObject = z.record(z.string(), z.unknown());
+export const ConnectorOperation = z.object({
+  id: z.string().min(1).max(120),
+  name: z.string().min(1).max(80),
+  description: z.string().min(1).max(500),
   inputSchema: JsonObject,
   outputSchema: JsonObject,
-  request: Schema.Union([
-    Schema.Struct({ kind: Schema.Literal("mcp"), structured: Schema.Boolean }),
-    Schema.Struct({
-      kind: Schema.Literal("openapi"),
-      method: Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]),
-      path: Schema.String.check(Schema.isMaxLength(500)),
-      pathParameters: Schema.Array(Schema.String),
-      queryParameters: Schema.Array(Schema.String),
-      body: Schema.Boolean,
+  request: z.union([
+    z.object({ kind: z.literal("mcp"), structured: z.boolean() }),
+    z.object({
+      kind: z.literal("openapi"),
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+      path: z.string().max(500),
+      pathParameters: z.array(z.string()),
+      queryParameters: z.array(z.string()),
+      body: z.boolean(),
     }),
   ]),
 });
-export const ConnectorOperations = Schema.Array(ConnectorOperation).check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(100)
-);
-export const ConnectorDiscovery = Schema.Struct({
-  connectionId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
-  offset: Schema.optionalKey(
-    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))
-  ),
+export const ConnectorOperations = z.array(ConnectorOperation).min(1).max(100);
+export const ConnectorDiscovery = z.object({
+  connectionId: z.optional(z.uuid()),
+  offset: z.optional(z.number().int().min(0).max(100)),
 });
-export class ConnectorError extends Schema.TaggedError<ConnectorError>()(
-  "ConnectorError",
-  {
-    reason: Schema.Literals([
-      "invalid",
-      "unavailable",
-      "changed",
-      "denied",
-      "uncertain",
-    ]),
+export class ConnectorError extends Error {
+  readonly _tag = "ConnectorError";
+  declare readonly reason:
+    | "invalid"
+    | "unavailable"
+    | "changed"
+    | "denied"
+    | "uncertain";
+  constructor(input: {
+    readonly reason:
+      | "invalid"
+      | "unavailable"
+      | "changed"
+      | "denied"
+      | "uncertain";
+  }) {
+    super("ConnectorError");
+    this.name = "ConnectorError";
+    Object.assign(this, input);
   }
-) {}
+}
 
-export const ConnectorInput = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
-  name: Schema.NonEmptyString.check(Schema.isMaxLength(80)),
-  endpoint: Schema.NonEmptyString.check(Schema.isMaxLength(1000)),
-  kind: Schema.Literals(["mcp", "openapi"]),
-  credential: Schema.String.check(Schema.isMaxLength(8000)),
-  share: Schema.Literals(["owner", "workspace"]),
-  document: Schema.optional(Schema.String.check(Schema.isMaxLength(262_144))),
+export const ConnectorInput = z.object({
+  id: z.uuid(),
+  name: z.string().min(1).max(80),
+  endpoint: z.string().min(1).max(1000),
+  kind: z.enum(["mcp", "openapi"]),
+  credential: z.string().max(8000),
+  share: z.enum(["owner", "workspace"]),
+  document: z.optional(z.string().max(262_144)),
 });

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import { type BillingPlanId, quotaLimitsForPlan } from "@shared/billing/plans";
 
 /**
@@ -51,7 +51,7 @@ export function admissionLimitsForPlan(
   };
 }
 
-const quotaResourceSchema = Schema.Literals([
+const quotaResourceSchema = z.enum([
   "concurrent_turns",
   "model_tokens",
   "tool_calls",
@@ -60,15 +60,15 @@ const quotaResourceSchema = Schema.Literals([
   "sandbox_seconds",
   "active_users",
 ]);
-type QuotaResource = typeof quotaResourceSchema.Type;
+type QuotaResource = z.output<typeof quotaResourceSchema>;
 
-const quotaScopeSchema = Schema.Literals(["user", "installation"]);
-type QuotaScope = typeof quotaScopeSchema.Type;
+const quotaScopeSchema = z.enum(["user", "installation"]);
+type QuotaScope = z.output<typeof quotaScopeSchema>;
 
-const nonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const nonNegativeInt = z.number().int().min(0);
 
-const quotaUsageStruct = Schema.Struct({
-  user: Schema.Struct({
+const quotaUsageStruct = z.object({
+  user: z.object({
     concurrentTurns: nonNegativeInt,
     dailyModelTokens: nonNegativeInt,
     dailyToolCalls: nonNegativeInt,
@@ -76,7 +76,7 @@ const quotaUsageStruct = Schema.Struct({
     storageBytes: nonNegativeInt,
     sandboxActiveSecondsPerDay: nonNegativeInt,
   }),
-  installation: Schema.Struct({
+  installation: z.object({
     concurrentTurns: nonNegativeInt,
     dailyModelTokens: nonNegativeInt,
     activeUsersPerDay: nonNegativeInt,
@@ -99,15 +99,15 @@ export interface QuotaUsage {
   };
 }
 
-const quotaDemandStruct = Schema.Struct({
-  concurrentTurns: Schema.optionalKey(nonNegativeInt),
-  modelTokens: Schema.optionalKey(nonNegativeInt),
-  toolCalls: Schema.optionalKey(nonNegativeInt),
-  proactiveMessages: Schema.optionalKey(nonNegativeInt),
-  storageBytes: Schema.optionalKey(nonNegativeInt),
-  sandboxSeconds: Schema.optionalKey(nonNegativeInt),
+const quotaDemandStruct = z.object({
+  concurrentTurns: z.optional(nonNegativeInt),
+  modelTokens: z.optional(nonNegativeInt),
+  toolCalls: z.optional(nonNegativeInt),
+  proactiveMessages: z.optional(nonNegativeInt),
+  storageBytes: z.optional(nonNegativeInt),
+  sandboxSeconds: z.optional(nonNegativeInt),
   /** 1 when admitting work for a user not yet counted in today's active set. */
-  activeUser: Schema.optionalKey(Schema.Literals([0, 1])),
+  activeUser: z.optional(z.literal([0, 1])),
 });
 
 export interface QuotaDemand {
@@ -120,17 +120,27 @@ export interface QuotaDemand {
   activeUser?: 0 | 1;
 }
 
-export class QuotaAdmissionError extends Schema.TaggedError<QuotaAdmissionError>()(
-  "QuotaAdmissionError",
-  {
-    reason: Schema.Literals(["exceeded", "invalid_input"]),
-    scope: Schema.optionalKey(quotaScopeSchema),
-    resource: Schema.optionalKey(quotaResourceSchema),
-    limit: Schema.optionalKey(Schema.Number),
-    used: Schema.optionalKey(Schema.Number),
-    requested: Schema.optionalKey(Schema.Number),
+export class QuotaAdmissionError extends Error {
+  readonly _tag = "QuotaAdmissionError";
+  declare readonly reason: "exceeded" | "invalid_input";
+  declare readonly scope?: z.output<typeof quotaScopeSchema> | undefined;
+  declare readonly resource?: z.output<typeof quotaResourceSchema> | undefined;
+  declare readonly limit?: number | undefined;
+  declare readonly used?: number | undefined;
+  declare readonly requested?: number | undefined;
+  constructor(input: {
+    readonly reason: "exceeded" | "invalid_input";
+    readonly scope?: z.output<typeof quotaScopeSchema> | undefined;
+    readonly resource?: z.output<typeof quotaResourceSchema> | undefined;
+    readonly limit?: number | undefined;
+    readonly used?: number | undefined;
+    readonly requested?: number | undefined;
+  }) {
+    super("QuotaAdmissionError");
+    this.name = "QuotaAdmissionError";
+    Object.assign(this, input);
   }
-) {}
+}
 
 export function quotaFailureMessage(error: QuotaAdmissionError) {
   if (error.reason === "invalid_input")
@@ -276,34 +286,38 @@ export function emptyQuotaUsage(): QuotaUsage {
   };
 }
 
-function decodeUsage(usage: QuotaUsage) {
-  return Schema.decodeUnknownEffect(quotaUsageStruct)(usage).pipe(
-    Effect.map((decoded): QuotaUsage => ({
+async function decodeUsage(usage: QuotaUsage) {
+  try {
+    const decoded = await quotaUsageStruct.parseAsync(usage);
+    return {
       user: { ...decoded.user },
       installation: { ...decoded.installation },
-    })),
-    Effect.mapError(() => new QuotaAdmissionError({ reason: "invalid_input" }))
-  );
+    };
+  } catch {
+    throw new QuotaAdmissionError({ reason: "invalid_input" });
+  }
 }
 
-function decodeDemand(demand: QuotaDemand) {
-  return Schema.decodeUnknownEffect(quotaDemandStruct)(demand).pipe(
-    Effect.map((decoded): QuotaDemand => ({ ...decoded })),
-    Effect.mapError(() => new QuotaAdmissionError({ reason: "invalid_input" }))
-  );
+async function decodeDemand(demand: QuotaDemand) {
+  try {
+    const decoded = await quotaDemandStruct.parseAsync(demand);
+    return { ...decoded };
+  } catch {
+    throw new QuotaAdmissionError({ reason: "invalid_input" });
+  }
 }
 
 /** Fail closed when any demanded resource would exceed its Release-1 limit. */
-export const admitQuota = Effect.fn("admitQuota")(function* (
+export const admitQuota = async function (
   usage: QuotaUsage,
   demand: QuotaDemand,
   limits: Release1QuotaLimits = admissionLimitsForPlan()
 ) {
-  const decodedUsage = yield* decodeUsage(usage);
-  const decodedDemand = yield* decodeDemand(demand);
+  const decodedUsage = await decodeUsage(usage);
+  const decodedDemand = await decodeDemand(demand);
   for (const check of checks(limits, decodedUsage, decodedDemand)) {
     if (check.used + check.requested > check.limit) {
-      return yield* new QuotaAdmissionError({
+      throw new QuotaAdmissionError({
         reason: "exceeded",
         scope: check.scope,
         resource: check.resource,
@@ -314,7 +328,7 @@ export const admitQuota = Effect.fn("admitQuota")(function* (
     }
   }
   return decodedDemand;
-});
+};
 
 /**
  * Apply a reserved demand to a usage snapshot after a successful admit.

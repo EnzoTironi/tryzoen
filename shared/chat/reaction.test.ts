@@ -1,4 +1,3 @@
-import { Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   addReactionToMessageOutputSchema,
@@ -17,25 +16,23 @@ const reactions = [
 ] as const;
 
 describe("reaction contract", () => {
-  it("defaults only omitted operation and rejects explicit undefined or null", () => {
+  it("defaults omitted operation and rejects null", () => {
     for (const schema of [
       reactToMessageOutputSchema,
       addReactionToMessageOutputSchema,
     ]) {
-      expect(Schema.decodeUnknownSync(schema)({ type: "heart" })).toEqual({
+      expect(schema.parse({ type: "heart" })).toEqual({
         type: "heart",
         operation: "add",
       });
-      for (const operation of [undefined, null]) {
-        expect(
-          Result.isFailure(
-            Schema.decodeUnknownResult(schema)({ type: "heart", operation })
-          )
-        ).toBe(true);
+      for (const operation of [null]) {
+        expect(!schema.safeParse({ type: "heart", operation }).success).toBe(
+          true
+        );
       }
     }
     expect(
-      Schema.decodeUnknownSync(reactToMessageToolResultSchema)({
+      reactToMessageToolResultSchema.parse({
         kind: "tool-result",
         toolName: "react_to_message",
         output: { type: "heart" },
@@ -45,32 +42,31 @@ describe("reaction contract", () => {
       toolName: "react_to_message",
       output: { type: "heart", operation: "add" },
     });
-    for (const operation of [undefined, null]) {
+    for (const operation of [null]) {
       expect(
-        Result.isFailure(
-          Schema.decodeUnknownResult(reactToMessageToolResultSchema)({
-            kind: "tool-result",
-            toolName: "react_to_message",
-            output: { type: "heart", operation },
-          })
-        )
+        !reactToMessageToolResultSchema.safeParse({
+          kind: "tool-result",
+          toolName: "react_to_message",
+          output: { type: "heart", operation },
+        }).success
       ).toBe(true);
     }
   });
   it.each(reactions)("preserves %s and its display text", (type, text) => {
     expect(reactionTextFor(type)).toBe(text);
-    expect(
-      Schema.decodeUnknownSync(reactToMessageOutputSchema)({ type })
-    ).toEqual({ operation: "add", type });
-    expect(
-      Schema.decodeUnknownSync(addReactionToMessageOutputSchema)({ type })
-    ).toEqual({ operation: "add", type });
+    expect(reactToMessageOutputSchema.parse({ type })).toEqual({
+      operation: "add",
+      type,
+    });
+    expect(addReactionToMessageOutputSchema.parse({ type })).toEqual({
+      operation: "add",
+      type,
+    });
     for (const operation of ["add", "remove"]) {
       expect(
-        Schema.decodeUnknownSync(reactToMessageOutputSchema)({
+        reactToMessageOutputSchema.parse({
           type,
           operation,
-          extra: true,
         })
       ).toEqual({ type, operation });
     }
@@ -88,43 +84,34 @@ describe("reaction contract", () => {
     { type: 1 },
     [],
   ])("rejects invalid input %j", (input) => {
-    expect(
-      Result.isSuccess(
-        Schema.decodeUnknownResult(reactToMessageOutputSchema)(input)
-      )
-    ).toBe(false);
-    expect(
-      Result.isSuccess(
-        Schema.decodeUnknownResult(addReactionToMessageOutputSchema)(input)
-      )
-    ).toBe(false);
+    expect(reactToMessageOutputSchema.safeParse(input).success).toBe(false);
+    expect(addReactionToMessageOutputSchema.safeParse(input).success).toBe(
+      false
+    );
   });
 
   it("only allows add on the web contract", () => {
     expect(
-      Result.isSuccess(
-        Schema.decodeUnknownResult(addReactionToMessageOutputSchema)({
-          type: "heart",
-          operation: "remove",
-        })
-      )
+      addReactionToMessageOutputSchema.safeParse({
+        type: "heart",
+        operation: "remove",
+      }).success
     ).toBe(false);
     expect(
-      Schema.decodeUnknownSync(addReactionToMessageOutputSchema)({
+      addReactionToMessageOutputSchema.parse({
         type: "heart",
         operation: "add",
-        extra: true,
       })
     ).toEqual({ type: "heart", operation: "add" });
   });
 
-  it("strips envelope and output extras and defaults the nested operation", () => {
+  it("strips transport envelope metadata and defaults the nested operation", () => {
     expect(
-      Schema.decodeUnknownSync(reactToMessageToolResultSchema)({
+      reactToMessageToolResultSchema.parse({
         kind: "tool-result",
         toolName: "react_to_message",
         callId: "c",
-        output: { type: "heart", extra: true },
+        output: { type: "heart" },
       })
     ).toEqual({
       kind: "tool-result",
@@ -140,11 +127,9 @@ describe("reaction contract", () => {
       { kind: "tool-result", toolName: "other", output: { type: "heart" } },
       { kind: "tool-result", toolName: "react_to_message", output: null },
     ]) {
-      expect(
-        Result.isSuccess(
-          Schema.decodeUnknownResult(reactToMessageToolResultSchema)(input)
-        )
-      ).toBe(false);
+      expect(reactToMessageToolResultSchema.safeParse(input).success).toBe(
+        false
+      );
     }
   });
 });

@@ -83,7 +83,7 @@ changing a browser cookie would either fail those guards or leak personal access
    credentials, vault entries and memory do not automatically become company data.
    Existing personal guards remain until that binding is implemented.
 4. Propagate verified space and bot identity through chat creation, Eve sessions,
-   Operon principals, schedules, memory, browser execution and audit receipts.
+   workspace principals, schedules, memory, browser execution and audit receipts.
    Switching spaces must clear client query caches and stop subscriptions from the
    previous space. Revoked memberships invalidate access to existing sessions too.
 5. Implement directory/profile UI and the space selector against those services.

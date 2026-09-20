@@ -1,8 +1,9 @@
 "use client";
 
+import { isValid } from "@shared/validation";
+
 import { useState } from "react";
 import { CheckIcon, ChevronRightIcon, CpuIcon } from "lucide-react";
-import { Schema } from "effect";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { ModelAuthorization } from "./model-authorization";
@@ -71,10 +72,10 @@ export function ModelConnections() {
                     disabled={select.isPending}
                     onChange={(event) => {
                       const model = event.target.value;
-                      if (Schema.is(WorkspaceModelSchema)(model))
+                      if (isValid(WorkspaceModelSchema, model))
                         void select
                           .mutateAsync({ model })
-                          .then(() => refetch())
+                          .then(async () => refetch())
                           .catch(() => {
                             setFailed(true);
                           });

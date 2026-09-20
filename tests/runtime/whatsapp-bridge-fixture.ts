@@ -1,18 +1,17 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
 import { randomUUID } from "node:crypto";
-import { Schema } from "effect";
 
 const WHATSAPP_BRIDGE_PORT = 14351;
 const WHATSAPP_PROVISIONING_SECRET = "synthetic-whatsapp-provision-secret-32b";
 const WHATSAPP_AS_TOKEN = "synthetic-whatsapp-appservice-token-32bxx";
 export const MATRIX_HS_TOKEN = "synthetic-zoen-matrix-homeserver-token-32bx";
-const jsonBody = Schema.fromJsonString(
-  Schema.Struct({ body: Schema.optional(Schema.String) })
-);
+const jsonBody = jsonString(z.object({ body: z.optional(z.string()) }));
 
 interface LoginRecord {
   loginId: string;
@@ -45,10 +44,8 @@ function authorized(incoming: IncomingMessage, secret: string) {
 async function readJsonBody(incoming: IncomingMessage) {
   const chunks: Uint8Array[] = [];
   for await (const chunk of incoming)
-    chunks.push(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk));
-  return Schema.decodeUnknownSync(jsonBody)(
-    Buffer.concat(chunks).toString("utf8") || "{}"
-  );
+    chunks.push(z.instanceof(Uint8Array).parse(chunk));
+  return jsonBody.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
 export async function whatsappBridgeFixture() {

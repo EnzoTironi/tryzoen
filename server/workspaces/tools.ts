@@ -1,5 +1,8 @@
+import { mapAsync } from "../operations/async";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
-import { Effect, Schema } from "effect";
+
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -16,38 +19,39 @@ import {
   PublishedToolPath,
   ToolSlug,
 } from "./tool-document";
-import { executeCustomerCode } from "../executor/customer-runtime";
-import { readExecutorCatalog } from "../executor/workspace";
+import { executeCustomerCode } from "../tools/customer-runtime";
+import { readWorkspaceToolCatalog } from "../tools/workspace";
 import { requireRemoteTool } from "../connectors/connections";
 
-export const CustomerToolPublication = Schema.Struct({
+export const CustomerToolPublication = z.object({
   slug: ToolSlug,
-  operationId: WorkspaceWriteSchema.fields.operationId,
-  expectedRevision: WorkspaceWriteSchema.fields.expectedRevision,
+  operationId: WorkspaceWriteSchema.shape.operationId,
+  expectedRevision: WorkspaceWriteSchema.shape.expectedRevision,
 });
-export const CustomerToolRollback = Schema.Struct({
-  ...CustomerToolPublication.fields,
+export const CustomerToolRollback = z.object({
+  ...CustomerToolPublication.shape,
   revision: GitRevisionSchema,
 });
 
-export const listCustomerTools = Effect.fn("CustomerTools.list")(function* (
-  actor: typeof WorkspaceActorSchema.Type
+export const listCustomerTools = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const repository = yield* WorkspaceRepository;
-  const listing = yield* repository.read(actor);
-  const selection = yield* repository.selection(
+  const repository = WorkspaceRepository;
+  const listing = await repository.read(actor);
+  const selection = await repository.selection(
     actor,
     listing.files.filter(
       (path) =>
-        Schema.is(PublishedToolPath)(path) ||
+        isValid(PublishedToolPath, path) ||
         (!actor.agentGrantId &&
           !actor.groupBindingId &&
-          Schema.is(ToolProposalPath)(path))
+          isValid(ToolProposalPath, path))
     )
   );
-  const tools = yield* Effect.forEach(selection.documents, (document) =>
-    Effect.gen(function* () {
-      const definition = yield* decodeCustomerTool(document.content);
+  const tools = await mapAsync(
+    selection.documents,
+    async (document) => {
+      const definition = await decodeCustomerTool(document.content);
       const slug =
         document.path
           .split("/")
@@ -62,114 +66,112 @@ export const listCustomerTools = Effect.fn("CustomerTools.list")(function* (
         revision: selection.revision,
         draft: document.path.startsWith("proposals/"),
       };
-    })
+    },
+    1
   );
   return { revision: selection.revision, tools };
-});
+};
 
-export const validateCustomerTool = Effect.fn("CustomerTools.validate")(
-  function* (actor: typeof WorkspaceActorSchema.Type, content: string) {
-    yield* requireWorkspaceAccess(actor);
-    if (actor.agentGrantId) return yield* new WorkspaceAccessDenied();
-    const tool = yield* decodeCustomerTool(content);
-    if (tool.implementation.kind !== "code") {
-      yield* requireRemoteTool(actor, tool);
-      yield* Effect.forEach(tool.tests, (test) =>
-        Effect.gen(function* () {
-          yield* decodeCustomerValue(tool.inputSchema, test.input);
-          yield* decodeCustomerValue(tool.outputSchema, test.expected, true);
-        })
-      );
-      return { name: tool.name, tests: 0, status: "validated" as const };
-    }
-    const available = new Set<string>(
-      (yield* readExecutorCatalog(actor)).tools.map((entry) => entry.path)
+export const validateCustomerTool = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  content: string
+) {
+  await requireWorkspaceAccess(actor);
+  if (actor.agentGrantId) throw new WorkspaceAccessDenied();
+  const tool = await decodeCustomerTool(content);
+  if (tool.implementation.kind !== "code") {
+    await requireRemoteTool(actor, tool);
+    await mapAsync(
+      tool.tests,
+      async (test) => {
+        await decodeCustomerValue(tool.inputSchema, test.input);
+        await decodeCustomerValue(tool.outputSchema, test.expected, true);
+      },
+      1
     );
-    // Customer code composes this workspace's bounded reads. Native actions and
-    // other customer tools cannot be hidden inside it, even with an approval.
-    if (
-      tool.implementation.requires.some(
-        (path) => !available.has(path) || path.startsWith("workspace.google.")
-      )
+    return { name: tool.name, tests: 0, status: "validated" as const };
+  }
+  const available = new Set<string>(
+    (await readWorkspaceToolCatalog(actor)).tools.map((entry) => entry.path)
+  );
+  // Customer code composes this workspace's bounded reads. Native actions and
+  // other customer tools cannot be hidden inside it, even with an approval.
+  if (
+    tool.implementation.requires.some(
+      (path) => !available.has(path) || path.startsWith("workspace_google_")
     )
-      return yield* new CustomerToolError({ reason: "dependency_unavailable" });
-    yield* Effect.forEach(tool.tests, (test) =>
-      Effect.gen(function* () {
-        const result = yield* executeCustomerCode(tool, test.input, {
-          invoke: (call) => {
-            const fixture = test.fixtures[call.path];
-            return fixture === undefined
-              ? Effect.fail(new CustomerToolError({ reason: "test_failed" }))
-              : Effect.succeed(fixture);
-          },
-        });
-        if (!isDeepStrictEqual(result, test.expected))
-          return yield* new CustomerToolError({ reason: "test_failed" });
-        return undefined;
-      })
-    );
-    return {
-      name: tool.name,
-      tests: tool.tests.length,
-      status: "passed" as const,
-    };
-  }
-);
+  )
+    throw new CustomerToolError({ reason: "dependency_unavailable" });
+  await mapAsync(
+    tool.tests,
+    async (test) => {
+      const result = await executeCustomerCode(tool, test.input, {
+        invoke: (call) => {
+          const fixture = test.fixtures[call.path];
+          return fixture === undefined
+            ? Promise.reject(new CustomerToolError({ reason: "test_failed" }))
+            : Promise.resolve(fixture);
+        },
+      });
+      if (!isDeepStrictEqual(result, test.expected))
+        throw new CustomerToolError({ reason: "test_failed" });
+      return undefined;
+    },
+    1
+  );
+  return {
+    name: tool.name,
+    tests: tool.tests.length,
+    status: "passed" as const,
+  };
+};
 
-export const publishCustomerTool = Effect.fn("CustomerTools.publish")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    input: typeof CustomerToolPublication.Type
-  ) {
-    yield* requireWorkspaceAccess(actor, true);
-    const repository = yield* WorkspaceRepository;
-    const proposal = `proposals/tools/${input.slug}.json`;
-    const file = yield* repository.read(
-      actor,
-      proposal,
-      input.expectedRevision ?? undefined
-    );
-    if (!file.content)
-      return yield* new CustomerToolError({ reason: "unavailable" });
-    yield* validateCustomerTool(actor, file.content);
-    return yield* repository.write(
-      actor,
-      { ...input, path: `tools/${input.slug}.json`, content: file.content },
-      { kind: "tool-publication", proposal }
-    );
-  }
-);
+export const publishCustomerTool = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof CustomerToolPublication>
+) {
+  await requireWorkspaceAccess(actor, true);
+  const repository = WorkspaceRepository;
+  const proposal = `proposals/tools/${input.slug}.json`;
+  const file = await repository.read(
+    actor,
+    proposal,
+    input.expectedRevision ?? undefined
+  );
+  if (!file.content) throw new CustomerToolError({ reason: "unavailable" });
+  await validateCustomerTool(actor, file.content);
+  return await repository.write(
+    actor,
+    { ...input, path: `tools/${input.slug}.json`, content: file.content },
+    { kind: "tool-publication", proposal }
+  );
+};
 
-export const rollbackCustomerTool = Effect.fn("CustomerTools.rollback")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    input: typeof CustomerToolRollback.Type
-  ) {
-    yield* requireWorkspaceAccess(actor, true);
-    const repository = yield* WorkspaceRepository;
-    const path = `tools/${input.slug}.json`;
-    const file = yield* repository.read(actor, path, input.revision);
-    if (!file.content)
-      return yield* new CustomerToolError({ reason: "unavailable" });
-    yield* validateCustomerTool(actor, file.content);
-    return yield* repository.write(
-      actor,
-      { ...input, path, content: file.content },
-      { kind: "tool-rollback", revision: input.revision }
-    );
-  }
-);
+export const rollbackCustomerTool = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof CustomerToolRollback>
+) {
+  await requireWorkspaceAccess(actor, true);
+  const repository = WorkspaceRepository;
+  const path = `tools/${input.slug}.json`;
+  const file = await repository.read(actor, path, input.revision);
+  if (!file.content) throw new CustomerToolError({ reason: "unavailable" });
+  await validateCustomerTool(actor, file.content);
+  return await repository.write(
+    actor,
+    { ...input, path, content: file.content },
+    { kind: "tool-rollback", revision: input.revision }
+  );
+};
 
-export const disableCustomerTool = Effect.fn("CustomerTools.disable")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    input: typeof CustomerToolPublication.Type
-  ) {
-    yield* requireWorkspaceAccess(actor, true);
-    return yield* (yield* WorkspaceRepository).write(
-      actor,
-      { ...input, path: `tools/${input.slug}.json`, content: null },
-      { kind: "tool-disable" }
-    );
-  }
-);
+export const disableCustomerTool = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof CustomerToolPublication>
+) {
+  await requireWorkspaceAccess(actor, true);
+  return await WorkspaceRepository.write(
+    actor,
+    { ...input, path: `tools/${input.slug}.json`, content: null },
+    { kind: "tool-disable" }
+  );
+};

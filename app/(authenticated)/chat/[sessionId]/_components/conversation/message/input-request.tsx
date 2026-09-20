@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@web/i18n/context";
+import { approvalMessageSchema } from "@agent/lib/approval-message";
 import type { EveDynamicToolPart, EveMessageInputRequest } from "eve/react";
 import {
   Question,
@@ -117,10 +118,20 @@ export function InputRequestActions({
   const selectedOption = inputRequest.options?.find(
     (option) => option.id === inputResponse?.optionId
   );
+  const approvalMessage = approvalMessageSchema.safeParse(
+    inputRequest.kind === "tool-approval" &&
+      typeof part.input === "object" &&
+      part.input !== null &&
+      "approvalMessage" in part.input
+      ? part.input.approvalMessage
+      : undefined
+  );
 
   return (
     <Alert variant="warning">
-      <AlertTitle>{inputRequest.prompt}</AlertTitle>
+      <AlertTitle className="whitespace-pre-wrap">
+        {approvalMessage.success ? approvalMessage.data : inputRequest.prompt}
+      </AlertTitle>
       <AlertDescription>
         {inputResponse ? (
           <p>

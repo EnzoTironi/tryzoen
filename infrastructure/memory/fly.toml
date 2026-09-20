@@ -6,12 +6,6 @@ dockerfile = "Dockerfile"
 
 [env]
 MEM0_TELEMETRY = "false"
-ZOEN_MEMORY_DATA = "/data"
-
-[[mounts]]
-source = "zoen_memory_data"
-destination = "/data"
-snapshot_retention = 14
 
 [[vm]]
 memory = "1gb"

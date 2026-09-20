@@ -1,5 +1,4 @@
 import { desc, eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
 import {
   db,
   organizationAuditReceipts,
@@ -18,15 +17,20 @@ export const organizationAuditActions = [
 
 export type OrganizationAuditAction = (typeof organizationAuditActions)[number];
 
-export class OrganizationAuditAppendFailed extends Schema.TaggedError<OrganizationAuditAppendFailed>()(
-  "OrganizationAuditAppendFailed",
-  { message: Schema.String }
-) {}
+class OrganizationAuditAppendFailed extends Error {
+  readonly _tag = "OrganizationAuditAppendFailed";
+
+  constructor(input: { readonly message: string }) {
+    super(input.message);
+    this.name = "OrganizationAuditAppendFailed";
+    Object.assign(this, input);
+  }
+}
 
 /**
  * Append-only org admin receipts. Callers must never update or delete rows.
  */
-export function appendOrganizationAuditReceipt(input: {
+export async function appendOrganizationAuditReceipt(input: {
   id: string;
   organizationId: string;
   actorUserId: string;
@@ -35,9 +39,9 @@ export function appendOrganizationAuditReceipt(input: {
   targetEmail?: string | null;
   metadata?: OrganizationAuditMetadata;
   createdAt?: Date;
-}): Effect.Effect<void, OrganizationAuditAppendFailed> {
-  return Effect.tryPromise({
-    try: async () => {
+}): Promise<void> {
+  try {
+    await Promise.try(async () => {
       await db.insert(organizationAuditReceipts).values({
         id: input.id,
         organizationId: input.organizationId,
@@ -48,12 +52,13 @@ export function appendOrganizationAuditReceipt(input: {
         metadata: input.metadata ?? {},
         createdAt: input.createdAt ?? new Date(),
       });
-    },
-    catch: () =>
-      new OrganizationAuditAppendFailed({
-        message: "Failed to append organization audit receipt.",
-      }),
-  });
+    });
+    return;
+  } catch {
+    throw new OrganizationAuditAppendFailed({
+      message: "Failed to append organization audit receipt.",
+    });
+  }
 }
 
 /** Newest-first receipt list for an organization (admin review / export). */

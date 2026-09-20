@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { Predicate } from "effect";
+
 import {
   artifactDelete,
   artifactList,
   artifactRead,
-} from "../executor/tools/artifacts";
+} from "../tools/tools/artifacts";
 import { authorizeApprovalResponse } from "../../agent/lib/approval-response";
 
 const validate = (
@@ -56,9 +56,9 @@ describe("artifact tool authority boundary", () => {
   });
   test("deletion requires the existing native approval gate and a complete authored proposal", async () => {
     const approval = artifactDelete.approval;
-    if (!Predicate.isObject(approval))
+    if (typeof approval !== "object")
       throw new Error("Missing approval policy");
-    expect(Predicate.isFunction(approval.request)).toBe(true);
+    expect(typeof approval.request === "function").toBe(true);
     expect(approval.response).toBe(authorizeApprovalResponse);
     const artifactId = randomUUID();
     expect(await validate(artifactDelete, { artifactId })).toHaveProperty(

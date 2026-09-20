@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { defineEval } from "eve/evals";
-import { equals, includes } from "eve/evals/expect";
-import { executorInvocations } from "./executor";
+import { includes } from "eve/evals/expect";
 import { agentEvalTags, requireDeliveredText } from "@evals/agent/shared";
 import { saveWorkstreamSchema } from "@shared/workstreams/schema";
 
@@ -25,18 +24,18 @@ export default [
         ).id;
         first.notCalledTool("profile__save_memory");
 
-        const correction = await t.send(
+        const correction = await first.session.send(
           `For ${title}, change my seat requirement to aisle. Keep both departure options and the pending decision. This correction applies only to this trip.`
         );
         correction.expectOk();
         correction.succeeded();
         correction.calledTool("workstreams__save");
 
-        const later = await t
-          .newSession()
-          .send(
-            `Let's continue ${title}. Which departures were we considering, what seat do I want, and what remains undecided? Do not search or book.`
-          );
+        const later = await (
+          await t.session()
+        ).send(
+          `Let's continue ${title}. Which departures were we considering, what seat do I want, and what remains undecided? Do not search or book.`
+        );
         later.expectOk();
         later.succeeded();
         later.calledTool("workstreams__read");
@@ -44,15 +43,15 @@ export default [
         t.check(text, includes(/aisle/iu));
         t.check(text, includes(/(?:0?9(?::00)?|nine)/iu));
         t.check(text, includes(/(?:11(?::00)?|eleven)/iu));
-        t.check(executorInvocations(later, "schedules-create"), equals(0));
+        later.calledTool("schedules-create", { count: 0 });
         later.notCalledTool("browser-agent");
       } finally {
         if (id) {
-          const cleanup = await t
-            .newSession()
-            .send(
-              `Forget the workstream with id ${id}. Read its current revision and remove it from workstream memory.`
-            );
+          const cleanup = await (
+            await t.session()
+          ).send(
+            `Forget the workstream with id ${id}. Read its current revision and remove it from workstream memory.`
+          );
           cleanup.expectOk();
           cleanup.calledTool("workstreams__forget", { count: 1 });
         }

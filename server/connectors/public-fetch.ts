@@ -1,7 +1,8 @@
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import { lookup } from "node:dns/promises";
 import { request } from "node:https";
 import { BlockList, isIP } from "node:net";
-import { Schema } from "effect";
 
 const denied = new BlockList();
 for (const [address, prefix] of [
@@ -129,7 +130,7 @@ export const publicFetch: typeof fetch = async (input, init) => {
         "mcp-session-id",
         "mcp-protocol-version",
       ])
-        if (Schema.is(Schema.String)(response.headers[key]))
+        if (isValid(z.string(), response.headers[key]))
           responseHeaders.set(key, response.headers[key]);
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {

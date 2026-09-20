@@ -1,7 +1,9 @@
 "use client";
 
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
+
 import { useRef, useState } from "react";
-import { Schema } from "effect";
 import { ChevronRightIcon, PlugIcon, PlusIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
@@ -96,11 +98,9 @@ export function ConnectorLibrary({
           disabled={pending}
           onClick={() => {
             try {
-              const parsed = Schema.decodeUnknownSync(
-                Schema.fromJsonString(
-                  Schema.Record(Schema.String, Schema.Unknown)
-                )
-              )(input);
+              const parsed = jsonString(
+                z.record(z.string(), z.unknown())
+              ).parse(input);
               void test
                 .mutateAsync({
                   ...selection,

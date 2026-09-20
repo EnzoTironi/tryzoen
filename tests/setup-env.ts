@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 
 vi.mock("@web/i18n/server", async () => {
   const { createTranslator } = await import("@web/i18n/translate");
@@ -24,3 +24,8 @@ const testEnvironment = {
 for (const [name, value] of Object.entries(testEnvironment)) {
   vi.stubEnv(name, value);
 }
+
+beforeEach(() => {
+  for (const [name, value] of Object.entries(testEnvironment))
+    vi.stubEnv(name, value);
+});

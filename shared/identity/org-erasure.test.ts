@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   assertOrgErasureAllowed,
@@ -26,25 +25,21 @@ describe("C02 org erasure / retention gates", () => {
   });
 
   it("denies non-admin erase requests", async () => {
-    const decision = await Effect.runPromise(
-      assertOrgErasureAllowed({
-        organizationId: "org-acme",
-        actorUserId: "bob",
-        actorRole: "member",
-      })
-    );
+    const decision = await assertOrgErasureAllowed({
+      organizationId: "org-acme",
+      actorUserId: "bob",
+      actorRole: "member",
+    });
     expect(decision.status).toBe("denied");
     expect(decision.reason).toBe("not_admin");
   });
 
   it("denies cascade even for admins (fail closed stub)", async () => {
-    const decision = await Effect.runPromise(
-      assertOrgErasureAllowed({
-        organizationId: "org-acme",
-        actorUserId: "alice",
-        actorRole: "admin",
-      })
-    );
+    const decision = await assertOrgErasureAllowed({
+      organizationId: "org-acme",
+      actorUserId: "alice",
+      actorRole: "admin",
+    });
     expect(decision.status).toBe("denied");
     expect(decision.reason).toBe("cascade_unimplemented");
     expect(decision.notErased).toEqual(orgErasureSurfaces);
@@ -52,14 +47,12 @@ describe("C02 org erasure / retention gates", () => {
   });
 
   it("honors retention holds ahead of cascade stub", async () => {
-    const decision = await Effect.runPromise(
-      assertOrgErasureAllowed({
-        organizationId: "org-acme",
-        actorUserId: "alice",
-        actorRole: "admin",
-        retentionHold: true,
-      })
-    );
+    const decision = await assertOrgErasureAllowed({
+      organizationId: "org-acme",
+      actorUserId: "alice",
+      actorRole: "admin",
+      retentionHold: true,
+    });
     expect(decision.reason).toBe("retention_hold");
   });
 });

@@ -49,7 +49,7 @@ export function PluginSettings({ mayManage }: { readonly mayManage: boolean }) {
                       2
                     ),
                   })
-                  .then(() => cache.workspaces.invalidate())
+                  .then(async () => cache.workspaces.invalidate())
                   .catch(() => undefined);
               }}
             >

@@ -29,7 +29,7 @@
    - Personal: **`owner` only** (helpers enforce).
    - Company: **`admin` | `member` only** (helpers enforce; never assign
      `owner` on company workspaces).
-4. **Authorization helpers** (`shared/identity/org-rbac.ts`, Effect-safe):
+4. **Authorization helpers** (`shared/identity/org-rbac.ts`, authorized):
    - Admin/owner may manage members.
    - Member cannot elevate (cannot grant `admin`).
    - Typed `RbacDenied` fails closed.
@@ -37,7 +37,7 @@
    creating company workspaces / setting membership roles. `ensureScope`
    remains the personal provisioning path (`role: "owner"`).
 6. **Migration** `0029_org-workspace-rbac` adds tables/column and widens the
-   role CHECK with `NOT VALID` + `VALIDATE` (Effect-safe adoption).
+   role CHECK with `NOT VALID` + `VALIDATE` (authorized adoption).
 7. **Removal ends issued authority** (`server/workspaces/team.ts`
    `removeWorkspaceMember`). `agent_sessions`, `scheduled_agent_jobs`, their
    runs and rendered report outputs cascade from the membership row. Before

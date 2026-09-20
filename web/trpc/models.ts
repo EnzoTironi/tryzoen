@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { withSignal } from "../../server/operations/async";
+import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
   ModelChallengeSchema,
@@ -12,7 +13,6 @@ import {
   selectWorkspaceModel,
   startModelConnection,
 } from "../../server/models/connections";
-import { serverRuntime } from "../../server/runtime";
 import { workspaceProcedure } from "./workspace-procedure";
 
 const failure = () =>
@@ -23,61 +23,59 @@ const failure = () =>
 
 export const modelsRouter = {
   read: workspaceProcedure.query(({ ctx, signal }) =>
-    serverRuntime.runPromise(
-      readModelConnection(ctx.actor).pipe(Effect.mapError(failure)),
-      { signal }
-    )
+    withSignal(signal, async () => {
+      try {
+        return await readModelConnection(ctx.actor);
+      } catch {
+        throw failure();
+      }
+    })
   ),
   start: workspaceProcedure
-    .input(
-      Schema.toStandardSchemaV1(
-        Schema.Struct({ provider: ModelProviderSchema })
-      )
-    )
+    .input(z.object({ provider: ModelProviderSchema }))
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(
-        startModelConnection(ctx.actor, input.provider).pipe(
-          Effect.mapError(
-            () =>
-              new TRPCError({
-                code: "BAD_REQUEST",
-                message: "Model authorization unavailable.",
-              })
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await startModelConnection(ctx.actor, input.provider);
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Model authorization unavailable.",
+          });
+        }
+      })
     ),
   poll: workspaceProcedure
-    .input(Schema.toStandardSchemaV1(ModelChallengeSchema))
+    .input(ModelChallengeSchema)
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(
-        finishModelConnection(ctx.actor, input.id).pipe(
-          Effect.mapError(failure)
-        ),
-        {
-          signal,
+      withSignal(signal, async () => {
+        try {
+          return await finishModelConnection(ctx.actor, input.id);
+        } catch {
+          throw failure();
         }
-      )
+      })
     ),
   select: workspaceProcedure
-    .input(
-      Schema.toStandardSchemaV1(Schema.Struct({ model: WorkspaceModelSchema }))
-    )
+    .input(z.object({ model: WorkspaceModelSchema }))
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(
-        selectWorkspaceModel(ctx.actor, input.model).pipe(
-          Effect.mapError(failure)
-        ),
-        {
-          signal,
+      withSignal(signal, async () => {
+        try {
+          await selectWorkspaceModel(ctx.actor, input.model);
+          return;
+        } catch {
+          throw failure();
         }
-      )
+      })
     ),
   disconnect: workspaceProcedure.mutation(({ ctx, signal }) =>
-    serverRuntime.runPromise(
-      disconnectModel(ctx.actor).pipe(Effect.mapError(failure)),
-      { signal }
-    )
+    withSignal(signal, async () => {
+      try {
+        await disconnectModel(ctx.actor);
+        return;
+      } catch {
+        throw failure();
+      }
+    })
   ),
 };

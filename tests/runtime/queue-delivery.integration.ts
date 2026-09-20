@@ -1,16 +1,13 @@
+import { env } from "@shared/environment/env";
+import { Secret } from "@shared/environment/secret";
+import { withTimeout } from "../../server/operations/async";
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { createWorld } from "@workflow/world-postgres";
-import { Config, Effect, Redacted, Schema } from "effect";
 import { expect, test, vi } from "vitest";
-import { runtimeDatabase } from "./database";
-
 test("the restricted role delivers a real queued job through the native leased worker", async () => {
-  const connectionString = Redacted.value(
-    await Effect.runPromise(
-      Config.redacted("DATABASE_URL").pipe(Effect.provide(runtimeDatabase))
-    )
-  );
+  const connectionString = new Secret(env.DATABASE_URL).reveal();
   const world = createWorld({
     connectionString,
     maxPoolSize: 5,
@@ -30,7 +27,7 @@ test("the restricted role delivers a real queued job through the native leased w
     const run = async () => {
       const chunks: Uint8Array[] = [];
       for await (const chunk of request)
-        chunks.push(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk));
+        chunks.push(z.instanceof(Uint8Array).parse(chunk));
       const headers = new Headers();
       for (const [name, value] of Object.entries(request.headers)) {
         if (value !== undefined)
@@ -58,9 +55,11 @@ test("the restricted role delivers a real queued job through the native leased w
       server.listen(0, "127.0.0.1", resolve);
     });
     const address = server.address();
-    const port = Schema.decodeUnknownSync(
-      Schema.Struct({ port: Schema.Number })
-    )(address).port;
+    const port = z
+      .object({
+        port: z.number(),
+      })
+      .parse(address).port;
     vi.stubEnv("WORKFLOW_LOCAL_BASE_URL", `http://127.0.0.1:${String(port)}`);
     const payload = {
       __healthCheck: true as const,
@@ -68,11 +67,9 @@ test("the restricted role delivers a real queued job through the native leased w
     };
     await world.queue("__roleproof_wkf_workflow_probe", payload);
     expect(
-      await Effect.runPromise(
-        Effect.tryPromise(() => received.promise).pipe(
-          Effect.timeout("15 seconds")
-        )
-      )
+      await withTimeout(async () => {
+        return await received.promise;
+      }, 15000)
     ).toEqual(payload);
   } finally {
     await world.close?.();

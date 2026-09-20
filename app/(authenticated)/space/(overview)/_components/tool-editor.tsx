@@ -168,7 +168,7 @@ export function ToolEditor({
           onClick={() => {
             void validate
               .mutateAsync({ content })
-              .then(() => {
+              .then(async () => {
                 setValidated(content);
                 return undefined;
               })

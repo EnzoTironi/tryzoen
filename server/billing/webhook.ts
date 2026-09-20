@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { z } from "zod";
 import type { Stripe } from "stripe";
 import {
   findEntitlementByStripeSubscription,
@@ -13,17 +13,18 @@ import {
   StripeNotConfiguredError,
 } from "./stripe";
 
-export class BillingWebhookError extends Schema.TaggedError<BillingWebhookError>()(
-  "BillingWebhookError",
-  {
-    reason: Schema.Literals([
-      "stripe_not_configured",
-      "invalid_signature",
-      "unhandled",
-    ]),
-    message: Schema.String,
+export class BillingWebhookError extends Error {
+  readonly _tag = "BillingWebhookError";
+  readonly reason: "stripe_not_configured" | "invalid_signature" | "unhandled";
+  constructor(input: {
+    reason: "stripe_not_configured" | "invalid_signature" | "unhandled";
+    message: string;
+  }) {
+    super(input.message);
+    this.name = "BillingWebhookError";
+    this.reason = input.reason;
   }
-) {}
+}
 
 function mapSubscriptionStatus(
   status: Stripe.Subscription.Status
@@ -53,22 +54,18 @@ function parseSubjectType(raw: string | undefined): BillingSubjectType | null {
   return null;
 }
 
-const stripeIdRefSchema = Schema.Union([
-  Schema.String,
-  Schema.Struct({ id: Schema.String }),
-]);
+const stripeIdRefSchema = z.union([z.string(), z.object({ id: z.string() })]);
 
-function stripeIdFromRef(value: typeof stripeIdRefSchema.Type): string {
-  if (Schema.is(Schema.String)(value)) return value;
+function stripeIdFromRef(value: z.output<typeof stripeIdRefSchema>): string {
+  if (typeof value === "string") return value;
   return value.id;
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Stripe SDK customer/subscription fields are string | expanded object at the webhook boundary.
 function readStripeId(field: unknown): string | null {
   // Stripe expands customer/subscription into objects or leaves string ids.
-  const decoded = Schema.decodeUnknownOption(stripeIdRefSchema)(field);
-  if (Option.isNone(decoded)) return null;
-  return stripeIdFromRef(decoded.value);
+  const decoded = stripeIdRefSchema.safeParse(field);
+  if (!decoded.success) return null;
+  return stripeIdFromRef(decoded.data);
 }
 
 async function applySubscription(subscription: Stripe.Subscription) {
@@ -147,9 +144,7 @@ async function applyCheckoutSession(session: Stripe.Checkout.Session) {
   }
 }
 
-export const handleStripeWebhook = Effect.fn("handleStripeWebhook")(function* (
-  request: Request
-) {
+export async function handleStripeWebhook(request: Request) {
   let stripe;
   let secret: string;
   try {
@@ -157,7 +152,7 @@ export const handleStripeWebhook = Effect.fn("handleStripeWebhook")(function* (
     secret = stripeWebhookSecret();
   } catch (error) {
     if (error instanceof StripeNotConfiguredError) {
-      return yield* new BillingWebhookError({
+      throw new BillingWebhookError({
         reason: "stripe_not_configured",
         message: error.message,
       });
@@ -167,57 +162,54 @@ export const handleStripeWebhook = Effect.fn("handleStripeWebhook")(function* (
 
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
-    return yield* new BillingWebhookError({
+    throw new BillingWebhookError({
       reason: "invalid_signature",
       message: "Missing stripe-signature header.",
     });
   }
 
-  const payload = yield* Effect.tryPromise({
-    try: () => request.text(),
-    catch: () =>
-      new BillingWebhookError({
-        reason: "invalid_signature",
-        message: "Unable to read webhook body.",
-      }),
+  const payload = await request.text().catch(() => {
+    throw new BillingWebhookError({
+      reason: "invalid_signature",
+      message: "Unable to read webhook body.",
+    });
   });
 
-  const event = yield* Effect.try({
-    try: () => stripe.webhooks.constructEvent(payload, signature, secret),
-    catch: () =>
-      new BillingWebhookError({
-        reason: "invalid_signature",
-        message: "Stripe signature verification failed.",
-      }),
-  });
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(payload, signature, secret);
+  } catch {
+    throw new BillingWebhookError({
+      reason: "invalid_signature",
+      message: "Stripe signature verification failed.",
+    });
+  }
 
-  yield* Effect.tryPromise({
-    try: async () => {
-      switch (event.type) {
-        case "checkout.session.completed": {
-          // SAFETY: Stripe event.type discriminates Checkout.Session for this case.
-          const session = event.data.object;
-          await applyCheckoutSession(session);
-          break;
-        }
-        case "customer.subscription.created":
-        case "customer.subscription.updated":
-        case "customer.subscription.deleted": {
-          // SAFETY: Stripe event.type discriminates Subscription for these cases.
-          const subscription = event.data.object;
-          await applySubscription(subscription);
-          break;
-        }
-        default:
-          break;
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        // SAFETY: Stripe event.type discriminates Checkout.Session for this case.
+        const session = event.data.object;
+        await applyCheckoutSession(session);
+        break;
       }
-    },
-    catch: () =>
-      new BillingWebhookError({
-        reason: "unhandled",
-        message: "Webhook handler failed while updating entitlements.",
-      }),
-  });
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        // SAFETY: Stripe event.type discriminates Subscription for these cases.
+        const subscription = event.data.object;
+        await applySubscription(subscription);
+        break;
+      }
+      default:
+        break;
+    }
+  } catch {
+    throw new BillingWebhookError({
+      reason: "unhandled",
+      message: "Webhook handler failed while updating entitlements.",
+    });
+  }
 
   return { received: true as const };
-});
+}

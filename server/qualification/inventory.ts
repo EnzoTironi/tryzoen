@@ -1,8 +1,8 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-const EvidenceKind = Schema.Literals(["contract", "integration", "live"]);
-const Result = Schema.Literals(["passed", "failed", "blocked"]);
-const Family = Schema.Literals([
+const EvidenceKind = z.enum(["contract", "integration", "live"]);
+const Result = z.enum(["passed", "failed", "blocked"]);
+const Family = z.enum([
   "tool",
   "skill",
   "eval",
@@ -11,8 +11,8 @@ const Family = Schema.Literals([
   "fault",
   "release",
 ]);
-const Surface = Schema.Literals(["coordinator", "browser", "all"]);
-const Provider = Schema.Literals([
+const Surface = z.enum(["coordinator", "browser", "all"]);
+const Provider = z.enum([
   "none",
   "google",
   "telegram",
@@ -24,25 +24,25 @@ const Provider = Schema.Literals([
   "model",
 ]);
 
-const QualificationRowSchema = Schema.Struct({
-  id: Schema.String,
+const QualificationRowSchema = z.object({
+  id: z.string(),
   family: Family,
-  path: Schema.String,
+  path: z.string(),
   surface: Surface,
   provider: Provider,
-  advertised: Schema.Boolean,
-  fixture: Schema.Struct({
+  advertised: z.boolean(),
+  fixture: z.object({
     kind: EvidenceKind,
     result: Result,
-    proof: Schema.String,
+    proof: z.string(),
   }),
-  live: Schema.Struct({
+  live: z.object({
     result: Result,
-    cause: Schema.String,
+    cause: z.string(),
   }),
 });
 
-export type QualificationRow = typeof QualificationRowSchema.Type;
+export type QualificationRow = z.output<typeof QualificationRowSchema>;
 
 const live = {
   google: "No live Google OAuth in this environment.",
@@ -128,7 +128,7 @@ const browser = (
     provider === "none" ? live.none : live[provider]
   );
 
-const files = "tests/runtime/executor-codemode.integration.ts";
+const files = "tests/runtime/native-tools.integration.ts";
 const skills = "tests/runtime/workspace-skills.integration.ts";
 const whatsapp = "tests/runtime/whatsapp-bridge.integration.ts";
 const vault = "tests/runtime/vault-delegation.integration.ts";
@@ -140,7 +140,7 @@ const ontology = "tests/runtime/workspace-ontology.integration.ts";
 const google = "tests/runtime/team-connections.integration.ts";
 const boundaries = "tests/agent-tool-boundaries.test.ts";
 const learned = "tests/runtime/learned-memory.integration.ts";
-const launchExecutor = "evals/launch/executor.eval.ts";
+const launchExecutor = "evals/launch/workspace.eval.ts";
 const launchApproval = "evals/launch/approval.eval.ts";
 const launchBrowser = "evals/launch/browser.eval.ts";
 const observations = "tests/runtime/observability.integration.ts";
@@ -164,19 +164,19 @@ const rows: readonly QualificationRow[] = [
   coordinator("describe.skill", "none", skills),
   coordinator("web_fetch", "none", boundaries, "contract"),
   coordinator("workspace-save", "none", launchExecutor, "contract"),
-  coordinator("workspace.files.list", "none", files),
-  coordinator("workspace.files.read", "none", files),
-  coordinator("workspace.files.search", "none", files),
+  coordinator("workspace_files_list", "none", files),
+  coordinator("workspace_files_read", "none", files),
+  coordinator("workspace_files_search", "none", files),
   coordinator(
-    "workspace.tools.connections",
+    "workspace_tools_connections",
     "none",
     "tests/runtime/customer-connectors.integration.ts"
   ),
-  coordinator("workspace.memory.search", "mem0", learned),
-  coordinator("workspace.ontology.read", "none", ontology),
-  coordinator("workspace.google.mail.search", "google", google),
-  coordinator("workspace.google.calendar.list", "google", google),
-  coordinator("workspace.google.contacts.search", "google", google),
+  coordinator("workspace_memory_search", "mem0", learned),
+  coordinator("workspace_ontology_read", "none", ontology),
+  coordinator("workspace_google_mail_search", "google", google),
+  coordinator("workspace_google_calendar_list", "google", google),
+  coordinator("workspace_google_contacts_search", "google", google),
   coordinator("ontology-action", "none", ontology),
   coordinator("gmail-read-thread", "google", google),
   coordinator("gmail-search", "google", google),
@@ -239,9 +239,9 @@ const rows: readonly QualificationRow[] = [
     live: blocked(live.none),
   },
   {
-    id: "eval:launch/executor",
+    id: "eval:launch/workspace",
     family: "eval",
-    path: "evals/launch/executor.eval.ts",
+    path: "evals/launch/workspace.eval.ts",
     surface: "coordinator",
     provider: "model",
     advertised: true,
@@ -422,9 +422,9 @@ const rows: readonly QualificationRow[] = [
   },
 ];
 
-export const qualificationEvidence = Schema.decodeUnknownSync(
-  Schema.Array(QualificationRowSchema)
-)(rows);
+export const qualificationEvidence = z
+  .array(QualificationRowSchema)
+  .parse(rows);
 
 export const advertisedToolPaths = qualificationEvidence
   .filter((row) => row.family === "tool" && row.advertised)

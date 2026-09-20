@@ -1,20 +1,21 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-export const channelProviderSchema = Schema.Literals(["telegram", "kapso"]);
-const challengeId = Schema.String.check(Schema.isUUID(4));
+export const channelProviderSchema = z.enum(["telegram", "kapso"]);
+const challengeId = z.uuid({ version: "v4" });
 
-export const channelChallengeRequestSchema = Schema.Struct({
+export const channelChallengeRequestSchema = z.object({
   channel: channelProviderSchema,
-  purpose: Schema.Literals(["login", "link"]),
+  purpose: z.enum(["login", "link"]),
 });
 
-export const channelChallengeSchema = Schema.Struct({
-  id: challengeId,
-  channel: channelProviderSchema,
-  deepLink: Schema.String,
-  expiresAt: Schema.String,
-}).check(
-  Schema.makeFilter(({ channel, deepLink, expiresAt }) => {
+export const channelChallengeSchema = z
+  .object({
+    id: challengeId,
+    channel: channelProviderSchema,
+    deepLink: z.string(),
+    expiresAt: z.string(),
+  })
+  .superRefine(({ channel, deepLink, expiresAt }, ctx) => {
     const expectedHost = channel === "telegram" ? "t.me" : "wa.me";
     const prefix = `https://${expectedHost}/`;
     const link = URL.parse(deepLink);
@@ -33,71 +34,73 @@ export const channelChallengeSchema = Schema.Struct({
       link.username !== "" ||
       link.password !== "" ||
       link.hash !== ""
-    )
-      return {
+    ) {
+      ctx.addIssue({
+        code: "custom",
         path: ["deepLink"],
-        issue: "Expected a channel-matched HTTPS messenger link.",
-      };
+        message: "Expected a channel-matched HTTPS messenger link.",
+      });
+      return;
+    }
     const expiry = Date.parse(expiresAt);
     if (
       !Number.isFinite(expiry) ||
       new Date(expiry).toISOString() !== expiresAt
     ) {
-      return {
+      ctx.addIssue({
+        code: "custom",
         path: ["expiresAt"],
-        issue: "Expected a finite ISO UTC expiry.",
-      };
+        message: "Expected a finite ISO UTC expiry.",
+      });
+      return;
     }
-    return true;
-  })
-);
+    return;
+  });
 
-export const channelChallengeIdSchema = Schema.Struct({ id: challengeId });
+export const channelChallengeIdSchema = z.object({ id: challengeId });
 
-const channelConversationEntrySchema = Schema.Struct({
-  channel: Schema.Literal("kapso"),
-  conversationUrl: Schema.String.check(
-    Schema.makeFilter((value) => {
-      const url = URL.parse(value);
-      return (
-        url?.protocol === "https:" &&
-        url.hostname === "wa.me" &&
-        url.port === "" &&
-        url.username === "" &&
-        url.password === "" &&
-        url.hash === "" &&
-        /^\/[1-9][0-9]+$/u.test(url.pathname) &&
-        !value.includes("\\")
-      );
-    })
-  ),
+const channelConversationEntrySchema = z.object({
+  channel: z.literal("kapso"),
+  conversationUrl: z.string().refine((value) => {
+    const url = URL.parse(value);
+    return (
+      url?.protocol === "https:" &&
+      url.hostname === "wa.me" &&
+      url.port === "" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.hash === "" &&
+      /^\/[1-9][0-9]+$/u.test(url.pathname) &&
+      !value.includes("\\")
+    );
+  }),
 });
 
-export const channelStartResultSchema = Schema.Union([
+export const channelStartResultSchema = z.union([
   channelChallengeSchema,
   channelConversationEntrySchema,
 ]);
 
-export const channelChallengeStatusSchema = Schema.Struct({
-  status: Schema.Literals(["pending", "confirmed", "expired", "consumed"]),
+export const channelChallengeStatusSchema = z.object({
+  status: z.enum(["pending", "confirmed", "expired", "consumed"]),
 });
 
-export const channelChallengeCompletionSchema = Schema.Struct({
-  ok: Schema.Literal(true),
+export const channelChallengeCompletionSchema = z.object({
+  ok: z.literal(true),
 });
 
-export const deviceRequestSchema = Schema.Struct({
+export const deviceRequestSchema = z.object({
   id: challengeId,
-  purpose: channelChallengeRequestSchema.fields.purpose,
+  purpose: channelChallengeRequestSchema.shape.purpose,
 });
 
-export const deviceBindingSchema = Schema.Struct({
-  ...deviceRequestSchema.fields,
-  token: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
-  archivePreviousAccount: Schema.optionalKey(Schema.Literal(true)),
+export const deviceBindingSchema = z.object({
+  ...deviceRequestSchema.shape,
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
+  archivePreviousAccount: z.optional(z.literal(true)),
 });
-export const deviceBoundSchema = Schema.Struct({
-  ...deviceRequestSchema.fields,
+export const deviceBoundSchema = z.object({
+  ...deviceRequestSchema.shape,
   channel: channelProviderSchema,
-  expiresAt: Schema.String,
+  expiresAt: z.string(),
 });

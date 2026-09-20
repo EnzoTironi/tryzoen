@@ -1,4 +1,3 @@
-import { Effect, Schema } from "effect";
 import type { CompanyRole } from "./org-rbac";
 
 /**
@@ -13,28 +12,36 @@ import type { CompanyRole } from "./org-rbac";
  * linked Google account. Domain allowlists are optional policy metadata only.
  */
 
-export class OrgSsoDenied extends Schema.TaggedError<OrgSsoDenied>()(
-  "OrgSsoDenied",
-  {
-    reason: Schema.Literals([
-      "email_mismatch",
-      "email_unverified",
-      "google_account_missing",
-      "invite_not_pending",
-      "invite_expired",
-      "domain_not_allowed",
-    ]),
-    message: Schema.String,
+export class OrgSsoDenied extends Error {
+  readonly _tag = "OrgSsoDenied";
+  declare readonly reason:
+    | "email_mismatch"
+    | "email_unverified"
+    | "google_account_missing"
+    | "invite_not_pending"
+    | "invite_expired"
+    | "domain_not_allowed";
+  constructor(input: {
+    readonly reason:
+      | "email_mismatch"
+      | "email_unverified"
+      | "google_account_missing"
+      | "invite_not_pending"
+      | "invite_expired"
+      | "domain_not_allowed";
+    readonly message: string;
+  }) {
+    super(input.message);
+    this.name = "OrgSsoDenied";
+    Object.assign(this, input);
   }
-) {}
-
+}
 export interface GoogleLinkedIdentity {
   userId: string;
   email: string;
   emailVerified: boolean;
   hasGoogleAccount: boolean;
 }
-
 export interface OrganizationInviteView {
   id: string;
   organizationId: string;
@@ -43,11 +50,9 @@ export interface OrganizationInviteView {
   status: "pending" | "accepted" | "revoked" | "expired";
   expiresAt: Date;
 }
-
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
-
 export function emailDomain(email: string): string | undefined {
   const normalized = normalizeEmail(email);
   const at = normalized.lastIndexOf("@");
@@ -59,93 +64,82 @@ export function emailDomain(email: string): string | undefined {
 export function assertEmailDomainAllowed(
   email: string,
   allowedDomains: readonly string[] | undefined
-): Effect.Effect<void, OrgSsoDenied> {
+): Promise<void> {
   if (allowedDomains === undefined || allowedDomains.length === 0) {
-    return Effect.void;
+    return Promise.resolve();
   }
   const domain = emailDomain(email);
   const allowed = new Set(
     allowedDomains.map((value) => value.trim().toLowerCase()).filter(Boolean)
   );
   if (domain === undefined || !allowed.has(domain)) {
-    return Effect.fail(
-      new OrgSsoDenied({
-        reason: "domain_not_allowed",
-        message:
-          "Invite email domain is not on the organization Google Workspace allowlist.",
-      })
-    );
+    throw new OrgSsoDenied({
+      reason: "domain_not_allowed",
+      message:
+        "Invite email domain is not on the organization Google Workspace allowlist.",
+    });
   }
-  return Effect.void;
+  return Promise.resolve();
 }
 
 /**
  * Gate invite acceptance: verified email match + linked Google account.
- * Does not mint membership — callers persist after this Effect succeeds.
+ * Does not mint membership — callers persist after this operation succeeds.
  */
-export function assertCanAcceptOrgInvite(input: {
+export async function assertCanAcceptOrgInvite(input: {
   invite: OrganizationInviteView;
   identity: GoogleLinkedIdentity;
   now?: Date;
   allowedDomains?: readonly string[];
-}): Effect.Effect<void, OrgSsoDenied> {
-  return Effect.gen(function* () {
-    if (input.invite.status !== "pending") {
-      yield* Effect.fail(
-        new OrgSsoDenied({
-          reason: "invite_not_pending",
-          message: "Only pending organization invites can be accepted.",
-        })
-      );
-    }
-
-    const now = input.now ?? new Date();
-    if (input.invite.expiresAt.getTime() <= now.getTime()) {
-      yield* Effect.fail(
-        new OrgSsoDenied({
-          reason: "invite_expired",
-          message: "This organization invite has expired.",
-        })
-      );
-    }
-
-    yield* assertEmailDomainAllowed(input.invite.email, input.allowedDomains);
-
-    if (!input.identity.emailVerified) {
-      yield* Effect.fail(
-        new OrgSsoDenied({
-          reason: "email_unverified",
-          message:
-            "Verify the Google-linked email before joining the organization.",
-        })
-      );
-    }
-
-    if (
-      normalizeEmail(input.identity.email) !==
-      normalizeEmail(input.invite.email)
-    ) {
-      yield* Effect.fail(
-        new OrgSsoDenied({
-          reason: "email_mismatch",
-          message:
-            "Signed-in Google email must match the organization invite email.",
-        })
-      );
-    }
-
-    if (!input.identity.hasGoogleAccount) {
-      yield* Effect.fail(
-        new OrgSsoDenied({
-          reason: "google_account_missing",
-          message:
-            "Link a Google account (Workspace SSO) before accepting an organization invite.",
-        })
-      );
-    }
-  });
+}): Promise<void> {
+  if (input.invite.status !== "pending") {
+    await Promise.reject(
+      new OrgSsoDenied({
+        reason: "invite_not_pending",
+        message: "Only pending organization invites can be accepted.",
+      })
+    );
+  }
+  const now = input.now ?? new Date();
+  if (input.invite.expiresAt.getTime() <= now.getTime()) {
+    await Promise.reject(
+      new OrgSsoDenied({
+        reason: "invite_expired",
+        message: "This organization invite has expired.",
+      })
+    );
+  }
+  await assertEmailDomainAllowed(input.invite.email, input.allowedDomains);
+  if (!input.identity.emailVerified) {
+    await Promise.reject(
+      new OrgSsoDenied({
+        reason: "email_unverified",
+        message:
+          "Verify the Google-linked email before joining the organization.",
+      })
+    );
+  }
+  if (
+    normalizeEmail(input.identity.email) !== normalizeEmail(input.invite.email)
+  ) {
+    await Promise.reject(
+      new OrgSsoDenied({
+        reason: "email_mismatch",
+        message:
+          "Signed-in Google email must match the organization invite email.",
+      })
+    );
+  }
+  if (!input.identity.hasGoogleAccount) {
+    await Promise.reject(
+      new OrgSsoDenied({
+        reason: "google_account_missing",
+        message:
+          "Link a Google account (Workspace SSO) before accepting an organization invite.",
+      })
+    );
+  }
 }
-
 export function orgSsoFailureMessage(error: OrgSsoDenied): string {
   return error.message;
 }

@@ -1,8 +1,8 @@
 # Durable messaging store
 
-`Messaging.layer` requires `PgClient.PgClient`. Provide one application SQL layer
-at the framework boundary; every method returns an Effect. This service does not
-start a dispatcher, call Eve, send provider requests, or create another runtime.
+`Messaging` provides async product operations using Drizzle and the transaction
+context in `db/queries.ts`. It persists provider acceptance, dispatch leases and
+outcomes. Native Eve channels own session delivery; provider adapters own sends.
 
 The caller must resolve and authorize `identityId` before invoking the service.
 It is not an identity supplied directly by an untrusted HTTP body. Acceptance,
@@ -63,11 +63,15 @@ last check can race an external operation: the service never holds a database
 transaction open across provider I/O. An adapter timeout, crash or expired lease
 does not prove failure and does not authorize a resend.
 
-Eve continuation does not expose message idempotency. An inbox ID may be used as
-`operationId` for its separate create-once API, but this store never creates Eve
-sessions or treats an accepted candidate ID as proof of canonical ownership.
+Native delivery records input consumption in Eve channel state.
+`native-receipts.ts` indexes the consuming session in PostgreSQL and serializes
+transport handoff per workspace and address. Acknowledgment requires the durable
+receipt and Eve's checkpointed session alias; a cold candidate is not an
+acknowledgment. Replays with changed contents fail. Eve owns the turn queue and
+recovery, and the number of aliases does not grow with message count.
 
-`messaging.integration.ts` uses real PostgreSQL in `companion_messaging_test`.
+`tests/runtime/messaging.integration.ts` uses the isolated PostgreSQL environment
+documented in [local setup](../../docs/local-runtime-setup.md).
 Its synthetic receipt IDs exercise storage transitions, not provider delivery.
 
 Inbox receipts and claims retain the required original provider `sourceMessageId` separately from the webhook event key. It participates in inbox replay conflict detection and survives service reconstruction for native reply/auth attribution. Outbox receipts and claims expose `sourceMessageId: null`; their intent hash remains payload-only.

@@ -1,17 +1,18 @@
-import { Effect } from "effect";
+import { withSignal } from "../../../../server/operations/async";
+import { AccountPrivacyError } from "../../../../server/accounts/privacy";
 import {
   accountPrivacyErrorResponse,
   exportAccountPrivacyResponse,
 } from "../../../../server/accounts/privacy";
-import { serverRuntime } from "../../../../server/runtime";
 
 export function GET(request: Request) {
-  return serverRuntime.runPromise(
-    exportAccountPrivacyResponse(request.headers).pipe(
-      Effect.catchTag("AccountPrivacyError", (error) =>
-        Effect.succeed(accountPrivacyErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  return withSignal(request.signal, async () => {
+    try {
+      return await exportAccountPrivacyResponse(request.headers);
+    } catch (error) {
+      if (error instanceof AccountPrivacyError)
+        return accountPrivacyErrorResponse(error);
+      throw error;
+    }
+  });
 }

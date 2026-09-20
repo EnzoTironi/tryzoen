@@ -35,7 +35,7 @@ export default [
         });
         await requireDeliveredText(t, save);
 
-        const laterSession = t.newSession();
+        const laterSession = await t.session();
         const recall = await laterSession.send(
           "What first and last name do you have in my personal information?"
         );
@@ -57,7 +57,7 @@ export default [
 
       let cleanupError: Error | undefined;
       try {
-        const cleanupSession = t.newSession();
+        const cleanupSession = await t.session();
         const cleanup = await cleanupSession.send(
           "Use personal_info__update to forget my first and last name from personal information."
         );
@@ -113,15 +113,15 @@ export default [
       const { ensureScope } = await import("@db/services/scope");
       const { requirePersonalMemoryMembership } =
         await import("../../server/personal-memory/access");
-      const { serverRuntime } = await import("../../server/runtime");
       const isolatedScope = accessScopeForUser(
         "better-auth:isolated-agent-eval"
       );
       await ensureScope(isolatedScope);
-      await serverRuntime.runPromise(
-        patchUserProfile(requirePersonalMemoryMembership(isolatedScope), {
+      await patchUserProfile(
+        () => requirePersonalMemoryMembership(isolatedScope),
+        {
           firstName: isolatedFirstNameCanary,
-        })
+        }
       );
 
       const turn = await t.send(

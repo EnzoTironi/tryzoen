@@ -1,5 +1,6 @@
+import { z } from "zod";
 import type { ToolContext } from "eve/tools";
-import { Option, Schema } from "effect";
+
 import { scheduledConversationChannelSchema } from "../../../shared/schedules/conversation";
 import { ScheduleOwnerInactive } from "../../../server/schedules/channel-owner";
 import type {
@@ -11,31 +12,25 @@ import { scopeFromPrincipal } from "../../../shared/identity/principal-scope";
 export function scheduleOwner(context: ToolContext) {
   const auth = context.session.auth.current;
   if (auth?.principalType !== "user") throw new ScheduleOwnerInactive();
-  const conversationChannel = Schema.decodeUnknownSync(
-    scheduledConversationChannelSchema
-  )(auth.attributes.conversationChannel);
+  const conversationChannel = scheduledConversationChannelSchema.parse(
+    auth.attributes.conversationChannel
+  );
   const scope = scopeFromPrincipal(auth);
   const conversationId =
     conversationChannel === "eve"
       ? context.session.id
-      : Schema.decodeUnknownSync(
-          conversationChannel === "linq"
-            ? Schema.String.check(Schema.isStartsWith("linq:"))
-            : Schema.Union([
-                Schema.String.check(Schema.isUUID()),
-                Schema.String.check(Schema.isStartsWith("group:")),
-              ])
-        )(auth.attributes.conversationId);
+      : (conversationChannel === "linq"
+          ? z.string().startsWith("linq:")
+          : z.union([z.uuid(), z.string().startsWith("group:")])
+        ).parse(auth.attributes.conversationId);
   return { conversation: { conversationChannel, conversationId }, scope };
 }
 
 export function scheduleReplyAnchor(context: ToolContext) {
   const auth = context.session.auth.current;
   if (auth?.attributes.conversationChannel !== "linq") return undefined;
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(Schema.NonEmptyString)(
-      auth.attributes.linqMessageId
-    )
+  return ((parsed) => (parsed.success ? parsed.data : undefined))(
+    z.string().min(1).safeParse(auth.attributes.linqMessageId)
   );
 }
 

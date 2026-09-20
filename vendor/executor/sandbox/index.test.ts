@@ -1,13 +1,14 @@
-import { describe, expect, it } from "@effect/vitest";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
+import { sleep } from "../../../server/operations/async";
+import { describe, expect, it } from "vitest";
 
 import type { SandboxToolInvoker } from "../core";
 import { makeQuickJsExecutor } from "./index";
 
-class UnknownToolError extends Data.TaggedError("UnknownToolError")<{
-  readonly path: string;
-}> {}
+class UnknownToolError extends Error {
+  constructor({ path }: { path: string }) {
+    super(`Unknown tool: ${path}`);
+  }
+}
 
 const makeTestInvoker = (
   handlers: Record<string, (args: unknown) => unknown>
@@ -15,12 +16,13 @@ const makeTestInvoker = (
   invoke: ({ path, args }) => {
     const handler = handlers[path];
     if (!handler) {
-      return Effect.fail(new UnknownToolError({ path }));
+      return Promise.reject(new UnknownToolError({ path }));
     }
-    return Effect.try({
-      try: () => handler(args),
-      catch: (error) => error,
-    });
+    return Promise.resolve()
+      .then(async () => handler(args))
+      .catch((error) => {
+        throw ((error) => error)(error);
+      });
   },
 });
 
@@ -29,21 +31,20 @@ const executor = makeQuickJsExecutor({ timeoutMs: 5_000 });
 describe("quickjs executor", () => {
   it("interrupts compute while an unawaited host call is in flight and cancels that call", async () => {
     let ended = false;
-    const result = await Effect.runPromise(
-      makeQuickJsExecutor({ timeoutMs: 100, maxWallTimeMs: 500 }).execute(
-        "tools.slow({}); while (true) {}",
-        {
-          invoke: () =>
-            Effect.never.pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  ended = true;
-                })
-              )
-            ),
-        }
-      )
-    );
+    const result = await makeQuickJsExecutor({
+      timeoutMs: 100,
+      maxWallTimeMs: 500,
+    }).execute("tools.slow({}); while (true) {}", {
+      invoke: (_call, signal) =>
+        new Promise((_, reject) => {
+          const abort = () => {
+            ended = true;
+            reject(signal?.reason);
+          };
+          signal?.addEventListener("abort", abort, { once: true });
+          if (signal?.aborted) abort();
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(result.error).toContain("timed out");
     expect(ended).toBe(true);
@@ -51,40 +52,38 @@ describe("quickjs executor", () => {
 
   it("bounds time waiting for a host call which never resolves", async () => {
     let ended = false;
-    const result = await Effect.runPromise(
-      makeQuickJsExecutor({ timeoutMs: 100, maxWallTimeMs: 150 }).execute(
-        "return await tools.slow({});",
-        {
-          invoke: () =>
-            Effect.never.pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  ended = true;
-                })
-              )
-            ),
-        }
-      )
-    );
+    const result = await makeQuickJsExecutor({
+      timeoutMs: 100,
+      maxWallTimeMs: 150,
+    }).execute("return await tools.slow({});", {
+      invoke: (_call, signal) =>
+        new Promise((_, reject) => {
+          const abort = () => {
+            ended = true;
+            reject(signal?.reason);
+          };
+          signal?.addEventListener("abort", abort, { once: true });
+          if (signal?.aborted) abort();
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(result.error).toContain("timed out");
     expect(ended).toBe(true);
   });
 
-  it.effect("runs plain code", () =>
-    Effect.gen(function* () {
-      const result = yield* executor.execute(
+  it("runs plain code", () =>
+    (async function () {
+      const result = await executor.execute(
         `return 1 + 2`,
         makeTestInvoker({})
       );
       expect(result.result).toBe(3);
       expect(result.error).toBeUndefined();
-    })
-  );
+    })());
 
-  it.effect("accumulates helper output separately from returned data", () =>
-    Effect.gen(function* () {
-      const result = yield* executor.execute(
+  it("accumulates helper output separately from returned data", () =>
+    (async function () {
+      const result = await executor.execute(
         `
         const attachment = {
           _tag: "ToolFile",
@@ -169,23 +168,21 @@ describe("quickjs executor", () => {
           content: { type: "text", text: '{"arbitrary":true}' },
         },
       ]);
-    })
-  );
+    })());
 
-  it.effect("recovers prose-wrapped fenced async arrow input", () =>
-    Effect.gen(function* () {
-      const result = yield* executor.execute(
+  it("recovers prose-wrapped fenced async arrow input", () =>
+    (async function () {
+      const result = await executor.execute(
         ["Use this snippet.", "", "```ts", "async () => 42", "```"].join("\n"),
         makeTestInvoker({})
       );
 
       expect(result.result).toBe(42);
       expect(result.error).toBeUndefined();
-    })
-  );
+    })());
 
-  it.effect("invokes a tool and returns its result", () =>
-    Effect.gen(function* () {
+  it("invokes a tool and returns its result", () =>
+    (async function () {
       const invoker = makeTestInvoker({
         "math.add": (args) => {
           const { a, b } = args as { a: number; b: number };
@@ -193,7 +190,7 @@ describe("quickjs executor", () => {
         },
       });
 
-      const result = yield* executor.execute(
+      const result = await executor.execute(
         `
         const res = await tools.math.add({ a: 5, b: 3 });
         return res.sum;
@@ -203,18 +200,21 @@ describe("quickjs executor", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.result).toBe(8);
-    })
-  );
+    })());
 
   it("suspends the execution deadline while a tool dispatch is in flight", async () => {
     const timeoutMs = 100;
     const slowInvoker: SandboxToolInvoker = {
-      invoke: () => Effect.sleep(timeoutMs * 3).pipe(Effect.as("slow result")),
+      invoke: () =>
+        Promise.resolve()
+          .then(async () => sleep(timeoutMs * 3))
+          .then(async () => "slow result"),
     };
     const slowExecutor = makeQuickJsExecutor({ timeoutMs });
 
-    const result = await Effect.runPromise(
-      slowExecutor.execute("return await tools.slow.wait({});", slowInvoker)
+    const result = await slowExecutor.execute(
+      "return await tools.slow.wait({});",
+      slowInvoker
     );
 
     expect(result.error).toBeUndefined();
@@ -225,8 +225,9 @@ describe("quickjs executor", () => {
     const timeoutMs = 100;
     const timedExecutor = makeQuickJsExecutor({ timeoutMs });
 
-    const result = await Effect.runPromise(
-      timedExecutor.execute("while (true) {}", makeTestInvoker({}))
+    const result = await timedExecutor.execute(
+      "while (true) {}",
+      makeTestInvoker({})
     );
 
     expect(result.result).toBeNull();
@@ -238,18 +239,19 @@ describe("quickjs executor", () => {
   it("resets the execution deadline after a tool dispatch returns", async () => {
     const timeoutMs = 100;
     const slowInvoker: SandboxToolInvoker = {
-      invoke: () => Effect.sleep(timeoutMs * 3).pipe(Effect.as("done")),
+      invoke: () =>
+        Promise.resolve()
+          .then(async () => sleep(timeoutMs * 3))
+          .then(async () => "done"),
     };
     const timedExecutor = makeQuickJsExecutor({ timeoutMs });
 
-    const result = await Effect.runPromise(
-      timedExecutor.execute(
-        `
+    const result = await timedExecutor.execute(
+      `
         await tools.slow.wait({});
         while (true) {}
         `,
-        slowInvoker
-      )
+      slowInvoker
     );
 
     expect(result.result).toBeNull();
@@ -258,8 +260,8 @@ describe("quickjs executor", () => {
     );
   });
 
-  it.effect("invokes multiple tools in sequence", () =>
-    Effect.gen(function* () {
+  it("invokes multiple tools in sequence", () =>
+    (async function () {
       const invoker = makeTestInvoker({
         "users.get": (args) => {
           const { id } = args as { id: number };
@@ -271,7 +273,7 @@ describe("quickjs executor", () => {
         },
       });
 
-      const result = yield* executor.execute(
+      const result = await executor.execute(
         `
         const user = await tools.users.get({ id: 42 });
         const greeting = await tools.users.greet({ name: user.name });
@@ -282,18 +284,17 @@ describe("quickjs executor", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.result).toBe("Hello, User 42!");
-    })
-  );
+    })());
 
-  it.effect("handles tool errors", () =>
-    Effect.gen(function* () {
+  it("handles tool errors", () =>
+    (async function () {
       const invoker = makeTestInvoker({
         "db.query": () => {
           throw new Error("connection refused");
         },
       });
 
-      const result = yield* executor.execute(
+      const result = await executor.execute(
         `
         try {
           await tools.db.query({ sql: "SELECT 1" });
@@ -307,36 +308,33 @@ describe("quickjs executor", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.result).toContain("caught:");
-    })
-  );
+    })());
 
-  it.effect(
-    "internal defects reach the sandbox as an opaque generic only",
-    () =>
-      Effect.gen(function* () {
-        // Plugin defect carrying sensitive context. The bridge's reject
-        // path must strip everything except the canonical
-        // "Internal tool error [<corrId>]" shape — or fall back to the
-        // bare generic if the upstream invoker hasn't already stamped
-        // the correlation id (this test exercises the latter path
-        // because it bypasses makeExecutorToolInvoker).
-        const invoker: SandboxToolInvoker = {
-          invoke: () =>
-            Effect.fail(
-              Object.assign(
-                new Error(
-                  "Authorization: Bearer SECRET_TOKEN_xyz failed against host 10.0.0.5"
-                ),
-                {
-                  stack:
-                    "Error\n    at /home/svc/executor/packages/plugins/foo:142:11",
-                }
-              ) as never
-            ),
-        };
+  it("internal defects reach the sandbox as an opaque generic only", () =>
+    (async function () {
+      // Plugin defect carrying sensitive context. The bridge's reject
+      // path must strip everything except the canonical
+      // "Internal tool error [<corrId>]" shape — or fall back to the
+      // bare generic if the upstream invoker hasn't already stamped
+      // the correlation id (this test exercises the latter path
+      // because it bypasses makeExecutorToolInvoker).
+      const invoker: SandboxToolInvoker = {
+        invoke: () =>
+          Promise.reject(
+            Object.assign(
+              new Error(
+                "Authorization: Bearer SECRET_TOKEN_xyz failed against host 10.0.0.5"
+              ),
+              {
+                stack:
+                  "Error\n    at /home/svc/executor/packages/plugins/foo:142:11",
+              }
+            ) as never
+          ),
+      };
 
-        const result = yield* executor.execute(
-          `
+      const result = await executor.execute(
+        `
         try {
           await tools.leaky.call({});
           return "should not reach";
@@ -344,29 +342,28 @@ describe("quickjs executor", () => {
           return e.message;
         }
         `,
-          invoker
-        );
+        invoker
+      );
 
-        expect(result.error).toBeUndefined();
-        const message = String(result.result);
-        // Either the canonical opaque generic with a correlation id, or
-        // the bare fallback. Neither must contain any sensitive context.
-        expect(
-          message === "Internal tool error" ||
-            /^Internal tool error \[[0-9a-f]{8}\]$/.test(message)
-        ).toBe(true);
-        expect(message).not.toContain("SECRET_TOKEN_xyz");
-        expect(message).not.toContain("Authorization");
-        expect(message).not.toContain("10.0.0.5");
-        expect(message).not.toContain("packages/plugins");
-      })
-  );
+      expect(result.error).toBeUndefined();
+      const message = String(result.result);
+      // Either the canonical opaque generic with a correlation id, or
+      // the bare fallback. Neither must contain any sensitive context.
+      expect(
+        message === "Internal tool error" ||
+          /^Internal tool error \[[0-9a-f]{8}\]$/.test(message)
+      ).toBe(true);
+      expect(message).not.toContain("SECRET_TOKEN_xyz");
+      expect(message).not.toContain("Authorization");
+      expect(message).not.toContain("10.0.0.5");
+      expect(message).not.toContain("packages/plugins");
+    })());
 
-  it.effect("handles unknown tool path", () =>
-    Effect.gen(function* () {
+  it("handles unknown tool path", () =>
+    (async function () {
       const invoker = makeTestInvoker({});
 
-      const result = yield* executor.execute(
+      const result = await executor.execute(
         `
         try {
           await tools.nonexistent.thing({ x: 1 });
@@ -380,12 +377,11 @@ describe("quickjs executor", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.result).toContain("caught:");
-    })
-  );
+    })());
 
-  it.effect("captures console.log output", () =>
-    Effect.gen(function* () {
-      const result = yield* executor.execute(
+  it("captures console.log output", () =>
+    (async function () {
+      const result = await executor.execute(
         `
         console.log("hello from sandbox");
         console.warn("a warning");
@@ -398,14 +394,13 @@ describe("quickjs executor", () => {
       expect(result.result).toBe("done");
       expect(result.logs).toContainEqual("[log] hello from sandbox");
       expect(result.logs).toContainEqual("[warn] a warning");
-    })
-  );
+    })());
 
-  it.effect("applies a memory limit by default", () =>
-    Effect.gen(function* () {
+  it("applies a memory limit by default", () =>
+    (async function () {
       const defaultExecutor = makeQuickJsExecutor({ timeoutMs: 5_000 });
 
-      const result = yield* defaultExecutor.execute(
+      const result = await defaultExecutor.execute(
         `
         return new ArrayBuffer(128 * 1024 * 1024).byteLength;
         `,
@@ -414,11 +409,10 @@ describe("quickjs executor", () => {
 
       expect(result.result).toBeNull();
       expect(result.error).toBeDefined();
-    })
-  );
+    })());
 
-  it.effect("passes tool result into next tool call", () =>
-    Effect.gen(function* () {
+  it("passes tool result into next tool call", () =>
+    (async function () {
       const invoker = makeTestInvoker({
         "stripe.customers.list": () => ({
           data: [
@@ -435,7 +429,7 @@ describe("quickjs executor", () => {
         },
       });
 
-      const result = yield* executor.execute(
+      const result = await executor.execute(
         `
         const customers = await tools.stripe.customers.list();
         const invoice = await tools.stripe.invoices.create({
@@ -453,12 +447,11 @@ describe("quickjs executor", () => {
         customer: "cus_1",
         amount: 5000,
       });
-    })
-  );
+    })());
 
-  it.effect("tools proxy throws a search hint on enumeration", () =>
-    Effect.gen(function* () {
-      const result = yield* executor.execute(
+  it("tools proxy throws a search hint on enumeration", () =>
+    (async function () {
+      const result = await executor.execute(
         `
         const outcomes = {};
         try {
@@ -484,23 +477,19 @@ describe("quickjs executor", () => {
         spread:
           'tools.github is a lazy proxy and cannot be enumerated. Use tools.search({ query: "..." }) to find tools, tools.search({ namespace: "<integration>", query: "" }) to list every tool in an integration, or tools.executor.coreTools.connections.list({}) to list saved connections.',
       });
-    })
-  );
+    })());
 
-  it.effect(
-    "tools proxy still invokes and chains after the enumeration traps",
-    () =>
-      Effect.gen(function* () {
-        const result = yield* executor.execute(
-          `
+  it("tools proxy still invokes and chains after the enumeration traps", () =>
+    (async function () {
+      const result = await executor.execute(
+        `
         try { Object.keys(tools); } catch {}
         return tools.a.b.c({});
         `,
-          makeTestInvoker({ "a.b.c": () => "a.b.c" })
-        );
+        makeTestInvoker({ "a.b.c": () => "a.b.c" })
+      );
 
-        expect(result.error).toBeUndefined();
-        expect(result.result).toBe("a.b.c");
-      })
-  );
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBe("a.b.c");
+    })());
 });

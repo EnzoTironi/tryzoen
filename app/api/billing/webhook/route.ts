@@ -1,5 +1,4 @@
-import { Effect } from "effect";
-import type { BillingWebhookError } from "../../../../server/billing/webhook";
+import { BillingWebhookError } from "../../../../server/billing/webhook";
 import { handleStripeWebhook } from "../../../../server/billing/webhook";
 
 export const runtime = "nodejs";
@@ -15,13 +14,12 @@ function webhookErrorResponse(error: BillingWebhookError) {
 }
 
 export async function POST(request: Request) {
-  return Effect.runPromise(
-    handleStripeWebhook(request).pipe(
-      Effect.map((result) => Response.json(result)),
-      Effect.catchTag("BillingWebhookError", (error) =>
-        Effect.succeed(webhookErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  try {
+    request.signal.throwIfAborted();
+    return Response.json(await handleStripeWebhook(request));
+  } catch (error) {
+    if (error instanceof BillingWebhookError)
+      return webhookErrorResponse(error);
+    throw error;
+  }
 }

@@ -1,5 +1,9 @@
 # Zoen launch validation
 
+Historical evidence from the pre-rebuild implementation. It does not qualify the
+current Eve 0.63.0 runtime. Current architecture and verification are recorded in
+[the rewrite report](../eve/rebuild.md).
+
 Status (2026-09-14): the Google-first onboarding release is deployed. Existing
 Google and WhatsApp accounts have completed real sign-in, and a WhatsApp reply is
 visible in both the native app and web history. Telegram group isolation fixes
@@ -227,12 +231,12 @@ public benchmark artifacts.
 
 ## Executor ownership
 
-`server/executor/catalog.ts` resolves the current workspace's product capabilities.
+`server/tools/catalog.ts` resolves the current workspace's product capabilities.
 `agent/tools/execute.ts` and the declared browser worker's `tools/execute.ts` are
 thin Eve mounts. The model cannot select its own coordinator/browser surface.
-Business implementations and schemas live in `server/executor/tools` and
-`server/executor/browser`; native message, question, approval and memory adapters
-live in `server/executor/native` and `server/executor/memory`.
+Business implementations and schemas live in `server/tools/tools` and
+`server/tools/browser`; native message, question, approval and memory adapters
+live in `server/tools/native` and `server/tools/memory`.
 
 Eve still owns turns, sessions, tasks, approval continuations and memory refresh.
 Its framework controls remain native; there is no second agent loop or scheduler.

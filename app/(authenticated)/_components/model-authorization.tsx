@@ -83,7 +83,7 @@ export function ModelAuthorization({
               onClick={() => {
                 void disconnect
                   .mutateAsync()
-                  .then(() => utils.modelConnections.read.invalidate())
+                  .then(async () => utils.modelConnections.read.invalidate())
                   .catch(() => {
                     setFailed(true);
                   });

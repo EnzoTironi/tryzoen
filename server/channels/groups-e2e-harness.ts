@@ -1,4 +1,5 @@
-import { Effect, type Schema } from "effect";
+import type { z } from "zod";
+
 import { bindGroupChannelIdentity } from "./group-policy";
 import { parseTelegramUpdate, type TelegramInstallation } from "./telegram";
 import type { InboundEvent } from "./inbound";
@@ -24,21 +25,17 @@ export interface TelegramGroupHarnessResult {
 
 /**
  * Fixture/e2e harness: parse Telegram update → require group message →
- * bindGroupChannelIdentity. Pure Effect; no network.
+ * bindGroupChannelIdentity. Direct async calls; no network.
  */
-export const runTelegramGroupMentionHarness = Effect.fn(
-  "runTelegramGroupMentionHarness"
-)(function* (input: {
-  readonly update: Schema.Json;
+export const runTelegramGroupMentionHarness = async function (input: {
+  readonly update: z.core.util.JSONType;
   readonly installation: TelegramInstallation;
   readonly nowMs: number;
   readonly identityId: string;
-}): Effect.fn.Return<TelegramGroupHarnessResult> {
-  const events = yield* parseTelegramUpdate(
-    input.update,
-    input.installation,
-    input.nowMs
-  ).pipe(Effect.orElseSucceed(() => [] as const));
+}) {
+  const events = await Promise.try(async () =>
+    parseTelegramUpdate(input.update, input.installation, input.nowMs)
+  ).catch(() => [] as const);
   const event = events[0];
   if (!event) {
     return {
@@ -56,13 +53,15 @@ export const runTelegramGroupMentionHarness = Effect.fn(
       reason: "not_group_event",
     } satisfies TelegramGroupHarnessResult;
   }
-  const binding = yield* bindGroupChannelIdentity({
-    identityId: input.identityId,
-    channel: "telegram",
-    installationId: event.installationId,
-    senderId: event.senderId,
-    chatId: event.chatId,
-  }).pipe(Effect.orElseSucceed(() => null));
+  const binding = await Promise.try(async () =>
+    bindGroupChannelIdentity({
+      identityId: input.identityId,
+      channel: "telegram",
+      installationId: event.installationId,
+      senderId: event.senderId,
+      chatId: event.chatId,
+    })
+  ).catch(() => null);
   if (binding?.channel !== "telegram") {
     return {
       accepted: false,
@@ -86,4 +85,4 @@ export const runTelegramGroupMentionHarness = Effect.fn(
     },
     reason: "accepted_and_bound",
   } satisfies TelegramGroupHarnessResult;
-});
+};

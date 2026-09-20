@@ -1,4 +1,3 @@
-import { Predicate } from "effect";
 import { isToolSchema } from "../../../node_modules/eve/dist/src/tools/schema.js";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import type {
@@ -37,7 +36,7 @@ import schedules, {
   createSchedule,
   listSchedules,
   updateSchedule,
-} from "../../../server/executor/tools/schedules";
+} from "../../../server/tools/tools/schedules";
 
 describe("schedule tools", () => {
   beforeEach(() => {
@@ -260,19 +259,22 @@ describe("schedule tools", () => {
       "send_message",
     ]);
     const reportSend =
-      Predicate.isObject(reportMessaging) &&
+      typeof reportMessaging === "object" &&
+      reportMessaging !== null &&
       !("execute" in reportMessaging) &&
       "send_message" in reportMessaging
         ? reportMessaging.send_message
         : undefined;
     const interactiveSend =
-      Predicate.isObject(interactiveMessaging) &&
+      typeof interactiveMessaging === "object" &&
+      interactiveMessaging !== null &&
       !("execute" in interactiveMessaging) &&
       "send_message" in interactiveMessaging
         ? interactiveMessaging.send_message
         : undefined;
     const debugSend =
-      Predicate.isObject(debugMessaging) &&
+      typeof debugMessaging === "object" &&
+      debugMessaging !== null &&
       !("execute" in debugMessaging) &&
       "send_message" in debugMessaging
         ? debugMessaging.send_message
@@ -331,6 +333,7 @@ describe("schedule tools", () => {
 
 function dynamicContext(authenticator: string, kind = "channel:scheduled-run") {
   return {
+    model: null,
     channel: { kind, metadata: {} },
     messages: [],
     session: {

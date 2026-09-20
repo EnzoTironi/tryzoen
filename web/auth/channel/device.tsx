@@ -1,5 +1,7 @@
 "use client";
 
+import type { z } from "zod";
+
 import { useI18n } from "@web/i18n/context";
 
 import { useEffect, useState } from "react";
@@ -8,13 +10,12 @@ import type {
   deviceBoundSchema,
   deviceRequestSchema,
 } from "@shared/identity/channel-auth";
-import { Effect } from "effect";
 import {
   bindNativeBrowser,
   resumeNativeBrowser,
   channelFailureMessage,
   channelHttpError,
-  type ChannelAuthorizationError,
+  ChannelAuthorizationError,
 } from "./client";
 import {
   PendingAuthorization,
@@ -26,9 +27,9 @@ import { Button } from "@web/components/ui/button";
 export function NativeDeviceForm({
   id,
   purpose,
-}: typeof deviceRequestSchema.Type) {
+}: z.output<typeof deviceRequestSchema>) {
   const { t } = useI18n();
-  const [bound, setBound] = useState<typeof deviceBoundSchema.Type>();
+  const [bound, setBound] = useState<z.output<typeof deviceBoundSchema>>();
   const action = useAuthorizationRequest();
   const [loading, setLoading] = useState(true);
   const [resumeError, setResumeError] = useState<ChannelAuthorizationError>();
@@ -36,30 +37,31 @@ export function NativeDeviceForm({
     const input = { id, purpose, token: window.location.hash.slice(1) };
     if (archivePreviousAccount)
       Object.assign(input, { archivePreviousAccount });
-    action.run(bindNativeBrowser(input), (result) => {
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}?id=${encodeURIComponent(id)}&purpose=${purpose}`
-      );
-      setBound(result);
-    });
+    action.run(
+      (signal) => bindNativeBrowser(input, signal),
+      (result) => {
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}?id=${encodeURIComponent(id)}&purpose=${purpose}`
+        );
+        setBound(result);
+      }
+    );
   };
   useEffect(() => {
     const controller = new AbortController();
-    void Effect.runPromise(
-      resumeNativeBrowser({ id, purpose }).pipe(
-        Effect.match({
-          onSuccess: setBound,
-          onFailure: (failure) => {
-            if (!window.location.hash) setResumeError(failure);
-          },
-        })
-      ),
-      { signal: controller.signal }
-    )
-      .catch(() => {
-        if (!controller.signal.aborted) setResumeError(channelHttpError(0));
+    void resumeNativeBrowser({ id, purpose }, controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) setBound(value);
+      })
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted && !window.location.hash)
+          setResumeError(
+            failure instanceof ChannelAuthorizationError
+              ? failure
+              : channelHttpError(503)
+          );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -151,7 +153,7 @@ export function DeviceChallengeRecovery({
   showSignInAgain,
 }: {
   readonly message: string;
-  readonly purpose: typeof deviceRequestSchema.Type.purpose;
+  readonly purpose: z.output<typeof deviceRequestSchema>["purpose"];
   readonly showSignInAgain: boolean;
 }) {
   const { t } = useI18n();

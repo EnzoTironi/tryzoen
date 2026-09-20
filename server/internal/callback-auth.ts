@@ -1,89 +1,93 @@
+import { Secret } from "@shared/environment/secret";
+import { withTimeout } from "../operations/async";
+import { TimeoutError } from "../operations/async";
+import { z } from "zod";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import {
-  Clock,
-  Config,
-  Effect,
-  Option,
-  Redacted,
-  Schema,
-  Stream,
-} from "effect";
+import { resolvedInstallationSecrets } from "@db/services/installation-secrets";
+import { env } from "@shared/environment/env";
+import { BodyTooLarge, readBody } from "../http/body";
 import { routeAuth, vercelOidc } from "eve/channels/auth";
-
 export const internalCallbackBodies = {
-  "/internal/channel-input/respond": Schema.Struct({
-    sessionId: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
-    identityId: Schema.String.check(Schema.isUUID()),
-    sourceMessageId: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
-    turnId: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
-    requestId: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
-    decision: Schema.Literals(["approve", "cancel"]),
+  "/internal/channel-input/respond": z.object({
+    sessionId: z.string().min(1).max(256),
+    identityId: z.uuid(),
+    sourceMessageId: z.string().min(1).max(256),
+    turnId: z.string().min(1).max(256),
+    requestId: z.string().min(1).max(256),
+    decision: z.enum(["approve", "cancel"]),
   }),
-  "/internal/scheduled-run/report": Schema.Struct({
-    runId: Schema.String.check(Schema.isUUID()),
+  "/internal/scheduled-run/report": z.object({
+    runId: z.uuid(),
   }),
-  "/internal/scheduled-run/respond": Schema.Struct({
-    answer: Schema.String.check(
-      Schema.isTrimmed(),
-      Schema.isMinLength(1),
-      Schema.isMaxLength(8000)
-    ),
-    leaseToken: Schema.String.check(Schema.isUUID()),
-    runId: Schema.String.check(Schema.isUUID()),
+  "/internal/scheduled-run/respond": z.object({
+    answer: z
+      .string()
+      .refine((value) => value === value.trim(), "Expected trimmed text")
+      .min(1)
+      .max(8000),
+    leaseToken: z.uuid(),
+    runId: z.uuid(),
   }),
 };
 export type InternalCallbackRoute = keyof typeof internalCallbackBodies;
-
-export class InternalCallbackRejected extends Schema.TaggedError<InternalCallbackRejected>()(
-  "InternalCallbackRejected",
-  { status: Schema.Literals([400, 401, 408, 413, 503]) }
-) {}
-
-const reject = (status: InternalCallbackRejected["status"]) =>
-  new InternalCallbackRejected({ status });
-const originSchema = Schema.String.check(
-  Schema.makeFilter((value) => {
-    if (!URL.canParse(value)) return false;
-    const url = new URL(value);
-    return (
-      !url.username &&
-      !url.password &&
-      (url.protocol === "https:" ||
-        (url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
-    );
-  })
-);
-
-export const internalCallbackOrigin = Config.string("BETTER_AUTH_URL").pipe(
-  Effect.flatMap(Schema.decodeUnknownEffect(originSchema)),
-  Effect.map((value) => new URL(value).origin),
-  Effect.mapError(() => reject(503))
-);
-const callbackKey = Effect.gen(function* () {
-  const installation = yield* ResolvedInstallationSecrets;
-  const secret = yield* Schema.decodeUnknownEffect(
-    Schema.String.check(
-      Schema.isBase64(),
-      Schema.makeFilter((value) => Buffer.from(value, "base64").length === 32)
-    )
-  )(Redacted.value(installation.secretEncryptionKey));
-  return Redacted.make(
-    createHmac("sha256", Buffer.from(secret, "base64"))
-      .update("companion/internal-callback/v1")
-      .digest()
+export class InternalCallbackRejected extends Error {
+  readonly _tag = "InternalCallbackRejected";
+  declare readonly status: 400 | 401 | 408 | 413 | 503;
+  constructor(input: { readonly status: 400 | 401 | 408 | 413 | 503 }) {
+    super("InternalCallbackRejected");
+    this.name = "InternalCallbackRejected";
+    Object.assign(this, input);
+  }
+}
+function reject(status: InternalCallbackRejected["status"]): never {
+  throw new InternalCallbackRejected({
+    status,
+  });
+}
+const originSchema = z.string().refine((value) => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (
+    !url.username &&
+    !url.password &&
+    (url.protocol === "https:" ||
+      (url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
   );
-}).pipe(Effect.mapError(() => reject(503)));
-
+});
+export function internalCallbackOrigin() {
+  const value = originSchema.safeParse(env.BETTER_AUTH_URL);
+  if (!value.success)
+    throw new InternalCallbackRejected({
+      status: 503,
+    });
+  return new URL(value.data).origin;
+}
+const callbackKey = async () => {
+  try {
+    const installation = await resolvedInstallationSecrets();
+    const secret = await z
+      .string()
+      .refine((value) => z.base64().safeParse(value).success, "Expected base64")
+      .refine((value) => Buffer.from(value, "base64").length === 32)
+      .parseAsync(installation.secretEncryptionKey.reveal());
+    return new Secret(
+      createHmac("sha256", Buffer.from(secret, "base64"))
+        .update("companion/internal-callback/v1")
+        .digest()
+    );
+  } catch {
+    return reject(503);
+  }
+};
 function signature(
-  key: Redacted.Redacted<Buffer>,
+  key: Secret<Buffer>,
   origin: string,
   route: InternalCallbackRoute,
   timestamp: string,
   body: Uint8Array
 ) {
-  return createHmac("sha256", Redacted.value(key))
+  return createHmac("sha256", key.reveal())
     .update(
       JSON.stringify([
         "v1",
@@ -96,106 +100,92 @@ function signature(
     )
     .digest();
 }
-
-export const internalCallbackHeaders = Effect.fn("internalCallbackHeaders")(
-  function* (route: InternalCallbackRoute, body: string) {
-    const origin = yield* internalCallbackOrigin;
-    const key = yield* callbackKey;
-    const timestamp = String(
-      Math.floor((yield* Clock.currentTimeMillis) / 1000)
-    );
-    return new Headers({
-      "content-type": "application/json",
-      "x-internal-callback-time": timestamp,
-      "x-internal-callback-signature": signature(
-        key,
-        origin,
-        route,
-        timestamp,
-        Buffer.from(body)
-      ).toString("hex"),
+export const internalCallbackHeaders = async function (
+  route: InternalCallbackRoute,
+  body: string
+) {
+  const origin = internalCallbackOrigin();
+  const key = await callbackKey();
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  return new Headers({
+    "content-type": "application/json",
+    "x-internal-callback-time": timestamp,
+    "x-internal-callback-signature": signature(
+      key,
+      origin,
+      route,
+      timestamp,
+      Buffer.from(body)
+    ).toString("hex"),
+  });
+};
+async function readInternalCallbackBody(request: Request) {
+  if (!request.body)
+    throw new InternalCallbackRejected({
+      status: 400,
+    });
+  try {
+    return await withTimeout(() => readBody(request.body, 64 * 1024), 5_000);
+  } catch (error) {
+    throw new InternalCallbackRejected({
+      status:
+        error instanceof TimeoutError
+          ? 408
+          : error instanceof BodyTooLarge
+            ? 413
+            : 400,
     });
   }
-);
-
-const readInternalCallbackBody = Effect.fn("readInternalCallbackBody")(
-  function* (request: Request) {
-    if (!request.body) return yield* reject(400);
-    const source = request.body;
-    const cancel = Effect.tryPromise({
-      try: () => source.cancel(),
-      catch: () => reject(400),
-    }).pipe(Effect.interruptible, Effect.timeout("100 millis"), Effect.ignore);
-    return yield* Stream.fromReadableStream({
-      evaluate: () => source,
-      onError: () => reject(400),
-      releaseLockOnEnd: true,
-    }).pipe(
-      Stream.runFoldEffect(
-        () => ({ size: 0, chunks: new Array<Uint8Array>() }),
-        (acc, chunk) => {
-          if (acc.size + chunk.length > 64 * 1024)
-            return Effect.fail(reject(413));
-          return Effect.sync(() => {
-            acc.size += chunk.length;
-            acc.chunks.push(chunk);
-            return acc;
-          });
-        }
-      ),
-      Effect.map(({ chunks, size }) => Buffer.concat(chunks, size)),
-      Effect.timeout("5 seconds"),
-      Effect.catchTag("TimeoutError", () => Effect.fail(reject(408))),
-      Effect.ensuring(cancel)
-    );
-  }
-);
-
-export const readVerifiedInternalCallback = Effect.fn(
-  "readVerifiedInternalCallback"
-)(function* (request: Request, route: InternalCallbackRoute) {
-  const origin = yield* internalCallbackOrigin;
-  const key = yield* callbackKey;
+}
+export const readVerifiedInternalCallback = async function (
+  request: Request,
+  route: InternalCallbackRoute
+) {
+  const origin = internalCallbackOrigin();
+  const key = await callbackKey();
   const url = new URL(request.url);
   if (request.method !== "POST" || url.pathname !== route || url.search)
-    return yield* reject(401);
-  const timestamp = yield* Schema.decodeUnknownEffect(
-    Schema.String.check(Schema.isPattern(/^\d{10}$/u))
-  )(request.headers.get("x-internal-callback-time")).pipe(
-    Effect.mapError(() => reject(401))
-  );
-  const age =
-    Math.floor((yield* Clock.currentTimeMillis) / 1000) - Number(timestamp);
-  if (age < -5 || age > 60) return yield* reject(401);
-  const encoded = yield* Schema.decodeUnknownEffect(
-    Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u))
-  )(request.headers.get("x-internal-callback-signature")).pipe(
-    Effect.mapError(() => reject(401))
-  );
-  const body = yield* readInternalCallbackBody(request);
+    return reject(401);
+  const timestamp = await Promise.try(async () =>
+    z
+      .string()
+      .regex(/^\d{10}$/u)
+      .parseAsync(request.headers.get("x-internal-callback-time"))
+  ).catch(() => {
+    return reject(401);
+  });
+  const age = Math.floor(Date.now() / 1000) - Number(timestamp);
+  if (age < -5 || age > 60) return reject(401);
+  const encoded = await Promise.try(async () =>
+    z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .parseAsync(request.headers.get("x-internal-callback-signature"))
+  ).catch(() => {
+    return reject(401);
+  });
+  const body = await readInternalCallbackBody(request);
   const expected = signature(key, origin, route, timestamp, body);
   if (!timingSafeEqual(Buffer.from(encoded, "hex"), expected))
-    return yield* reject(401);
+    return reject(401);
   // Authentication is time-bounded, not single-use. The existing run/report claim fences dispatch.
   return body;
-});
-
-export const readAuthenticatedInternalCallback = Effect.fn(
-  "readAuthenticatedInternalCallback"
-)(
-  function* (request: Request, route: InternalCallbackRoute) {
-    const vercel = yield* Config.option(Config.string("VERCEL_ENV"));
-    if (Option.isSome(vercel)) {
-      const auth = yield* Effect.tryPromise({
-        try: () => routeAuth(request, [vercelOidc()]),
-        catch: () => new InternalCallbackRejected({ status: 503 }),
+};
+export async function readAuthenticatedInternalCallback(
+  request: Request,
+  route: InternalCallbackRoute
+) {
+  if (env.VERCEL_ENV) {
+    let auth: Awaited<ReturnType<typeof routeAuth>>;
+    try {
+      auth = await routeAuth(request, [vercelOidc()]);
+    } catch {
+      throw new InternalCallbackRejected({
+        status: 503,
       });
-      if (auth instanceof Response) return auth;
-      return yield* readInternalCallbackBody(request);
     }
-    return yield* readVerifiedInternalCallback(request, route);
-  },
-  Effect.catchTag("ConfigError", () =>
-    Effect.fail(new InternalCallbackRejected({ status: 503 }))
-  )
-);
+    if (auth instanceof Response) return auth;
+    return readInternalCallbackBody(request);
+  }
+  return readVerifiedInternalCallback(request, route);
+}

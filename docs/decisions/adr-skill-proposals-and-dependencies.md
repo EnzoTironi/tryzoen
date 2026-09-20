@@ -50,7 +50,7 @@ does not change the authorization of its operations.
 ## Evidence
 
 `tests/runtime/workspace-skills.integration.ts` proves personal publish and
-Code Mode use, member proposal versus admin publication, a bound group
+native tool use, member proposal versus admin publication, a bound group
 proposal without `manage`, second revision plus rollback, concurrent
 publication conflict, a malicious skill that does not change grants, and a
 missing dependency returning `blocked`. `server/workspaces/git.test.ts`

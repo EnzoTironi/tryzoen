@@ -12,10 +12,9 @@ import app as service
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(monkeypatch):
     monkeypatch.setenv("ZOEN_MEM0_API_KEY", "test-service-key-" * 3)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-unused-provider-key")
-    monkeypatch.setenv("ZOEN_MEMORY_DATA", str(tmp_path))
     original = Memory.from_config
 
     def local_memory(config):

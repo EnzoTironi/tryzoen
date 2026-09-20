@@ -1,12 +1,12 @@
-import { Result, Schema } from "effect";
+import {
+  createLinqAdapter,
+  type LinqWebhookVerifier,
+} from "@linqapp/chat-sdk-adapter";
+
 import { connectLinqCredentials } from "@vercel/connect/eve";
 import { LinqAPIV3 } from "@linqapp/sdk";
-import type { AdapterPostableMessage } from "chat";
-import {
-  defaultLinqAuth,
-  linqChannel,
-  type LinqChannelCredentials,
-} from "eve/channels/linq";
+import type { AdapterPostableMessage, Chat, Message, Thread } from "chat";
+import { defaultLinqAuth, linqChannel } from "eve/channels/linq";
 import { vercelOidc } from "eve/channels/auth";
 import { z } from "zod";
 import { resolveLinqReplyTarget } from "@agent/lib/reply-targets";
@@ -45,34 +45,38 @@ const trustedForwarder = vercelOidc();
 // The Linq adapter only rejects a webhook when the verifier returns `false`,
 // while eve's OIDC verifier reports failure as `null`. Translate explicitly so
 // an unverified forwarder can never reach message dispatch.
-export const linqWebhookVerifier: NonNullable<
-  LinqChannelCredentials["webhookVerifier"]
-> = async (request) => (await trustedForwarder(request)) ?? false;
+export const linqWebhookVerifier: LinqWebhookVerifier = async (
+  request: Request
+) => (await trustedForwarder(request)) ?? false;
 
-const credentials = (
-  env.LINQ_CONNECTOR
-    ? {
-        ...connectLinqCredentials(env.LINQ_CONNECTOR),
-        webhookVerifier: linqWebhookVerifier,
-      }
-    : {
-        apiKey() {
-          throw new Error(
-            "LINQ_CONNECTOR is not configured for this deployment."
-          );
-        },
-        webhookVerifier: () => false,
-      }
-) satisfies LinqChannelCredentials;
+const credentials = env.LINQ_CONNECTOR
+  ? {
+      ...connectLinqCredentials(env.LINQ_CONNECTOR),
+      webhookVerifier: linqWebhookVerifier,
+    }
+  : {
+      apiKey() {
+        throw new Error(
+          "LINQ_CONNECTOR is not configured for this deployment."
+        );
+      },
+      webhookVerifier: () => false,
+    };
 
+// Use the Chat SDK’s public types so these adapter callbacks remain fully checked.
 export default linqChannel({
   credentials,
   events: {
-    async "action.result"(event, context, session) {
-      const reaction = Schema.decodeUnknownResult(
-        reactToMessageToolResultSchema
-      )(event.result);
-      if (event.status === "completed" && Result.isSuccess(reaction)) {
+    async "action.result"(
+      event,
+      context: {
+        thread: Thread | null;
+        bot: Chat<{ linq: ReturnType<typeof createLinqAdapter> }>;
+      },
+      session
+    ) {
+      const reaction = reactToMessageToolResultSchema.safeParse(event.result);
+      if (event.status === "completed" && reaction.success) {
         if (!context.thread) {
           throw new Error(
             "react_to_message requires an active Linq conversation thread."
@@ -83,27 +87,25 @@ export default linqChannel({
           throw new Error("react_to_message requires a current Linq message.");
         }
         const adapter = context.bot.getAdapter("linq");
-        if (reaction.success.output.operation === "remove") {
+        if (reaction.data.output.operation === "remove") {
           await adapter.removeReaction(
             context.thread.id,
             messageId,
-            reaction.success.output.type
+            reaction.data.output.type
           );
         } else {
           await adapter.addReaction(
             context.thread.id,
             messageId,
-            reaction.success.output.type
+            reaction.data.output.type
           );
         }
         await finalizeScheduledReportDelivery(session);
         return;
       }
 
-      const message = Schema.decodeUnknownResult(sendMessageToolResultSchema)(
-        event.result
-      );
-      if (event.status === "completed" && Result.isSuccess(message)) {
+      const message = sendMessageToolResultSchema.safeParse(event.result);
+      if (event.status === "completed" && message.success) {
         const { thread } = context;
         if (!thread) {
           throw new Error(
@@ -112,7 +114,7 @@ export default linqChannel({
         }
         const report = scheduledReportFromSession(session);
         const replyTarget = resolveLinqReplyTarget(
-          message.success.output.replyTo,
+          message.data.output.replyTo,
           session.session.auth
         );
         const requestedReplyMessageId =
@@ -122,11 +124,15 @@ export default linqChannel({
         const idempotencyKey = report
           ? `scheduled-report:${report.runId}:${String(report.sequence)}`
           : undefined;
-        const adapter = context.bot.getAdapter("linq");
+        const adapter = createLinqAdapter({
+          credentials: async () => ({ apiKey: await credentials.apiKey() }),
+          webhookVerifier: linqWebhookVerifier,
+        });
         const post = idempotencyKey
           ? (content: AdapterPostableMessage) =>
               adapter.postMessage(thread.id, content, { idempotencyKey })
-          : (content: AdapterPostableMessage) => thread.post(content);
+          : (content: AdapterPostableMessage) =>
+              adapter.postMessage(thread.id, content);
         const postReply = (
           content: AdapterPostableMessage,
           replyToMessageId: string
@@ -149,8 +155,8 @@ export default linqChannel({
           return chatId;
         };
 
-        if (message.success.output.kind === "link") {
-          const { url } = message.success.output;
+        if (message.data.output.kind === "link") {
+          const { url } = message.data.output;
           const chatId = resolveExistingChatId();
           const apiKey = await credentials.apiKey();
           const client = new LinqAPIV3({ apiKey });
@@ -188,10 +194,10 @@ export default linqChannel({
           return;
         }
 
-        const attachments = message.success.output.attachments?.map(
+        const attachments = message.data.output.attachments?.map(
           ({ kind, ...attachment }) => ({ ...attachment, type: kind })
         );
-        const { text: requestedText } = message.success.output;
+        const { text: requestedText } = message.data.output;
         if (!requestedText) {
           if (attachments?.length) {
             await sendLinqMessage({
@@ -293,7 +299,7 @@ export default linqChannel({
       await releaseScheduledReportDelivery(session, event.message);
     },
   },
-  async onMessage(context, message) {
+  async onMessage(context: { thread: Thread }, message: Message) {
     if (message.author.isBot) return null;
 
     const auth = defaultLinqAuth(message);

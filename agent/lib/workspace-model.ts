@@ -1,9 +1,10 @@
+import { withSignal } from "../../server/operations/async";
+import { jsonString, isValid } from "@shared/validation";
+import { z } from "zod";
 import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError, wrapLanguageModel } from "ai";
-import { Effect, Schema } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
 import { modelCredentials } from "../../server/models/connections";
-import { serverRuntime } from "../../server/runtime";
 import type { WorkspaceActorSchema } from "../../server/workspaces/access";
 import {
   ModelConnectionError,
@@ -11,17 +12,15 @@ import {
 } from "../../shared/models/catalog";
 import { withModelDeadline } from "./model-deadline";
 
-const CodexBody = Schema.Struct({
-  input: Schema.optional(
-    Schema.Array(Schema.Record(Schema.String, Schema.Unknown))
-  ),
+const CodexBody = z.object({
+  input: z.optional(z.array(z.record(z.string(), z.unknown()))),
 });
 
-export const workspaceModel = Effect.fn("model.workspace.select")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const workspaceModel = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   browser = false
 ) {
-  const connection = yield* modelCredentials(actor);
+  const connection = await modelCredentials(actor);
   if (!connection) return null;
   const selected =
     browser && !modelCatalog[connection.model].vision
@@ -35,9 +34,8 @@ export const workspaceModel = Effect.fn("model.workspace.select")(function* (
         ? "https://api.x.ai/v1"
         : "https://api.openai.com/v1",
     fetch: async (_url, init) => {
-      const current = await serverRuntime.runPromise(
-        modelCredentials(actor, connection.revision),
-        { signal: init?.signal ?? undefined }
+      const current = await withSignal(init?.signal ?? undefined, async () =>
+        modelCredentials(actor, connection.revision)
       );
       if (!current) throw new ModelConnectionError({ reason: "changed" });
       const headers = new Headers(init?.headers);
@@ -47,11 +45,11 @@ export const workspaceModel = Effect.fn("model.workspace.select")(function* (
         headers.set("originator", "zoen");
         if (current.tokens.accountId)
           headers.set("ChatGPT-Account-Id", current.tokens.accountId);
-        if (Schema.is(Schema.String)(body)) {
-          const parsed = Schema.decodeUnknownSync(
-            Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
-          )(body);
-          const input = Schema.decodeUnknownSync(CodexBody)(parsed).input;
+        if (isValid(z.string(), body)) {
+          const parsed = jsonString(z.record(z.string(), z.unknown())).parse(
+            body
+          );
+          const input = CodexBody.parse(parsed).input;
           const requestBody = { ...parsed };
           // Codex subscription transport does not accept the public API's safety_identifier field.
           delete requestBody.safety_identifier;
@@ -72,13 +70,14 @@ export const workspaceModel = Effect.fn("model.workspace.select")(function* (
       });
       if (response.status === 401) {
         await response.body?.cancel();
-        const refreshed = await serverRuntime.runPromise(
-          modelCredentials(
-            actor,
-            connection.revision,
-            current.tokens.accessToken
-          ),
-          { signal: init?.signal ?? undefined }
+        const refreshed = await withSignal(
+          init?.signal ?? undefined,
+          async () =>
+            modelCredentials(
+              actor,
+              connection.revision,
+              current.tokens.accessToken
+            )
         );
         if (!refreshed) throw new ModelConnectionError({ reason: "changed" });
         headers.set("authorization", `Bearer ${refreshed.tokens.accessToken}`);
@@ -146,4 +145,4 @@ export const workspaceModel = Effect.fn("model.workspace.select")(function* (
     modelContextWindowTokens: modelCatalog[selected].context,
     modelOptions,
   };
-});
+};

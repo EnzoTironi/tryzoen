@@ -1,7 +1,7 @@
 # Browser account controls
 
 `controls.ts` exposes `readLinkedChannelIdentities(requestHeaders)` and
-`revokeLinkedChannelIdentity(requestHeaders, identityId)` as Effect operations.
+`revokeLinkedChannelIdentity(requestHeaders, identityId)` as async operations.
 They verify the real Better Auth browser session, including its current database
 row and expiry and current canonical workspace membership, and derive the owner
 from that session. The browser never supplies a user ID. The existing account
@@ -16,7 +16,7 @@ with `unauthenticated`, `identity_inactive` or `unavailable`; root tRPC maps the
 a safe public message. Successful revocation invalidates all browser sessions;
 the account UI clears browser auth and returns to sign-in with an explanation.
 
-`/account` and `/sign-in` share the form, status UI and Effect HTTP client in
+`/account` and `/sign-in` share the form, status UI and HTTP client in
 `web/auth/channel`. Link mode sends the existing `purpose: "link"` request to
 Better Auth's channel challenge API. The existing backend owns the recent-session
 requirement, browser cookie, messenger confirmation and same-session consumption.
@@ -80,7 +80,7 @@ and HTTP proofs with synthetic identities, not live provider qualification.
 
 ## Account privacy export/delete gates
 
-`privacy.ts` exposes Effect-safe `exportAccountPrivacy(headers)` and
+`privacy.ts` exposes authorized `exportAccountPrivacy(headers)` and
 `deleteAccountOnlineData(headers)`. Both derive the owner from the live Better
 Auth browser session plus canonical workspace membership. The browser never
 supplies a user ID. Missing, expired or revoked credentials fail closed as
@@ -121,6 +121,5 @@ append-only audit receipts.
 Full deletion proofs: `tests/runtime/account-deletion.integration.ts` and
 `tests/runtime/account-deletion-providers.integration.ts`.
 
-Delete hooks `PersonalMemory.wipe` when that service is present in the runtime
-(registered from `server/runtime.ts`). Fixture proof:
+Deletion invokes the personal-memory wipe operation through its owning module. Fixture proof:
 `server/accounts/privacy.test.ts` (fail-closed without auth; wipe never runs).

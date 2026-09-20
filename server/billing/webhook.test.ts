@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Effect } from "effect";
-import { handleStripeWebhook, BillingWebhookError } from "./webhook";
+import { handleStripeWebhook } from "./webhook";
 
 describe("Stripe billing webhook", () => {
   it("rejects when Stripe is not configured", async () => {
@@ -8,10 +7,9 @@ describe("Stripe billing webhook", () => {
       method: "POST",
       body: "{}",
     });
-    const error = await Effect.runPromise(
-      handleStripeWebhook(request).pipe(Effect.flip)
-    );
-    expect(error).toBeInstanceOf(BillingWebhookError);
-    expect(error.reason).toBe("stripe_not_configured");
+    await expect(handleStripeWebhook(request)).rejects.toMatchObject({
+      _tag: "BillingWebhookError",
+      reason: "stripe_not_configured",
+    });
   });
 });

@@ -1,20 +1,12 @@
+import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { Config, Effect, Redacted, Schema } from "effect";
+import { env } from "@shared/environment/env";
 import { chatgpt } from "eve/models/openai";
 import type { AgentModelOptionsDefinition } from "eve";
 import { withModelDeadline } from "./model-deadline";
-import {
-  browserModelProviderSchema,
-  codexModelSchema,
-  installationModelProviderSchema,
-} from "@shared/environment/model-provider";
+import { codexModelSchema } from "@shared/environment/model-provider";
 
-const openRouterKey = Config.schema(
-  Schema.Redacted(Schema.NonEmptyString.check(Schema.isTrimmed())),
-  "OPENROUTER_API_KEY"
-);
-
-function codexSelection(model: typeof codexModelSchema.Type) {
+function codexSelection(model: z.output<typeof codexModelSchema>) {
   const modelOptions: AgentModelOptionsDefinition = {
     providerOptions: { openai: { reasoningSummary: null } },
   };
@@ -26,23 +18,18 @@ function codexSelection(model: typeof codexModelSchema.Type) {
   };
 }
 
-export const installationModel = Effect.gen(function* () {
-  const provider = yield* Config.schema(
-    installationModelProviderSchema,
-    "COMPANION_MODEL_PROVIDER"
-  ).pipe(Config.withDefault("gateway"));
+export const installationModel = async () => {
+  const provider = env.COMPANION_MODEL_PROVIDER ?? "gateway";
   if (provider === "gateway") return null;
   if (provider === "codex-local") {
-    const model = yield* Config.schema(
-      codexModelSchema,
-      "COMPANION_CODEX_MODEL"
-    ).pipe(Config.withDefault("gpt-5.3-codex-spark"));
+    const model = env.COMPANION_CODEX_MODEL ?? "gpt-5.3-codex-spark";
     return codexSelection(model);
   }
 
-  const key = yield* openRouterKey;
+  const key = env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("OPENROUTER_API_KEY is required for OpenRouter");
   const openrouter = createOpenRouter({
-    apiKey: Redacted.value(key),
+    apiKey: key.reveal(),
     compatibility: "strict",
     extraBody: {
       provider: {
@@ -55,32 +42,29 @@ export const installationModel = Effect.gen(function* () {
     model: withModelDeadline(openrouter("nvidia/nemotron-3.5-lightning:free")),
     modelContextWindowTokens: 1_000_000,
   };
-});
+};
 
-export const browserInstallationModel = Effect.gen(function* () {
-  const provider = yield* Config.schema(
-    browserModelProviderSchema,
-    "COMPANION_BROWSER_MODEL_PROVIDER"
-  ).pipe(Config.withDefault("gateway"));
-  const model = yield* Config.schema(
+export const browserInstallationModel = async () => {
+  const provider = env.COMPANION_BROWSER_MODEL_PROVIDER ?? "gateway";
+  const model = (
     provider === "codex-local"
       ? codexModelSchema
-      : Schema.Literals(["meta/muse-spark-1.3", "openai/gpt-5-mini"]),
-    "COMPANION_BROWSER_MODEL"
-  ).pipe(
-    Config.withDefault(
-      provider === "codex-local" ? "gpt-5.3-codex-spark" : "meta/muse-spark-1.3"
-    )
+      : z.enum(["meta/muse-spark-1.3", "openai/gpt-5-mini"])
+  ).parse(
+    env.COMPANION_BROWSER_MODEL ??
+      (provider === "codex-local"
+        ? "gpt-5.3-codex-spark"
+        : "meta/muse-spark-1.3")
   );
   if (provider === "codex-local")
-    return codexSelection(
-      yield* Schema.decodeUnknownEffect(codexModelSchema)(model)
-    );
-  if (provider === "gateway") return model;
+    return codexSelection(await codexModelSchema.parseAsync(model));
+  if (provider === "gateway")
+    return { model: withModelDeadline(model), modelOptions: undefined };
 
-  const key = yield* openRouterKey;
+  const key = env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("OPENROUTER_API_KEY is required for OpenRouter");
   const openrouter = createOpenRouter({
-    apiKey: Redacted.value(key),
+    apiKey: key.reveal(),
     compatibility: "strict",
     extraBody: { provider: { allow_fallbacks: false } },
   });
@@ -93,4 +77,4 @@ export const browserInstallationModel = Effect.gen(function* () {
       model === "meta/muse-spark-1.3" ? 1_048_576 : 400_000,
     modelOptions,
   };
-});
+};

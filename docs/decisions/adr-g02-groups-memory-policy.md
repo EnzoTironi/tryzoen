@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (policy + hooks; shared storage stub)
 - **Date:** 2026-09-10 (America/Sao_Paulo)
-- **Decision:** **proceed** Effect-safe shared-vs-personal memory boundary for
+- **Decision:** **proceed** authorized shared-vs-personal memory boundary for
   G01 `group:<channel>:<installation>:<chatId>` scopes. Group sessions must not
   freely read personal memory; personal forget/wipe must not poison or leak
   across group scope. Shared-group memory model is documented with stub storage.
@@ -22,8 +22,8 @@ for erasing group-shared state.
 ## Decision
 
 1. **Classify** conversation memory kind from `conversationScope` / `chatKind`
-   in `server/personal-memory/group-memory-policy.ts` (Effect-safe pure helpers +
-   admit Effects).
+   in `server/personal-memory/group-memory-policy.ts` (authorized pure helpers +
+   admission operations).
 2. **Deny personal surfaces in group scope:** recall/bind/inspect/mutate paths
    call `admitPersonalMemoryFromSession` before `authorizePersonalMemoryPrincipal`
    / `PersonalMemory.bind` (`agent/lib/personal-memory-access.ts`,

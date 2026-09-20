@@ -1,5 +1,9 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { SqlError } from "../../db/queries";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
+
 import type { SessionAuthContext } from "eve/context";
 import { channelProviderSchema } from "../../shared/identity/channel-auth";
 import { scopeFromPrincipal } from "../../shared/identity/principal-scope";
@@ -11,52 +15,53 @@ import {
 } from "./access";
 
 // Storage callers keep these authority locks in the same transaction as document I/O.
-export const authorizePersonalMemoryPrincipal = Effect.fn(
-  "authorizePersonalMemoryPrincipal"
-)(
-  function* (principal: SessionAuthContext | null) {
+export const authorizePersonalMemoryPrincipal = async function (
+  principal: SessionAuthContext | null
+) {
+  try {
     if (principal?.principalType !== "user")
-      return yield* new PersonalMemoryError({ reason: "unauthenticated" });
-    const scope = yield* Effect.try({
-      try: () => scopeFromPrincipal(principal),
-      catch: () => new PersonalMemoryError({ reason: "unauthenticated" }),
+      throw new PersonalMemoryError({ reason: "unauthenticated" });
+    const scope = await Promise.try(async () =>
+      scopeFromPrincipal(principal)
+    ).catch(() => {
+      throw new PersonalMemoryError({ reason: "unauthenticated" });
     });
     if (
       principal.authenticator === "verified-channel" ||
-      Schema.is(channelProviderSchema)(principal.attributes.conversationChannel)
+      isValid(channelProviderSchema, principal.attributes.conversationChannel)
     ) {
-      const channel = yield* Schema.decodeUnknownEffect(channelProviderSchema)(
-        principal.attributes.conversationChannel
-      ).pipe(
-        Effect.mapError(
-          () => new PersonalMemoryError({ reason: "unauthenticated" })
+      const channel = await Promise.try(async () =>
+        channelProviderSchema.parseAsync(
+          principal.attributes.conversationChannel
         )
+      ).catch(() => {
+        throw new PersonalMemoryError({ reason: "unauthenticated" });
+      });
+      const identity = await Promise.try(async () =>
+        requireChannelPrincipal(channel, principal)
+      ).catch(() => {
+        throw new PersonalMemoryError({ reason: "unauthenticated" });
+      });
+
+      const rows = await query(
+        sql`SELECT id FROM channel_identity WHERE id = ${identity.id} AND revoked_at IS NULL FOR SHARE`
       );
-      const identity = yield* requireChannelPrincipal(channel, principal).pipe(
-        Effect.mapError(
-          () => new PersonalMemoryError({ reason: "unauthenticated" })
-        )
-      );
-      const sql = yield* PgClient.PgClient;
-      const rows =
-        yield* sql`SELECT id FROM channel_identity WHERE id = ${identity.id} AND revoked_at IS NULL FOR SHARE`;
       if (rows.length !== 1)
-        return yield* new PersonalMemoryError({ reason: "unauthenticated" });
+        throw new PersonalMemoryError({ reason: "unauthenticated" });
     }
     if (principal.authenticator === "authjs") {
-      const sessionId = yield* Schema.decodeUnknownEffect(
-        Schema.NonEmptyString
-      )(principal.attributes.authSessionId).pipe(
-        Effect.mapError(
-          () => new PersonalMemoryError({ reason: "unauthenticated" })
-        )
-      );
-      yield* requirePersonalMemoryWebSession(scope, sessionId);
-    } else yield* requirePersonalMemoryMembership(scope);
+      const sessionId = await Promise.try(async () =>
+        z.string().min(1).parseAsync(principal.attributes.authSessionId)
+      ).catch(() => {
+        throw new PersonalMemoryError({ reason: "unauthenticated" });
+      });
+      await requirePersonalMemoryWebSession(scope, sessionId);
+    } else await requirePersonalMemoryMembership(scope);
     return scope;
-  },
-  Effect.catchTag(
-    "SqlError",
-    () => new PersonalMemoryError({ reason: "unavailable" })
-  )
-);
+  } catch (error) {
+    if (error instanceof SqlError) {
+      throw new PersonalMemoryError({ reason: "unavailable" });
+    }
+    throw error;
+  }
+};

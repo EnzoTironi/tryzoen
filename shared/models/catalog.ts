@@ -1,7 +1,7 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-export const ModelProviderSchema = Schema.Literals(["chatgpt", "grok"]);
-export const WorkspaceModelSchema = Schema.Literals([
+export const ModelProviderSchema = z.enum(["chatgpt", "grok"]);
+export const WorkspaceModelSchema = z.enum([
   "gpt-5.6-luna",
   "gpt-5.3-codex-spark",
   "grok-4.6",
@@ -31,8 +31,8 @@ export const defaultWorkspaceModel = {
   grok: "grok-4.6",
 } as const;
 
-export const ModelChallengeSchema = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
+export const ModelChallengeSchema = z.object({
+  id: z.uuid(),
 });
 
 const modelConnectionMessages = {
@@ -49,21 +49,32 @@ const modelConnectionMessages = {
     "The model provider is temporarily unavailable. Try again later.",
 };
 
-export class ModelConnectionError extends Schema.TaggedError<ModelConnectionError>()(
-  "ModelConnectionError",
-  {
-    reason: Schema.Literals([
-      "unavailable",
-      "expired",
-      "denied",
-      "changed",
-      "invalid_response",
-      "reconnect",
-      "rate_limited",
-    ]),
-    status: Schema.optional(Schema.Int),
+export class ModelConnectionError extends Error {
+  readonly _tag = "ModelConnectionError";
+  declare readonly reason:
+    | "unavailable"
+    | "expired"
+    | "denied"
+    | "changed"
+    | "invalid_response"
+    | "reconnect"
+    | "rate_limited";
+  declare readonly status?: number | undefined;
+  constructor(input: {
+    readonly reason:
+      | "unavailable"
+      | "expired"
+      | "denied"
+      | "changed"
+      | "invalid_response"
+      | "reconnect"
+      | "rate_limited";
+    readonly status?: number | undefined;
+  }) {
+    super("ModelConnectionError");
+    this.name = "ModelConnectionError";
+    Object.assign(this, input);
   }
-) {
   override get message() {
     return modelConnectionMessages[this.reason];
   }

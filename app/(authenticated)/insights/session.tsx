@@ -94,7 +94,7 @@ export function DiagnosticSession({
                     onClick={() => {
                       void review
                         .mutateAsync({ sessionId, status })
-                        .then(() => utils.insights.read.invalidate())
+                        .then(async () => utils.insights.read.invalidate())
                         .catch(() => {
                           setFailed(true);
                         });

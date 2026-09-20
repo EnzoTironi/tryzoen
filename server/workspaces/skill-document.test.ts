@@ -11,10 +11,10 @@ test("parses a title without frontmatter and a strict requires list", () => {
   });
   expect(
     parseSkillDocument(
-      "---\nrequires: [workspace.files.list, workspace-save]\n---\n# Inbox\n\nTriage mail."
+      "---\nrequires: [workspace_files_list, workspace-save]\n---\n# Inbox\n\nTriage mail."
     )
   ).toEqual({
-    requires: ["workspace.files.list", "workspace-save"],
+    requires: ["workspace_files_list", "workspace-save"],
     body: "# Inbox\n\nTriage mail.",
     title: "Inbox",
   });
@@ -28,12 +28,12 @@ test("rejects invalid skill documents", () => {
   ).toBeNull();
   expect(
     parseSkillDocument(
-      "---\nrequires: [workspace.files.list, workspace.files.list]\n---\n# Title\n"
+      "---\nrequires: [workspace_files_list, workspace_files_list]\n---\n# Title\n"
     )
   ).toBeNull();
   expect(
     parseSkillDocument(
-      '---\nrequires: ["workspace.files.list"]\n---\n# Title\n'
+      '---\nrequires: ["workspace_files_list"]\n---\n# Title\n'
     )
   ).toBeNull();
 });

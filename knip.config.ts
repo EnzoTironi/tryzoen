@@ -2,10 +2,6 @@ import type { KnipConfig } from "knip";
 
 export default {
   ignoreIssues: {
-    // Preserve the pinned upstream kernel's public contracts and companion tests.
-    "vendor/executor/**/*.ts": ["exports", "types", "files"],
-    // Retain the former Operon adapter and tests for reference; it is no longer discovered by Eve.
-    "server/operon/legacy-tools.ts": ["exports"],
     // Eve AI Elements and shadcn registry primitives intentionally expose
     // a reusable component surface wider than this minimal chat consumes.
     "web/components/ai-elements/**/*.tsx": ["exports", "files", "types"],
@@ -14,14 +10,12 @@ export default {
   workspaces: {
     ".": {
       vitest: {
-        config: [
-          "vitest.config.ts",
-          "vitest.runtime.config.ts",
-          "vitest.operon.config.ts",
-        ],
+        config: ["vitest.config.ts", "vitest.runtime.config.ts"],
       },
       entry: [
         "agent/channels/**/*.ts",
+        "agent/instrumentation/**/*.ts",
+        "tests/fixtures/eve-runtime/agent/**/*.ts",
         "agent/hooks/**/*.ts",
         "agent/instructions/**/*.ts",
         "agent/memory/**/*.ts",
@@ -43,14 +37,10 @@ export default {
         "scripts/groups-live-e2e.ts",
         // Launched in a separate process before web/worker traffic is admitted.
         "scripts/reconcile-account-erasures.ts",
-        // In-memory Operon MCP used by email-flow tests.
       ],
       ignoreDependencies: [
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
-        // Type owners referenced by the Eve declaration patch, which Knip does not parse.
-        "@linqapp/chat-sdk-adapter",
-        "chat",
         // Imported through the owning Tailwind stylesheet rather than TypeScript.
         "shadcn",
         "tailwindcss",
@@ -66,7 +56,6 @@ export default {
         "alchemy.run.ts",
         "alchemy.fly-postgres.run.ts",
         "recovery.run.ts",
-        "operations.ts",
         "tests/*.test.ts",
       ],
       // POSIX shell builtin used to protect local Alchemy state.

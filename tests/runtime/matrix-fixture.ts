@@ -1,11 +1,34 @@
+import { z } from "zod";
 import { createServer } from "node:http";
-import { Effect, Layer, Schema } from "effect";
-import { WorkspaceRepository } from "../../server/workspaces/repository";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { expect, vi } from "vitest";
+import { env } from "@shared/environment/env";
+
 import { acceptMatrixTransaction } from "../../server/matrix/inbound";
-import { runtimeDatabase } from "./database";
-const services = WorkspaceRepository.layer.pipe(
-  Layer.provideMerge(runtimeDatabase)
-);
+
+/** Call only after the fixture's callback listener is accepting requests. */
+export async function wakeMatrixService() {
+  // PostgreSQL preserves transaction IDs while this clears callback backoff
+  // accumulated during builds or unrelated runtime tests.
+  await promisify(execFile)(
+    "docker",
+    ["restart", "zoen-runtime-tests-matrix-1"],
+    { timeout: 30_000 }
+  );
+  await vi.waitFor(
+    async () => {
+      const response = await fetch(
+        new URL(
+          "/_matrix/client/versions",
+          z.string().parse(env.ZOEN_MATRIX_URL)
+        )
+      );
+      expect(response.ok).toBe(true);
+    },
+    { timeout: 20_000, interval: 100 }
+  );
+}
 
 export async function matrixReceiver() {
   const receipts: { id: string; body: string; authorization: string }[] = [];
@@ -19,19 +42,17 @@ export async function matrixReceiver() {
       try {
         const chunks: Uint8Array[] = [];
         for await (const chunk of incoming)
-          chunks.push(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk));
+          chunks.push(z.instanceof(Uint8Array).parse(chunk));
         const body = Buffer.concat(chunks).toString("utf8");
         const authorization = incoming.headers.authorization ?? "";
         const id = incoming.url.split("/").at(-1) ?? "";
-        await Effect.runPromise(
-          acceptMatrixTransaction(
-            new Request("http://localhost/transactions", {
-              method: "PUT",
-              headers: { authorization },
-              body,
-            }),
-            id
-          ).pipe(Effect.provide(services))
+        await acceptMatrixTransaction(
+          new Request("http://localhost/transactions", {
+            method: "PUT",
+            headers: { authorization },
+            body,
+          }),
+          id
         );
         receipts.push({ id, body, authorization });
         outgoing.writeHead(200);
@@ -47,6 +68,12 @@ export async function matrixReceiver() {
     server.once("error", reject);
     server.listen(4350, "0.0.0.0", resolve);
   });
+  try {
+    await wakeMatrixService();
+  } catch (error) {
+    server.close();
+    throw error;
+  }
   return {
     receipts,
     close: () =>

@@ -1,6 +1,6 @@
+import { withSignal } from "../../server/operations/async";
 import { gateway } from "ai";
 import { z } from "zod";
-import { Effect, Schema } from "effect";
 import { TRPCError } from "@trpc/server";
 import { listBrowserTraces } from "@db/services/browser-traces";
 import { saveChat } from "@db/services/chats";
@@ -9,7 +9,6 @@ import { selectGatewayModel } from "@db/services/settings";
 import { deleteVaultItem, saveVaultItem } from "@db/services/vault";
 import { saveChatSchema } from "@shared/chat/schema";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
-import { serverRuntime } from "../../server/runtime";
 import { disconnectGoogleWorkspace } from "../../server/google-workspace";
 import { activatePersonalGoogle } from "../../server/google-workspace/settings";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
@@ -24,7 +23,6 @@ import { createTRPCRouter, protectedProcedure } from "./init";
 import { workspacesRouter } from "./workspaces";
 import { modelsRouter } from "./models";
 import { insightsRouter } from "./insights";
-
 export const appRouter = createTRPCRouter({
   modelConnections: modelsRouter,
   insights: insightsRouter,
@@ -32,27 +30,25 @@ export const appRouter = createTRPCRouter({
   accountChannels: {
     revoke: protectedProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({ identityId: IdentitySchema.fields.id })
-        )
+        z.object({
+          identityId: IdentitySchema.shape.id,
+        })
       )
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          revokeLinkedChannelIdentity(
-            ctx.requestHeaders,
-            input.identityId
-          ).pipe(
-            Effect.mapError(
-              () =>
-                new TRPCError({
-                  code: "INTERNAL_SERVER_ERROR",
-                  message:
-                    "Your linked channel could not be updated. Please try again.",
-                })
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await revokeLinkedChannelIdentity(
+              ctx.requestHeaders,
+              input.identityId
+            );
+          } catch {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message:
+                "Your linked channel could not be updated. Please try again.",
+            });
+          }
+        })
       ),
   },
   chats: {
@@ -63,35 +59,39 @@ export const appRouter = createTRPCRouter({
   googleWorkspace: {
     update: protectedProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({
-            action: Schema.Literals(["connect", "disconnect"]),
-            returnTo: Schema.optional(Schema.String),
-          })
-        )
+        z.object({
+          action: z.enum(["connect", "disconnect"]),
+          returnTo: z.optional(z.string()),
+        })
       )
       .mutation(async ({ ctx, input, signal }) => {
         const returnTo = googleWorkspaceReturnTo(input.returnTo);
         if (input.action === "disconnect") {
-          await serverRuntime.runPromise(
-            disconnectGoogleWorkspace(ctx.requestHeaders),
-            { signal }
+          await withSignal(signal, async () =>
+            disconnectGoogleWorkspace(ctx.requestHeaders)
           );
           const query = new URLSearchParams({
             google: "disconnected",
             returnTo,
           });
-          return { redirectTo: `/?${query}`, authorize: false };
+          return {
+            redirectTo: `/?${query}`,
+            authorize: false,
+          };
         }
-        const activation = await serverRuntime.runPromise(
-          resolveWorkspaceActor(ctx.requestHeaders).pipe(
-            Effect.flatMap(activatePersonalGoogle)
-          ),
-          { signal }
-        );
+        const activation = await withSignal(signal, async () => {
+          return await Promise.try(async () =>
+            resolveWorkspaceActor(ctx.requestHeaders)
+          ).then(activatePersonalGoogle);
+        });
         if (!activation.authorize)
-          return { redirectTo: returnTo, authorize: false };
-        const query = new URLSearchParams({ returnTo });
+          return {
+            redirectTo: returnTo,
+            authorize: false,
+          };
+        const query = new URLSearchParams({
+          returnTo,
+        });
         return {
           redirectTo: `/api/google-workspace/connect?${query}`,
           authorize: true,
@@ -100,7 +100,11 @@ export const appRouter = createTRPCRouter({
   },
   settings: {
     selectModel: protectedProcedure
-      .input(z.object({ modelId: z.string().trim().min(1).max(300) }))
+      .input(
+        z.object({
+          modelId: z.string().trim().min(1).max(300),
+        })
+      )
       .mutation(({ ctx, input }) =>
         selectGatewayModel(ctx.scope, input.modelId)
       ),
@@ -110,15 +114,18 @@ export const appRouter = createTRPCRouter({
       .input(userProfileSchema)
       .output(userProfileSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          replacePersonalProfile(ctx.requestHeaders, input),
-          { signal }
+        withSignal(signal, async () =>
+          replacePersonalProfile(ctx.requestHeaders, input)
         )
       ),
   },
   traces: {
     list: protectedProcedure
-      .input(z.object({ cursor: z.string().nullish() }))
+      .input(
+        z.object({
+          cursor: z.string().nullish(),
+        })
+      )
       .query(({ ctx, input }) =>
         listBrowserTraces(ctx.scope, input.cursor ?? undefined)
       ),
@@ -130,24 +137,23 @@ export const appRouter = createTRPCRouter({
     import: protectedProcedure
       .input(vaultImportItemsSchema)
       .mutation(async ({ ctx, input }) => {
-        /* oxlint-disable eslint/no-await-in-loop -- Import preserves source order and avoids concurrent writes to the same vault scope. */
         for (const item of input) await saveVaultItem(ctx.scope, item);
-        /* oxlint-enable eslint/no-await-in-loop */
       }),
     remove: protectedProcedure
-      .input(z.object({ id: z.string().min(1) }))
+      .input(
+        z.object({
+          id: z.string().min(1),
+        })
+      )
       .mutation(({ ctx, input }) => deleteVaultItem(ctx.scope, input.id)),
   },
   models: {
     list: protectedProcedure.query(readModelCatalog),
   },
 });
-
 export type AppRouter = typeof appRouter;
-
 async function readModelCatalog() {
   const { models } = await gateway.getAvailableModels();
-
   return z
     .array(
       z.object({
@@ -178,7 +184,6 @@ async function readModelCatalog() {
         }))
     );
 }
-
 function perMillion(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed * 1_000_000 : undefined;

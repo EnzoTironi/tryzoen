@@ -70,7 +70,7 @@ export default function LearnedMemoryPage() {
           onClick={() => {
             void toggle
               .mutateAsync({ enabled: !memory.data?.enabled })
-              .then(() => memory.refetch())
+              .then(async () => memory.refetch())
               .catch(() => undefined);
           }}
         >
@@ -165,7 +165,7 @@ export default function LearnedMemoryPage() {
                     memoryId: item.id,
                     operationId: crypto.randomUUID(),
                   })
-                  .then(() => memory.refetch())
+                  .then(async () => memory.refetch())
                   .catch(() => undefined);
               }}
             >
@@ -181,7 +181,7 @@ export default function LearnedMemoryPage() {
             onClick={() => {
               void recover
                 .mutateAsync()
-                .then(() => memory.refetch())
+                .then(async () => memory.refetch())
                 .catch(() => undefined);
             }}
           >
@@ -212,7 +212,7 @@ export default function LearnedMemoryPage() {
                     action: "clear",
                     operationId: crypto.randomUUID(),
                   })
-                  .then(() => memory.refetch())
+                  .then(async () => memory.refetch())
                   .catch(() => undefined);
               }
             }}

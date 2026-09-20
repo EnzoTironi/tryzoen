@@ -1,35 +1,45 @@
-import { NodeServices } from "@effect/platform-node";
-import { Config, Effect, FileSystem, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { execFile } from "node:child_process";
+import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { z } from "zod";
+import { env } from "@shared/environment/env";
+import { operationSignal, withTimeout, mapAsync } from "../operations/async";
 
 export const workspaceGitLimits = {
   fileBytes: 262_144,
   bundleBytes: 25_165_824,
   files: 200,
 } as const;
-export const WorkspacePathSchema = Schema.String.check(
-  Schema.isPattern(
+export const WorkspacePathSchema = z
+  .string()
+  .regex(
     /^(?:(?:knowledge|skills|agent|proposals\/skills)\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.md|(?:plugins|ontology)\/workspace\.json|(?:tools|proposals\/tools)\/[a-z][a-z0-9-]{0,39}\.json)$/
-  ),
-  Schema.isPattern(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/)
-);
-export const GitRevisionSchema = Schema.String.check(
-  Schema.isPattern(/^[a-f0-9]{40}$/)
-);
+  )
+  .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
+export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);
 
-export class WorkspaceGitError extends Schema.TaggedError<WorkspaceGitError>()(
-  "WorkspaceGitError",
-  { reason: Schema.Literals(["invalid_file", "too_large", "unavailable"]) }
-) {}
+export class WorkspaceGitError extends Error {
+  readonly _tag = "WorkspaceGitError";
+  declare readonly reason: "invalid_file" | "too_large" | "unavailable";
+  constructor(input: {
+    readonly reason: "invalid_file" | "too_large" | "unavailable";
+  }) {
+    super("WorkspaceGitError");
+    this.name = "WorkspaceGitError";
+    Object.assign(this, input);
+  }
+}
 
-const git = Effect.fn("WorkspaceGit.command")(function* (
+const runGit = promisify(execFile);
+async function git(
   directory: string,
   args: readonly string[],
   allowedExitCode = 0
 ) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const process = yield* spawner.spawn(
-    ChildProcess.make(
+  try {
+    const { stdout } = await runGit(
       "git",
       [
         "-c",
@@ -45,7 +55,8 @@ const git = Effect.fn("WorkspaceGit.command")(function* (
       ],
       {
         env: {
-          PATH: yield* Config.string("PATH"),
+          NODE_ENV: "production",
+          PATH: env.PATH ?? "",
           GIT_CONFIG_NOSYSTEM: "1",
           GIT_CONFIG_GLOBAL: "/dev/null",
           GIT_AUTHOR_NAME: "Zoen",
@@ -53,127 +64,120 @@ const git = Effect.fn("WorkspaceGit.command")(function* (
           GIT_COMMITTER_NAME: "Zoen",
           GIT_COMMITTER_EMAIL: "workspace@zoen.invalid",
         },
-        extendEnv: false,
-        stdin: "ignore",
-        stderr: "ignore",
-        forceKillAfter: "1 second",
+        maxBuffer: workspaceGitLimits.fileBytes * 2,
+        signal: operationSignal(),
+        killSignal: "SIGKILL",
       }
-    )
-  );
-  const output = yield* process.stdout.pipe(
-    Stream.runFoldEffect(
-      () => Buffer.alloc(0),
-      (body, chunk) =>
-        body.length + chunk.length > workspaceGitLimits.fileBytes * 2
-          ? Effect.fail(new WorkspaceGitError({ reason: "too_large" }))
-          : Effect.succeed(Buffer.concat([body, chunk]))
-    )
-  );
-  const exitCode = yield* process.exitCode;
-  if (exitCode !== 0 && exitCode !== allowedExitCode) {
-    yield* Effect.logError("Workspace Git command failed", {
-      command: args[0],
-    });
-    return yield* new WorkspaceGitError({ reason: "unavailable" });
+    );
+    return stdout;
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      if (
+        error.code === allowedExitCode &&
+        "stdout" in error &&
+        typeof error.stdout === "string"
+      )
+        return error.stdout;
+      if (error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER")
+        throw new WorkspaceGitError({ reason: "too_large" });
+    }
+    throw new WorkspaceGitError({ reason: "unavailable" });
   }
-  return output.toString("utf8");
-});
+}
 
-const openBundle = Effect.fn("WorkspaceGit.openBundle")(function* (
-  bundle: Uint8Array | null
+async function withBundle<T>(
+  bundle: Uint8Array | null,
+  run: (location: { directory: string; repository: string }) => Promise<T>,
+  timeout = 15_000
 ) {
-  const fs = yield* FileSystem.FileSystem;
-  const directory = yield* fs.makeTempDirectoryScoped({ prefix: "zoen-git-" });
-  const repository = `${directory}/repository`;
-  yield* git(repository, [
-    "init",
-    "--bare",
-    "--initial-branch=main",
-    repository,
-  ]);
-  yield* fs.makeDirectory(`${repository}/worktree`);
-  if (bundle) {
-    if (bundle.length > workspaceGitLimits.bundleBytes)
-      return yield* new WorkspaceGitError({ reason: "too_large" });
-    const path = `${directory}/source.bundle`;
-    yield* fs.writeFile(path, bundle, { mode: 0o600 });
-    yield* git(repository, ["bundle", "unbundle", path]);
+  let directory: string | undefined;
+  try {
+    if (bundle && bundle.length > workspaceGitLimits.bundleBytes)
+      throw new WorkspaceGitError({ reason: "too_large" });
+    directory = await fs.mkdtemp(join(tmpdir(), "zoen-git-"));
+    const location = { directory, repository: join(directory, "repository") };
+    return await withTimeout(async () => {
+      await git(location.repository, [
+        "init",
+        "--bare",
+        "--initial-branch=main",
+        location.repository,
+      ]);
+      await fs.mkdir(join(location.repository, "worktree"));
+      if (bundle) {
+        const source = join(location.directory, "source.bundle");
+        await fs.writeFile(source, bundle, { mode: 0o600 });
+        await git(location.repository, ["bundle", "unbundle", source]);
+      }
+      return run(location);
+    }, timeout);
+  } catch (error) {
+    if (error instanceof WorkspaceGitError) throw error;
+    throw new WorkspaceGitError({
+      reason: error instanceof z.ZodError ? "invalid_file" : "unavailable",
+    });
+  } finally {
+    if (directory) await fs.rm(directory, { recursive: true, force: true });
   }
-  return { fs, directory, repository };
-});
+}
 
-export const readWorkspaceGit = Effect.fn("readWorkspaceGit")(
-  function* (bundle: Uint8Array, revision: string, path?: string) {
-    const sha = yield* Schema.decodeUnknownEffect(GitRevisionSchema)(revision);
-    const { repository } = yield* openBundle(bundle);
+export const readWorkspaceGit = async function (
+  bundle: Uint8Array,
+  revision: string,
+  path?: string
+) {
+  return withBundle(bundle, async ({ repository }) => {
+    const sha = await GitRevisionSchema.parseAsync(revision);
     if (path !== undefined) {
       const files: string[] = [];
-      const filename =
-        yield* Schema.decodeUnknownEffect(WorkspacePathSchema)(path);
+      const filename = await WorkspacePathSchema.parseAsync(path);
       return {
-        content: yield* git(repository, ["show", `${sha}:${filename}`]),
+        content: await git(repository, ["show", `${sha}:${filename}`]),
         files,
       };
     }
-    const files = (yield* git(repository, [
-      "ls-tree",
-      "-r",
-      "--name-only",
-      "-z",
-      sha,
-    ]))
+    const files = (
+      await git(repository, ["ls-tree", "-r", "--name-only", "-z", sha])
+    )
       .split("\0")
       .filter(Boolean);
     return { content: null, files };
-  },
-  Effect.scoped,
-  Effect.timeout("10 seconds"),
-  Effect.catchTag(
-    "SchemaError",
-    () => new WorkspaceGitError({ reason: "invalid_file" })
-  ),
-  Effect.catchTag(
-    ["PlatformError", "ConfigError", "TimeoutError"],
-    () => new WorkspaceGitError({ reason: "unavailable" })
-  ),
-  Effect.provide(NodeServices.layer)
-);
+  });
+};
 
-export const readWorkspaceGitSelection = Effect.fn("readWorkspaceGitSelection")(
-  function* (bundle: Uint8Array, revision: string, paths: readonly string[]) {
-    const sha = yield* Schema.decodeUnknownEffect(GitRevisionSchema)(revision);
-    const selected = yield* Schema.decodeUnknownEffect(
-      Schema.Array(WorkspacePathSchema).check(Schema.isMaxLength(24))
-    )(paths);
-    const { repository } = yield* openBundle(bundle);
-    return yield* Effect.forEach(
+export const readWorkspaceGitSelection = async function (
+  bundle: Uint8Array,
+  revision: string,
+  paths: readonly string[]
+) {
+  return withBundle(bundle, async ({ repository }) => {
+    const sha = await GitRevisionSchema.parseAsync(revision);
+    const selected = await z
+      .array(WorkspacePathSchema)
+      .max(24)
+      .parseAsync(paths);
+    return await mapAsync(
       selected,
-      Effect.fn(function* (path) {
+      async function (path) {
         return {
           path,
-          content: yield* git(repository, ["show", `${sha}:${path}`]),
+          content: await git(repository, ["show", `${sha}:${path}`]),
         };
-      }),
-      { concurrency: 4 }
+      },
+      4
     );
-  },
-  Effect.scoped,
-  Effect.timeout("15 seconds"),
-  Effect.catchTag(
-    ["SchemaError", "PlatformError", "ConfigError", "TimeoutError"],
-    () => new WorkspaceGitError({ reason: "unavailable" })
-  ),
-  Effect.provide(NodeServices.layer)
-);
+  });
+};
 
-export const searchWorkspaceGit = Effect.fn("searchWorkspaceGit")(
-  function* (bundle: Uint8Array, revision: string, query: string) {
-    const sha = yield* Schema.decodeUnknownEffect(GitRevisionSchema)(revision);
-    const term = yield* Schema.decodeUnknownEffect(
-      Schema.NonEmptyString.check(Schema.isMaxLength(200))
-    )(query);
-    const { repository } = yield* openBundle(bundle);
-    const found = yield* git(
+export const searchWorkspaceGit = async function (
+  bundle: Uint8Array,
+  revision: string,
+  query: string
+) {
+  return withBundle(bundle, async ({ repository }) => {
+    const sha = await GitRevisionSchema.parseAsync(revision);
+    const term = await z.string().min(1).max(200).parseAsync(query);
+    const found = await git(
       repository,
       [
         "grep",
@@ -195,59 +199,46 @@ export const searchWorkspaceGit = Effect.fn("searchWorkspaceGit")(
       .filter(Boolean)
       .slice(0, 60)
       .map((line) => line.slice(sha.length + 1, sha.length + 801));
-  },
-  Effect.scoped,
-  Effect.timeout("15 seconds"),
-  Effect.catchTag(
-    ["SchemaError", "PlatformError", "ConfigError", "TimeoutError"],
-    () => new WorkspaceGitError({ reason: "unavailable" })
-  ),
-  Effect.provide(NodeServices.layer)
-);
+  });
+};
 
-export const publishWorkspaceGit = Effect.fn("publishWorkspaceGit")(
-  function* (input: {
-    readonly bundle: Uint8Array | null;
-    readonly parent: string | null;
-    readonly path: string;
-    readonly content: string | null;
-    readonly message: string;
-    readonly remove?: string;
-  }) {
-    const path = yield* Schema.decodeUnknownEffect(WorkspacePathSchema)(
-      input.path
-    );
+export const publishWorkspaceGit = async function (input: {
+  readonly bundle: Uint8Array | null;
+  readonly parent: string | null;
+  readonly path: string;
+  readonly content: string | null;
+  readonly message: string;
+  readonly remove?: string;
+}) {
+  return withBundle(input.bundle, async ({ directory, repository }) => {
+    const path = await WorkspacePathSchema.parseAsync(input.path);
     const removed =
       input.remove === undefined
         ? null
-        : yield* Schema.decodeUnknownEffect(WorkspacePathSchema)(input.remove);
+        : await WorkspacePathSchema.parseAsync(input.remove);
     if (removed === path)
-      return yield* new WorkspaceGitError({ reason: "invalid_file" });
+      throw new WorkspaceGitError({ reason: "invalid_file" });
     const parent =
       input.parent === null
         ? null
-        : yield* Schema.decodeUnknownEffect(GitRevisionSchema)(input.parent);
+        : await GitRevisionSchema.parseAsync(input.parent);
     if (
       input.content !== null &&
       Buffer.byteLength(input.content) > workspaceGitLimits.fileBytes
     )
-      return yield* new WorkspaceGitError({ reason: "too_large" });
+      throw new WorkspaceGitError({ reason: "too_large" });
     if (input.content?.includes("\0"))
-      return yield* new WorkspaceGitError({ reason: "invalid_file" });
-    const { fs, directory, repository } = yield* openBundle(input.bundle);
-    if (parent) yield* git(repository, ["read-tree", parent]);
+      throw new WorkspaceGitError({ reason: "invalid_file" });
+    if (parent) await git(repository, ["read-tree", parent]);
     if (input.content === null)
-      yield* git(repository, ["update-index", "--force-remove", "--", path]);
+      await git(repository, ["update-index", "--force-remove", "--", path]);
     else {
       const file = `${directory}/content`;
-      yield* fs.writeFileString(file, input.content, { mode: 0o600 });
-      const blob = (yield* git(repository, [
-        "hash-object",
-        "-w",
-        "--",
-        file,
-      ])).trim();
-      yield* git(repository, [
+      await fs.writeFile(file, input.content, { mode: 0o600 });
+      const blob = (
+        await git(repository, ["hash-object", "-w", "--", file])
+      ).trim();
+      await git(repository, [
         "update-index",
         "--add",
         "--cacheinfo",
@@ -255,47 +246,34 @@ export const publishWorkspaceGit = Effect.fn("publishWorkspaceGit")(
       ]);
     }
     if (removed)
-      yield* git(repository, ["update-index", "--force-remove", "--", removed]);
-    const tree = (yield* git(repository, ["write-tree"])).trim();
-    const files = (yield* git(repository, [
-      "ls-tree",
-      "-r",
-      "--name-only",
-      "-z",
-      tree,
-    ]))
+      await git(repository, ["update-index", "--force-remove", "--", removed]);
+    const tree = (await git(repository, ["write-tree"])).trim();
+    const files = (
+      await git(repository, ["ls-tree", "-r", "--name-only", "-z", tree])
+    )
       .split("\0")
       .filter(Boolean);
     if (files.length > workspaceGitLimits.files)
-      return yield* new WorkspaceGitError({ reason: "too_large" });
-    const revision = (yield* git(repository, [
-      "commit-tree",
-      tree,
-      ...(parent ? ["-p", parent] : []),
-      "-m",
-      input.message,
-    ])).trim();
-    yield* git(repository, ["update-ref", "refs/heads/main", revision]);
+      throw new WorkspaceGitError({ reason: "too_large" });
+    const revision = (
+      await git(repository, [
+        "commit-tree",
+        tree,
+        ...(parent ? ["-p", parent] : []),
+        "-m",
+        input.message,
+      ])
+    ).trim();
+    await git(repository, ["update-ref", "refs/heads/main", revision]);
     const destination = `${directory}/published.bundle`;
-    yield* git(repository, ["bundle", "create", destination, "--all"]);
-    const info = yield* fs.stat(destination);
-    if (Number(info.size) > workspaceGitLimits.bundleBytes)
-      return yield* new WorkspaceGitError({ reason: "too_large" });
+    await git(repository, ["bundle", "create", destination, "--all"]);
+    const info = await fs.stat(destination);
+    if (info.size > workspaceGitLimits.bundleBytes)
+      throw new WorkspaceGitError({ reason: "too_large" });
     return {
       revision,
-      bundle: Buffer.from(yield* fs.readFile(destination)),
+      bundle: Buffer.from(await fs.readFile(destination)),
       files,
     };
-  },
-  Effect.scoped,
-  Effect.timeout("15 seconds"),
-  Effect.catchTag(
-    "SchemaError",
-    () => new WorkspaceGitError({ reason: "invalid_file" })
-  ),
-  Effect.catchTag(
-    ["PlatformError", "ConfigError", "TimeoutError"],
-    () => new WorkspaceGitError({ reason: "unavailable" })
-  ),
-  Effect.provide(NodeServices.layer)
-);
+  });
+};

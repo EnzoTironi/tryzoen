@@ -1,17 +1,18 @@
-import { Effect } from "effect";
+import { withSignal } from "../../../../server/operations/async";
+import { AccountPrivacyError } from "../../../../server/accounts/privacy";
 import {
   accountPrivacyErrorResponse,
   deleteAccountOnlineDataResponse,
 } from "../../../../server/accounts/privacy";
-import { serverRuntime } from "../../../../server/runtime";
 
 export function POST(request: Request) {
-  return serverRuntime.runPromise(
-    deleteAccountOnlineDataResponse(request.headers).pipe(
-      Effect.catchTag("AccountPrivacyError", (error) =>
-        Effect.succeed(accountPrivacyErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  return withSignal(request.signal, async () => {
+    try {
+      return await deleteAccountOnlineDataResponse(request.headers);
+    } catch (error) {
+      if (error instanceof AccountPrivacyError)
+        return accountPrivacyErrorResponse(error);
+      throw error;
+    }
+  });
 }

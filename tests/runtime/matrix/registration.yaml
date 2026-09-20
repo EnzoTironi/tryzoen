@@ -1,0 +1,14 @@
+id: zoen
+url: http://host.docker.internal:4350
+as_token: zoen-eve-synthetic-application-service-token
+hs_token: zoen-eve-synthetic-homeserver-token
+sender_localpart: _zoen_bot
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: "^@_zoen_.*:zoen-eve.test$"
+  aliases:
+    - exclusive: true
+      regex: "^#_zoen_room_.*:zoen-eve.test$"
+  rooms: []

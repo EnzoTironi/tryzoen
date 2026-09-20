@@ -1,5 +1,9 @@
-import { Effect, Schema } from "effect";
-import { serverRuntime } from "../../../../server/runtime";
+import { withSignal } from "../../../../server/operations/async";
+import { WorkspaceRepositoryError } from "../../../../server/workspaces/repository";
+import { WorkspaceImportError } from "../../../../server/workspaces/import";
+import { ZodError as SchemaError } from "zod";
+import { WorkspaceAccessDenied } from "../../../../server/workspaces/access";
+import { z } from "zod";
 import { resolveWorkspaceActor } from "../../../../server/workspaces/session";
 import { WorkspaceRepository } from "../../../../server/workspaces/repository";
 import {
@@ -9,9 +13,9 @@ import {
 import { isSameOrigin } from "@web/trpc/same-origin";
 import { GitRevisionSchema } from "../../../../server/workspaces/git";
 
-const importMetadata = Schema.Struct({
-  operationId: Schema.String.check(Schema.isUUID()),
-  expectedRevision: Schema.NullOr(GitRevisionSchema),
+const importMetadata = z.object({
+  operationId: z.uuid(),
+  expectedRevision: z.nullable(GitRevisionSchema),
 });
 
 export async function POST(request: Request) {
@@ -20,21 +24,19 @@ export async function POST(request: Request) {
   const length = Number(request.headers.get("content-length"));
   if (!length || length > workspaceImportBytes + 8192)
     return Response.json({ error: "too_large" }, { status: 413 });
-  return serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const actor = yield* resolveWorkspaceActor(request.headers);
-      const form = yield* Effect.tryPromise(() => request.formData());
+  return withSignal(request.signal, async () => {
+    try {
+      const actor = await resolveWorkspaceActor(request.headers);
+      const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File))
         return Response.json({ error: "invalid_document" }, { status: 400 });
-      const metadata = yield* Schema.decodeUnknownEffect(importMetadata)({
+      const metadata = await importMetadata.parseAsync({
         operationId: form.get("operationId"),
         expectedRevision: form.get("revision"),
       });
-      const bytes = Buffer.from(
-        yield* Effect.tryPromise(() => file.arrayBuffer())
-      );
-      const converted = yield* convertWorkspaceDocument(file.name, bytes);
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const converted = await convertWorkspaceDocument(file.name, bytes);
       const slug =
         file.name
           .replace(/\.[^.]+$/, "")
@@ -45,7 +47,7 @@ export async function POST(request: Request) {
           .replace(/^-|-$/g, "")
           .slice(0, 80) || "document";
       const path = `knowledge/${slug}.md`;
-      const saved = yield* (yield* WorkspaceRepository).write(
+      const saved = await WorkspaceRepository.write(
         actor,
         {
           ...metadata,
@@ -58,32 +60,22 @@ export async function POST(request: Request) {
         { ...saved, path },
         { headers: { "cache-control": "private, no-store" } }
       );
-    }).pipe(
-      Effect.catchTag("WorkspaceAccessDenied", () =>
-        Effect.succeed(Response.json({ error: "forbidden" }, { status: 403 }))
-      ),
-      Effect.catchTag("SchemaError", () =>
-        Effect.succeed(
-          Response.json({ error: "invalid_document" }, { status: 400 })
-        )
-      ),
-      Effect.catchTag("WorkspaceImportError", (error) =>
-        Effect.succeed(
-          Response.json(
-            { error: error.reason },
-            { status: error.reason === "too_large" ? 413 : 422 }
-          )
-        )
-      ),
-      Effect.catchTag("WorkspaceRepositoryError", (error) =>
-        Effect.succeed(
-          Response.json(
-            { error: error.reason },
-            { status: error.reason === "conflict" ? 409 : 400 }
-          )
-        )
-      )
-    ),
-    { signal: request.signal }
-  );
+    } catch (error) {
+      if (error instanceof WorkspaceAccessDenied)
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      if (error instanceof SchemaError)
+        return Response.json({ error: "invalid_document" }, { status: 400 });
+      if (error instanceof WorkspaceImportError)
+        return Response.json(
+          { error: error.reason },
+          { status: error.reason === "too_large" ? 413 : 422 }
+        );
+      if (error instanceof WorkspaceRepositoryError)
+        return Response.json(
+          { error: error.reason },
+          { status: error.reason === "conflict" ? 409 : 400 }
+        );
+      throw error;
+    }
+  });
 }

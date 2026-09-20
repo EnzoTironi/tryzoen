@@ -524,8 +524,8 @@ Referências são pontos de integração, não declaração de cobertura complet
 | server/schedules/native-report.ts; server/schedules/native-report-render.ts                                           | Entrega com receipts e supressão de nothing_to_report.                | Atenção, status conversacional, retomada e orçamento; qualificar atraso de polling por minuto.                                   |
 | Conta interna existente                                                                                               | Identidade única para uso e cadastro posterior.                       | Ledger, reservas, estado de cadastro e bônus único ainda não encontrados.                                                        |
 
-Eve continua dono de sessões, espera e execução durável. Effect é dono de lógica,
-I/O e validação da aplicação. Projeção nova guarda apenas fatos de produto e
+Eve continua dono de sessões, espera e execução durável. A aplicação usa funções async,
+I/O direto e validação Zod. Projeção nova guarda apenas fatos de produto e
 referências do Eve, não duplica transcrição/replay. Consultar APIs instaladas e
 migrar consumidores internos atomicamente, sem camada de compatibilidade.
 

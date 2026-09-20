@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   createServer,
   request as httpRequest,
@@ -5,7 +6,6 @@ import {
 } from "node:http";
 import type { LookupAddress } from "node:dns";
 import type { Socket } from "node:net";
-import { Schema } from "effect";
 import type { RequestOptions } from "node:https";
 import { once } from "node:events";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
@@ -68,9 +68,7 @@ server.on("connection", (socket) => {
 beforeAll(async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  const address = Schema.decodeUnknownSync(
-    Schema.Struct({ port: Schema.Number })
-  )(server.address());
+  const address = z.object({ port: z.number() }).parse(server.address());
   state.port = address.port;
 });
 beforeEach(() => {

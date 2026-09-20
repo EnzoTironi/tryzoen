@@ -65,6 +65,9 @@ export function MarketingShell({
             ))}
           </nav>
           <div className="flex items-center gap-1 sm:gap-2">
+            <div className={styles.headerLanguage}>
+              <LanguagePicker compact />
+            </div>
             <Button
               className="hidden sm:inline-flex"
               nativeButton={false}

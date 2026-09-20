@@ -1,6 +1,7 @@
 import { createTranslator } from "@web/i18n/translate";
 import ptBR from "@web/i18n/messages/pt-br.json";
 import { createElement } from "react";
+import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";
 import { describe, expect, it } from "vitest";
 import {
@@ -55,5 +56,22 @@ describe("first-run status", () => {
       })
     );
     expect(html).toBe("");
+  });
+
+  it("keeps onboarding conversation and connection links in the selected workspace", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        SearchParamsContext.Provider,
+        { value: new URLSearchParams("space=team-audit") },
+        createElement(FirstRunStatus, {
+          welcome: true,
+          identities: [{ channel: "telegram", senderId: "42" }],
+        })
+      )
+    );
+    expect(html).toContain('href="/chat?space=team-audit"');
+    expect(html).toContain(
+      'href="/connections?messengers=1&amp;space=team-audit"'
+    );
   });
 });

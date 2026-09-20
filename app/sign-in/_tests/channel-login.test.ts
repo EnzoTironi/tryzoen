@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToEnglishMarkup as renderToStaticMarkup } from "@tests/helpers/i18n";
-import { Effect, Schema } from "effect";
+
 import { describe, expect, it, vi } from "vitest";
 import { ChannelStatus } from "@web/auth/channel/status";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@web/auth/channel/client";
 import { channelChallengeSchema } from "@shared/identity/channel-auth";
 
-const challenge = Schema.decodeUnknownSync(channelChallengeSchema)({
+const challenge = channelChallengeSchema.parse({
   id: "5dd20c8c-9d99-49ea-8e04-936d238dac03",
   channel: "telegram",
   deepLink: "https://t.me/assistant_bot?start=example",
@@ -34,7 +34,7 @@ it.each([
     );
     try {
       await expect(
-        Effect.runPromise(checkChannelAuthorization(challenge.id))
+        checkChannelAuthorization(challenge.id)
       ).rejects.toMatchObject({
         status: 429,
         category: "rate-limit",

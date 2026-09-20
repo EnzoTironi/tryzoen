@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import {
   index,
   integer,
@@ -8,7 +9,7 @@ import {
   boolean,
   doublePrecision,
 } from "drizzle-orm/pg-core";
-import type { Schema } from "effect";
+
 import { workspaces } from "./workspaces";
 
 export const telemetrySettings = pgTable("telemetry_settings", {
@@ -38,7 +39,7 @@ export const telemetryEvents = pgTable(
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     costUsd: doublePrecision("cost_usd"),
-    metadata: jsonb("metadata").$type<Schema.Json>().notNull(),
+    metadata: jsonb("metadata").$type<z.core.util.JSONType>().notNull(),
     payload: text("payload"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

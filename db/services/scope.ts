@@ -1,15 +1,18 @@
 import { and, eq } from "drizzle-orm";
-import { Schema } from "effect";
 import {
   accessScopeForUser,
   type AccessScope,
 } from "@shared/identity/access-scope";
 import { db, workspaceMemberships, workspaces } from "@db";
 
-class ScopeAccessDenied extends Schema.TaggedError<ScopeAccessDenied>()(
-  "ScopeAccessDenied",
-  {}
-) {}
+class ScopeAccessDenied extends Error {
+  readonly _tag = "ScopeAccessDenied";
+
+  constructor() {
+    super("ScopeAccessDenied");
+    this.name = "ScopeAccessDenied";
+  }
+}
 
 /** Personal install path: creates workspace + owner membership when missing. */
 export async function ensureScope(scope: AccessScope) {

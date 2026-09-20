@@ -1,17 +1,15 @@
-import { Effect, Layer } from "effect";
+import { beforeEach, vi } from "vitest";
 import { ErasureJournal } from "../../server/accounts/erasure-journal";
 
 /** Independent storage survives the database restoration exercised by deletion tests. */
-export const erasureJournalFixture = Layer.effect(
-  ErasureJournal,
-  Effect.sync(() => {
+export function installErasureJournalFixture() {
+  beforeEach(() => {
     const users = new Set<string>();
-    return {
-      append: (userId: string) =>
-        Effect.sync(() => {
-          users.add(userId);
-        }),
-      read: () => Effect.sync(() => [...users].map((userId) => ({ userId }))),
-    };
-  })
-);
+    vi.spyOn(ErasureJournal, "append").mockImplementation(async (userId) => {
+      users.add(userId);
+    });
+    vi.spyOn(ErasureJournal, "read").mockImplementation(async () =>
+      [...users].map((userId) => ({ userId }))
+    );
+  });
+}

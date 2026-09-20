@@ -91,7 +91,7 @@ const questions = [
   {
     question: "Como começo?",
     answer:
-      "Toque em Começar, abra o iMessage e faça seu primeiro pedido. Seu Zoen segue com você por ali.",
+      "Toque em Começar, mande uma mensagem e faça seu primeiro pedido. Seu Zoen segue com você por ali.",
   },
 ] as const;
 

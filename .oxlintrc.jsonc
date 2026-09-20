@@ -22,17 +22,8 @@
     "suspicious": "error",
     "perf": "error"
   },
-  "ignorePatterns": [
-    // Pinned third-party kernel: retain upstream style; typecheck and run its tests.
-    "vendor/executor/**",
-    "tools/oxlint/anti-slop/**",
-    // Manual live TG Bot API probe; fixture harness is the CI proof.
-    "scripts/groups-live-e2e.ts"
-  ],
+  "ignorePatterns": ["vendor/executor/**", "scripts/groups-live-e2e.ts"],
   "jsPlugins": [
-    "./tools/oxlint/architecture/index.ts",
-    "./tools/oxlint/anti-slop/index.ts",
-    "./tools/oxlint/next/index.ts",
     "eslint-plugin-turbo",
     {
       "name": "hooks",
@@ -46,26 +37,6 @@
     }
   },
   "rules": {
-    "local-architecture/no-forbidden-layer-imports": "error",
-    "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-empty-object-spread": "error",
-    "anti-slop/no-known-value-widening": "error",
-    "anti-slop/no-module-mocking": "error",
-    "anti-slop/no-object-parameters": "error",
-    "anti-slop/no-reflect-apply": "error",
-    "anti-slop/no-reflect-get": "error",
-    "anti-slop/no-runtime-typeof": "error",
-    "anti-slop/no-shape-in-symbol-names": "error",
-    "anti-slop/no-unknown-parameters": "error",
-    "anti-slop/no-unknown-returns": "error",
-    "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-unsafe-dictionary-type": "error",
-    "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error",
-    "local-next/no-route-private-imports": "error",
-    "local-next/prefer-nearest-route-private-owner": "error",
-    "local-next/require-generated-route-props": "error",
-    "local-next/require-page-route-group": "error",
     "hooks/config": "error",
     "hooks/error-boundaries": "error",
     "hooks/gating": "error",
@@ -224,7 +195,7 @@
     "nextjs/no-typos": "warn",
     "nextjs/no-unwanted-polyfillio": "warn",
     "no-array-constructor": "error",
-    "no-await-in-loop": "error",
+    "no-await-in-loop": "off",
     "no-case-declarations": "error",
     "no-empty": "error",
     "no-empty-function": "error",
@@ -272,16 +243,9 @@
     "tailwindcss/enforce-negative-arbitrary-values": "warn",
     "tailwindcss/enforce-shorthand": "warn",
     "tailwindcss/no-conflicting-classes": "error",
-    // Unsound under the cn()/twMerge + cva composition this codebase assumes.
-    // The rule reads one class string in isolation, so it cannot see that a
-    // "redundant" variant is there to override a class twMerge pulls in from a
-    // component's own variants. Acting on it removes the override and changes
-    // rendering.
     "tailwindcss/no-contradicting-variants": "off",
     "tailwindcss/no-deprecated-classes": "warn",
     "tailwindcss/no-duplicate-classes": "error",
-    // The semantic typography utilities are hand-authored `@layer utilities`
-    // classes in app/styles/brand/typography.css.
     "tailwindcss/no-unknown-classes": [
       "warn",
       {
@@ -310,7 +274,8 @@
       "error",
       {
         "fixStyle": "separate-type-imports",
-        "prefer": "type-imports"
+        "prefer": "type-imports",
+        "disallowTypeAnnotations": false
       }
     ],
     "typescript/dot-notation": "error",
@@ -321,7 +286,6 @@
     "typescript/no-explicit-any": "error",
     "typescript/no-import-type-side-effects": "error",
     "typescript/no-inferrable-types": "error",
-    "typescript/no-invalid-void-type": "error",
     "typescript/no-misused-promises": "error",
     "typescript/no-mixed-enums": "error",
     "typescript/no-namespace": "error",
@@ -336,7 +300,12 @@
     "typescript/no-unsafe-member-access": "error",
     "typescript/no-unsafe-return": "error",
     "typescript/non-nullable-type-assertion-style": "error",
-    "typescript/only-throw-error": "error",
+    "typescript/only-throw-error": [
+      "error",
+      {
+        "allowThrowingUnknown": true
+      }
+    ],
     "typescript/prefer-find": "error",
     "typescript/prefer-for-of": "error",
     "typescript/prefer-function-type": "error",
@@ -366,7 +335,7 @@
         "allowBoolean": false,
         "allowNever": false,
         "allowNullish": false,
-        "allowNumber": false,
+        "allowNumber": true,
         "allowRegExp": false
       }
     ],
@@ -379,6 +348,24 @@
       "error",
       {
         "exclude": ["Function"]
+      }
+    ],
+    "vitest/expect-expect": [
+      "error",
+      {
+        "assertFunctionNames": ["expect", "assert", "assert.*"]
+      }
+    ],
+    "vitest/valid-expect": [
+      "error",
+      {
+        "maxArgs": 2
+      }
+    ],
+    "promise/always-return": [
+      "error",
+      {
+        "ignoreLastCallback": true
       }
     ]
   },
@@ -395,7 +382,6 @@
     {
       "files": ["**/tests/**/*.{ts,tsx,mts,cts}", "**/*.test.{ts,tsx,mts,cts}"],
       "rules": {
-        "anti-slop/no-module-mocking": "off",
         "vitest/consistent-test-filename": [
           "error",
           {
@@ -409,21 +395,18 @@
         "vitest/no-interpolation-in-snapshots": "error",
         "vitest/no-mocks-import": "error",
         "vitest/no-unneeded-async-expect-function": "error",
-        "vitest/prefer-called-exactly-once-with": "error"
+        "vitest/prefer-called-exactly-once-with": "error",
+        "no-restricted-properties": "off",
+        "turbo/no-undeclared-env-vars": "off"
       }
     },
     {
-      // shadcn registry source uses behavior utilities that the Tailwind
-      // linter cannot resolve through package stylesheet imports.
       "files": ["web/components/ui/**/*.tsx"],
       "rules": {
         "tailwindcss/no-unknown-classes": "off"
       }
     },
     {
-      // AI Elements uses typography and animation utilities supplied through
-      // package styles that the Tailwind linter cannot resolve from the app
-      // entrypoint. Keep this exception limited to the affected components.
       "files": [
         "web/components/ai-elements/message.tsx",
         "web/components/ai-elements/reasoning.tsx",

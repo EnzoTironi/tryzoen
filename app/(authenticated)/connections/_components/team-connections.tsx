@@ -91,7 +91,7 @@ export function TeamConnections() {
             disabled={share.isPending || disconnect.isPending}
             onClick={() => {
               void (google ? disconnect.mutateAsync() : share.mutateAsync())
-                .then(() => state.refetch())
+                .then(async () => state.refetch())
                 .catch(() => undefined);
             }}
           >

@@ -1,7 +1,9 @@
+import { query, transaction as withDatabaseTransaction } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { mapAsync } from "../operations/async";
+import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -26,80 +28,75 @@ import {
   redactConnectorCredential,
 } from "./credentials";
 
-const Connection = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  kind: Schema.Literals(["mcp", "openapi"]),
-  endpoint: Schema.String,
-  connected_by: Schema.String,
-  revision: Schema.String,
+const Connection = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.enum(["mcp", "openapi"]),
+  endpoint: z.string(),
+  connected_by: z.string(),
+  revision: z.string(),
   operations: ConnectorOperations,
-  share: Schema.Literals(["owner", "workspace"]),
+  share: z.enum(["owner", "workspace"]),
 });
-const fingerprint = (input: typeof ConnectorInput.Type) =>
+const fingerprint = (input: z.output<typeof ConnectorInput>) =>
   createHash("sha256").update(JSON.stringify(input)).digest("hex");
 
-export const listToolConnections = Effect.fn("Connector.list")(function* (
-  actor: typeof WorkspaceActorSchema.Type
+export const listToolConnections = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const sql = yield* PgClient.PgClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      yield* requireWorkspaceAccess(actor);
-      if (actor.agentGrantId) return [];
-      const rows =
-        yield* sql`SELECT id, name, kind, endpoint, connected_by, revision, operations, share FROM tool_connections
+  return await withDatabaseTransaction(async () => {
+    await requireWorkspaceAccess(actor);
+    if (actor.agentGrantId) return [];
+    const rows =
+      await query(sql`SELECT id, name, kind, endpoint, connected_by, revision, operations, share FROM tool_connections
     WHERE workspace_id = ${actor.workspaceId} AND revoked_at IS NULL
-      AND (share = 'workspace' OR (connected_by = ${actor.userId} AND ${!actor.groupBindingId})) ORDER BY created_at`;
-      return yield* Schema.decodeUnknownEffect(Schema.Array(Connection))(rows);
-    })
-  );
-});
+      AND (share = 'workspace' OR (connected_by = ${actor.userId} AND ${!actor.groupBindingId})) ORDER BY created_at`);
+    return await z.array(Connection).parseAsync(rows);
+  });
+};
 
-export const readToolConnection = Effect.fn("Connector.read")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const readToolConnection = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string,
   revision?: string
 ) {
-  const connection = (yield* listToolConnections(actor)).find(
+  const connection = (await listToolConnections(actor)).find(
     (entry) => entry.id === id
   );
   if (!connection || (revision && connection.revision !== revision))
-    return yield* new ConnectorError({ reason: "changed" });
+    throw new ConnectorError({ reason: "changed" });
   return connection;
-});
+};
 
-export const discoverToolConnections = Effect.fn("Connector.discover")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    input: typeof ConnectorDiscovery.Type
-  ) {
-    const connections = yield* listToolConnections(actor);
-    const metadata = connections.map(({ operations, ...connection }) => ({
-      ...connection,
-      operationCount: operations.length,
-    }));
-    if (!input.connectionId) return { connections: metadata };
-    const connection = connections.find(
-      (entry) => entry.id === input.connectionId
-    );
-    if (!connection) return yield* new ConnectorError({ reason: "denied" });
-    const offset = input.offset ?? 0;
-    const operations = connection.operations.slice(offset, offset + 3);
-    return {
-      connection: metadata.find((entry) => entry.id === connection.id),
-      operations,
-      nextOffset:
-        offset + operations.length < connection.operations.length
-          ? offset + operations.length
-          : null,
-    };
-  }
-);
+export const discoverToolConnections = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof ConnectorDiscovery>
+) {
+  const connections = await listToolConnections(actor);
+  const metadata = connections.map(({ operations, ...connection }) => ({
+    ...connection,
+    operationCount: operations.length,
+  }));
+  if (!input.connectionId) return { connections: metadata };
+  const connection = connections.find(
+    (entry) => entry.id === input.connectionId
+  );
+  if (!connection) throw new ConnectorError({ reason: "denied" });
+  const offset = input.offset ?? 0;
+  const operations = connection.operations.slice(offset, offset + 3);
+  return {
+    connection: metadata.find((entry) => entry.id === connection.id),
+    operations,
+    nextOffset:
+      offset + operations.length < connection.operations.length
+        ? offset + operations.length
+        : null,
+  };
+};
 
 export const remoteToolDefinition = (
-  connection: typeof Connection.Type,
-  operation: (typeof ConnectorOperations.Type)[number]
+  connection: z.output<typeof Connection>,
+  operation: z.output<typeof ConnectorOperations>[number]
 ) => ({
   name: operation.name,
   description: operation.description,
@@ -114,14 +111,14 @@ export const remoteToolDefinition = (
   tests: [],
 });
 
-export const requireRemoteTool = Effect.fn("Connector.requireTool")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
-  definition: typeof CustomerToolSchema.Type
+export const requireRemoteTool = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  definition: z.output<typeof CustomerToolSchema>
 ) {
   const implementation = definition.implementation;
   if (implementation.kind === "code")
-    return yield* new ConnectorError({ reason: "invalid" });
-  const connection = yield* readToolConnection(
+    throw new ConnectorError({ reason: "invalid" });
+  const connection = await readToolConnection(
     actor,
     implementation.connectionId,
     implementation.revision
@@ -135,41 +132,39 @@ export const requireRemoteTool = Effect.fn("Connector.requireTool")(function* (
     !isDeepStrictEqual(operation.inputSchema, definition.inputSchema) ||
     !isDeepStrictEqual(operation.outputSchema, definition.outputSchema)
   )
-    return yield* new ConnectorError({ reason: "changed" });
+    throw new ConnectorError({ reason: "changed" });
   return { connection, operation };
-});
+};
 
-export const connectTools = Effect.fn("Connector.connect")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
-  input: typeof ConnectorInput.Type
+export const connectTools = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof ConnectorInput>
 ) {
-  yield* requireWorkspaceAccess(actor, true);
-  if (!actor.authSessionId) return yield* new WorkspaceAccessDenied();
-  yield* Effect.try({
-    try: () => connectorEndpoint(input.endpoint),
-    catch: () => new ConnectorError({ reason: "invalid" }),
+  await requireWorkspaceAccess(actor, true);
+  if (!actor.authSessionId) throw new WorkspaceAccessDenied();
+  await Promise.try(async () => connectorEndpoint(input.endpoint)).catch(() => {
+    throw new ConnectorError({ reason: "invalid" });
   });
   if (/[\r\n]/u.test(input.credential))
-    return yield* new ConnectorError({ reason: "invalid" });
-  const sql = yield* PgClient.PgClient;
+    throw new ConnectorError({ reason: "invalid" });
+
   const hash = fingerprint(input);
   const existing =
-    yield* sql`SELECT id FROM tool_connections WHERE id = ${input.id} AND workspace_id = ${actor.workspaceId}
-    AND connected_by = ${actor.userId} AND request_hash = ${hash} AND revoked_at IS NULL`;
-  if (existing.length) return yield* readToolConnection(actor, input.id);
+    await query(sql`SELECT id FROM tool_connections WHERE id = ${input.id} AND workspace_id = ${actor.workspaceId}
+    AND connected_by = ${actor.userId} AND request_hash = ${hash} AND revoked_at IS NULL`);
+  if (existing.length) return await readToolConnection(actor, input.id);
   const imported =
     input.kind === "mcp"
-      ? yield* importMcp(input.endpoint, input.credential)
-      : yield* importOpenApi(
+      ? await importMcp(input.endpoint, input.credential)
+      : await importOpenApi(
           redactConnectorCredential(input.document ?? "", input.credential)
         );
-  const operations =
-    yield* Schema.decodeUnknownEffect(ConnectorOperations)(imported);
+  const operations = await ConnectorOperations.parseAsync(imported);
   if (
     new Set(operations.map((operation) => operation.id)).size !==
     operations.length
   )
-    return yield* new ConnectorError({ reason: "invalid" });
+    throw new ConnectorError({ reason: "invalid" });
   const revision = randomUUID();
   const candidate = {
     ...input,
@@ -179,72 +174,72 @@ export const connectTools = Effect.fn("Connector.connect")(function* (
   };
   // Import uses the same schema owner as publication, rejecting unsupported
   // refs or schema extensions before any remote operation becomes discoverable.
-  yield* Effect.forEach(operations, (operation) =>
-    decodeCustomerTool(
-      JSON.stringify(remoteToolDefinition(candidate, operation))
-    )
+  await mapAsync(
+    operations,
+    (operation) =>
+      decodeCustomerTool(
+        JSON.stringify(remoteToolDefinition(candidate, operation))
+      ),
+    1
   );
-  const credentials = yield* sealConnectorCredential(
+  const credentials = await sealConnectorCredential(
     actor.workspaceId,
     input.id,
     revision,
     input.credential
   );
-  yield* sql.withTransaction(
-    Effect.gen(function* () {
-      const access = yield* requireWorkspaceAccess(actor, true);
-      yield* sql`SELECT pg_advisory_xact_lock(hashtextextended(${actor.workspaceId}, 5861))`;
-      const active =
-        yield* sql`SELECT id FROM tool_connections WHERE workspace_id = ${actor.workspaceId} AND revoked_at IS NULL`;
-      if (active.length >= 20)
-        return yield* new ConnectorError({ reason: "unavailable" });
-      const inserted =
-        yield* sql`INSERT INTO tool_connections(id, workspace_id, connected_by, organization_id, name, kind, endpoint, credentials, revision, operations, share, request_hash)
+  await withDatabaseTransaction(async () => {
+    const access = await requireWorkspaceAccess(actor, true);
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${actor.workspaceId}, 5861))`
+    );
+    const active = await query(
+      sql`SELECT id FROM tool_connections WHERE workspace_id = ${actor.workspaceId} AND revoked_at IS NULL`
+    );
+    if (active.length >= 20)
+      throw new ConnectorError({ reason: "unavailable" });
+    const inserted =
+      await query(sql`INSERT INTO tool_connections(id, workspace_id, connected_by, organization_id, name, kind, endpoint, credentials, revision, operations, share, request_hash)
       VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${access.organizationId}, ${input.name}, ${input.kind}, ${input.endpoint}, ${credentials}, ${revision}, ${JSON.stringify(operations)}::jsonb, ${input.share}, ${hash})
-      ON CONFLICT (id) DO NOTHING RETURNING id`;
-      if (!inserted.length)
-        return yield* new ConnectorError({ reason: "changed" });
-      return undefined;
-    })
-  );
-  return yield* readToolConnection(actor, input.id);
-});
+      ON CONFLICT (id) DO NOTHING RETURNING id`);
+    if (!inserted.length) throw new ConnectorError({ reason: "changed" });
+    return undefined;
+  });
+  return await readToolConnection(actor, input.id);
+};
 
-export const revokeToolConnection = Effect.fn("Connector.revoke")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const revokeToolConnection = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
-  if (!actor.authSessionId) return yield* new WorkspaceAccessDenied();
-  const sql = yield* PgClient.PgClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      yield* requireWorkspaceAccess(actor, true);
-      yield* sql`UPDATE tool_connections SET credentials = NULL, revoked_at = now(), revision = ${randomUUID()}
-    WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND revoked_at IS NULL`;
-      yield* sql`UPDATE tool_invocations SET result = NULL WHERE connection_id = ${id} AND workspace_id = ${actor.workspaceId}`;
-      return undefined;
-    })
-  );
-});
+  if (!actor.authSessionId) throw new WorkspaceAccessDenied();
 
-export const toolConnectionCredentials = Effect.fn("Connector.credentials")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    id: string,
-    revision: string
-  ) {
-    yield* readToolConnection(actor, id, revision);
-    const sql = yield* PgClient.PgClient;
-    const rows =
-      yield* sql`SELECT credentials FROM tool_connections WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND revision = ${revision} AND revoked_at IS NULL`;
-    const row = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ credentials: Schema.String })
-    )(rows[0]);
-    return yield* openConnectorCredential(
-      actor.workspaceId,
-      id,
-      revision,
-      row.credentials
+  await withDatabaseTransaction(async () => {
+    await requireWorkspaceAccess(actor, true);
+    await query(sql`UPDATE tool_connections SET credentials = NULL, revoked_at = now(), revision = ${randomUUID()}
+    WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND revoked_at IS NULL`);
+    await query(
+      sql`UPDATE tool_invocations SET result = NULL WHERE connection_id = ${id} AND workspace_id = ${actor.workspaceId}`
     );
-  }
-);
+    return undefined;
+  });
+};
+
+export const toolConnectionCredentials = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  id: string,
+  revision: string
+) {
+  await readToolConnection(actor, id, revision);
+
+  const rows = await query(
+    sql`SELECT credentials FROM tool_connections WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND revision = ${revision} AND revoked_at IS NULL`
+  );
+  const row = await z.object({ credentials: z.string() }).parseAsync(rows[0]);
+  return await openConnectorCredential(
+    actor.workspaceId,
+    id,
+    revision,
+    row.credentials
+  );
+};

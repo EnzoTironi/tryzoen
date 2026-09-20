@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { get, put } from "@vercel/blob";
-import { Effect, Redacted } from "effect";
 import { z } from "zod";
 import type { InstallationSecrets } from "@db/services/installation-secrets";
 
@@ -141,7 +140,7 @@ describe("installation secrets", () => {
     expect(mocks.put).toHaveBeenCalledOnce();
   });
 
-  it("Effect layer injects the same explicit-env resolved secrets", async () => {
+  it("native resolver returns the same redacted installation secrets", async () => {
     const configured = {
       betterAuthSecret: Buffer.alloc(32, 7).toString("base64"),
       secretEncryptionKey: Buffer.alloc(32, 8).toString("base64"),
@@ -150,18 +149,16 @@ describe("installation secrets", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", configured.betterAuthSecret);
     vi.stubEnv("SECRET_ENCRYPTION_KEY", configured.secretEncryptionKey);
 
-    const { ResolvedInstallationSecrets } =
+    const { resolvedInstallationSecrets } =
       await import("@db/services/installation-secrets");
-    const resolved = await Effect.runPromise(
-      Effect.gen(function* () {
-        const secrets = yield* ResolvedInstallationSecrets;
-        return {
-          betterAuthSecret: Redacted.value(secrets.betterAuthSecret),
-          secretEncryptionKey: Redacted.value(secrets.secretEncryptionKey),
-          version: 1 as const,
-        };
-      }).pipe(Effect.provide(ResolvedInstallationSecrets.layer))
-    );
+    const resolved = await (async function () {
+      const secrets = await resolvedInstallationSecrets();
+      return {
+        betterAuthSecret: secrets.betterAuthSecret.reveal(),
+        secretEncryptionKey: secrets.secretEncryptionKey.reveal(),
+        version: 1 as const,
+      };
+    })();
 
     expect(resolved).toEqual(configured);
     expect(mocks.get).not.toHaveBeenCalled();

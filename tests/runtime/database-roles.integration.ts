@@ -1,16 +1,14 @@
+import { env } from "@shared/environment/env";
+import { Secret } from "@shared/environment/secret";
 import { createWorld } from "@workflow/world-postgres";
-import { Config, Effect, Redacted } from "effect";
 import { Pool } from "pg";
 import { expect, test } from "vitest";
-import { runtimeDatabase } from "./database";
-
 test("the runtime starts its durable queue without database administration rights", async () => {
-  const connectionString = Redacted.value(
-    await Effect.runPromise(
-      Config.redacted("DATABASE_URL").pipe(Effect.provide(runtimeDatabase))
-    )
-  );
-  const pool = new Pool({ connectionString, max: 2 });
+  const connectionString = new Secret(env.DATABASE_URL).reveal();
+  const pool = new Pool({
+    connectionString,
+    max: 2,
+  });
   const world = createWorld({
     connectionString,
     maxPoolSize: 4,
@@ -31,16 +29,24 @@ test("the runtime starts its durable queue without database administration right
     ]);
     await expect(
       pool.query("CREATE SCHEMA privilege_escalation_proof")
-    ).rejects.toMatchObject({ code: "42501" });
+    ).rejects.toMatchObject({
+      code: "42501",
+    });
     await expect(pool.query("SET ROLE zoen_migrator")).rejects.toMatchObject({
       code: "42501",
     });
     await expect(
       pool.query("SELECT * FROM drizzle.__drizzle_migrations")
-    ).rejects.toMatchObject({ code: "42501" });
+    ).rejects.toMatchObject({
+      code: "42501",
+    });
     await expect(world.start()).resolves.toBeUndefined();
     await expect(
-      world.runs.list({ pagination: { limit: 1 } })
+      world.runs.list({
+        pagination: {
+          limit: 1,
+        },
+      })
     ).resolves.toBeDefined();
   } finally {
     await world.close?.();

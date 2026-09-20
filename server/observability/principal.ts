@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import type { SessionAuthContext } from "eve/context";
 import { readProtocolTask } from "../a2a/tasks";
 import {
@@ -7,24 +8,23 @@ import {
 } from "../workspaces/access";
 
 /** Terminal A2A events still belong to the same authorized task; this grants no tool execution. */
-export const telemetryScope = Effect.fn("telemetry.scope")(function* (
+export const telemetryScope = async function (
   principal: SessionAuthContext,
   sessionId: string
 ) {
   if (principal.authenticator !== "a2a")
-    return yield* workspaceActorFromPrincipal(principal);
+    return await workspaceActorFromPrincipal(principal);
   const { protocolTaskId, ...attributes } = principal.attributes;
-  if (!Schema.is(Schema.String.check(Schema.isUUID()))(protocolTaskId))
-    return yield* new WorkspaceAccessDenied();
-  const actor = yield* workspaceActorFromPrincipal({
+  if (!isValid(z.uuid(), protocolTaskId)) throw new WorkspaceAccessDenied();
+  const actor = await workspaceActorFromPrincipal({
     ...principal,
     attributes,
   });
-  const task = yield* readProtocolTask(actor, protocolTaskId);
+  const task = await readProtocolTask(actor, protocolTaskId);
   if (
     task.state === "TASK_STATE_CANCELED" ||
     (task.sessionId !== null && task.sessionId !== sessionId)
   )
-    return yield* new WorkspaceAccessDenied();
+    throw new WorkspaceAccessDenied();
   return actor;
-});
+};

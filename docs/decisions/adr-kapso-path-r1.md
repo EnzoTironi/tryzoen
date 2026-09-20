@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-09 (America/Sao_Paulo)
-- **Decision:** **proceed** (Effect adapter / webhook private-delivery path)
+- **Decision:** **proceed** (async adapter / webhook private-delivery path)
 - **Worker:** U07 — compare Kapso on `origin/main` (@ c4258fa, includes #16) to Telegram U06 private-delivery qual bar
 
 ## Context
@@ -14,8 +14,8 @@ U06 qualifies Telegram private delivery on three contract points:
 3. Outbox-safe 429 handling (`ProviderRetryable` → `scheduleOutboxRetry`).
 
 Release 1 still wants WhatsApp through Kapso as a product destination
-(`docs/companion-blueprint.md` P09 / R1). This ADR answers whether the **Kapso
-Effect adapter + webhook + tests** may proceed at that engineering bar, or must
+(`docs/eve/architecture.md` P09 / R1). This ADR answers whether the **Kapso
+async adapter + webhook + tests** may proceed at that engineering bar, or must
 be deferred / blocked.
 
 ## Evidence (Kapso on main)
@@ -31,7 +31,7 @@ be deferred / blocked.
 
 ## Decision
 
-**Proceed** with the Kapso Effect adapter / webhook private-delivery path for
+**Proceed** with the Kapso async adapter / webhook private-delivery path for
 Release-1 engineering work. No production adapter change was required; only
 qualification fixtures and this ADR landed.
 
@@ -56,7 +56,7 @@ templates / messaging windows / live webhook redirect / linking UX) is done.
 ## Alternatives considered
 
 - **Defer adapter work until login parity:** rejected — private ingress/outbox
-  contracts are already Effect-shaped and testable; login is a separate slice.
+  contracts are already async and testable; login is a separate slice.
 - **Blocked:** rejected — no critical Effect/safety gap found in adapter or
   webhook verification relative to U06.
 

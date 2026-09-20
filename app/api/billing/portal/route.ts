@@ -1,13 +1,11 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import { getAuthSession } from "@db/services/auth/session";
 import {
   BillingPortalError,
   createCustomerPortalSession,
 } from "../../../../server/billing/portal";
 
-const bodySchema = Schema.Struct({
-  organizationId: Schema.optionalKey(Schema.String),
-});
+const bodySchema = z.object({ organizationId: z.string().optional() });
 
 function portalErrorResponse(error: BillingPortalError) {
   const status =
@@ -31,27 +29,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawBody: unknown = await request.json().catch(() => ({}));
-  return Effect.runPromise(
-    Schema.decodeUnknownEffect(bodySchema)(rawBody).pipe(
-      Effect.mapError(
-        () =>
-          new BillingPortalError({
-            reason: "stripe_failed",
-            message: "Invalid portal payload.",
-          })
-      ),
-      Effect.flatMap((body) =>
-        createCustomerPortalSession({
-          userId: session.user.id,
-          organizationId: body.organizationId,
-        })
-      ),
-      Effect.map((result) => Response.json({ url: result.url })),
-      Effect.catchTag("BillingPortalError", (error) =>
-        Effect.succeed(portalErrorResponse(error))
-      )
-    ),
-    { signal: request.signal }
-  );
+  const body = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!body.success) {
+    return portalErrorResponse(
+      new BillingPortalError({
+        reason: "stripe_failed",
+        message: "Invalid portal payload.",
+      })
+    );
+  }
+  try {
+    request.signal.throwIfAborted();
+    const result = await createCustomerPortalSession({
+      ...body.data,
+      userId: session.user.id,
+    });
+    return Response.json({ url: result.url });
+  } catch (error) {
+    if (error instanceof BillingPortalError) return portalErrorResponse(error);
+    throw error;
+  }
 }

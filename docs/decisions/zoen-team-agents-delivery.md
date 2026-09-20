@@ -84,7 +84,7 @@ the database. Protocol context identifiers confer no authority.
 - Infrastructure TypeScript and all 18 Alchemy provider tests pass. Structural
   review flagged UI size/churn and generated migration/CI growth. Those findings
   are recorded rather than silenced. Ripwire could not resolve the dynamic
-  Effect/Eve/test registrations for test selection; real suites supply the evidence.
+  Eve/test registrations for test selection; real suites supply the evidence.
 - A production session called the native Gmail search and Calendar free/busy tools
   using the existing linked Google account. Both returned successful read-only
   results; no message or calendar event was created.

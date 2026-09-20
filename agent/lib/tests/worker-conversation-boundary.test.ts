@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "eve/tools";
-import { privateMessageTool } from "../../../server/executor/native/private-message-tool";
+import { privateMessageTool } from "../../../server/tools/native/private-message-tool";
 import { privateChannelEvents } from "../private-channel-events";
 
 const child: ToolContext = {
@@ -38,7 +38,7 @@ describe.each(["telegram", "kapso"] as const)(
     it("rejects direct child delivery before accessing identity or transport", async () => {
       const tool = privateMessageTool(channel);
       await expect(
-        Promise.resolve().then(() =>
+        Promise.try(() =>
           tool.execute({ kind: "message", text: "internal result" }, child)
         )
       ).rejects.toThrow("Return the result to the parent conversation");

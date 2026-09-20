@@ -1,50 +1,37 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect } from "effect";
+import { transaction } from "@db/queries";
+import { withSignal } from "../../server/operations/async";
+import {
+  MemoryDocumentConflict,
+  MemoryDocuments,
+} from "../../server/memory/documents";
 import {
   MemoryDocumentConflictError,
   type MemoryDocumentBackend,
 } from "eve/memory/file";
-import { MemoryDocuments } from "../../server/memory/documents";
-import { serverRuntime } from "../../server/runtime";
-import type { authorizePersonalMemoryContext } from "./personal-memory-access";
 
 export function createMemoryDocumentBackend(
-  authorize: ReturnType<typeof authorizePersonalMemoryContext>
+  authorize: () => Promise<void>
 ): MemoryDocumentBackend {
   return {
     read: ({ key, signal }) =>
-      serverRuntime.runPromise(
-        Effect.gen(function* () {
-          const sql = yield* PgClient.PgClient;
-          return yield* sql.withTransaction(
-            Effect.andThen(
-              authorize,
-              Effect.flatMap(MemoryDocuments, (documents) =>
-                documents.read(key)
-              )
-            )
-          );
-        }),
-        { signal }
+      withSignal(signal, () =>
+        transaction(async () => {
+          await authorize();
+          return MemoryDocuments.read(key);
+        })
       ),
     write: ({ key, content, expectedVersion, signal }) =>
-      serverRuntime.runPromise(
-        Effect.gen(function* () {
-          const sql = yield* PgClient.PgClient;
-          return yield* sql.withTransaction(
-            Effect.andThen(
-              authorize,
-              Effect.flatMap(MemoryDocuments, (documents) =>
-                documents.write({ key, content, expectedVersion })
-              )
-            )
-          );
-        }).pipe(
-          Effect.catchTag("MemoryDocumentConflict", (error) =>
-            Effect.fail(new MemoryDocumentConflictError(error.key))
-          )
-        ),
-        { signal }
-      ),
+      withSignal(signal, async () => {
+        try {
+          return await transaction(async () => {
+            await authorize();
+            return MemoryDocuments.write({ key, content, expectedVersion });
+          });
+        } catch (error) {
+          if (error instanceof MemoryDocumentConflict)
+            throw new MemoryDocumentConflictError(error.key);
+          throw error;
+        }
+      }),
   };
 }

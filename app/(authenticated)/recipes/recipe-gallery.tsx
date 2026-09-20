@@ -5,7 +5,7 @@ import { useI18n } from "@web/i18n/context";
 import { useState } from "react";
 import { ArrowUpRightIcon, SearchIcon } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import { PanelLink } from "../_components/panel-link";
 import { Input } from "@web/components/ui/input";
 import { chatStarters } from "../_lib/chat-starters";
 import styles from "./recipes.module.css";
@@ -77,7 +77,7 @@ export function RecipeGallery() {
       </div>
       <div className={styles.grid}>
         {matching.map((recipe) => (
-          <Link
+          <PanelLink
             className={styles.recipe}
             key={recipe.id}
             href={`/chat?starter=${recipe.id}`}
@@ -95,7 +95,7 @@ export function RecipeGallery() {
               <h2 className="type-section-title">{t(recipe.label)}</h2>
               <ArrowUpRightIcon aria-hidden="true" />
             </div>
-          </Link>
+          </PanelLink>
         ))}
       </div>
       {matching.length === 0 && (
@@ -104,7 +104,7 @@ export function RecipeGallery() {
         </output>
       )}
       <p className={styles.footer}>
-        <Link href="/chat">{t("Ou me conte a sua ideia.")}</Link>
+        <PanelLink href="/chat">{t("Ou me conte a sua ideia.")}</PanelLink>
       </p>
     </>
   );

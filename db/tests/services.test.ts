@@ -10,15 +10,12 @@ import {
   browserTraceDomains as browserTraceDomainsTable,
   browserTraces as browserTracesTable,
 } from "../schema";
-
 const databases: PGlite[] = [];
-
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.resetModules();
   await Promise.all(databases.splice(0).map((database) => database.close()));
 });
-
 describe("database services", () => {
   it("preserves workspace ownership across application domains", async () => {
     const client = new PGlite();
@@ -33,13 +30,13 @@ describe("database services", () => {
     await applyOrgWorkspaceRbacMigration(client);
     await applyOrgSsoAuditErasureMigration(client);
     await client.exec("ALTER TABLE workspaces ADD COLUMN display_name text");
-
-    const pgliteDatabase = drizzle(client, { schema });
+    const pgliteDatabase = drizzle(client, {
+      schema,
+    });
     // SAFETY: PGlite implements the query-builder surface exercised by these services despite using a different Drizzle driver.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This test swaps only the driver while retaining the shared Drizzle schema and query-builder contract.
     const database = pgliteDatabase as never;
     vi.spyOn(Database, "db", "get").mockReturnValue(database);
-
     const [
       browserImages,
       browsers,
@@ -63,10 +60,8 @@ describe("database services", () => {
     ]);
     const alice = accessScopeForUser("alice");
     const bob = accessScopeForUser("bob");
-
     await scope.ensureScope(alice);
     await scope.ensureScope(bob);
-
     const imageInput = {
       browserSessionId: "browser-alice",
       idempotencyKey: "worker-session:call-image",
@@ -123,7 +118,9 @@ describe("database services", () => {
     const storedImage = await browserImages.readReadyBrowserImageArtifact(
       alice,
       image.id,
-      { rootSessionId: "session-alice" }
+      {
+        rootSessionId: "session-alice",
+      }
     );
     expect(storedImage?.createdAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u
@@ -133,31 +130,33 @@ describe("database services", () => {
     ).toBeUndefined();
     expect(
       await browserImages.reserveBrowserImageArtifact(alice, imageInput)
-    ).toEqual({ image, status: "ready" });
+    ).toEqual({
+      image,
+      status: "ready",
+    });
     await expect(
       browserImages.reserveBrowserImageArtifact(alice, {
         ...imageInput,
         workerSessionId: "different-worker",
       })
     ).rejects.toThrow("idempotency key is already in use");
-
     await sessions.claimSession(alice, "session-alice");
-
     expect(await sessions.isSessionOwned(alice, "session-alice")).toBe(true);
     expect(await sessions.isSessionOwned(bob, "session-alice")).toBe(false);
-
     await sessions.claimSession(alice, "session-imessage");
     expect(await chats.listChats(alice)).toEqual([]);
-
     await sessions.claimSession(bob, "session-alice");
     expect(await sessions.isSessionOwned(alice, "session-alice")).toBe(true);
     expect(await sessions.isSessionOwned(bob, "session-alice")).toBe(false);
-
     await chats.saveChat(alice, {
       channel: "http",
       sessionId: "session-alice",
       title: "Initial title",
-      usage: { costUsd: 0.25, inputTokens: 10, outputTokens: 4 },
+      usage: {
+        costUsd: 0.25,
+        inputTokens: 10,
+        outputTokens: 4,
+      },
     });
     await chats.saveChat(alice, {
       sessionId: "session-alice",
@@ -167,7 +166,6 @@ describe("database services", () => {
       channel: "channel:linq",
       sessionId: "session-imessage",
     });
-
     const aliceChat = await chats.readChat(alice, "session-alice");
     expect(aliceChat?.title).toBe("Updated title");
     expect(aliceChat?.channel).toBe("http");
@@ -184,19 +182,23 @@ describe("database services", () => {
     ).toEqual(aliceChat);
     expect(
       indexedChats.find((chat) => chat.sessionId === "session-imessage")
-    ).toMatchObject({ channel: "channel:linq", title: "New chat" });
+    ).toMatchObject({
+      channel: "channel:linq",
+      title: "New chat",
+    });
     expect(await chats.listChats(bob)).toEqual([]);
-
     await chats.saveChat(bob, {
       sessionId: "session-alice",
       title: "Bob's title",
     });
-    await chats.saveChat(bob, { sessionId: "session-unknown", title: "Probe" });
+    await chats.saveChat(bob, {
+      sessionId: "session-unknown",
+      title: "Probe",
+    });
     expect(await chats.readChat(alice, "session-alice")).toEqual(aliceChat);
     expect(await chats.readChat(bob, "session-alice")).toBeUndefined();
     expect(await chats.readChat(bob, "session-unknown")).toBeUndefined();
     expect(await chats.listChats(bob)).toEqual([]);
-
     await browsers.createBrowserSession(alice, {
       createdAt: new Date().toISOString(),
       sessionId: "browser-alice",
@@ -204,7 +206,9 @@ describe("database services", () => {
     });
     expect(
       await browsers.readBrowserSession(alice, "browser-alice")
-    ).toMatchObject({ workerSessionId: "worker-alice" });
+    ).toMatchObject({
+      workerSessionId: "worker-alice",
+    });
     expect(
       await browsers.readBrowserSession(bob, "browser-alice")
     ).toBeUndefined();
@@ -218,7 +222,6 @@ describe("database services", () => {
     expect(await browsers.deleteBrowserSession(bob, "browser-alice")).toBe(
       false
     );
-
     const { serializeLoginVaultPayload } = await import("@shared/vault/schema");
     await browserTraces.beginBrowserTrace(alice, {
       sessionId: "worker-alice",
@@ -255,7 +258,6 @@ describe("database services", () => {
       domain: "shop.example.com",
       traceSessionId: "worker-alice",
     });
-
     await browserTraces.recordBrowserTraceEvents(alice, "worker-alice", [
       {
         at: "2026-08-31T00:00:01.000Z",
@@ -279,11 +281,13 @@ describe("database services", () => {
       "worker-alice"
     );
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ id: "evt_01", label: "Task received" });
+    expect(events[0]).toMatchObject({
+      id: "evt_01",
+      label: "Task received",
+    });
     expect(
       await browserTraces.listBrowserTraceEvents(bob, "worker-alice")
     ).toEqual([]);
-
     const tracePage = await browserTraces.listBrowserTraces(alice);
     expect(tracePage.nextCursor).toBeNull();
     expect(tracePage.traces).toHaveLength(1);
@@ -295,14 +299,19 @@ describe("database services", () => {
       task: "Order the blue mug",
     });
     expect((await browserTraces.listBrowserTraces(bob)).traces).toEqual([]);
-
     await vault.saveVaultItem(alice, {
       account: "alice@example.com",
       kind: "login",
       label: "Alice",
       secret: serializeLoginVaultPayload({
-        authentication: { password: "correct horse", type: "password" },
-        identifier: { type: "email", value: "alice@example.com" },
+        authentication: {
+          password: "correct horse",
+          type: "password",
+        },
+        identifier: {
+          type: "email",
+          value: "alice@example.com",
+        },
         kind: "login",
         origin: "https://example.com",
         version: 2,
@@ -319,7 +328,6 @@ describe("database services", () => {
     expect(
       await vault.deleteVaultItem(bob, aliceVaultItem?.id ?? "vault-alice")
     ).toBe(false);
-
     const sharedSecretId = "00000000-0000-4000-8000-000000000099";
     await secrets.writeEncryptedSecret(
       alice,
@@ -340,117 +348,97 @@ describe("database services", () => {
     expect(await secrets.readEncryptedSecret(bob, sharedSecretId)).toBe(
       "ciphertext-bob"
     );
-
     await settings.selectGatewayModel(alice, "openai/test");
     expect(await settings.getGatewayModel(alice)).toBe("openai/test");
     expect(await settings.getGatewayModel(bob)).toBe("openai/gpt-5.6-sol-fast");
   }, 15_000);
 });
-
 async function applyInitialMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0000_fluffy_the_spike.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyBrowserImageMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0003_unusual_fabian_cortez.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyBrowserTraceMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0004_kind_manta.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyBrowserTraceEventMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0005_brave_kang.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applySchemaAdoptionMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0006_illegal_tattoo.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyNativeTypesMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0008_black_sandman.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyChatChannelMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0011_faulty_unicorn.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyOrgWorkspaceRbacMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0029_org-workspace-rbac.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function applyOrgSsoAuditErasureMigration(database: PGlite) {
   const migration = await readFile(
     new URL("../migrations/0030_org-sso-audit-erasure.sql", import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
+
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }

@@ -1,4 +1,3 @@
-import { Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { EveMessagePart } from "eve/react";
 import {
@@ -7,12 +6,35 @@ import {
 } from "@shared/chat/reaction";
 import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
 
+export function conversationStreamEvents(
+  events: readonly MessageStreamEvent[]
+): readonly MessageStreamEvent[] {
+  return events.map((event) => {
+    // Eve approval continuations can omit their turn ID while retaining the sequence.
+    // Give those turns a stable UI identity without changing the persisted event.
+    if (
+      "data" in event &&
+      "turnId" in event.data &&
+      !event.data.turnId &&
+      "sequence" in event.data
+    ) {
+      return Object.assign({}, event, {
+        data: {
+          ...event.data,
+          turnId: `continuation:${event.data.sequence}`,
+        },
+      });
+    }
+    return event;
+  });
+}
+
 export function messageTimestamps(events: readonly MessageStreamEvent[]) {
   const timestamps = new Map<string, string>();
 
   for (const event of events) {
     if (event.type === "message.received") {
-      timestamps.set(`${event.data.turnId}:user`, event.meta.at);
+      timestamps.set(`${event.meta.id}:user`, event.meta.at);
     }
 
     if (
@@ -31,7 +53,7 @@ export function imessageTimestamps(events: readonly MessageStreamEvent[]) {
 
   for (const event of events) {
     if (event.type === "message.received") {
-      timestamps.set(`${event.data.turnId}:user`, event.meta.at);
+      timestamps.set(`${event.meta.id}:user`, event.meta.at);
     }
   }
 
@@ -110,11 +132,9 @@ function completedReactionOutput(event: MessageStreamEvent) {
     return undefined;
   }
 
-  const result = Schema.decodeUnknownResult(reactToMessageToolResultSchema)(
-    event.data.result
-  );
-  return Result.isSuccess(result) && result.success.output.operation === "add"
-    ? { callId: event.data.result.callId, output: result.success.output }
+  const result = reactToMessageToolResultSchema.safeParse(event.data.result);
+  return result.success && result.data.output.operation === "add"
+    ? { callId: event.data.result.callId, output: result.data.output }
     : undefined;
 }
 
@@ -123,11 +143,9 @@ function completedSendMessageOutput(event: MessageStreamEvent) {
     return undefined;
   }
 
-  const result = Schema.decodeUnknownResult(sendMessageToolResultSchema)(
-    event.data.result
-  );
-  return Result.isSuccess(result)
-    ? { callId: event.data.result.callId, output: result.success.output }
+  const result = sendMessageToolResultSchema.safeParse(event.data.result);
+  return result.success
+    ? { callId: event.data.result.callId, output: result.data.output }
     : undefined;
 }
 

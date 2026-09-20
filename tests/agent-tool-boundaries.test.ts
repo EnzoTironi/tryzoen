@@ -5,7 +5,7 @@ const rootTools = "agent/tools";
 const rootMemory = "agent/memory/profile.ts";
 const workerRoot = "agent/subagents/browser-agent";
 const workerTools = `${workerRoot}/tools`;
-const executorBrowser = "server/executor/browser";
+const executorBrowser = "server/tools/browser";
 
 function toolFiles(directory: string, root = directory): string[] {
   return readdirSync(directory, { withFileTypes: true })
@@ -22,18 +22,17 @@ describe("root and worker capability boundaries", () => {
     expect(toolFiles(rootTools)).toEqual([
       "ask_question.ts",
       "bash.ts",
-      "execute.ts",
-      "load_skill.ts",
+      "capabilities.ts",
       "messaging.ts",
       "read_file.ts",
       "respond-to-approval.ts",
       "web_search.ts",
       "write_file.ts",
     ]);
-    expect(readFileSync(`${rootTools}/execute.ts`, "utf8")).toContain(
-      'executorTool("coordinator")'
+    expect(readFileSync(`${rootTools}/capabilities.ts`, "utf8")).toContain(
+      "resolveCapabilities"
     );
-    for (const tool of ["bash", "load_skill", "read_file", "write_file"]) {
+    for (const tool of ["bash", "read_file", "write_file"]) {
       expect(readFileSync(`${rootTools}/${tool}.ts`, "utf8")).toContain(
         "disableTool()"
       );
@@ -58,10 +57,7 @@ describe("root and worker capability boundaries", () => {
   });
 
   it("keeps durable memory scoped to the authenticated root user", () => {
-    expect(readFileSync(rootMemory, "utf8")).toContain(
-      'export { default } from "../../server/executor/memory/profile"'
-    );
-    const memory = readFileSync("server/executor/memory/profile.ts", "utf8");
+    const memory = readFileSync(rootMemory, "utf8");
 
     expect(memory).toContain("defineMemory(");
     expect(memory).toContain("scope: resolveProfileMemoryScope");
@@ -71,7 +67,7 @@ describe("root and worker capability boundaries", () => {
     expect(toolFiles(workerTools)).toEqual([
       "ask_question.ts",
       "bash.ts",
-      "execute.ts",
+      "browser.ts",
       "load_skill.ts",
       "personal_info.ts",
       "read_file.ts",
@@ -80,8 +76,8 @@ describe("root and worker capability boundaries", () => {
       "web_search.ts",
       "write_file.ts",
     ]);
-    expect(readFileSync(`${workerTools}/execute.ts`, "utf8")).toContain(
-      'executorTool("browser")'
+    expect(readFileSync(`${workerTools}/browser.ts`, "utf8")).toContain(
+      "resolveBrowserTools"
     );
     expect(existsSync(`${workerRoot}/tools/sendMessage.ts`)).toBe(false);
     expect(existsSync(`${workerRoot}/tools/request_vault_setup.ts`)).toBe(
@@ -186,7 +182,7 @@ describe("root and worker capability boundaries", () => {
     expect(existsSync(`${executorBrowser}/get_totp.ts`)).toBe(false);
     expect(existsSync(`${workerTools}/get_password.ts`)).toBe(false);
     expect(existsSync(`${workerTools}/get_totp.ts`)).toBe(false);
-    const whatsapp = readFileSync("server/executor/tools/whatsapp.ts", "utf8");
+    const whatsapp = readFileSync("server/tools/tools/whatsapp.ts", "utf8");
     expect(whatsapp).toContain("listWhatsAppChats");
     expect(whatsapp).not.toContain("kapso");
     expect(whatsapp).not.toContain("KAPSO_");

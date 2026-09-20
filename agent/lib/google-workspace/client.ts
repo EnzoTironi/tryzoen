@@ -1,5 +1,9 @@
+import { withSignal } from "../../../server/operations/async";
+import { AuthUnavailable } from "../../../db/services/auth/index";
+import { GoogleWorkspaceError } from "../../../server/google-workspace/index";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import { auth } from "@googleapis/gmail";
-import { Effect, Redacted, Schema } from "effect";
 import {
   ConnectionAuthorizationFailedError,
   ConnectionAuthorizationRequiredError,
@@ -9,14 +13,12 @@ import {
 import type { SessionAuthContext } from "eve/context";
 import type { ToolContext } from "eve/tools";
 import { scopeFromPrincipal } from "../../../shared/identity/principal-scope";
-import { serverRuntime } from "../../../server/runtime";
 import { getGoogleWorkspaceToken } from "../../../server/google-workspace";
 import { createGoogleWorkspaceChallenge } from "../../../server/google-workspace/challenge";
 import { accessScopeForUser } from "../../../shared/identity/access-scope";
 import { workspaceActorFromPrincipal } from "../../../server/workspaces/access";
 import { getWorkspaceGoogleToken } from "../../../server/workspaces/connections";
 import { readWorkspaceCapabilities } from "../../../server/workspaces/capabilities";
-
 function googleScope(principal: ConnectionPrincipal) {
   if (principal.type !== "user")
     throw new ConnectionAuthorizationFailedError("google-workspace", {
@@ -43,52 +45,52 @@ function liveGoogleConsentPrincipal(
     principalType: "user",
   };
 }
-
 async function readToken(principal: ConnectionPrincipal) {
-  return serverRuntime.runPromise(
-    getGoogleWorkspaceToken(googleScope(principal)).pipe(
-      Effect.map(Redacted.value),
-      Effect.catchTag("GoogleWorkspaceError", (error) =>
-        Effect.fail(
-          error.reason === "authorization_required"
-            ? new ConnectionAuthorizationRequiredError("google-workspace")
-            : new ConnectionAuthorizationFailedError("google-workspace", {
-                reason: error.reason,
-                retryable: false,
-              })
-        )
-      ),
-      Effect.catchTag("AuthUnavailable", () =>
-        Effect.fail(
-          new ConnectionAuthorizationFailedError("google-workspace", {
-            reason: "unavailable",
-            retryable: false,
-          })
-        )
-      )
-    )
-  );
+  try {
+    try {
+      const secret = await getGoogleWorkspaceToken(googleScope(principal));
+      return secret.reveal();
+    } catch (error) {
+      if (error instanceof GoogleWorkspaceError)
+        throw error.reason === "authorization_required"
+          ? new ConnectionAuthorizationRequiredError("google-workspace")
+          : new ConnectionAuthorizationFailedError("google-workspace", {
+              reason: error.reason,
+              retryable: false,
+            });
+      throw error;
+    }
+  } catch (error) {
+    if (error instanceof AuthUnavailable)
+      throw new ConnectionAuthorizationFailedError("google-workspace", {
+        reason: "unavailable",
+        retryable: false,
+      });
+    throw error;
+  }
 }
-
 const googleWorkspaceAuth = defineInteractiveAuthorization({
   getToken: ({ principal }) => readToken(principal),
   async startAuthorization({ principal, callbackUrl }) {
-    const url = await serverRuntime.runPromise(
+    const url = await Promise.try(async () =>
       createGoogleWorkspaceChallenge(
         liveGoogleConsentPrincipal(principal),
         callbackUrl
-      ).pipe(
-        Effect.catchTag("GoogleWorkspaceError", (error) =>
-          Effect.fail(
-            new ConnectionAuthorizationFailedError("google-workspace", {
-              reason: error.reason,
-              retryable: false,
-            })
-          )
-        )
       )
-    );
-    return { challenge: { url, displayName: "Google Workspace" } };
+    ).catch((error: unknown) => {
+      if (error instanceof GoogleWorkspaceError)
+        throw new ConnectionAuthorizationFailedError("google-workspace", {
+          reason: error.reason,
+          retryable: false,
+        });
+      throw error;
+    });
+    return {
+      challenge: {
+        url,
+        displayName: "Google Workspace",
+      },
+    };
   },
   completeAuthorization({ principal, callback }) {
     if (callback.params.error)
@@ -99,27 +101,30 @@ const googleWorkspaceAuth = defineInteractiveAuthorization({
     return readToken(principal);
   },
 });
-
-class GoogleApiError extends Schema.TaggedError<GoogleApiError>()(
-  "GoogleApiError",
-  { status: Schema.optionalKey(Schema.Number) }
-) {}
-const googleApiErrorSchema = Schema.Struct({
-  response: Schema.Struct({
-    status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
+class GoogleApiError extends Error {
+  readonly _tag = "GoogleApiError";
+  declare readonly status?: number | undefined;
+  constructor(input: { readonly status?: number | undefined }) {
+    super("GoogleApiError");
+    this.name = "GoogleApiError";
+    Object.assign(this, input);
+  }
+}
+const googleApiErrorSchema = z.object({
+  response: z.object({
+    status: z.number().int().min(100).max(599),
   }),
 });
-
 export function googleApiErrorStatus(cause: unknown) {
-  return Schema.is(googleApiErrorSchema)(cause)
+  return isValid(googleApiErrorSchema, cause)
     ? cause.response.status
     : undefined;
 }
-
 export function googleApiFailure(cause: unknown) {
-  return new GoogleApiError({ status: googleApiErrorStatus(cause) });
+  return new GoogleApiError({
+    status: googleApiErrorStatus(cause),
+  });
 }
-
 export async function withGoogleAuth<T>(
   ctx: ToolContext,
   execute: (authClient: InstanceType<typeof auth.OAuth2>) => Promise<T>
@@ -130,40 +135,38 @@ export async function withGoogleAuth<T>(
     principal.attributes.workspaceId !==
       accessScopeForUser(principal.principalId).workspaceId;
   const { token } = isCompany
-    ? await serverRuntime.runPromise(
-        Effect.gen(function* () {
-          const actor = yield* workspaceActorFromPrincipal(principal);
-          if (
-            actor.agentGrantId ||
-            actor.groupBindingId ||
-            !(yield* readWorkspaceCapabilities(actor)).enabled.includes(
-              "google"
-            )
-          )
-            return yield* Effect.fail(
-              new ConnectionAuthorizationFailedError("google-workspace", {
-                reason: "permission_denied",
-                retryable: false,
-              })
-            );
-          return Redacted.value(yield* getWorkspaceGoogleToken(actor));
-        }),
-        { signal: ctx.abortSignal }
-      )
+    ? await withSignal(ctx.abortSignal, async () => {
+        const actor = await workspaceActorFromPrincipal(principal);
+        if (
+          actor.agentGrantId ||
+          actor.groupBindingId ||
+          !(await readWorkspaceCapabilities(actor)).enabled.includes("google")
+        )
+          throw new ConnectionAuthorizationFailedError("google-workspace", {
+            reason: "permission_denied",
+            retryable: false,
+          });
+        return (await getWorkspaceGoogleToken(actor)).reveal();
+      })
     : await ctx.getToken(googleWorkspaceAuth);
   const authClient = new auth.OAuth2();
-  authClient.setCredentials({ access_token: token });
-  return Effect.runPromise(
-    Effect.tryPromise({
-      try: () => execute(authClient),
-      catch: googleApiFailure,
-    }).pipe(
-      Effect.catchTag("GoogleApiError", (error) => {
-        if (error.status === 401)
-          return Effect.sync(() => ctx.requireAuth(googleWorkspaceAuth));
-        return Effect.fail(error);
-      })
-    ),
-    { signal: ctx.abortSignal }
-  );
+  authClient.setCredentials({
+    access_token: token,
+  });
+  return withSignal(ctx.abortSignal, async () => {
+    try {
+      try {
+        return await execute(authClient);
+      } catch (error) {
+        throw googleApiFailure(error);
+      }
+    } catch (error) {
+      if (error instanceof GoogleApiError)
+        return ((cause) => {
+          if (cause.status === 401) return ctx.requireAuth(googleWorkspaceAuth);
+          throw cause;
+        })(error);
+      throw error;
+    }
+  });
 }

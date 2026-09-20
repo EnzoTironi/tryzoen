@@ -1,39 +1,40 @@
-import { Effect, Schema } from "effect";
+import { operationSignal } from "../operations/async";
+import { ZodError as SchemaError } from "zod";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { ConnectorError, ConnectorOperation } from "./definition";
 import { connectorEndpoint, publicFetch } from "./public-fetch";
 
-const JsonObject = Schema.Record(Schema.String, Schema.Unknown);
-const Media = Schema.Struct({
-  content: Schema.Record(Schema.String, Schema.Struct({ schema: JsonObject })),
+const JsonObject = z.record(z.string(), z.unknown());
+const Media = z.object({
+  content: z.record(z.string(), z.object({ schema: JsonObject })),
 });
-const Parameter = Schema.Struct({
-  name: Schema.String,
-  in: Schema.Literals(["path", "query"]),
-  required: Schema.optional(Schema.Boolean),
+const Parameter = z.object({
+  name: z.string(),
+  in: z.enum(["path", "query"]),
+  required: z.optional(z.boolean()),
   schema: JsonObject,
 });
-const Operation = Schema.Struct({
-  operationId: Schema.String,
-  summary: Schema.optional(Schema.String),
-  description: Schema.optional(Schema.String),
-  parameters: Schema.optional(Schema.Array(Parameter)),
-  requestBody: Schema.optional(Media),
-  responses: Schema.Record(Schema.String, Media),
+const Operation = z.object({
+  operationId: z.string(),
+  summary: z.optional(z.string()),
+  description: z.optional(z.string()),
+  parameters: z.optional(z.array(Parameter)),
+  requestBody: z.optional(Media),
+  responses: z.record(z.string(), Media),
 });
-const Document = Schema.Struct({
-  openapi: Schema.String.check(Schema.isPattern(/^3\.(0|1)\./u)),
-  paths: Schema.Record(Schema.String, JsonObject),
+const Document = z.object({
+  openapi: z.string().regex(/^3\.(0|1)\./u),
+  paths: z.record(z.string(), JsonObject),
 });
 
 /** Import a bounded JSON OpenAPI operation set. No remote $ref resolution,
  * server overrides, header/cookie parameters, or implicit schema coercion.
  */
-export const importOpenApi = Effect.fn("Connector.importOpenApi")(
-  function* (content: string) {
-    const document = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Document)
-    )(content);
-    const operations: (typeof ConnectorOperation.Type)[] = [];
+export const importOpenApi = async function (content: string) {
+  try {
+    const document = await jsonString(Document).parseAsync(content);
+    const operations: z.output<typeof ConnectorOperation>[] = [];
     for (const [path, item] of Object.entries(document.paths)) {
       if (
         !/^\/[A-Za-z0-9_/{}.~-]*$/u.test(path) ||
@@ -41,25 +42,23 @@ export const importOpenApi = Effect.fn("Connector.importOpenApi")(
         path.startsWith("//") ||
         item.parameters
       )
-        return yield* new ConnectorError({ reason: "invalid" });
+        throw new ConnectorError({ reason: "invalid" });
       for (const method of ["get", "post", "put", "patch", "delete"] as const) {
         if (!item[method]) continue;
-        const operation = yield* Schema.decodeUnknownEffect(Operation)(
-          item[method]
-        );
+        const operation = await Operation.parseAsync(item[method]);
         const parameters = operation.parameters ?? [];
         if (
           new Set(parameters.map((parameter) => parameter.name)).size !==
           parameters.length
         )
-          return yield* new ConnectorError({ reason: "invalid" });
+          throw new ConnectorError({ reason: "invalid" });
         if (
           parameters.some(
             (parameter) =>
               !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/u.test(parameter.name)
           )
         )
-          return yield* new ConnectorError({ reason: "invalid" });
+          throw new ConnectorError({ reason: "invalid" });
         const pathParameters = parameters
           .filter((p) => p.in === "path")
           .map((p) => p.name);
@@ -71,20 +70,19 @@ export const importOpenApi = Effect.fn("Connector.importOpenApi")(
           placeholders.some((name) => !pathParameters.includes(name ?? "")) ||
           pathParameters.some((name) => !placeholders.includes(name))
         )
-          return yield* new ConnectorError({ reason: "invalid" });
+          throw new ConnectorError({ reason: "invalid" });
         const body = operation.requestBody?.content["application/json"]?.schema;
         if ((operation.requestBody && !body) || (body && method === "get"))
-          return yield* new ConnectorError({ reason: "invalid" });
+          throw new ConnectorError({ reason: "invalid" });
         const response =
           operation.responses["200"] ?? operation.responses["201"];
         const outputSchema = response?.content["application/json"]?.schema;
-        if (!outputSchema)
-          return yield* new ConnectorError({ reason: "invalid" });
+        if (!outputSchema) throw new ConnectorError({ reason: "invalid" });
         const properties = Object.fromEntries(
           parameters.map((p) => [p.name, p.schema])
         );
         if (body && properties.body)
-          return yield* new ConnectorError({ reason: "invalid" });
+          throw new ConnectorError({ reason: "invalid" });
         if (body) properties.body = body;
         const inputSchema = {
           type: "object",
@@ -98,7 +96,7 @@ export const importOpenApi = Effect.fn("Connector.importOpenApi")(
           additionalProperties: false,
         };
         operations.push(
-          yield* Schema.decodeUnknownEffect(ConnectorOperation)({
+          await ConnectorOperation.parseAsync({
             id: operation.operationId,
             name: (operation.summary ?? operation.operationId).slice(0, 80),
             description: (
@@ -123,41 +121,42 @@ export const importOpenApi = Effect.fn("Connector.importOpenApi")(
       }
     }
     return operations;
-  },
-  Effect.catchTag(
-    "SchemaError",
-    () => new ConnectorError({ reason: "invalid" })
-  )
-);
+  } catch (error) {
+    if (error instanceof SchemaError) {
+      throw new ConnectorError({ reason: "invalid" });
+    }
+    throw error;
+  }
+};
 
-export const invokeOpenApi = Effect.fn("Connector.openApi")(
-  function* (
-    endpoint: string,
-    token: string,
-    operation: typeof ConnectorOperation.Type,
-    input: typeof JsonObject.Type,
-    operationId: string
-  ) {
+export const invokeOpenApi = async function (
+  endpoint: string,
+  token: string,
+  operation: z.output<typeof ConnectorOperation>,
+  input: z.output<typeof JsonObject>,
+  operationId: string
+) {
+  try {
     const definition = operation.request;
     if (definition.kind !== "openapi")
-      return yield* new ConnectorError({ reason: "invalid" });
+      throw new ConnectorError({ reason: "invalid" });
     const url = connectorEndpoint(endpoint);
     let path = definition.path;
     for (const name of definition.pathParameters) {
-      const value = yield* Schema.decodeUnknownEffect(
-        Schema.Union([Schema.String, Schema.Number])
-      )(input[name]);
+      const value = await z
+        .union([z.string(), z.number()])
+        .parseAsync(input[name]);
       if (String(value) === "." || String(value) === "..")
-        return yield* new ConnectorError({ reason: "invalid" });
+        throw new ConnectorError({ reason: "invalid" });
       path = path.replaceAll(`{${name}}`, encodeURIComponent(String(value)));
     }
     url.pathname = `${url.pathname.replace(/\/$/u, "")}${path}`;
     for (const name of definition.queryParameters) {
       const value = input[name];
       if (value !== undefined) {
-        const scalar = yield* Schema.decodeUnknownEffect(
-          Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
-        )(value);
+        const scalar = await z
+          .union([z.string(), z.number(), z.boolean()])
+          .parseAsync(value);
         url.searchParams.set(name, String(scalar));
       }
     }
@@ -167,8 +166,8 @@ export const invokeOpenApi = Effect.fn("Connector.openApi")(
       "Idempotency-Key": operationId,
     });
     if (token) headers.set("Authorization", `Bearer ${token}`);
-    const text = yield* Effect.tryPromise({
-      try: async (signal) => {
+    const text = await Promise.try(async () => {
+      return await (async (signal) => {
         const response = await publicFetch(url, {
           method: definition.method,
           signal,
@@ -181,15 +180,15 @@ export const invokeOpenApi = Effect.fn("Connector.openApi")(
         )
           throw new Error("Unavailable");
         return response.text();
-      },
-      catch: () => new ConnectorError({ reason: "unavailable" }),
+      })(operationSignal());
+    }).catch(() => {
+      throw new ConnectorError({ reason: "unavailable" });
     });
-    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))(
-      text
-    );
-  },
-  Effect.catchTag(
-    "SchemaError",
-    () => new ConnectorError({ reason: "invalid" })
-  )
-);
+    return await jsonString(JsonObject).parseAsync(text);
+  } catch (error) {
+    if (error instanceof SchemaError) {
+      throw new ConnectorError({ reason: "invalid" });
+    }
+    throw error;
+  }
+};

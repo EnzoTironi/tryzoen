@@ -1,4 +1,5 @@
-import { Effect, type Schema } from "effect";
+import type { z } from "zod";
+
 import { describe, expect, it, test } from "vitest";
 import {
   DEFAULT_RETRY_AFTER_SECONDS,
@@ -18,8 +19,8 @@ const baseMessage = {
   from: { id: 789012, is_bot: false },
   chat: { id: 789012, type: "private" },
 };
-const parse = (value: Schema.Json) =>
-  Effect.runPromise(parseTelegramUpdate(value, installation, now));
+const parse = (value: z.core.util.JSONType) =>
+  parseTelegramUpdate(value, installation, now);
 
 test.each(["/start", "/start@CompanionBot"])(
   "%s opens an ordinary conversation",
@@ -105,7 +106,7 @@ test("normalizes text and opaque media without downloading or retaining URLs", a
 });
 
 test("ignores bots, unmentioned groups, edited updates, mismatched private senders and other bot commands", async () => {
-  const ignored: Schema.Json[] = [
+  const ignored: z.core.util.JSONType[] = [
     {
       update_id: 1,
       message: {

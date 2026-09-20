@@ -4,7 +4,6 @@ import { env } from "@shared/environment";
 import { OnboardingShell } from "@web/auth/onboarding/shell";
 import { OnboardingSignIn } from "@web/auth/onboarding/sign-in";
 import { VaultContinue } from "./continue";
-import { Predicate } from "effect";
 
 export default async function VaultSignInPage({
   searchParams,
@@ -12,7 +11,7 @@ export default async function VaultSignInPage({
   const session = await getAuthSession(await headers());
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {
-    if (Predicate.isString(value)) query.set(key, value);
+    if (typeof value === "string") query.set(key, value);
   }
   return (
     <OnboardingShell>

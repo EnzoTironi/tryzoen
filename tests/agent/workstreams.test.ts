@@ -419,6 +419,7 @@ describe("workstream memory", () => {
 
 function context(sessionId: string, authenticator = "authjs") {
   return {
+    model: null,
     abortSignal: new AbortController().signal,
     channel: {},
     getToken() {

@@ -1,9 +1,8 @@
 import { getI18n } from "@web/i18n/server";
-import Link from "next/link";
-import { Effect, Result } from "effect";
+import { PanelLink } from "../_components/panel-link";
+
 import { headers } from "next/headers";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
-import { serverRuntime } from "../../../server/runtime";
 import { requireRequestScope } from "@web/auth/request-scope";
 import { FirstRunStatus } from "./_components/first-run-status";
 import { readLinkedChannelIdentities } from "../../../server/accounts/controls";
@@ -16,36 +15,42 @@ export default async function Page({ searchParams }: PageProps<"/">) {
   await requireRequestScope();
   const welcome = params.welcome === "1" || params.welcome === "true";
   const linkedChannels = welcome
-    ? await serverRuntime.runPromise(
-        readLinkedChannelIdentities(await headers()).pipe(Effect.result)
+    ? await Promise.try(async () =>
+        readLinkedChannelIdentities(await headers())
+      ).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error })
       )
     : undefined;
   return (
     <>
-      {linkedChannels && Result.isFailure(linkedChannels) && (
+      {linkedChannels && !linkedChannels.ok && (
         <p className={styles.notice} role="alert">
           {t("Não foi possível verificar seus mensageiros.")}{" "}
-          <Link href="/connections">{t("Revisar conexões")}</Link>.
+          <PanelLink href="/connections">{t("Revisar conexões")}</PanelLink>.
         </p>
       )}
       {params.google === "unavailable" && (
         <p className={styles.notice} role="alert">
           {t("Não foi possível atualizar a conexão com o Google.")}{" "}
-          <Link href="/connections">{t("Revisar conexão")}</Link>.
+          <PanelLink href="/connections">{t("Revisar conexão")}</PanelLink>.
         </p>
       )}
       {returnTo !== "/" && (
         <p className={styles.notice}>
-          <Link href={returnTo}>{t("Voltar para sua conversa")}</Link> {t("ou")}{" "}
-          <Link href={`/connections?returnTo=${encodeURIComponent(returnTo)}`}>
+          <PanelLink href={returnTo}>{t("Voltar para sua conversa")}</PanelLink>{" "}
+          {t("ou")}{" "}
+          <PanelLink
+            href={`/connections?returnTo=${encodeURIComponent(returnTo)}`}
+          >
             {t("gerenciar a conexão com o Google")}
-          </Link>
+          </PanelLink>
           .
         </p>
       )}
-      {linkedChannels && Result.isSuccess(linkedChannels) && (
+      {linkedChannels && linkedChannels.ok && (
         <div className={styles.notice}>
-          <FirstRunStatus identities={linkedChannels.success} welcome />
+          <FirstRunStatus identities={linkedChannels.value} welcome />
         </div>
       )}
     </>

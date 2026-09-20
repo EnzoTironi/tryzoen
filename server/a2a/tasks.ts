@@ -1,217 +1,222 @@
+import { query, transaction as withDatabaseTransaction } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { sleep } from "../operations/async";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 
-const identifier = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(128)
-);
-export const A2AMessageSchema = Schema.Struct({
-  message: Schema.Struct({
+const identifier = z.string().min(1).max(128);
+export const A2AMessageSchema = z.object({
+  message: z.object({
     messageId: identifier,
-    role: Schema.Literal("ROLE_USER"),
-    parts: Schema.Array(
-      Schema.Struct({ text: Schema.String.check(Schema.isMaxLength(8000)) })
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
-    contextId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
-    taskId: Schema.optionalKey(Schema.String.check(Schema.isUUID())),
+    role: z.literal("ROLE_USER"),
+    parts: z
+      .array(z.object({ text: z.string().max(8000) }))
+      .min(1)
+      .max(4),
+    contextId: z.optional(z.uuid()),
+    taskId: z.optional(z.uuid()),
   }),
-  configuration: Schema.optionalKey(
-    Schema.Struct({
-      returnImmediately: Schema.optionalKey(Schema.Boolean),
-      acceptedOutputModes: Schema.optionalKey(
-        Schema.Array(Schema.Literal("text/plain"))
-      ),
+  configuration: z.optional(
+    z.object({
+      returnImmediately: z.optional(z.boolean()),
+      acceptedOutputModes: z.optional(z.array(z.literal("text/plain"))),
     })
   ),
 });
-const taskSchema = Schema.Struct({
-  id: Schema.String,
-  contextId: Schema.String,
-  messageId: Schema.String,
-  requestHash: Schema.String,
-  prompt: Schema.String,
-  sessionId: Schema.NullOr(Schema.String),
-  state: Schema.String,
-  output: Schema.NullOr(Schema.String),
-  correlationId: Schema.String,
-  round: Schema.Number,
-  originTaskId: Schema.NullOr(Schema.String),
-  updatedAt: Schema.String,
+const taskSchema = z.object({
+  id: z.string(),
+  contextId: z.string(),
+  messageId: z.string(),
+  requestHash: z.string(),
+  prompt: z.string(),
+  sessionId: z.nullable(z.string()),
+  state: z.string(),
+  output: z.nullable(z.string()),
+  correlationId: z.string(),
+  round: z.number(),
+  originTaskId: z.nullable(z.string()),
+  updatedAt: z.string(),
 });
 export interface ProtocolTaskChain {
   correlationId: string;
   round: number;
   originTaskId: string;
 }
-export class A2AError extends Schema.TaggedError<A2AError>()("A2AError", {
-  code: Schema.Number,
-  message: Schema.String,
-}) {}
+export class A2AError extends Error {
+  readonly _tag = "A2AError";
+  declare readonly code: number;
+  constructor(input: { readonly code: number; readonly message: string }) {
+    super(input.message);
+    this.name = "A2AError";
+    Object.assign(this, input);
+  }
+}
 
-export const readProtocolTask = Effect.fn("readProtocolTask")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const readProtocolTask = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
-  yield* requireWorkspaceAccess(actor);
-  if (!actor.agentGrantId) return yield* new WorkspaceAccessDenied();
-  const sql = yield* PgClient.PgClient;
-  const rows =
-    yield* sql`SELECT id, context_id AS "contextId", message_id AS "messageId", request_hash AS "requestHash", prompt, session_id AS "sessionId", state, output, correlation_id AS "correlationId", round, origin_task_id AS "originTaskId", updated_at::text AS "updatedAt"
-    FROM agent_protocol_tasks WHERE id = ${id} AND grant_id = ${actor.agentGrantId}`;
-  if (!rows[0])
-    return yield* new A2AError({ code: -32001, message: "Task not found" });
-  return yield* Schema.decodeUnknownEffect(taskSchema)(rows[0]);
-});
+  await requireWorkspaceAccess(actor);
+  if (!actor.agentGrantId) throw new WorkspaceAccessDenied();
 
-export const acceptProtocolTask = Effect.fn("acceptProtocolTask")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
-  raw: typeof A2AMessageSchema.Type,
+  const rows =
+    await query(sql`SELECT id, context_id AS "contextId", message_id AS "messageId", request_hash AS "requestHash", prompt, session_id AS "sessionId", state, output, correlation_id AS "correlationId", round, origin_task_id AS "originTaskId", updated_at::text AS "updatedAt"
+    FROM agent_protocol_tasks WHERE id = ${id} AND grant_id = ${actor.agentGrantId}`);
+  if (!rows[0]) throw new A2AError({ code: -32001, message: "Task not found" });
+  return await taskSchema.parseAsync(rows[0]);
+};
+
+export const acceptProtocolTask = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof A2AMessageSchema>,
   chain?: ProtocolTaskChain
 ) {
-  const input = yield* Schema.decodeUnknownEffect(A2AMessageSchema)(raw, {
-    onExcessProperty: "error",
-  });
+  const input = await A2AMessageSchema.strict().parseAsync(raw);
   if (input.message.taskId)
-    return yield* new A2AError({
+    throw new A2AError({
       code: -32004,
       message:
         "Start a new task in the same context instead of reopening a terminal task",
     });
-  const sql = yield* PgClient.PgClient;
+
   const hash = createHash("sha256")
     .update(JSON.stringify(input.message))
     .digest("hex");
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      // Serialize submissions before taking shared authority locks: two callers
-      // must not both try to upgrade a shared grant lock to an exclusive lock.
-      yield* sql`SELECT pg_advisory_xact_lock(hashtextextended(${actor.agentGrantId ?? ""}, 2))`;
-      yield* requireWorkspaceAccess(actor);
-      if (!actor.agentGrantId) return yield* new WorkspaceAccessDenied();
-      const previous = yield* sql<{
-        id: string;
-        request_hash: string;
-      }>`SELECT id, request_hash FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND message_id = ${input.message.messageId}`;
-      if (previous[0]) {
-        if (previous[0].request_hash !== hash)
-          return yield* new A2AError({
-            code: -32602,
-            message: "Message ID was reused with different content",
-          });
-        return yield* readProtocolTask(actor, previous[0].id);
-      }
-      const recent = yield* sql<{
-        active: number;
-        recent: number;
-      }>`SELECT count(*) FILTER (WHERE state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING'))::int AS active, count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS recent FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId}`;
-      if ((recent[0]?.active ?? 0) >= 5 || (recent[0]?.recent ?? 0) >= 60)
-        return yield* new A2AError({
-          code: -32000,
-          message: "Task limit reached; retry later",
+  return await withDatabaseTransaction(async () => {
+    // Serialize submissions before taking shared authority locks: two callers
+    // must not both try to upgrade a shared grant lock to an exclusive lock.
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${actor.agentGrantId ?? ""}, 2))`
+    );
+    await requireWorkspaceAccess(actor);
+    if (!actor.agentGrantId) throw new WorkspaceAccessDenied();
+    const previous = await query<{
+      id: string;
+      request_hash: string;
+    }>(
+      sql`SELECT id, request_hash FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND message_id = ${input.message.messageId}`
+    );
+    if (previous[0]) {
+      if (previous[0].request_hash !== hash)
+        throw new A2AError({
+          code: -32602,
+          message: "Message ID was reused with different content",
         });
-      if (input.message.contextId) {
-        const context =
-          yield* sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} LIMIT 1`;
-        if (!context.length)
-          return yield* new A2AError({
-            code: -32001,
-            message: "Context not found",
-          });
-        const active =
-          yield* sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`;
-        if (active.length)
-          return yield* new A2AError({
-            code: -32000,
-            message: "A task is already running in this context",
-          });
-      }
-      const id = randomUUID();
-      const round = chain?.round ?? 1;
-      if (round < 1 || round > 8)
-        return yield* new A2AError({
-          code: -32000,
-          message: "Task chain limit reached",
+      return await readProtocolTask(actor, previous[0].id);
+    }
+    const recent = await query<{
+      active: number;
+      recent: number;
+    }>(
+      sql`SELECT count(*) FILTER (WHERE state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING'))::int AS active, count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS recent FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId}`
+    );
+    if ((recent[0]?.active ?? 0) >= 5 || (recent[0]?.recent ?? 0) >= 60)
+      throw new A2AError({
+        code: -32000,
+        message: "Task limit reached; retry later",
+      });
+    if (input.message.contextId) {
+      const context = await query(
+        sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} LIMIT 1`
+      );
+      if (!context.length)
+        throw new A2AError({
+          code: -32001,
+          message: "Context not found",
         });
-      yield* sql`INSERT INTO agent_protocol_tasks(id, grant_id, context_id, message_id, request_hash, prompt, correlation_id, round, origin_task_id)
-      VALUES (${id}, ${actor.agentGrantId}, ${input.message.contextId ?? randomUUID()}, ${input.message.messageId}, ${hash}, ${input.message.parts.map((part) => part.text).join("\n\n")}, ${chain?.correlationId ?? id}, ${round}, ${chain?.originTaskId ?? null})`;
-      return yield* readProtocolTask(actor, id);
-    })
-  );
-});
+      const active = await query(
+        sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`
+      );
+      if (active.length)
+        throw new A2AError({
+          code: -32000,
+          message: "A task is already running in this context",
+        });
+    }
+    const id = randomUUID();
+    const round = chain?.round ?? 1;
+    if (round < 1 || round > 8)
+      throw new A2AError({
+        code: -32000,
+        message: "Task chain limit reached",
+      });
+    await query(sql`INSERT INTO agent_protocol_tasks(id, grant_id, context_id, message_id, request_hash, prompt, correlation_id, round, origin_task_id)
+      VALUES (${id}, ${actor.agentGrantId}, ${input.message.contextId ?? randomUUID()}, ${input.message.messageId}, ${hash}, ${input.message.parts.map((part) => part.text).join("\n\n")}, ${chain?.correlationId ?? id}, ${round}, ${chain?.originTaskId ?? null})`);
+    return await readProtocolTask(actor, id);
+  });
+};
 
-export const bindProtocolSession = Effect.fn("bindProtocolSession")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const bindProtocolSession = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string,
   sessionId: string
 ) {
-  yield* readProtocolTask(actor, id);
-  const sql = yield* PgClient.PgClient;
-  const bound =
-    yield* sql`UPDATE agent_protocol_tasks SET session_id = ${sessionId}, state = CASE WHEN state = 'TASK_STATE_SUBMITTED' THEN 'TASK_STATE_WORKING' ELSE state END, updated_at = now()
-    WHERE id = ${id} AND grant_id = ${actor.agentGrantId} AND (session_id IS NULL OR session_id = ${sessionId}) RETURNING id`;
-  if (!bound.length) return yield* new WorkspaceAccessDenied();
-  return undefined;
-});
+  await readProtocolTask(actor, id);
 
-export const cancelProtocolTask = Effect.fn("cancelProtocolTask")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+  const bound =
+    await query(sql`UPDATE agent_protocol_tasks SET session_id = ${sessionId}, state = CASE WHEN state = 'TASK_STATE_SUBMITTED' THEN 'TASK_STATE_WORKING' ELSE state END, updated_at = now()
+    WHERE id = ${id} AND grant_id = ${actor.agentGrantId} AND (session_id IS NULL OR session_id = ${sessionId}) RETURNING id`);
+  if (!bound.length) throw new WorkspaceAccessDenied();
+  return undefined;
+};
+
+export const cancelProtocolTask = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
-  const sql = yield* PgClient.PgClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      yield* readProtocolTask(actor, id);
-      // Persist cancellation before delivering it. A racing dispatch or tool call
-      // then fails the same live authority check, even if no session is bound yet.
-      const changed =
-        yield* sql`UPDATE agent_protocol_tasks SET state = 'TASK_STATE_CANCELED', updated_at = now()
+  return await withDatabaseTransaction(async () => {
+    await readProtocolTask(actor, id);
+    // Persist cancellation before delivering it. A racing dispatch or tool call
+    // then fails the same live authority check, even if no session is bound yet.
+    const changed =
+      await query(sql`UPDATE agent_protocol_tasks SET state = 'TASK_STATE_CANCELED', updated_at = now()
       WHERE id = ${id} AND grant_id = ${actor.agentGrantId}
-      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_CANCELED') RETURNING id`;
-      if (!changed.length)
-        return yield* new A2AError({
-          code: -32002,
-          message: "Task cannot be canceled",
-        });
-      return yield* readProtocolTask(actor, id);
-    })
-  );
-});
+      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_CANCELED') RETURNING id`);
+    if (!changed.length)
+      throw new A2AError({
+        code: -32002,
+        message: "Task cannot be canceled",
+      });
+    return await readProtocolTask(actor, id);
+  });
+};
 
-export const awaitProtocolTask = Effect.fn("awaitProtocolTask")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const awaitProtocolTask = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
   for (;;) {
-    const task = yield* readProtocolTask(actor, id);
+    const task = await readProtocolTask(actor, id);
     if (
       task.state !== "TASK_STATE_SUBMITTED" &&
       task.state !== "TASK_STATE_WORKING"
     )
       return task;
-    yield* Effect.sleep("500 millis");
+    await sleep(500);
   }
-});
+};
 
-export const finishProtocolTask = Effect.fn("finishProtocolTask")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const finishProtocolTask = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   id: string,
   state: "TASK_STATE_COMPLETED" | "TASK_STATE_FAILED" | "TASK_STATE_CANCELED",
   output?: string
 ) {
-  yield* readProtocolTask(actor, id);
-  const sql = yield* PgClient.PgClient;
-  yield* sql`UPDATE agent_protocol_tasks SET state = ${state}, output = ${output?.slice(0, 32000) ?? null}, updated_at = now()
-    WHERE id = ${id} AND grant_id = ${actor.agentGrantId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED')`;
-});
+  await readProtocolTask(actor, id);
+
+  await query(sql`UPDATE agent_protocol_tasks SET state = ${state}, output = ${output?.slice(0, 32000) ?? null}, updated_at = now()
+    WHERE id = ${id} AND grant_id = ${actor.agentGrantId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED')`);
+};
 
 export function protocolTaskView(
-  task: typeof taskSchema.Type,
+  task: z.output<typeof taskSchema>,
   includeArtifacts = true
 ) {
   const message = task.output
@@ -240,7 +245,7 @@ export function protocolTaskView(
 }
 
 /** Native failure events can arrive before the acceptance receipt is bound. */
-export const failProtocolSession = Effect.fn("failProtocolSession")(function* (
+export const failProtocolSession = async function (
   sessionId: string,
   continuation: string | undefined
 ) {
@@ -248,13 +253,13 @@ export const failProtocolSession = Effect.fn("failProtocolSession")(function* (
   if (
     parts?.length !== 3 ||
     parts[0] !== "a2a" ||
-    !Schema.is(Schema.String.check(Schema.isUUID()))(parts[1]) ||
-    !Schema.is(Schema.String.check(Schema.isUUID()))(parts[2])
+    !isValid(z.uuid(), parts[1]) ||
+    !isValid(z.uuid(), parts[2])
   )
     return;
-  const sql = yield* PgClient.PgClient;
-  yield* sql`UPDATE agent_protocol_tasks SET state = 'TASK_STATE_FAILED', session_id = ${sessionId},
+
+  await query(sql`UPDATE agent_protocol_tasks SET state = 'TASK_STATE_FAILED', session_id = ${sessionId},
     output = 'The task could not be completed. Start a new task to retry.', updated_at = now()
     WHERE id = ${parts[2]} AND grant_id = ${parts[1]} AND (session_id IS NULL OR session_id = ${sessionId})
-      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`;
-});
+      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`);
+};

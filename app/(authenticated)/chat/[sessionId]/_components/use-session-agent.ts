@@ -29,6 +29,7 @@ import {
   type SessionHistoryPage,
 } from "../_lib/session-history";
 import type { ChatAgent } from "./chat-agent";
+import { conversationStreamEvents } from "../_lib/message-events";
 
 const client = new Client({
   host: "",
@@ -45,108 +46,105 @@ export function useSessionAgent(sessionId: string): ChatAgent {
   const historyRef = useRef(history);
   const operationRef = useRef<Promise<void> | undefined>(undefined);
 
-  useEffect(() => {
-    historyRef.current = history;
-  }, [history]);
+  const streamController = useRef<AbortController | undefined>(undefined);
 
-  const followActiveTurn = useCallback(
-    async (startIndex: number, signal?: AbortSignal) => {
+  const followSession = useCallback(
+    async (startIndex: number, signal: AbortSignal) => {
       const session = client.sessions.attach(sessionId, {
         streamIndex: startIndex,
       });
       let nextIndex = startIndex;
-      for await (const event of session.stream({ signal, startIndex })) {
-        nextIndex += 1;
-        appendSessionEvent(historyRef, setHistory, event, nextIndex);
-        setStatus("streaming");
-        if (isCurrentTurnBoundaryEvent(event)) break;
+      try {
+        // The native stream reconnects from its cursor and stays open while idle.
+        // It is the only writer of live events, including turns from another tab.
+        for await (const event of session.stream({ signal, startIndex })) {
+          if (signal.aborted) return;
+          nextIndex += 1;
+          appendSessionEvent(historyRef, setHistory, event, nextIndex);
+          if (isCurrentTurnBoundaryEvent(event)) {
+            setStatus(
+              operationRef.current ||
+                hasPendingAuthorization(historyRef.current?.events ?? [])
+                ? "streaming"
+                : "ready"
+            );
+          } else if ("data" in event && "turnId" in event.data) {
+            setStatus("streaming");
+          }
+          if (
+            event.type === "session.completed" ||
+            event.type === "session.failed"
+          )
+            return;
+        }
+        if (!signal.aborted)
+          throw new Error("The conversation stream disconnected.");
+      } catch (cause) {
+        if (signal.aborted) return;
+        setError(toError(cause));
+        setStatus("error");
       }
     },
     [sessionId]
   );
 
-  const catchUp = useCallback(
-    async (signal?: AbortSignal) => {
-      const current = historyRef.current;
-      if (!current) return;
+  const resume = useCallback(async () => {
+    streamController.current?.abort();
+    const controller = new AbortController();
+    streamController.current = controller;
+    setStatus("resuming");
+    setError(undefined);
+    try {
+      const current =
+        historyRef.current ??
+        (await readLatestSessionHistory(sessionId, controller.signal));
+      if (controller.signal.aborted) return;
+      historyRef.current = current;
+      setHistory(current);
+      const tail = current.events.at(-1);
+      setStatus(
+        (tail && !isCurrentTurnBoundaryEvent(tail)) ||
+          hasPendingAuthorization(current.events)
+          ? "streaming"
+          : "ready"
+      );
+      void followSession(current.endIndex, controller.signal);
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      setError(toError(cause));
+      setStatus("error");
+    }
+  }, [followSession, sessionId]);
 
-      const session = client.sessions.attach(sessionId, {
-        streamIndex: current.endIndex,
-      });
-      let nextIndex = current.endIndex;
-      let latest = current.events.at(-1);
-      for await (const event of session.stream({
-        follow: false,
-        signal,
-        startIndex: nextIndex,
-      })) {
-        nextIndex += 1;
-        latest = event;
-        appendSessionEvent(historyRef, setHistory, event, nextIndex);
-      }
-
-      if (latest && !isCurrentTurnBoundaryEvent(latest)) {
-        await followActiveTurn(nextIndex, signal);
-      }
-    },
-    [followActiveTurn, sessionId]
-  );
+  useEffect(() => {
+    const startup = setTimeout(() => void resume(), 0);
+    return () => {
+      clearTimeout(startup);
+      streamController.current?.abort();
+    };
+  }, [resume]);
 
   const runOperation = useCallback((operation: () => Promise<void>) => {
     const activeOperation = operationRef.current;
-    if (activeOperation) return activeOperation;
+    if (activeOperation)
+      return Promise.reject(
+        new Error("The conversation is already processing a turn.")
+      );
     const promise = operation().finally(() => {
-      if (operationRef.current === promise) operationRef.current = undefined;
+      if (operationRef.current !== promise) return;
+      operationRef.current = undefined;
+      const events = historyRef.current?.events ?? [];
+      const tail = events.at(-1);
+      if (
+        tail &&
+        isCurrentTurnBoundaryEvent(tail) &&
+        !hasPendingAuthorization(events)
+      )
+        setStatus((current) => (current === "error" ? current : "ready"));
     });
     operationRef.current = promise;
     return promise;
   }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void readLatestSessionHistory(sessionId, controller.signal)
-      .then(async (latest) => {
-        if (controller.signal.aborted) return undefined;
-        historyRef.current = latest;
-        setHistory(latest);
-        const tail = latest.events.at(-1);
-        if (tail && !isCurrentTurnBoundaryEvent(tail)) {
-          setStatus("streaming");
-          await runOperation(async () => {
-            await followActiveTurn(latest.endIndex, controller.signal);
-          });
-        }
-        setStatus("ready");
-        return undefined;
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return undefined;
-        setError(toError(cause));
-        setStatus("error");
-        return undefined;
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [followActiveTurn, runOperation, sessionId]);
-
-  const resume = useCallback(
-    () =>
-      runOperation(async () => {
-        setStatus("resuming");
-        setError(undefined);
-        try {
-          await catchUp();
-          setStatus("ready");
-        } catch (cause) {
-          setError(toError(cause));
-          setStatus("error");
-        }
-      }),
-    [catchUp, runOperation]
-  );
 
   const send = useCallback(
     async <TOutput>(
@@ -160,9 +158,9 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         const session = client.sessions.attach(sessionId, {
           streamIndex: current.endIndex,
         });
-        await session.send(message, options);
+        const response = await session.send(message, options);
+        await response.result();
         await activeOperation;
-        await resume();
         return;
       }
 
@@ -174,15 +172,9 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         const session = client.sessions.attach(sessionId, {
           streamIndex: current.endIndex,
         });
-        let nextIndex = current.endIndex;
         try {
           const response = await session.send(message, options);
-          for await (const event of response) {
-            nextIndex += 1;
-            appendSessionEvent(historyRef, setHistory, event, nextIndex);
-            setStatus("streaming");
-          }
-          setStatus("ready");
+          await response.result();
         } catch (cause) {
           setError(toError(cause));
           setStatus("error");
@@ -190,7 +182,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         }
       });
     },
-    [resume, runOperation, sessionId]
+    [runOperation, sessionId]
   );
 
   const respond = useCallback(
@@ -206,15 +198,9 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         const session = client.sessions.attach(sessionId, {
           streamIndex: current.endIndex,
         });
-        let nextIndex = current.endIndex;
         try {
           const response = await session.respond(inputResponses, options);
-          for await (const event of response) {
-            nextIndex += 1;
-            appendSessionEvent(historyRef, setHistory, event, nextIndex);
-            setStatus("streaming");
-          }
-          setStatus("ready");
+          await response.result();
         } catch (cause) {
           setError(toError(cause));
           setStatus("error");
@@ -234,15 +220,16 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         sessionId,
         current.startIndex
       );
-      setHistory((latest) =>
-        latest
-          ? {
-              ...latest,
-              events: [...older.events, ...latest.events],
-              startIndex: older.startIndex,
-            }
-          : latest
-      );
+      const latest = historyRef.current;
+      if (latest) {
+        const next = {
+          ...latest,
+          events: [...older.events, ...latest.events],
+          startIndex: older.startIndex,
+        };
+        historyRef.current = next;
+        setHistory(next);
+      }
     } catch (cause) {
       setError(toError(cause));
     } finally {
@@ -250,7 +237,10 @@ export function useSessionAgent(sessionId: string): ChatAgent {
     }
   };
 
-  const events = history?.events ?? emptyEvents;
+  const events = useMemo(
+    () => conversationStreamEvents(history?.events ?? emptyEvents),
+    [history?.events]
+  );
   const data = useMemo<EveMessageData>(
     () =>
       events.reduce(
@@ -283,27 +273,33 @@ function appendSessionEvent(
   event: MessageStreamEvent,
   endIndex: number
 ) {
-  setHistory((current) => {
-    if (!current) return current;
-    let next: SessionHistoryPage;
-    if (
-      current.events.some((candidate) => candidate.meta.id === event.meta.id)
-    ) {
-      next = { ...current, endIndex };
-    } else {
-      next = {
-        ...current,
-        endIndex,
-        events: [...current.events, event],
-      };
-    }
-    historyRef.current = next;
-    return next;
-  });
+  const current = historyRef.current;
+  if (!current) return;
+  const next = {
+    ...current,
+    endIndex,
+    events: current.events.some(
+      (candidate) => candidate.meta.id === event.meta.id
+    )
+      ? current.events
+      : [...current.events, event],
+  };
+  historyRef.current = next;
+  setHistory(next);
 }
 
 function toError(cause: unknown) {
   return cause instanceof Error
     ? cause
     : new Error("The session request failed.");
+}
+
+function hasPendingAuthorization(events: readonly MessageStreamEvent[]) {
+  const pending = new Set<string>();
+  for (const event of events) {
+    if (event.type === "authorization.required") pending.add(event.data.name);
+    else if (event.type === "authorization.completed")
+      pending.delete(event.data.name);
+  }
+  return pending.size > 0;
 }

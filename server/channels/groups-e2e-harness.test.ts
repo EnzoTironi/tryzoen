@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import {
@@ -25,14 +24,13 @@ test("telegram group mention fixture → accept → bind (artifact)", async () =
       date: Math.floor(nowMs / 1000),
     },
   };
-  const result: TelegramGroupHarnessResult = await Effect.runPromise(
-    runTelegramGroupMentionHarness({
+  const result: TelegramGroupHarnessResult =
+    await runTelegramGroupMentionHarness({
       update,
       installation,
       nowMs,
       identityId,
-    })
-  );
+    });
   expect(result.accepted).toBe(true);
   expect(result.reason).toBe("accepted_and_bound");
   expect(result.events[0]).toMatchObject({
@@ -83,14 +81,13 @@ test("telegram bare group chatter stays dropped", async () => {
       text: "casual chatter without a mention",
     },
   };
-  const result: TelegramGroupHarnessResult = await Effect.runPromise(
-    runTelegramGroupMentionHarness({
+  const result: TelegramGroupHarnessResult =
+    await runTelegramGroupMentionHarness({
       update,
       installation,
       nowMs,
       identityId,
-    })
-  );
+    });
   expect(result.accepted).toBe(false);
   expect(result.events).toEqual([]);
 });
@@ -108,9 +105,7 @@ test("kapso group opens only when mention signals exist; else stays closed", asy
     phoneNumberId: "123456789",
     phoneNumber: "15550001111",
   };
-  const opened = await Effect.runPromise(
-    parseKapsoWebhook(mentioned, kapsoInstallation, nowMs)
-  );
+  const opened = await parseKapsoWebhook(mentioned, kapsoInstallation, nowMs);
   expect(opened).toHaveLength(1);
   const openedEvent = opened[0];
   expect(openedEvent).toMatchObject({
@@ -122,36 +117,32 @@ test("kapso group opens only when mention signals exist; else stays closed", asy
   if (openedEvent?.kind !== "message" || openedEvent.chatKind !== "group") {
     throw new Error("expected opened kapso group message");
   }
-  const binding = await Effect.runPromise(
-    bindGroupChannelIdentity({
-      identityId,
-      channel: "kapso",
-      installationId: openedEvent.installationId,
-      senderId: openedEvent.senderId,
-      chatId: openedEvent.chatId,
-    })
-  );
+  const binding = await bindGroupChannelIdentity({
+    identityId,
+    channel: "kapso",
+    installationId: openedEvent.installationId,
+    senderId: openedEvent.senderId,
+    chatId: openedEvent.chatId,
+  });
   expect(binding.conversationScope).toBe(
     "group:kapso:123456789:group-id-redacted"
   );
 
   const { mentions: _mentions, ...messageWithoutMentions } = mentioned.message;
-  const closed = await Effect.runPromise(
-    parseKapsoWebhook(
-      {
-        ...mentioned,
-        message: {
-          ...messageWithoutMentions,
-          kapso: {
-            direction: "inbound",
-            status: "received",
-            origin: "cloud_api",
-          },
+  const closed = await parseKapsoWebhook(
+    {
+      ...mentioned,
+      message: {
+        ...messageWithoutMentions,
+        kapso: {
+          direction: "inbound",
+          status: "received",
+          origin: "cloud_api",
         },
       },
-      kapsoInstallation,
-      nowMs
-    )
+    },
+    kapsoInstallation,
+    nowMs
   );
   expect(closed).toEqual([]);
 

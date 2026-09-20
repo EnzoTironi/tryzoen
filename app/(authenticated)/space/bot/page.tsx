@@ -1,6 +1,6 @@
 "use client";
 
-import { Schema } from "effect";
+import { z } from "zod";
 
 import { useState } from "react";
 import { AtSignIcon, KeyRoundIcon, SearchIcon, Trash2Icon } from "lucide-react";
@@ -43,17 +43,13 @@ export default function WorkspaceBotPage() {
             const values = new FormData(event.currentTarget);
             void save
               .mutateAsync({
-                username: Schema.decodeUnknownSync(Schema.String)(
-                  values.get("username")
-                )
+                username: z
+                  .string()
+                  .parse(values.get("username"))
                   .trim()
                   .toLowerCase(),
-                name: Schema.decodeUnknownSync(Schema.String)(
-                  values.get("name")
-                ).trim(),
-                description: Schema.decodeUnknownSync(Schema.String)(
-                  values.get("description")
-                ),
+                name: z.string().parse(values.get("name")).trim(),
+                description: z.string().parse(values.get("description")),
                 discoverable: values.get("discoverable") === "on",
               })
               .then(refresh)
@@ -130,9 +126,7 @@ export default function WorkspaceBotPage() {
               const values = new FormData(event.currentTarget);
               void issue
                 .mutateAsync({
-                  label: Schema.decodeUnknownSync(Schema.String)(
-                    values.get("label")
-                  ).trim(),
+                  label: z.string().parse(values.get("label")).trim(),
                   capabilities: ["files", "ontology"],
                   days: 30,
                 })
@@ -160,7 +154,7 @@ export default function WorkspaceBotPage() {
               <Input value={token} readOnly aria-label={t("Chave de acesso")} />
               <Button
                 onClick={() => {
-                  void navigator.clipboard.writeText(token).then(() => {
+                  void navigator.clipboard.writeText(token).then(async () => {
                     setCopied(true);
                     return undefined;
                   });

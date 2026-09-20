@@ -2,7 +2,7 @@
 
 import type { createTranslator } from "@web/i18n/translate";
 import { useI18n } from "@web/i18n/context";
-import Link from "next/link";
+import { PanelLink } from "../../_components/panel-link";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";
 
@@ -56,14 +56,14 @@ export function FirstRunStatus({
           <div className="flex flex-wrap gap-2">
             <Button
               nativeButton={false}
-              render={<Link href="/chat" />}
+              render={<PanelLink href="/chat" />}
               size="sm"
             >
               {t("Começar uma conversa")}
             </Button>
             <Button
               nativeButton={false}
-              render={<Link href="/connections?messengers=1" />}
+              render={<PanelLink href="/connections?messengers=1" />}
               size="sm"
               variant="outline"
             >
@@ -83,7 +83,7 @@ export function FirstRunStatus({
         </p>
         <Button
           nativeButton={false}
-          render={<Link href="/connections?messengers=1" />}
+          render={<PanelLink href="/connections?messengers=1" />}
           size="sm"
         >
           {t("Conectar um mensageiro")}

@@ -1,31 +1,19 @@
-import assert from "node:assert/strict";
+import { withSignal } from "../../operations/async";
+import { z } from "zod";
+
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
-import { Cause, Effect, Exit, Schema } from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientRequest,
-} from "effect/unstable/http";
+
 import { describe, expect, it } from "vitest";
 import { downloadMediaBytes } from "./download";
 import { decodeMediaText } from "./policy";
 
 function fixtureUrl(server: Server) {
-  const address = Schema.decodeUnknownSync(
-    Schema.Struct({ port: Schema.Number })
-  )(server.address());
+  const address = z.object({ port: z.number() }).parse(server.address());
   return `http://127.0.0.1:${String(address.port)}/file`;
 }
 
-const download = (url: string, limit: number) =>
-  Effect.gen(function* () {
-    return yield* downloadMediaBytes(
-      yield* HttpClient.HttpClient,
-      HttpClientRequest.get(url),
-      limit
-    );
-  }).pipe(Effect.provide(FetchHttpClient.layer));
+const download = downloadMediaBytes;
 
 describe("bounded download over real loopback HTTP (no provider emulation)", () => {
   it("downloads a synthetic text file and decodes its actual bytes", async () => {
@@ -34,11 +22,9 @@ describe("bounded download over real loopback HTTP (no provider emulation)", () 
       response.end(file);
     }).listen(0, "127.0.0.1");
     await once(server, "listening");
-    const bytes = await Effect.runPromise(download(fixtureUrl(server), 1024));
+    const bytes = await download(fixtureUrl(server), 1024);
     expect(bytes).toEqual(file);
-    expect(await Effect.runPromise(decodeMediaText(bytes))).toBe(
-      file.toString("utf8")
-    );
+    expect(await decodeMediaText(bytes)).toBe(file.toString("utf8"));
   });
   it("closes a rejected oversized response before buffering its body", async () => {
     let closed = Promise.resolve<unknown>(undefined);
@@ -49,9 +35,9 @@ describe("bounded download over real loopback HTTP (no provider emulation)", () 
       response.write("x");
     }).listen(0, "127.0.0.1");
     await once(server, "listening");
-    await expect(
-      Effect.runPromise(download(fixtureUrl(server), 16))
-    ).rejects.toMatchObject({ reason: "too_large" });
+    await expect(download(fixtureUrl(server), 16)).rejects.toMatchObject({
+      reason: "too_large",
+    });
     await closed;
   });
   it("enforces the stream limit when content length is absent", async () => {
@@ -61,9 +47,9 @@ describe("bounded download over real loopback HTTP (no provider emulation)", () 
       response.end();
     }).listen(0, "127.0.0.1");
     await once(server, "listening");
-    await expect(
-      Effect.runPromise(download(fixtureUrl(server), 16))
-    ).rejects.toMatchObject({ reason: "too_large" });
+    await expect(download(fixtureUrl(server), 16)).rejects.toMatchObject({
+      reason: "too_large",
+    });
   });
   it("does not follow redirects", async () => {
     let redirectedRequests = 0;
@@ -74,9 +60,9 @@ describe("bounded download over real loopback HTTP (no provider emulation)", () 
       response.end();
     }).listen(0, "127.0.0.1");
     await once(server, "listening");
-    await expect(
-      Effect.runPromise(download(fixtureUrl(server), 1024))
-    ).rejects.toMatchObject({ reason: "download_failed" });
+    await expect(download(fixtureUrl(server), 1024)).rejects.toMatchObject({
+      reason: "download_failed",
+    });
     expect(redirectedRequests).toBe(0);
   });
   it("propagates caller cancellation to an unfinished HTTP response", async () => {
@@ -92,15 +78,13 @@ describe("bounded download over real loopback HTTP (no provider emulation)", () 
     }).listen(0, "127.0.0.1");
     await once(server, "listening");
     const controller = new AbortController();
-    const interrupted = Effect.runPromiseExit(
-      download(fixtureUrl(server), 1024),
-      { signal: controller.signal }
-    );
+    const interrupted = withSignal(controller.signal, () =>
+      download(fixtureUrl(server), 1024)
+    ).catch((error: unknown) => error);
     await started.promise;
     controller.abort();
     const result = await interrupted;
-    assert.ok(Exit.isFailure(result));
-    expect(Cause.hasInterrupts(result.cause)).toBe(true);
+    expect(result).toBe(controller.signal.reason);
     await closed.promise;
   });
 });

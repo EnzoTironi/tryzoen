@@ -5,24 +5,41 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import browserAgent from "@agent/subagents/browser-agent/agent";
 vi.mock("@agent/lib/workspace-model", async () => {
-  const { Effect } = await import("effect");
-  return { workspaceModel: () => Effect.succeed(null) };
+  return { workspaceModel: () => Promise.resolve(null) };
 });
 vi.mock("../server/workspaces/access", async () => {
-  const { Effect } = await import("effect");
   return {
     workspaceActorFromPrincipal: () =>
-      Effect.succeed({
+      Promise.resolve({
         userId: "browser-test-user",
         workspaceId: "browser-test-workspace",
       }),
   };
 });
-vi.mock("../server/runtime", async () => {
-  const { Effect } = await import("effect");
-  return { serverRuntime: { runPromise: Effect.runPromise } };
-});
 
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  const { Secret } = await import("@shared/environment/secret");
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, key): unknown {
+        if (key === "OPENROUTER_API_KEY") {
+          const value = process.env.OPENROUTER_API_KEY;
+          return value ? new Secret(value) : undefined;
+        }
+        if (
+          [
+            "COMPANION_BROWSER_MODEL_PROVIDER",
+            "COMPANION_BROWSER_MODEL",
+          ].includes(String(key))
+        )
+          return process.env[String(key)];
+        return Reflect.get(target, key);
+      },
+    }),
+  };
+});
 const resolveBrowserModel = browserAgent.model.events["step.started"];
 if (!resolveBrowserModel)
   throw new Error("Browser model resolver is required.");
@@ -137,6 +154,7 @@ describe("worker input bubbling", () => {
 
 function browserContext(authenticator: string, groupBindingId = "") {
   return {
+    model: null,
     channel: { kind: "channel:linq", metadata: {} },
     messages: [],
     session: {

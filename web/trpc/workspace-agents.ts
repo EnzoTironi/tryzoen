@@ -1,3 +1,7 @@
+import { withSignal } from "../../server/operations/async";
+import { WhatsAppBridgeUnavailable } from "../../server/whatsapp/client";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
+import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
   OntologySchema,
@@ -9,8 +13,6 @@ import {
   publishOntology,
   readOntology,
 } from "../../server/workspaces/ontology";
-import { Effect, Schema } from "effect";
-import { serverRuntime } from "../../server/runtime";
 import {
   AgentGrantInputSchema,
   BotProfileSchema,
@@ -61,307 +63,348 @@ import {
   sendMatrixConversation,
   closeMatrixConversation,
 } from "../../server/matrix/conversations";
-
 const revisionFields = {
-  expectedRevision: Schema.NullOr(GitRevisionSchema),
-  operationId: Schema.String.check(Schema.isUUID()),
+  expectedRevision: z.nullable(GitRevisionSchema),
+  operationId: z.uuid(),
 };
 export const workspaceAgentsRouter = {
   ontology: {
     read: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(readOntology(ctx.actor), { signal })
+      withSignal(signal, async () => readOntology(ctx.actor))
     ),
     publish: workspaceProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({ ...revisionFields, graph: OntologySchema })
-        )
+        z.object({
+          ...revisionFields,
+          graph: OntologySchema,
+        })
       )
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(publishOntology(ctx.actor, input), { signal })
+        withSignal(signal, async () => publishOntology(ctx.actor, input))
       ),
     act: workspaceProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({ ...revisionFields, ...OntologyActionSchema.fields })
-        )
+        z.object({
+          ...revisionFields,
+          ...OntologyActionSchema.shape,
+        })
       )
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(applyOntologyAction(ctx.actor, input), {
-          signal,
-        })
+        withSignal(signal, async () => applyOntologyAction(ctx.actor, input))
       ),
   },
   bot: {
     read: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(readWorkspaceBot(ctx.actor), { signal })
+      withSignal(signal, async () => readWorkspaceBot(ctx.actor))
     ),
     save: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(BotProfileSchema))
+      .input(BotProfileSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(saveWorkspaceBot(ctx.actor, input), { signal })
+        withSignal(signal, async () => saveWorkspaceBot(ctx.actor, input))
       ),
     search: workspaceProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({
-            query: Schema.String.check(Schema.isMaxLength(30)),
-          })
-        )
+        z.object({
+          query: z.string().max(30),
+        })
       )
       .query(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(searchWorkspaceBots(ctx.actor, input.query), {
-          signal,
-        })
+        withSignal(signal, async () =>
+          searchWorkspaceBots(ctx.actor, input.query)
+        )
       ),
     grant: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(AgentGrantInputSchema))
+      .input(AgentGrantInputSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(issueAgentGrant(ctx.actor, input), { signal })
+        withSignal(signal, async () => issueAgentGrant(ctx.actor, input))
       ),
     revoke: workspaceProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({ id: Schema.String.check(Schema.isUUID()) })
-        )
+        z.object({
+          id: z.uuid(),
+        })
       )
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(revokeAgentGrant(ctx.actor, input.id), {
-          signal,
-        })
+        withSignal(signal, async () => revokeAgentGrant(ctx.actor, input.id))
       ),
   },
   network: {
     conversations: {
       list: workspaceProcedure.query(({ ctx, signal }) =>
-        serverRuntime.runPromise(listMatrixConversations(ctx.actor), { signal })
+        withSignal(signal, async () => listMatrixConversations(ctx.actor))
       ),
       open: workspaceProcedure
-        .input(Schema.toStandardSchemaV1(PersonalTrustUsernameSchema))
+        .input(PersonalTrustUsernameSchema)
         .mutation(({ ctx, input, signal }) =>
-          serverRuntime.runPromise(
-            openMatrixConversation(ctx.actor, input.username).pipe(
-              Effect.map((c) => ({
-                id: c.id,
-                name: c.name,
-                username: c.username,
-                network: c.networkKind,
-              }))
-            ),
-            { signal }
-          )
+          withSignal(signal, async () => {
+            const c = await openMatrixConversation(ctx.actor, input.username);
+            return {
+              id: c.id,
+              name: c.name,
+              username: c.username,
+              network: c.networkKind,
+            };
+          })
         ),
       messages: workspaceProcedure
-        .input(Schema.toStandardSchemaV1(MatrixConversationInput))
+        .input(MatrixConversationInput)
         .query(({ ctx, input, signal }) =>
-          serverRuntime.runPromise(
-            readMatrixConversation(ctx.actor, input.id),
-            { signal }
+          withSignal(signal, async () =>
+            readMatrixConversation(ctx.actor, input.id)
           )
         ),
       send: workspaceProcedure
-        .input(Schema.toStandardSchemaV1(MatrixConversationSend))
+        .input(MatrixConversationSend)
         .mutation(({ ctx, input, signal }) =>
-          serverRuntime.runPromise(sendMatrixConversation(ctx.actor, input), {
-            signal,
-          })
+          withSignal(signal, async () =>
+            sendMatrixConversation(ctx.actor, input)
+          )
         ),
       close: workspaceProcedure
-        .input(Schema.toStandardSchemaV1(MatrixConversationInput))
+        .input(MatrixConversationInput)
         .mutation(({ ctx, input, signal }) =>
-          serverRuntime.runPromise(
-            closeMatrixConversation(ctx.actor, input.id),
-            { signal }
+          withSignal(signal, async () =>
+            closeMatrixConversation(ctx.actor, input.id)
           )
         ),
     },
     list: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        listPersonalNetwork(ctx.actor).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await listPersonalNetwork(ctx.actor);
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     invite: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(PersonalTrustUsernameSchema))
+      .input(PersonalTrustUsernameSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          invitePersonalTrust(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await invitePersonalTrust(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
     answer: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(AnswerPersonalTrustSchema))
+      .input(AnswerPersonalTrustSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          answerPersonalTrust(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await answerPersonalTrust(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
     end: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(PersonalTrustUsernameSchema))
+      .input(PersonalTrustUsernameSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          endPersonalTrust(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await endPersonalTrust(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
     block: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(PersonalTrustUsernameSchema))
+      .input(PersonalTrustUsernameSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          blockPersonalTrust(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await blockPersonalTrust(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
   },
   connections: {
     list: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(readWorkspaceConnections(ctx.actor), { signal })
+      withSignal(signal, async () => readWorkspaceConnections(ctx.actor))
     ),
     shareGoogle: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(shareGoogleConnection(ctx.actor), { signal })
+      withSignal(signal, async () => shareGoogleConnection(ctx.actor))
     ),
     disconnectGoogle: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(disconnectWorkspaceGoogle(ctx.actor), { signal })
+      withSignal(signal, async () => disconnectWorkspaceGoogle(ctx.actor))
     ),
   },
   vault: {
     delegations: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(inspectVaultDelegations(ctx.actor), { signal })
+      withSignal(signal, async () => inspectVaultDelegations(ctx.actor))
     ),
     list: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        listDelegatedVaultItems({
-          userId: ctx.actor.userId,
-          workspaceId: ctx.actor.workspaceId,
-        }).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await listDelegatedVaultItems({
+            userId: ctx.actor.userId,
+            workspaceId: ctx.actor.workspaceId,
+          });
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     delegate: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(DelegateVaultItemSchema))
+      .input(DelegateVaultItemSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          delegateVaultItem(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await delegateVaultItem(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
     revoke: workspaceProcedure
       .input(
-        Schema.toStandardSchemaV1(
-          Schema.Struct({ id: Schema.String.check(Schema.isUUID()) })
-        )
+        z.object({
+          id: z.uuid(),
+        })
       )
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          revokeVaultDelegation(ctx.actor, input.id).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await revokeVaultDelegation(ctx.actor, input.id);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
   },
   whatsapp: {
     list: workspaceProcedure.query(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        Effect.gen(function* () {
+      withSignal(signal, async () => {
+        try {
           return {
-            accounts: yield* listWhatsAppAccounts(ctx.actor),
-            chats: yield* listWhatsAppChats(ctx.actor),
+            accounts: await listWhatsAppAccounts(ctx.actor),
+            chats: await listWhatsAppChats(ctx.actor),
           };
-        }).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     start: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        startWhatsAppPairing(ctx.actor).pipe(
-          Effect.map(({ id, available, qr }) => ({ id, available, qr })),
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await Promise.try(async () =>
+            startWhatsAppPairing(ctx.actor)
+          ).then(({ id, available, qr }) => ({
+            id,
+            available,
+            qr,
+          }));
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     pause: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        pauseWhatsAppBridge(ctx.actor).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await pauseWhatsAppBridge(ctx.actor);
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     resume: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        resumeWhatsAppBridge(ctx.actor).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          ),
-          Effect.catchTag("WhatsAppBridgeUnavailable", () =>
-            Effect.fail(new TRPCError({ code: "PRECONDITION_FAILED" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          try {
+            return await resumeWhatsAppBridge(ctx.actor);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        } catch (error) {
+          if (error instanceof WhatsAppBridgeUnavailable)
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+            });
+          throw error;
+        }
+      })
     ),
     revoke: workspaceProcedure.mutation(({ ctx, signal }) =>
-      serverRuntime.runPromise(
-        revokeWhatsAppBridge(ctx.actor).pipe(
-          Effect.catchTag("WorkspaceAccessDenied", () =>
-            Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-          )
-        ),
-        { signal }
-      )
+      withSignal(signal, async () => {
+        try {
+          return await revokeWhatsAppBridge(ctx.actor);
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({
+              code: "FORBIDDEN",
+            });
+          throw error;
+        }
+      })
     ),
     share: workspaceProcedure
-      .input(Schema.toStandardSchemaV1(ShareWhatsAppChatSchema))
+      .input(ShareWhatsAppChatSchema)
       .mutation(({ ctx, input, signal }) =>
-        serverRuntime.runPromise(
-          shareWhatsAppChat(ctx.actor, input).pipe(
-            Effect.catchTag("WorkspaceAccessDenied", () =>
-              Effect.fail(new TRPCError({ code: "FORBIDDEN" }))
-            )
-          ),
-          { signal }
-        )
+        withSignal(signal, async () => {
+          try {
+            return await shareWhatsAppChat(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceAccessDenied)
+              throw new TRPCError({
+                code: "FORBIDDEN",
+              });
+            throw error;
+          }
+        })
       ),
   },
 };

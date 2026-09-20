@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { expect, test } from "vitest";
 import { importOpenApi } from "./openapi";
 import { decodeCustomerTool } from "../workspaces/tool-document";
@@ -37,9 +36,7 @@ const base = {
   },
 };
 test("imports typed path and query arguments while keeping the configured origin authoritative", async () => {
-  const operations = await Effect.runPromise(
-    importOpenApi(JSON.stringify(base))
-  );
+  const operations = await importOpenApi(JSON.stringify(base));
   expect(operations[0]?.request).toEqual({
     kind: "openapi",
     method: "GET",
@@ -88,15 +85,13 @@ test.each([
 ])(
   "rejects redirects, traversal, ambient headers, missing placeholders and external refs",
   async (document) => {
-    await expect(
-      Effect.runPromise(importOpenApi(JSON.stringify(document)))
-    ).rejects.toMatchObject({ reason: "invalid" });
+    await expect(importOpenApi(JSON.stringify(document))).rejects.toMatchObject(
+      { reason: "invalid" }
+    );
   }
 );
 test("schema validation rejects executable extensions after import, before publication", async () => {
-  const operations = await Effect.runPromise(
-    importOpenApi(JSON.stringify(base))
-  );
+  const operations = await importOpenApi(JSON.stringify(base));
   const operation = operations[0];
   expect(operation).toBeDefined();
   if (!operation) return;
@@ -112,16 +107,14 @@ test("schema validation rejects executable extensions after import, before publi
   };
   const definition = remoteToolDefinition(connection, operation);
   await expect(
-    Effect.runPromise(
-      decodeCustomerTool(
-        JSON.stringify({
-          ...definition,
-          outputSchema: {
-            ...object,
-            properties: { text: { type: "string", pattern: "(a+)+$" } },
-          },
-        })
-      )
+    decodeCustomerTool(
+      JSON.stringify({
+        ...definition,
+        outputSchema: {
+          ...object,
+          properties: { text: { type: "string", pattern: "(a+)+$" } },
+        },
+      })
     )
   ).rejects.toMatchObject({ reason: "invalid_definition" });
 });

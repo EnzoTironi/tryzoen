@@ -54,7 +54,7 @@ describe("source layout", () => {
       "workspaces",
       "workstreams",
     ]);
-    expect(files("shared")).toEqual([]);
+    expect(files("shared")).toEqual(["validation.ts"]);
     expect(existsSync("shared/environment/env.ts")).toBe(true);
     expect(existsSync("agent/subagents/browser-agent/lib/kernel.ts")).toBe(
       true

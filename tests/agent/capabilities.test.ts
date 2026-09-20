@@ -1,15 +1,14 @@
-import { Predicate } from "effect";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import type { DynamicResolveContext } from "eve/tools";
 import { describe, expect, it } from "vitest";
 import personalInfoMemory from "@agent/memory/personal_info";
 import workstreamMemory from "@agent/memory/workstreams";
-import calendar from "../../server/executor/tools/calendar";
-import contacts from "../../server/executor/tools/contacts";
-import gmail from "../../server/executor/tools/gmail";
+import calendar from "../../server/tools/tools/calendar";
+import contacts from "../../server/tools/tools/contacts";
+import gmail from "../../server/tools/tools/gmail";
 import messaging from "@agent/tools/messaging";
-import schedules from "../../server/executor/tools/schedules";
-import vault from "../../server/executor/tools/vault";
+import schedules from "../../server/tools/tools/schedules";
+import vault from "../../server/tools/tools/vault";
 
 const groupedTools = [calendar, contacts, gmail, messaging, schedules, vault];
 
@@ -67,7 +66,9 @@ async function authoredCapabilities(authenticator: string) {
     groupedTools.map(async (definition) => {
       const resolve = definition.events["turn.started"];
       const resolved = resolve ? await resolve({}, context) : null;
-      return Predicate.isObject(resolved) && !("execute" in resolved)
+      return typeof resolved === "object" &&
+        resolved !== null &&
+        !("execute" in resolved)
         ? Object.keys(resolved)
         : [];
     })
@@ -114,6 +115,7 @@ async function authoredCapabilities(authenticator: string) {
 
 function dynamicContext(authenticator: string) {
   return {
+    model: null,
     channel: { kind: "channel:linq", metadata: {} },
     messages: [],
     session: {

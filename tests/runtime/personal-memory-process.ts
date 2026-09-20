@@ -1,24 +1,23 @@
-import { Effect, Result, Schema } from "effect";
+import { z } from "zod";
+
 import { db } from "../../db";
+import { PersonalMemoryError } from "../../server/personal-memory/access";
 import { inspectPersonalMemory } from "../../server/personal-memory/export";
-import { serverRuntime } from "../../server/runtime";
 
 const chunks: Buffer[] = [];
 for await (const chunk of process.stdin)
-  chunks.push(Buffer.from(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk)));
+  chunks.push(Buffer.from(z.instanceof(Uint8Array).parse(chunk)));
 const cookie = Buffer.concat(chunks).toString("utf8");
 try {
-  const result = await serverRuntime.runPromise(
-    inspectPersonalMemory(new Headers({ cookie })).pipe(Effect.result)
-  );
-  process.stdout.write(
-    JSON.stringify(
-      Result.isSuccess(result)
-        ? { status: "Success", snapshot: result.success }
-        : { status: "Failure", reason: result.failure.reason }
-    )
-  );
+  try {
+    const snapshot = await inspectPersonalMemory(new Headers({ cookie }));
+    process.stdout.write(JSON.stringify({ status: "Success", snapshot }));
+  } catch (error) {
+    if (!(error instanceof PersonalMemoryError)) throw error;
+    process.stdout.write(
+      JSON.stringify({ status: "Failure", reason: error.reason })
+    );
+  }
 } finally {
-  await serverRuntime.dispose();
   await db.$client.end();
 }

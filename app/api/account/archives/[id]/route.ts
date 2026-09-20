@@ -1,7 +1,12 @@
-import { Effect, Schema } from "effect";
+import { withSignal } from "../../../../../server/operations/async";
+import { SqlError } from "../../../../../db/queries";
+import { Mem0Error } from "../../../../../server/memory/mem0";
+import { AuthUnavailable } from "../../../../../db/services/auth/index";
+import { ZodError as SchemaError } from "zod";
+import { AccountArchiveMissing } from "../../../../../server/accounts/archives";
+import { AccountControlError } from "../../../../../server/accounts/controls";
+import { z } from "zod";
 import { downloadAccountArchive } from "../../../../../server/accounts/archives";
-import { serverRuntime } from "../../../../../server/runtime";
-import { Mem0 } from "../../../../../server/memory/mem0";
 
 export async function GET(
   request: Request,
@@ -9,44 +14,49 @@ export async function GET(
 ) {
   const { id } = await context.params;
   const query = new URL(request.url).searchParams;
-  return serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const section = yield* Schema.decodeUnknownEffect(
-        Schema.Literals(["memory", "files", "attachment", "source"])
-      )(query.get("section"));
-      return yield* downloadAccountArchive(
-        request.headers,
-        id,
-        section,
-        query.get("attachment") ?? undefined
-      );
-    }).pipe(
-      Effect.provide(Mem0.layer),
-      Effect.catchTag("AccountControlError", () =>
-        Effect.succeed(
-          new Response("Sign in to continue", {
-            status: 401,
-            headers: { "cache-control": "no-store" },
-          })
+  return withSignal(request.signal, async () => {
+    try {
+      try {
+        try {
+          const section = await z
+            .enum(["memory", "files", "attachment", "source"])
+            .parseAsync(query.get("section"));
+          return await downloadAccountArchive(
+            request.headers,
+            id,
+            section,
+            query.get("attachment") ?? undefined
+          );
+        } catch (error) {
+          if (error instanceof AccountControlError)
+            return new Response("Sign in to continue", {
+              status: 401,
+              headers: { "cache-control": "no-store" },
+            });
+          throw error;
+        }
+      } catch (error) {
+        if (
+          error instanceof AccountArchiveMissing ||
+          error instanceof SchemaError
         )
-      ),
-      Effect.catchTag(["AccountArchiveMissing", "SchemaError"], () =>
-        Effect.succeed(
-          new Response("Not found", {
+          return new Response("Not found", {
             status: 404,
             headers: { "cache-control": "no-store" },
-          })
-        )
-      ),
-      Effect.catchTag(["AuthUnavailable", "Mem0Error", "SqlError"], () =>
-        Effect.succeed(
-          new Response("Archive unavailable", {
-            status: 503,
-            headers: { "cache-control": "no-store" },
-          })
-        )
+          });
+        throw error;
+      }
+    } catch (error) {
+      if (
+        error instanceof AuthUnavailable ||
+        error instanceof Mem0Error ||
+        error instanceof SqlError
       )
-    ),
-    { signal: request.signal }
-  );
+        return new Response("Archive unavailable", {
+          status: 503,
+          headers: { "cache-control": "no-store" },
+        });
+      throw error;
+    }
+  });
 }

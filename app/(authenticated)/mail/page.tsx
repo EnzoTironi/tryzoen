@@ -1,12 +1,10 @@
 import { getI18n } from "@web/i18n/server";
 import { headers } from "next/headers";
-import { Effect, Result } from "effect";
+
 import { CheckIcon } from "lucide-react";
-import Link from "next/link";
 import { requireRequestScope } from "@web/auth/request-scope";
 import { Button } from "@web/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@web/components/ui/alert";
-import { serverRuntime } from "../../../server/runtime";
 import { readPersonalGoogleSettings } from "../../../server/google-workspace/settings";
 import { resolveWorkspaceActor } from "../../../server/workspaces/session";
 import { PanelIntro } from "../_components/panel-intro";
@@ -34,14 +32,15 @@ export default async function MailPage() {
         </div>
       </div>
     );
-  const connection = await serverRuntime.runPromise(
-    resolveWorkspaceActor(await headers()).pipe(
-      Effect.flatMap(readPersonalGoogleSettings),
-      Effect.result
-    )
+  const connection = await Promise.try(async () => {
+    return await Promise.try(async () =>
+      resolveWorkspaceActor(await headers())
+    ).then(readPersonalGoogleSettings);
+  }).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error })
   );
-  const connected =
-    Result.isSuccess(connection) && connection.success.state === "connected";
+  const connected = connection.ok && connection.value.state === "connected";
   return (
     <div className={styles.page}>
       <PanelIntro
@@ -49,14 +48,14 @@ export default async function MailPage() {
         title={t("Menos e-mail. Mais vida.")}
         description={t("Resumos e respostas, em uma conversa.")}
       />
-      {Result.isFailure(connection) ? (
+      {!connection.ok ? (
         <Alert variant="destructive">
           <AlertTitle>{t("Não foi possível verificar seu Gmail")}</AlertTitle>
           <AlertDescription>
             {t("Tente novamente em")}{" "}
-            <Link href="/connections" className="underline">
+            <PanelLink href="/connections" className="underline">
               {t("Conexões")}
-            </Link>
+            </PanelLink>
             .
           </AlertDescription>
         </Alert>
@@ -65,23 +64,25 @@ export default async function MailPage() {
           <Button
             nativeButton={false}
             render={
-              <Link href={connected ? "/chat?starter=email" : "/connections"} />
+              <PanelLink
+                href={connected ? "/chat?starter=email" : "/connections"}
+              />
             }
           >
             {connected ? t("Organizar meus e-mails") : t("Conectar meu Gmail")}
           </Button>
           {connected && (
             <>
-              <Link
+              <PanelLink
                 href="/chat?starter=email-draft"
                 className={styles.subtleLink}
               >
                 {t("Preparar uma resposta")}
-              </Link>
-              <Link href="/connections" className={styles.statusLine}>
+              </PanelLink>
+              <PanelLink href="/connections" className={styles.statusLine}>
                 <CheckIcon aria-hidden="true" />
                 {t("Gmail conectado")}
-              </Link>
+              </PanelLink>
             </>
           )}
         </div>

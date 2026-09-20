@@ -1,13 +1,26 @@
+import { InternalCallbackRejected } from "./callback-auth";
+import { Secret } from "@shared/environment/secret";
+import { env } from "@shared/environment/env";
+import { jsonString } from "@shared/validation";
+
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import { ConfigProvider, Effect, Schema } from "effect";
-import { expect, test } from "vitest";
+import { resolvedInstallationSecrets } from "@db/services/installation-secrets";
+
+import { expect, test, vi } from "vitest";
 import {
   readVerifiedInternalCallback,
   internalCallbackBodies,
   internalCallbackHeaders,
   internalCallbackOrigin,
 } from "./callback-auth";
+
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return { ...actual, env: { ...actual.env } };
+});
+vi.mock("@db/services/installation-secrets", () => ({
+  resolvedInstallationSecrets: vi.fn<typeof resolvedInstallationSecrets>(),
+}));
 
 const configuration = {
   BETTER_AUTH_URL: "http://127.0.0.1:3000",
@@ -16,27 +29,19 @@ const configuration = {
 const unusedBetterAuthSecret = randomBytes(32).toString("base64");
 const route = "/internal/scheduled-run/report";
 const body = JSON.stringify({ runId: randomUUID() });
-const secretsLayer = (secretEncryptionKey: string) =>
-  ResolvedInstallationSecrets.layerFromResolved({
-    betterAuthSecret: unusedBetterAuthSecret,
-    secretEncryptionKey,
-  });
-const run = <A, E>(
-  effect: Effect.Effect<A, E, ResolvedInstallationSecrets>,
+const secretsLayer = (secretEncryptionKey: string) => ({
+  betterAuthSecret: new Secret(unusedBetterAuthSecret),
+  secretEncryptionKey: new Secret(secretEncryptionKey),
+});
+async function run<A>(
+  operation: () => A | Promise<A>,
   config: Record<string, string> = configuration,
-  secrets: ReturnType<typeof secretsLayer> = secretsLayer(
-    configuration.SECRET_ENCRYPTION_KEY
-  )
-) =>
-  Effect.runPromise(
-    effect.pipe(
-      Effect.provide(secrets),
-      Effect.provideService(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.fromUnknown(config)
-      )
-    )
-  );
+  secrets = secretsLayer(configuration.SECRET_ENCRYPTION_KEY)
+) {
+  Object.assign(env, { BETTER_AUTH_URL: config.BETTER_AUTH_URL });
+  vi.mocked(resolvedInstallationSecrets).mockResolvedValue(secrets);
+  return await operation();
+}
 
 function request(
   headers: Headers,
@@ -52,20 +57,22 @@ function request(
 }
 
 test("authenticates raw bytes through a proxy with a different internal host", async () => {
-  const headers = await run(internalCallbackHeaders(route, body));
-  const raw = await run(readVerifiedInternalCallback(request(headers), route));
+  const headers = await run(() => internalCallbackHeaders(route, body));
+  const raw = await run(() =>
+    readVerifiedInternalCallback(request(headers), route)
+  );
   expect(raw.toString()).toBe(body);
   // The public audience is configured; forwarded headers cannot change it.
   headers.set("x-forwarded-host", "untrusted.invalid");
   expect(
     (
-      await run(readVerifiedInternalCallback(request(headers), route))
+      await run(() => readVerifiedInternalCallback(request(headers), route))
     ).toString()
   ).toBe(body);
 });
 
 test("rejects absent, malformed and changed signatures and changed body/method/path/query", async () => {
-  const headers = await run(internalCallbackHeaders(route, body));
+  const headers = await run(() => internalCallbackHeaders(route, body));
   const absent = new Headers();
   const malformed = new Headers(headers);
   malformed.set("x-internal-callback-signature", "x");
@@ -82,26 +89,56 @@ test("rejects absent, malformed and changed signatures and changed body/method/p
   ];
   const results = await Promise.all(
     inputs.map((input) =>
-      run(readVerifiedInternalCallback(input, route).pipe(Effect.flip))
+      run(() =>
+        Promise.try(async () =>
+          readVerifiedInternalCallback(input, route)
+        ).then(
+          () => {
+            throw new Error("Expected rejection");
+          },
+          (error: unknown) => {
+            if (error instanceof InternalCallbackRejected) return error;
+            throw error;
+          }
+        )
+      )
     )
   );
   for (const result of results) expect(result.status).toBe(401);
 });
 
 test("rejects a signature transplanted between routes, audiences or installations", async () => {
-  const headers = await run(internalCallbackHeaders(route, body));
+  const headers = await run(() => internalCallbackHeaders(route, body));
   const respond = "/internal/scheduled-run/respond";
   expect(
-    await run(
-      readVerifiedInternalCallback(
-        request(headers, body, respond),
-        respond
-      ).pipe(Effect.flip)
+    await run(() =>
+      Promise.try(async () =>
+        readVerifiedInternalCallback(request(headers, body, respond), respond)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof InternalCallbackRejected) return error;
+          throw error;
+        }
+      )
     )
   ).toMatchObject({ status: 401 });
   expect(
     await run(
-      readVerifiedInternalCallback(request(headers), route).pipe(Effect.flip),
+      () =>
+        Promise.try(async () =>
+          readVerifiedInternalCallback(request(headers), route)
+        ).then(
+          () => {
+            throw new Error("Expected rejection");
+          },
+          (error: unknown) => {
+            if (error instanceof InternalCallbackRejected) return error;
+            throw error;
+          }
+        ),
       {
         ...configuration,
         BETTER_AUTH_URL: "https://another-installation.invalid",
@@ -110,7 +147,18 @@ test("rejects a signature transplanted between routes, audiences or installation
   ).toMatchObject({ status: 401 });
   expect(
     await run(
-      readVerifiedInternalCallback(request(headers), route).pipe(Effect.flip),
+      () =>
+        Promise.try(async () =>
+          readVerifiedInternalCallback(request(headers), route)
+        ).then(
+          () => {
+            throw new Error("Expected rejection");
+          },
+          (error: unknown) => {
+            if (error instanceof InternalCallbackRejected) return error;
+            throw error;
+          }
+        ),
       configuration,
       secretsLayer(randomBytes(32).toString("base64"))
     )
@@ -144,9 +192,17 @@ test("rejects correctly signed expired and far-future requests", async () => {
         "x-internal-callback-signature": signature,
       });
       expect(
-        await run(
-          readVerifiedInternalCallback(request(headers), route).pipe(
-            Effect.flip
+        await run(() =>
+          Promise.try(async () =>
+            readVerifiedInternalCallback(request(headers), route)
+          ).then(
+            () => {
+              throw new Error("Expected rejection");
+            },
+            (error: unknown) => {
+              if (error instanceof InternalCallbackRejected) return error;
+              throw error;
+            }
           )
         )
       ).toMatchObject({ status: 401 });
@@ -157,7 +213,16 @@ test("rejects correctly signed expired and far-future requests", async () => {
 test("requires explicit valid secret and restricts cleartext destinations to loopback", async () => {
   expect(
     await run(
-      internalCallbackHeaders(route, body).pipe(Effect.flip),
+      () =>
+        Promise.try(async () => internalCallbackHeaders(route, body)).then(
+          () => {
+            throw new Error("Expected rejection");
+          },
+          (error: unknown) => {
+            if (error instanceof InternalCallbackRejected) return error;
+            throw error;
+          }
+        ),
       configuration,
       secretsLayer("bad-key")
     )
@@ -170,7 +235,16 @@ test("requires explicit valid secret and restricts cleartext destinations to loo
     remoteConfigs.map(async (config) => {
       expect(
         await run(
-          internalCallbackHeaders(route, body).pipe(Effect.flip),
+          () =>
+            Promise.try(async () => internalCallbackHeaders(route, body)).then(
+              () => {
+                throw new Error("Expected rejection");
+              },
+              (error: unknown) => {
+                if (error instanceof InternalCallbackRejected) return error;
+                throw error;
+              }
+            ),
           config
         )
       ).toMatchObject({ status: 503 });
@@ -186,12 +260,20 @@ test("requires explicit valid secret and restricts cleartext destinations to loo
 
 test("limits streamed body bytes without trusting Content-Length", async () => {
   const oversized = "x".repeat(64 * 1024 + 1);
-  const headers = await run(internalCallbackHeaders(route, oversized));
+  const headers = await run(() => internalCallbackHeaders(route, oversized));
   headers.set("content-length", "1");
   expect(
-    await run(
-      readVerifiedInternalCallback(request(headers, oversized), route).pipe(
-        Effect.flip
+    await run(() =>
+      Promise.try(async () =>
+        readVerifiedInternalCallback(request(headers, oversized), route)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof InternalCallbackRejected) return error;
+          throw error;
+        }
       )
     )
   ).toMatchObject({ status: 413 });
@@ -201,26 +283,34 @@ test("signed malformed JSON and extra authority fields fail the boundary schema"
   await Promise.all(
     ["{", JSON.stringify({ runId: randomUUID(), userId: "other-user" })].map(
       async (payload) => {
-        const headers = await run(internalCallbackHeaders(route, payload));
-        const raw = await run(
+        const headers = await run(() =>
+          internalCallbackHeaders(route, payload)
+        );
+        const raw = await run(() =>
           readVerifiedInternalCallback(request(headers, payload), route)
         );
-        const result = await run(
-          Schema.decodeUnknownEffect(
-            Schema.fromJsonString(internalCallbackBodies[route]),
-            { onExcessProperty: "error" }
-          )(raw.toString()).pipe(Effect.result)
+        const result = await run(() =>
+          Promise.try(async () =>
+            jsonString(internalCallbackBodies[route].strict()).parseAsync(
+              raw.toString()
+            )
+          ).then(
+            (value) => ({ ok: true as const, value }),
+            (error: unknown) => ({ ok: false as const, error })
+          )
         );
-        expect(result).toMatchObject({ _tag: "Failure" });
+        expect(result).toMatchObject({ ok: false });
       }
     )
   );
 });
 
 test("a valid retry remains authentic and must still pass the database claim", async () => {
-  const headers = await run(internalCallbackHeaders(route, body));
+  const headers = await run(() => internalCallbackHeaders(route, body));
   const results = await Promise.all(
-    [1, 2].map(() => run(readVerifiedInternalCallback(request(headers), route)))
+    [1, 2].map(() =>
+      run(() => readVerifiedInternalCallback(request(headers), route))
+    )
   );
   for (const result of results) expect(result.toString()).toBe(body);
 });

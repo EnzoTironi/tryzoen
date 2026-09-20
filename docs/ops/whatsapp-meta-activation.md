@@ -4,7 +4,7 @@
 Workers only document the path — **no secret values**, no webhook redirects until
 durable HTTPS is up (D01).
 
-Companion reaches WhatsApp **through Kapso** (Effect adapter + HMAC webhook).
+Companion reaches WhatsApp **through Kapso** (async adapter + HMAC webhook).
 Product activation still needs Meta display-name approval and at least one
 **UTILITY** template approved. Adapter decision:
 [ADR Kapso path R1](../decisions/adr-kapso-path-r1.md).

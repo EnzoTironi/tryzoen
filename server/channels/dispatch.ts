@@ -1,4 +1,7 @@
-import { Config, Effect } from "effect";
+import { mapAsync } from "../operations/async";
+import { ProviderUncertain } from "./provider-errors";
+import { ProviderRejected } from "./provider-errors";
+import { env } from "@shared/environment/env";
 import { applicationOrigin } from "@shared/environment/origin";
 import { ChannelAuthPrompts } from "../channel-auth/prompts";
 import { Telegram } from "./telegram";
@@ -6,61 +9,56 @@ import { Kapso } from "./kapso";
 import { ProviderInputError } from "./provider-errors";
 import type { InboundEvent } from "./inbound";
 
-export const dispatchItem = Effect.fn("dispatchItem")(function* <
-  A,
-  E extends Error,
-  R,
->(itemId: string, operation: Effect.Effect<A, E, R>) {
-  yield* operation.pipe(
-    Effect.catch((error) =>
-      Effect.logError("Channel dispatch item failed", {
-        itemId,
-        errorType: error.name,
-      })
+export const dispatchItem = async function <A>(
+  itemId: string,
+  operation: Promise<A>
+) {
+  await Promise.try(async () => operation).catch((cause: unknown) => {
+    console.error("Channel dispatch item failed", {
+      itemId,
+      errorType: cause instanceof Error ? cause.name : "UnknownError",
+    });
+  });
+};
+
+export const dispatchAuthFeedback = async function (
+  event: Extract<InboundEvent, { kind: "command" }>,
+  confirmed: boolean,
+  refusalMessage?: string
+) {
+  const refusal =
+    refusalMessage ??
+    "This request cannot be confirmed here. Return to your original Zoen browser tab to check it or start a new request.";
+  if (event.channel === "kapso") {
+    await Kapso.sendText(
+      event.senderId,
+      confirmed
+        ? "Confirmado. Volte à aba do Zoen onde você começou para continuar."
+        : refusal
+    );
+    return;
+  }
+  const provider = Telegram;
+  if (event.command === "start") {
+    await provider.sendText(event.chatId, refusal);
+    return;
+  }
+  if (!event.callbackQueryId) return;
+  // The database outcome stands even if Telegram can no longer show the toast.
+  await dispatchItem(
+    event.eventId,
+    provider.answerCallbackQuery(
+      event.callbackQueryId,
+      confirmed
+        ? "Confirmed. Return to your original Zoen browser tab to finish."
+        : refusal,
+      !confirmed
     )
   );
-});
-
-export const dispatchAuthFeedback = Effect.fn("dispatchAuthFeedback")(
-  function* (
-    event: Extract<InboundEvent, { kind: "command" }>,
-    confirmed: boolean,
-    refusalMessage?: string
-  ) {
-    const refusal =
-      refusalMessage ??
-      "This request cannot be confirmed here. Return to your original Zoen browser tab to check it or start a new request.";
-    if (event.channel === "kapso") {
-      yield* (yield* Kapso).sendText(
-        event.senderId,
-        confirmed
-          ? "Confirmado. Volte à aba do Zoen onde você começou para continuar."
-          : refusal
-      );
-      return;
-    }
-    const provider = yield* Telegram;
-    if (event.command === "start") {
-      yield* provider.sendText(event.chatId, refusal);
-      return;
-    }
-    if (!event.callbackQueryId) return;
-    // The database outcome stands even if Telegram can no longer show the toast.
-    yield* dispatchItem(
-      event.eventId,
-      provider.answerCallbackQuery(
-        event.callbackQueryId,
-        confirmed
-          ? "Confirmed. Return to your original Zoen browser tab to finish."
-          : refusal,
-        !confirmed
-      )
-    );
-    if (confirmed) {
-      yield* provider.editLoginConfirmation(event.chatId, event.messageId);
-    }
+  if (confirmed) {
+    await provider.editLoginConfirmation(event.chatId, event.messageId);
   }
-);
+};
 
 export const unlinkedSenderCopy = (
   channel: InboundEvent["channel"],
@@ -70,73 +68,76 @@ export const unlinkedSenderCopy = (
     ? `Este número ainda não está vinculado a uma conta Zoen. Entre com Google em ${signInUrl} e vincule o WhatsApp em Conta para continuar.`
     : `This Telegram account is not linked to Zoen yet. Sign in with Google at ${signInUrl}, then link Telegram from your account to continue.`;
 
-export const signInUrl = (channel: InboundEvent["channel"]) =>
-  Effect.try({
-    try: () => `${applicationOrigin()}/sign-in`,
-    catch: () =>
-      new ProviderInputError({ provider: channel, reason: "configuration" }),
-  });
+export const signInUrl = async (channel: InboundEvent["channel"]) => {
+  try {
+    return `${applicationOrigin()}/sign-in`;
+  } catch {
+    throw new ProviderInputError({
+      provider: channel,
+      reason: "configuration",
+    });
+  }
+};
 
-export const dispatchUnlinkedSenderPrompt = Effect.fn(
-  "dispatchUnlinkedSenderPrompt"
-)(function* (event: Extract<InboundEvent, { kind: "message" }>) {
+export const dispatchUnlinkedSenderPrompt = async function (
+  event: Extract<InboundEvent, { kind: "message" }>
+) {
   const copy = unlinkedSenderCopy(
     event.channel,
-    yield* signInUrl(event.channel)
+    await signInUrl(event.channel)
   );
   if (event.channel === "kapso") {
-    yield* (yield* Kapso).sendText(event.senderId, copy);
+    await Kapso.sendText(event.senderId, copy);
     return;
   }
-  yield* (yield* Telegram).sendText(event.chatId, copy);
-});
+  await Telegram.sendText(event.chatId, copy);
+};
 
-export const dispatchAuthPrompt = Effect.fn("dispatchAuthPrompt")(function* (
-  challengeId: string
-) {
-  const prompts = yield* ChannelAuthPrompts;
-  const claim = yield* prompts.claim(challengeId);
+export const dispatchAuthPrompt = async function (challengeId: string) {
+  const prompts = ChannelAuthPrompts;
+  const claim = await prompts.claim(challengeId);
   if (!claim) return;
-  const send = Effect.gen(function* () {
-    const installation = yield* Config.string(
-      claim.channel === "telegram" ? "TELEGRAM_BOT_ID" : "KAPSO_PHONE_NUMBER_ID"
-    );
+  const send = async () => {
+    const installation =
+      env[
+        claim.channel === "telegram"
+          ? "TELEGRAM_BOT_ID"
+          : "KAPSO_PHONE_NUMBER_ID"
+      ];
     if (installation !== claim.installationId)
-      return yield* new ProviderInputError({
+      throw new ProviderInputError({
         provider: claim.channel,
         reason: "wrong_installation",
       });
-    const provider =
-      claim.channel === "telegram" ? yield* Telegram : yield* Kapso;
-    yield* prompts.checkLease(claim.lease);
-    return yield* provider.sendLoginConfirmation(
+    const provider = claim.channel === "telegram" ? Telegram : Kapso;
+    await prompts.checkLease(claim.lease);
+    return await provider.sendLoginConfirmation(
       claim.senderId,
       claim.token,
       claim.purpose
     );
-  });
-  yield* send.pipe(
-    Effect.flatMap((result) =>
-      prompts.markSent(claim.lease, result.providerMessageId)
-    ),
-    Effect.catchTags({
-      ProviderRejected: () => prompts.markRejected(claim.lease),
-      ProviderUncertain: () => prompts.markUncertain(claim.lease),
-      ProviderInputError: () => prompts.markRejected(claim.lease),
-      ConfigError: () => prompts.markRejected(claim.lease),
-    })
-  );
-});
-
-export const drainAuthPrompts = Effect.gen(function* () {
-  const prompts = yield* ChannelAuthPrompts;
-  const pending = yield* prompts.pending(25);
-  yield* Effect.forEach(
-    pending,
-    (id) => dispatchItem(id, dispatchAuthPrompt(id)),
-    {
-      concurrency: 4,
-      discard: true,
+  };
+  try {
+    const result = await send();
+    await prompts.markSent(claim.lease, result.providerMessageId);
+  } catch (error) {
+    if (
+      error instanceof ProviderRejected ||
+      error instanceof ProviderInputError
+    ) {
+      await prompts.markRejected(claim.lease);
+      return;
     }
-  );
-});
+    if (error instanceof ProviderUncertain) {
+      await prompts.markUncertain(claim.lease);
+      return;
+    }
+    throw error;
+  }
+};
+
+export const drainAuthPrompts = async () => {
+  const prompts = ChannelAuthPrompts;
+  const pending = await prompts.pending(25);
+  await mapAsync(pending, (id) => dispatchItem(id, dispatchAuthPrompt(id)), 4);
+};

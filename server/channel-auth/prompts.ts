@@ -1,19 +1,24 @@
+import { query, transaction as withDatabaseTransaction } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import { PgClient } from "@effect/sql-pg";
+import { resolvedInstallationSecrets } from "@db/services/installation-secrets";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
-import { Context, Effect, Layer, Redacted, Schema } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ChannelAccountError,
   ChannelAccounts,
   PreviewChallenge,
   VerifiedSender,
 } from "../accounts/index.ts";
-
-const Id = Schema.String.check(Schema.isUUID(4));
-const Identifier = Schema.NonEmptyString.check(Schema.isTrimmed());
-const Status = Schema.Literals([
+const Id = z.uuid({
+  version: "v4",
+});
+const Identifier = z
+  .string()
+  .min(1)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
+const Status = z.enum([
   "queued",
   "dispatching",
   "sent",
@@ -21,336 +26,313 @@ const Status = Schema.Literals([
   "failed",
   "cancelled",
 ]);
-const PreparePrompt = Schema.Struct({
-  ...PreviewChallenge.fields,
+const PreparePrompt = z.object({
+  ...PreviewChallenge.shape,
   eventId: Identifier,
 });
-const PromptLease = Schema.Struct({ challengeId: Id, leaseToken: Id });
-const PromptReceipt = Schema.Struct({ challengeId: Id, status: Status });
-const Envelope = Schema.Struct({ challengeId: Id, ...PreparePrompt.fields });
-const EnvelopeJson = Schema.fromJsonString(Envelope);
-const PromptRow = Schema.Struct({
-  ...PromptReceipt.fields,
-  ...VerifiedSender.fields,
-  eventId: Identifier,
-  tokenCiphertext: Schema.NullOr(Schema.String),
+const PromptLease = z.object({
+  challengeId: Id,
+  leaseToken: Id,
 });
-export class ChannelAuthPromptError extends Schema.TaggedError<ChannelAuthPromptError>()(
-  "ChannelAuthPromptError",
-  {
-    reason: Schema.Literals([
-      "invalid_input",
-      "conflict",
-      "lease_lost",
-      "crypto_unavailable",
-    ]),
+const PromptReceipt = z.object({
+  challengeId: Id,
+  status: Status,
+});
+const Envelope = z.object({
+  challengeId: Id,
+  ...PreparePrompt.shape,
+});
+const EnvelopeJson = jsonString(Envelope);
+const PromptRow = z.object({
+  ...PromptReceipt.shape,
+  ...VerifiedSender.shape,
+  eventId: Identifier,
+  tokenCiphertext: z.nullable(z.string()),
+});
+export class ChannelAuthPromptError extends Error {
+  readonly _tag = "ChannelAuthPromptError";
+  declare readonly reason:
+    | "invalid_input"
+    | "conflict"
+    | "lease_lost"
+    | "crypto_unavailable";
+  constructor(input: {
+    readonly reason:
+      | "invalid_input"
+      | "conflict"
+      | "lease_lost"
+      | "crypto_unavailable";
+  }) {
+    super("ChannelAuthPromptError");
+    this.name = "ChannelAuthPromptError";
+    Object.assign(this, input);
   }
-) {}
-type Failure = ChannelAuthPromptError | ChannelAccountError | SqlError;
-type ClaimedPrompt = typeof VerifiedSender.Type & {
-  readonly lease: typeof PromptLease.Type;
-  readonly token: string;
-  readonly purpose: "login" | "link";
-};
-interface Prompts {
-  readonly prepare: (
-    input: typeof PreparePrompt.Type
-  ) => Effect.Effect<typeof PromptReceipt.Type, Failure>;
-  readonly pending: (
-    limit?: number
-  ) => Effect.Effect<readonly string[], Failure>;
-  readonly claim: (
-    challengeId: string
-  ) => Effect.Effect<ClaimedPrompt | null, Failure>;
-  readonly checkLease: (
-    lease: typeof PromptLease.Type
-  ) => Effect.Effect<void, Failure>;
-  readonly markSent: (
-    lease: typeof PromptLease.Type,
-    providerMessageId: string
-  ) => Effect.Effect<void, Failure>;
-  readonly markUncertain: (
-    lease: typeof PromptLease.Type
-  ) => Effect.Effect<void, Failure>;
-  readonly markRejected: (
-    lease: typeof PromptLease.Type
-  ) => Effect.Effect<void, Failure>;
 }
-const error = (reason: ChannelAuthPromptError["reason"]) =>
-  new ChannelAuthPromptError({ reason });
-const decode = <S extends Schema.Constraint>(schema: S, input: S["Type"]) =>
-  Schema.decodeUnknownEffect(schema)(input).pipe(
-    Effect.mapError(() => error("invalid_input"))
-  );
+function error(reason: ChannelAuthPromptError["reason"]): never {
+  throw new ChannelAuthPromptError({
+    reason,
+  });
+}
+const decode = async <S extends z.ZodType>(schema: S, input: z.output<S>) => {
+  try {
+    return await schema.parseAsync(input);
+  } catch {
+    return error("invalid_input");
+  }
+};
 /** A single encrypted confirmation prompt per challenge. No provider I/O or polling. */
-export class ChannelAuthPrompts extends Context.Service<
-  ChannelAuthPrompts,
-  Prompts
->()("companion/ChannelAuthPrompts") {
-  static readonly layer = Layer.effect(
-    ChannelAuthPrompts,
-    Effect.gen(function* () {
-      const sql = yield* PgClient.PgClient;
-      const accounts = yield* ChannelAccounts;
-      const installation = yield* ResolvedInstallationSecrets;
-      const encryptionKey = Effect.gen(function* () {
-        const key = installation.betterAuthSecret;
-        yield* Schema.decodeUnknownEffect(
-          Schema.String.check(Schema.isMinLength(32))
-        )(Redacted.value(key));
-        return key;
-      }).pipe(Effect.mapError(() => error("crypto_unavailable")));
-      const transaction = <A, E>(operation: Effect.Effect<A, E>) =>
-        sql.withTransaction(
-          Effect.gen(function* () {
-            // Shared with account mutations, so proof validation and queue transitions agree.
-            yield* sql`SELECT pg_advisory_xact_lock(724193, 1)`;
-            return yield* operation;
-          })
-        );
-      const retire = Effect.gen(function* () {
-        yield* sql`UPDATE public.channel_auth_prompt SET status = 'uncertain', token_ciphertext = NULL,
+
+const accounts = ChannelAccounts;
+const encryptionKey = async () => {
+  try {
+    const key = (await resolvedInstallationSecrets()).betterAuthSecret;
+    await z.string().min(32).parseAsync(key.reveal());
+    return key;
+  } catch {
+    return error("crypto_unavailable");
+  }
+};
+const transaction = <A>(operation: () => Promise<A>) =>
+  withDatabaseTransaction(async () => {
+    // Shared with account mutations, so proof validation and queue transitions agree.
+    await query(sql`SELECT pg_advisory_xact_lock(724193, 1)`);
+    return await operation();
+  });
+const retire = async () => {
+  await query(sql`UPDATE public.channel_auth_prompt SET status = 'uncertain', token_ciphertext = NULL,
         lease_token = NULL, lease_expires_at = NULL, last_error = 'lease_expired'
-        WHERE status = 'dispatching' AND lease_expires_at <= clock_timestamp()`;
-        yield* sql`UPDATE public.channel_auth_prompt p SET status = 'cancelled', token_ciphertext = NULL,
+        WHERE status = 'dispatching' AND lease_expires_at <= clock_timestamp()`);
+  await query(sql`UPDATE public.channel_auth_prompt p SET status = 'cancelled', token_ciphertext = NULL,
         lease_token = NULL, lease_expires_at = NULL, last_error = 'challenge_inactive'
         FROM public.channel_auth_challenge c WHERE c.id = p.challenge_id
         AND p.status = 'queued'
-        AND (c.expires_at <= clock_timestamp() OR c.cancelled_at IS NOT NULL OR c.confirmed_at IS NOT NULL OR c.consumed_at IS NOT NULL)`;
-      });
-      const select = Effect.fn("ChannelAuthPrompts.select")(function* (
-        challengeId: string
-      ) {
-        const rows = yield* sql<
-          typeof PromptRow.Type
-        >`SELECT challenge_id AS "challengeId", channel,
+        AND (c.expires_at <= clock_timestamp() OR c.cancelled_at IS NOT NULL OR c.confirmed_at IS NOT NULL OR c.consumed_at IS NOT NULL)`);
+};
+const select = async function (challengeId: string) {
+  const rows = await query<
+    z.output<typeof PromptRow>
+  >(sql`SELECT challenge_id AS "challengeId", channel,
         installation_id AS "installationId", sender_id AS "senderId", event_id AS "eventId",
-        token_ciphertext AS "tokenCiphertext", status FROM public.channel_auth_prompt WHERE challenge_id = ${challengeId}`;
-        return rows[0];
-      });
-      const cancel = Effect.fn("ChannelAuthPrompts.cancel")(function* (
-        challengeId: string,
-        status: "cancelled" | "failed"
-      ) {
-        yield* sql`UPDATE public.channel_auth_prompt SET status = ${status}, token_ciphertext = NULL,
+        token_ciphertext AS "tokenCiphertext", status FROM public.channel_auth_prompt WHERE challenge_id = ${challengeId}`);
+  return rows[0];
+};
+const cancel = async function (
+  challengeId: string,
+  status: "cancelled" | "failed"
+) {
+  await query(sql`UPDATE public.channel_auth_prompt SET status = ${status}, token_ciphertext = NULL,
         lease_token = NULL, lease_expires_at = NULL, last_error = ${status === "failed" ? "invalid_envelope" : "challenge_inactive"}
-        WHERE challenge_id = ${challengeId} AND status = 'queued'`;
-      });
-      const preview = Effect.fn("ChannelAuthPrompts.preview")(
-        (input: typeof PreviewChallenge.Type) =>
-          accounts
-            .previewChallenge(input)
-            .pipe(
-              Effect.catchTag("ChannelAccountError", () => Effect.succeed(null))
-            )
-      );
-      const decrypt = Effect.fn("ChannelAuthPrompts.decrypt")(function* (
-        row: typeof PromptRow.Type
-      ) {
-        const ciphertext = row.tokenCiphertext;
-        if (!ciphertext) return null;
-        const key = yield* encryptionKey;
-        const plaintext = yield* Effect.tryPromise({
-          try: () =>
-            symmetricDecrypt({
-              key: Redacted.value(key),
-              data: ciphertext,
-            }),
-          catch: () => "corrupt" as const,
-        }).pipe(Effect.catch(() => Effect.succeed(null)));
-        if (plaintext === null) return null;
-        const envelope = yield* Schema.decodeUnknownEffect(EnvelopeJson)(
-          plaintext
-        ).pipe(Effect.catch(() => Effect.succeed(null)));
-        if (
-          !envelope ||
-          envelope.challengeId !== row.challengeId ||
-          envelope.eventId !== row.eventId ||
-          envelope.sender.channel !== row.channel ||
-          envelope.sender.installationId !== row.installationId ||
-          envelope.sender.senderId !== row.senderId
-        )
-          return null;
-        return envelope;
-      });
-      const prepare = Effect.fn("ChannelAuthPrompts.prepare")(function* (
-        input: typeof PreparePrompt.Type
-      ) {
-        const request = yield* decode(PreparePrompt, input);
-        return yield* transaction(
-          Effect.gen(function* () {
-            yield* retire;
-            const challenges = yield* sql<{
-              id: string;
-            }>`SELECT id FROM public.channel_auth_challenge
+        WHERE challenge_id = ${challengeId} AND status = 'queued'`);
+};
+const preview = async (input: z.output<typeof PreviewChallenge>) => {
+  try {
+    return await accounts.previewChallenge(input);
+  } catch (cause) {
+    if (cause instanceof ChannelAccountError) return null;
+    throw cause;
+  }
+};
+const decrypt = async function (row: z.output<typeof PromptRow>) {
+  const ciphertext = row.tokenCiphertext;
+  if (!ciphertext) return null;
+  const key = await encryptionKey();
+  const plaintext = await symmetricDecrypt({
+    key: key.reveal(),
+    data: ciphertext,
+  }).catch(() => null);
+  if (plaintext === null) return null;
+  const envelope = await Promise.try(async () =>
+    EnvelopeJson.parseAsync(plaintext)
+  ).catch(() => Promise.resolve(null));
+  if (
+    !envelope ||
+    envelope.challengeId !== row.challengeId ||
+    envelope.eventId !== row.eventId ||
+    envelope.sender.channel !== row.channel ||
+    envelope.sender.installationId !== row.installationId ||
+    envelope.sender.senderId !== row.senderId
+  )
+    return null;
+  return envelope;
+};
+const prepare = async function (input: z.output<typeof PreparePrompt>) {
+  const request = await decode(PreparePrompt, input);
+  return await transaction(async () => {
+    await retire();
+    const challenges = await query<{
+      id: string;
+    }>(sql`SELECT id FROM public.channel_auth_challenge
           WHERE token_hash = ${createHash("sha256").update(request.token).digest("hex")}
-          AND channel = ${request.sender.channel} AND installation_id = ${request.sender.installationId}`;
-            const challenge = challenges[0];
-            if (!challenge)
-              return yield* new ChannelAccountError({
-                reason: "invalid_challenge",
-              });
-            const events = yield* sql<{
-              challengeId: string;
-            }>`SELECT challenge_id AS "challengeId" FROM public.channel_auth_prompt
-          WHERE channel = ${request.sender.channel} AND installation_id = ${request.sender.installationId} AND event_id = ${request.eventId}`;
-            if (events.some((event) => event.challengeId !== challenge.id))
-              return yield* error("conflict");
-            const existing = yield* select(challenge.id);
-            if (existing) {
-              if (
-                existing.senderId !== request.sender.senderId ||
-                existing.channel !== request.sender.channel ||
-                existing.installationId !== request.sender.installationId
-              )
-                return yield* error("conflict");
-              if (existing.status === "queued") {
-                const valid = yield* preview(request);
-                if (!valid) {
-                  yield* cancel(challenge.id, "cancelled");
-                  return {
-                    challengeId: challenge.id,
-                    status: "cancelled" as const,
-                  };
-                }
-              }
-              return { challengeId: challenge.id, status: existing.status };
-            }
-            yield* accounts.previewChallenge(request);
-            const key = yield* encryptionKey;
-            const encoded = yield* Schema.encodeEffect(EnvelopeJson)({
-              ...request,
-              challengeId: challenge.id,
-            }).pipe(Effect.mapError(() => error("invalid_input")));
-            const ciphertext = yield* Effect.tryPromise({
-              try: () =>
-                symmetricEncrypt({ key: Redacted.value(key), data: encoded }),
-              catch: () => error("crypto_unavailable"),
-            });
-            yield* sql`INSERT INTO public.channel_auth_prompt
+          AND channel = ${request.sender.channel} AND installation_id = ${request.sender.installationId}`);
+    const challenge = challenges[0];
+    if (!challenge)
+      throw new ChannelAccountError({
+        reason: "invalid_challenge",
+      });
+    const events = await query<{
+      challengeId: string;
+    }>(sql`SELECT challenge_id AS "challengeId" FROM public.channel_auth_prompt
+          WHERE channel = ${request.sender.channel} AND installation_id = ${request.sender.installationId} AND event_id = ${request.eventId}`);
+    if (events.some((event) => event.challengeId !== challenge.id))
+      return error("conflict");
+    const existing = await select(challenge.id);
+    if (existing) {
+      if (
+        existing.senderId !== request.sender.senderId ||
+        existing.channel !== request.sender.channel ||
+        existing.installationId !== request.sender.installationId
+      )
+        return error("conflict");
+      if (existing.status === "queued") {
+        const valid = await preview(request);
+        if (!valid) {
+          await cancel(challenge.id, "cancelled");
+          return {
+            challengeId: challenge.id,
+            status: "cancelled" as const,
+          };
+        }
+      }
+      return {
+        challengeId: challenge.id,
+        status: existing.status,
+      };
+    }
+    await accounts.previewChallenge(request);
+    const key = await encryptionKey();
+    const encoded = await Promise.try(async () =>
+      Promise.resolve(
+        JSON.stringify(
+          Envelope.parse({
+            ...request,
+            challengeId: challenge.id,
+          })
+        )
+      )
+    ).catch(() => {
+      return error("invalid_input");
+    });
+    const ciphertext = await Promise.try(async () =>
+      symmetricEncrypt({
+        key: key.reveal(),
+        data: encoded,
+      })
+    ).catch(() => {
+      return error("crypto_unavailable");
+    });
+    await query(sql`INSERT INTO public.channel_auth_prompt
           (challenge_id, channel, installation_id, sender_id, event_id, token_ciphertext)
-          VALUES (${challenge.id}, ${request.sender.channel}, ${request.sender.installationId}, ${request.sender.senderId}, ${request.eventId}, ${ciphertext})`;
-            return { challengeId: challenge.id, status: "queued" as const };
-          })
-        );
-      });
-      const pending = Effect.fn("ChannelAuthPrompts.pending")(function* (
-        limit?: number
-      ) {
-        const size = yield* decode(
-          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
-          limit ?? 100
-        );
-        return yield* transaction(
-          Effect.gen(function* () {
-            yield* retire;
-            const rows = yield* sql<{
-              challengeId: string;
-            }>`SELECT challenge_id AS "challengeId" FROM public.channel_auth_prompt
-          WHERE status = 'queued' ORDER BY created_at, challenge_id LIMIT ${size}`;
-            return rows.map((row) => row.challengeId);
-          })
-        );
-      });
-      const claim = Effect.fn("ChannelAuthPrompts.claim")(function* (
-        challengeId: string
-      ) {
-        const id = yield* decode(Id, challengeId);
-        return yield* transaction(
-          Effect.gen(function* () {
-            yield* retire;
-            const row = yield* select(id);
-            if (row?.status !== "queued") return null;
-            const envelope = yield* decrypt(row);
-            if (!envelope) {
-              yield* cancel(id, "failed");
-              return null;
-            }
-            const challenge = yield* preview(envelope);
-            if (!challenge) {
-              yield* cancel(id, "cancelled");
-              return null;
-            }
-            const leaseToken = randomUUID();
-            yield* sql`UPDATE public.channel_auth_prompt SET status = 'dispatching', attempts = attempts + 1,
+          VALUES (${challenge.id}, ${request.sender.channel}, ${request.sender.installationId}, ${request.sender.senderId}, ${request.eventId}, ${ciphertext})`);
+    return {
+      challengeId: challenge.id,
+      status: "queued" as const,
+    };
+  });
+};
+const pending = async function (limit?: number) {
+  const size = await decode(z.number().int().min(1).max(100), limit ?? 100);
+  return await transaction(async () => {
+    await retire();
+    const rows = await query<{
+      challengeId: string;
+    }>(sql`SELECT challenge_id AS "challengeId" FROM public.channel_auth_prompt
+          WHERE status = 'queued' ORDER BY created_at, challenge_id LIMIT ${size}`);
+    return rows.map((row) => row.challengeId);
+  });
+};
+const claim = async function (challengeId: string) {
+  const id = await decode(Id, challengeId);
+  return await transaction(async () => {
+    await retire();
+    const row = await select(id);
+    if (row?.status !== "queued") return null;
+    const envelope = await decrypt(row);
+    if (!envelope) {
+      await cancel(id, "failed");
+      return null;
+    }
+    const challenge = await preview(envelope);
+    if (!challenge) {
+      await cancel(id, "cancelled");
+      return null;
+    }
+    const leaseToken = randomUUID();
+    await query(sql`UPDATE public.channel_auth_prompt SET status = 'dispatching', attempts = attempts + 1,
           lease_token = ${leaseToken}, lease_expires_at = clock_timestamp() + interval '30 seconds'
-          WHERE challenge_id = ${id} AND status = 'queued'`;
-            return {
-              lease: { challengeId: id, leaseToken },
-              ...envelope.sender,
-              token: envelope.token,
-              purpose: challenge.purpose,
-            };
-          })
-        );
-      });
-      const checkLease = Effect.fn("ChannelAuthPrompts.checkLease")(function* (
-        input: typeof PromptLease.Type
-      ) {
-        const lease = yield* decode(PromptLease, input);
-        const valid = yield* transaction(
-          Effect.gen(function* () {
-            yield* retire;
-            const matches =
-              yield* sql`SELECT challenge_id FROM public.channel_auth_prompt
+          WHERE challenge_id = ${id} AND status = 'queued'`);
+    return {
+      lease: {
+        challengeId: id,
+        leaseToken,
+      },
+      ...envelope.sender,
+      token: envelope.token,
+      purpose: challenge.purpose,
+    };
+  });
+};
+const checkLease = async function (input: z.output<typeof PromptLease>) {
+  const lease = await decode(PromptLease, input);
+  const valid = await transaction(async () => {
+    await retire();
+    const matches =
+      await query(sql`SELECT challenge_id FROM public.channel_auth_prompt
           WHERE challenge_id = ${lease.challengeId} AND lease_token = ${lease.leaseToken}
-          AND status = 'dispatching' AND lease_expires_at > clock_timestamp()`;
-            if (!matches.length) return false;
-            const row = yield* select(lease.challengeId);
-            if (!row) return false;
-            const envelope = yield* decrypt(row);
-            // A failed recheck prevents new I/O, but must not erase a receipt
-            // from I/O that already began under this lease.
-            if (!envelope || !(yield* preview(envelope))) return false;
-            yield* retire;
-            const active = yield* sql<{ valid: boolean }>`SELECT EXISTS (
+          AND status = 'dispatching' AND lease_expires_at > clock_timestamp()`);
+    if (!matches.length) return false;
+    const row = await select(lease.challengeId);
+    if (!row) return false;
+    const envelope = await decrypt(row);
+    // A failed recheck prevents new I/O, but must not erase a receipt
+    // from I/O that already began under this lease.
+    if (!envelope || !(await preview(envelope))) return false;
+    await retire();
+    const active = await query<{
+      valid: boolean;
+    }>(sql`SELECT EXISTS (
               SELECT 1 FROM public.channel_auth_prompt p JOIN public.channel_auth_challenge c ON c.id = p.challenge_id
               WHERE p.challenge_id = ${lease.challengeId} AND p.lease_token = ${lease.leaseToken}
               AND p.status = 'dispatching' AND p.lease_expires_at > clock_timestamp()
               AND c.expires_at > clock_timestamp() AND c.confirmed_at IS NULL
-              AND c.cancelled_at IS NULL AND c.consumed_at IS NULL) AS valid`;
-            return active[0]?.valid === true;
-          })
-        );
-        if (!valid) return yield* error("lease_lost");
-        return undefined;
-      });
-      const settle = Effect.fn("ChannelAuthPrompts.settle")(function* (
-        input: typeof PromptLease.Type,
-        status: "sent" | "uncertain" | "failed",
-        providerMessageId: string | null
-      ) {
-        const lease = yield* decode(PromptLease, input);
-        const changed = yield* transaction(
-          Effect.gen(function* () {
-            yield* retire;
-            return yield* sql`UPDATE public.channel_auth_prompt SET status = ${status}, token_ciphertext = NULL,
+              AND c.cancelled_at IS NULL AND c.consumed_at IS NULL) AS valid`);
+    return active[0]?.valid === true;
+  });
+  if (!valid) return error("lease_lost");
+  return undefined;
+};
+const settle = async function (
+  input: z.output<typeof PromptLease>,
+  status: "sent" | "uncertain" | "failed",
+  providerMessageId: string | null
+) {
+  const lease = await decode(PromptLease, input);
+  const changed = await transaction(async () => {
+    await retire();
+    return await query(sql`UPDATE public.channel_auth_prompt SET status = ${status}, token_ciphertext = NULL,
           lease_token = NULL, lease_expires_at = NULL, provider_message_id = ${providerMessageId},
           sent_at = CASE WHEN ${status} = 'sent' THEN clock_timestamp() ELSE NULL END,
           last_error = CASE WHEN ${status} = 'sent' THEN NULL ELSE ${status === "failed" ? "delivery_rejected" : "delivery_uncertain"} END
           WHERE challenge_id = ${lease.challengeId} AND lease_token = ${lease.leaseToken}
-          AND status = 'dispatching' AND lease_expires_at > clock_timestamp() RETURNING challenge_id`;
-          })
-        );
-        if (!changed.length) return yield* error("lease_lost");
-        return undefined;
-      });
-      const markSent = Effect.fn("ChannelAuthPrompts.markSent")(function* (
-        lease: typeof PromptLease.Type,
-        providerMessageId: string
-      ) {
-        const id = yield* decode(Identifier, providerMessageId);
-        yield* settle(lease, "sent", id);
-      });
-      return ChannelAuthPrompts.of({
-        prepare,
-        pending,
-        claim,
-        checkLease,
-        markSent,
-        markUncertain: (lease) => settle(lease, "uncertain", null),
-        markRejected: (lease) => settle(lease, "failed", null),
-      });
-    })
-  );
-}
+          AND status = 'dispatching' AND lease_expires_at > clock_timestamp() RETURNING challenge_id`);
+  });
+  if (!changed.length) return error("lease_lost");
+  return undefined;
+};
+const markSent = async function (
+  lease: z.output<typeof PromptLease>,
+  providerMessageId: string
+) {
+  const id = await decode(Identifier, providerMessageId);
+  await settle(lease, "sent", id);
+};
+export const ChannelAuthPrompts = {
+  prepare,
+  pending,
+  claim,
+  checkLease,
+  markSent,
+  markUncertain: (lease: z.output<typeof PromptLease>) =>
+    settle(lease, "uncertain", null),
+  markRejected: (lease: z.output<typeof PromptLease>) =>
+    settle(lease, "failed", null),
+};

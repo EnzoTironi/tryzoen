@@ -1,15 +1,16 @@
-import { Schema } from "effect";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 
-const chatReturnPathSchema = Schema.String.check(
-  Schema.isTrimmed(),
-  Schema.isPattern(/^\/chat\/(?!history$)[A-Za-z0-9_-]{1,256}$/u)
-);
+const chatReturnPathSchema = z
+  .string()
+  .refine((value) => value === value.trim(), "Expected trimmed text")
+  .regex(/^\/chat\/(?!history$)[A-Za-z0-9_-]{1,256}$/u);
 
 /** Connection callbacks return only to a concrete chat, never another origin. */
 export function googleWorkspaceReturnTo(
   value: string | readonly string[] | undefined
 ) {
-  return Schema.is(chatReturnPathSchema)(value) ? value : "/";
+  return isValid(chatReturnPathSchema, value) ? value : "/";
 }
 
 export const googleWorkspaceScopes = [

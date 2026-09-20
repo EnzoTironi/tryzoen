@@ -1,89 +1,55 @@
-import { Config, Effect, Schema } from "effect";
-import type { channelProviderSchema } from "../../shared/identity/channel-auth";
-import { isE164PhoneNumber } from "../../shared/identity/phone-number";
+import { z } from "zod";
+import { env } from "@shared/environment/env";
+import type { channelProviderSchema } from "@shared/identity/channel-auth";
+import { isE164PhoneNumber } from "@shared/identity/phone-number";
 
-const InstallationId = Schema.NonEmptyString.check(Schema.isTrimmed());
-const TelegramUsername = Schema.String.check(
-  Schema.isPattern(/^[A-Za-z][A-Za-z0-9_]{4,31}$/u)
-);
-const WhatsAppNumber = Schema.String.check(
-  Schema.isPattern(/^\+[1-9][0-9]{6,14}$/u)
-);
-const TelegramCapability = Schema.Struct({
-  installationId: InstallationId,
-  username: TelegramUsername,
-});
-const KapsoCapability = Schema.Struct({
-  installationId: InstallationId,
-  phoneNumber: WhatsAppNumber,
-});
+const installationId = z
+  .string()
+  .min(1)
+  .refine((value) => value === value.trim());
+const telegramUsername = z.string().regex(/^[A-Za-z][A-Za-z0-9_]{4,31}$/u);
+const whatsAppNumber = z.string().regex(/^\+[1-9][0-9]{6,14}$/u);
 
-export const channelDestination = Effect.fn("channelDestination")(function* (
-  channel: typeof channelProviderSchema.Type
+export function channelDestination(
+  channel: z.output<typeof channelProviderSchema>
 ) {
   if (channel === "telegram") {
-    const values = yield* Config.all({
-      installationId: Config.string("TELEGRAM_BOT_ID"),
-      username: Config.string("TELEGRAM_BOT_USERNAME"),
-    });
-    const capability =
-      yield* Schema.decodeUnknownEffect(TelegramCapability)(values);
     return {
-      installationId: capability.installationId,
-      url: `https://t.me/${capability.username}`,
+      installationId: installationId.parse(env.TELEGRAM_BOT_ID),
+      url: `https://t.me/${telegramUsername.parse(env.TELEGRAM_BOT_USERNAME)}`,
       parameter: "start",
     };
   }
-  const values = yield* Config.all({
-    installationId: Config.string("KAPSO_PHONE_NUMBER_ID"),
-    phoneNumber: Config.string("KAPSO_PHONE_NUMBER"),
-  });
-  const capability = yield* Schema.decodeUnknownEffect(KapsoCapability)(values);
   return {
-    installationId: capability.installationId,
-    url: `https://wa.me/${capability.phoneNumber.slice(1)}`,
+    installationId: installationId.parse(env.KAPSO_PHONE_NUMBER_ID),
+    url: `https://wa.me/${whatsAppNumber.parse(env.KAPSO_PHONE_NUMBER).slice(1)}`,
     parameter: "text",
   };
-});
+}
 
-export const conversationDestinations = Effect.all({
-  whatsapp: Config.string("MARKETING_WHATSAPP_NUMBER").pipe(
-    Config.orElse(() => Config.string("KAPSO_PHONE_NUMBER")),
-    Effect.flatMap(Schema.decodeUnknownEffect(WhatsAppNumber)),
-    Effect.map((phoneNumber) => {
-      const url = new URL(`https://wa.me/${phoneNumber.slice(1)}`);
-      url.searchParams.set("text", "Oi, Zoen!");
-      return url.href;
-    }),
-    Effect.catch(() => Effect.succeed(null))
-  ),
-  telegram: Config.string("MARKETING_TELEGRAM_USERNAME").pipe(
-    Config.orElse(() => Config.string("TELEGRAM_BOT_USERNAME")),
-    Effect.flatMap(Schema.decodeUnknownEffect(TelegramUsername)),
-    Effect.map((username) => `https://t.me/${username}`),
-    Effect.catch(() => Effect.succeed(null))
-  ),
-  imessage: Config.string("LINQ_CONNECTOR").pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(InstallationId)),
-    Effect.flatMap(() =>
-      Config.string("MARKETING_IMESSAGE_NUMBER").pipe(
-        Config.orElse(() => Config.string("LINQ_PHONE_NUMBER"))
-      )
-    ),
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(
-        Schema.String.check(Schema.makeFilter(isE164PhoneNumber))
-      )
-    ),
-    Effect.map((phoneNumber) => `sms:${phoneNumber}`),
-    Effect.catch(() => Effect.succeed(null))
-  ),
-});
+export function conversationDestinations() {
+  const whatsapp = whatsAppNumber.safeParse(
+    env.MARKETING_WHATSAPP_NUMBER ?? env.KAPSO_PHONE_NUMBER
+  );
+  const telegram = telegramUsername.safeParse(
+    env.MARKETING_TELEGRAM_USERNAME ?? env.TELEGRAM_BOT_USERNAME
+  );
+  const imessage = env.MARKETING_IMESSAGE_NUMBER ?? env.LINQ_PHONE_NUMBER;
+  return {
+    whatsapp: whatsapp.success
+      ? `https://wa.me/${whatsapp.data.slice(1)}?text=Oi%2C+Zoen%21`
+      : null,
+    telegram: telegram.success ? `https://t.me/${telegram.data}` : null,
+    imessage:
+      installationId.safeParse(env.LINQ_CONNECTOR).success &&
+      imessage &&
+      isE164PhoneNumber(imessage)
+        ? `sms:${imessage}`
+        : null,
+  };
+}
 
-/**
- * Temporary public CTA for this weekend (remove after 2026-09-21).
- * Every marketing start opens this iMessage draft to the agent-index setup.
- */
+/** Temporary public CTA for this weekend (remove after 2026-09-21). */
 export const WEEKEND_IMESSAGE_URL =
   "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen";
 
@@ -91,4 +57,4 @@ export const weekendPublicDestinations = {
   whatsapp: null,
   telegram: null,
   imessage: WEEKEND_IMESSAGE_URL,
-} satisfies Effect.Success<typeof conversationDestinations>;
+} satisfies ReturnType<typeof conversationDestinations>;

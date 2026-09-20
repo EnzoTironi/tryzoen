@@ -1,5 +1,7 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { SqlError } from "../../db/queries";
+
 import { readAuthSession } from "@db/services/auth/session";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import {
@@ -9,8 +11,11 @@ import {
   accountPrivacyExportLimits,
 } from "@shared/identity/account-privacy-limits";
 import { PersonalMemory } from "../personal-memory";
-import { requirePersonalMemoryWebSession } from "../personal-memory/access";
-import type { PersonalMemoryError } from "../personal-memory/access";
+import {
+  PersonalMemoryError,
+  requirePersonalMemoryWebSession,
+} from "../personal-memory/access";
+
 import { inspectPersonalMemory } from "../personal-memory/export";
 
 /**
@@ -20,89 +25,90 @@ import { inspectPersonalMemory } from "../personal-memory/export";
  * Export and delete cover stored personal memory only — not a full-account
  * backup, restore contract, or complete erasure (see README).
  */
-export class AccountPrivacyError extends Schema.TaggedError<AccountPrivacyError>()(
-  "AccountPrivacyError",
-  {
-    reason: Schema.Literals(["unauthenticated", "unavailable"]),
+export class AccountPrivacyError extends Error {
+  readonly _tag = "AccountPrivacyError";
+  declare readonly reason: "unauthenticated" | "unavailable";
+  constructor(input: { readonly reason: "unauthenticated" | "unavailable" }) {
+    super("AccountPrivacyError");
+    this.name = "AccountPrivacyError";
+    Object.assign(this, input);
   }
-) {}
+}
 
-const requirePrivacySession = Effect.fn("requirePrivacySession")(function* (
-  headers: Headers
-) {
-  const session = yield* readAuthSession(headers);
-  if (!session)
-    return yield* new AccountPrivacyError({ reason: "unauthenticated" });
+const requirePrivacySession = async function (headers: Headers) {
+  const session = await readAuthSession(headers);
+  if (!session) throw new AccountPrivacyError({ reason: "unauthenticated" });
   const scope = accessScopeForUser(`better-auth:${session.user.id}`);
-  yield* requirePersonalMemoryWebSession(scope, session.session.id).pipe(
-    Effect.mapError((error: PersonalMemoryError) =>
+  await Promise.try(async () =>
+    requirePersonalMemoryWebSession(scope, session.session.id)
+  ).catch((error: unknown) => {
+    throw !(error instanceof PersonalMemoryError) ||
       error.reason === "unavailable"
-        ? new AccountPrivacyError({ reason: "unavailable" })
-        : new AccountPrivacyError({ reason: "unauthenticated" })
-    )
-  );
+      ? new AccountPrivacyError({ reason: "unavailable" })
+      : new AccountPrivacyError({ reason: "unauthenticated" });
+  });
   return { session, scope };
-});
+};
 
-export const exportAccountPrivacy = Effect.fn("exportAccountPrivacy")(
-  function* (headers: Headers) {
-    const snapshot = yield* inspectPersonalMemory(headers).pipe(
-      Effect.mapError((error: PersonalMemoryError) =>
-        error.reason === "unavailable"
-          ? new AccountPrivacyError({ reason: "unavailable" })
-          : new AccountPrivacyError({ reason: "unauthenticated" })
-      )
-    );
-    return {
-      scope: "account-privacy-export" as const,
-      generatedAt: snapshot.generatedAt,
-      personalMemory: snapshot,
-      coverage: {
-        included: snapshot.coverage.included,
-        excluded: accountPrivacyExportExcluded,
-        limits: accountPrivacyExportLimits,
-      },
-    };
-  }
-);
+export const exportAccountPrivacy = async function (headers: Headers) {
+  const snapshot = await Promise.try(async () =>
+    inspectPersonalMemory(headers)
+  ).catch((error: unknown) => {
+    throw !(error instanceof PersonalMemoryError) ||
+      error.reason === "unavailable"
+      ? new AccountPrivacyError({ reason: "unavailable" })
+      : new AccountPrivacyError({ reason: "unauthenticated" });
+  });
+  return {
+    scope: "account-privacy-export" as const,
+    generatedAt: snapshot.generatedAt,
+    personalMemory: snapshot,
+    coverage: {
+      included: snapshot.coverage.included,
+      excluded: accountPrivacyExportExcluded,
+      limits: accountPrivacyExportLimits,
+    },
+  };
+};
 
-export const deleteAccountOnlineData = Effect.fn("deleteAccountOnlineData")(
-  function* (headers: Headers) {
-    const { session, scope } = yield* requirePrivacySession(headers);
-    const memory = yield* PersonalMemory;
-    const wiped = yield* memory
-      .wipe(scope)
-      .pipe(
-        Effect.mapError((error: PersonalMemoryError) =>
+export const deleteAccountOnlineData = async function (headers: Headers) {
+  try {
+    const { session, scope } = await requirePrivacySession(headers);
+    const memory = PersonalMemory;
+    const wiped = await Promise.try(async () => memory.wipe(scope)).catch(
+      (error: unknown) => {
+        throw !(error instanceof PersonalMemoryError) ||
           error.reason === "unavailable"
-            ? new AccountPrivacyError({ reason: "unavailable" })
-            : new AccountPrivacyError({ reason: "unauthenticated" })
-        )
-      );
-    const sql = yield* PgClient.PgClient;
-    yield* sql`DELETE FROM public.session WHERE "userId" = ${session.user.id}`;
+          ? new AccountPrivacyError({ reason: "unavailable" })
+          : new AccountPrivacyError({ reason: "unauthenticated" });
+      }
+    );
+
+    await query(
+      sql`DELETE FROM public.session WHERE "userId" = ${session.user.id}`
+    );
     // Re-check membership after wipe; session rows are already gone.
-    const membership = yield* sql`SELECT workspace_id FROM workspace_memberships
-      WHERE user_id = ${scope.userId} AND workspace_id = ${scope.workspaceId}`;
+    const membership =
+      await query(sql`SELECT workspace_id FROM workspace_memberships
+      WHERE user_id = ${scope.userId} AND workspace_id = ${scope.workspaceId}`);
     if (membership.length !== 1)
-      return yield* new AccountPrivacyError({ reason: "unauthenticated" });
+      throw new AccountPrivacyError({ reason: "unauthenticated" });
     return {
       status: "partial_online_wipe" as const,
       wiped: wiped.wiped,
       notWiped: accountOnlineWipeNotWiped,
       limits: accountOnlineWipeLimits,
     };
-  },
-  Effect.catchTag(
-    "SqlError",
-    () => new AccountPrivacyError({ reason: "unavailable" })
-  )
-);
+  } catch (error) {
+    if (error instanceof SqlError) {
+      throw new AccountPrivacyError({ reason: "unavailable" });
+    }
+    throw error;
+  }
+};
 
-export const exportAccountPrivacyResponse = Effect.fn(
-  "exportAccountPrivacyResponse"
-)(function* (headers: Headers) {
-  const body = yield* exportAccountPrivacy(headers);
+export const exportAccountPrivacyResponse = async function (headers: Headers) {
+  const body = await exportAccountPrivacy(headers);
   return new Response(JSON.stringify(body, null, 2), {
     headers: {
       "content-type": "application/json; charset=utf-8",
@@ -112,12 +118,12 @@ export const exportAccountPrivacyResponse = Effect.fn(
       "x-content-type-options": "nosniff",
     },
   });
-});
+};
 
-export const deleteAccountOnlineDataResponse = Effect.fn(
-  "deleteAccountOnlineDataResponse"
-)(function* (headers: Headers) {
-  const body = yield* deleteAccountOnlineData(headers);
+export const deleteAccountOnlineDataResponse = async function (
+  headers: Headers
+) {
+  const body = await deleteAccountOnlineData(headers);
   return new Response(JSON.stringify(body, null, 2), {
     status: 200,
     headers: {
@@ -126,7 +132,7 @@ export const deleteAccountOnlineDataResponse = Effect.fn(
       "x-content-type-options": "nosniff",
     },
   });
-});
+};
 
 export function accountPrivacyErrorResponse(error: AccountPrivacyError) {
   return new Response(

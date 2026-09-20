@@ -1,14 +1,8 @@
+import { writeFile } from "node:fs/promises";
+import { env } from "@shared/environment/env";
+
 import type { EveEvalResult } from "eve/evals";
 import type { EvalReporter } from "eve/evals/reporters";
-import { Config, Effect, FileSystem, Option, Schema } from "effect";
-import { NodeServices } from "@effect/platform-node";
-import { executorAttemptFailures } from "../agent/executor";
-import {
-  executorActionName,
-  ExecutorReceiptSchema,
-} from "../../shared/chat/executor";
-
-const receipts = Schema.Struct({ calls: Schema.Array(ExecutorReceiptSchema) });
 
 // Classify provider diagnostics without exporting their messages, URLs or payloads.
 function failureCategory(message: string) {
@@ -88,7 +82,7 @@ function caseMetrics(entry: EveEvalResult) {
     },
     durationMs: Date.parse(entry.completedAt) - Date.parse(entry.startedAt),
     steps: steps.length,
-    failedAttempts: executorAttemptFailures(tools),
+    failedAttempts: tools.filter((call) => call.status === "failed").length,
     inputTokens:
       usage.length === steps.length &&
       steps.length > 0 &&
@@ -113,14 +107,9 @@ function caseMetrics(entry: EveEvalResult) {
         session.sessionId ? [session.sessionId] : []
       ) ?? [],
     tools: tools.map((call) => ({
-      path: executorActionName(call.name, call.input),
+      path: call.name,
       status: call.status,
     })),
-    hostCalls: tools.flatMap((call) => {
-      if (call.name !== "execute" || call.status !== "completed") return [];
-      const parsed = Schema.decodeUnknownOption(receipts)(call.output);
-      return Option.isSome(parsed) ? parsed.value.calls : [];
-    }),
     failedAssertions: entry.assertions
       .filter((assertion) => !assertion.passed)
       .map((assertion) => assertion.name),
@@ -135,50 +124,42 @@ export const launchReporter: EvalReporter = {
   onEvalComplete() {
     /* Per-case results arrive together in onRunComplete. */
   },
-  onRunComplete: (summary) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const destination = yield* Config.option(
-          Config.string("ZOEN_EVAL_REPORT")
-        );
-        if (Option.isNone(destination)) return;
-        const cases = summary.results.map(caseMetrics);
-        const durations = cases
-          .map((entry) => entry.durationMs)
-          .toSorted((a, b) => a - b);
-        const report = {
-          version: 1,
-          evidence: "native-eve-live-model-synthetic-data",
-          startedAt: summary.startedAt,
-          completedAt: summary.completedAt,
-          counts: {
-            passed: summary.passed,
-            failed: summary.failed,
-            scored: summary.scored,
-            skipped: summary.skipped,
-            errored: summary.errored,
-            uniqueScenarios: new Set(cases.map((entry) => entry.id)).size,
-            executions: cases.length,
-            fixtureTraces: cases.length,
-            liveDeliveries: 0,
-          },
-          latencyMs: {
-            method:
-              "nearest-rank; includes provider latency; small samples are descriptive",
-            p50:
-              durations[Math.max(0, Math.ceil(durations.length * 0.5) - 1)] ??
-              null,
-            p95:
-              durations[Math.max(0, Math.ceil(durations.length * 0.95) - 1)] ??
-              null,
-          },
-          cases,
-        };
-        yield* (yield* FileSystem.FileSystem).writeFileString(
-          destination.value,
-          `${JSON.stringify(report, null, 2)}\n`,
-          { mode: 0o600 }
-        );
-      }).pipe(Effect.provide(NodeServices.layer))
-    ),
+  onRunComplete: async (summary) => {
+    const destination = env.ZOEN_EVAL_REPORT;
+    if (!destination) return;
+    const cases = summary.results.map(caseMetrics);
+    const durations = cases
+      .map((entry) => entry.durationMs)
+      .toSorted((a, b) => a - b);
+    const report = {
+      version: 1,
+      evidence: "native-eve-live-model-synthetic-data",
+      startedAt: summary.startedAt,
+      completedAt: summary.completedAt,
+      counts: {
+        passed: summary.passed,
+        failed: summary.failed,
+        scored: summary.scored,
+        skipped: summary.skipped,
+        errored: summary.errored,
+        uniqueScenarios: new Set(cases.map((entry) => entry.id)).size,
+        executions: cases.length,
+        fixtureTraces: cases.length,
+        liveDeliveries: 0,
+      },
+      latencyMs: {
+        method:
+          "nearest-rank; includes provider latency; small samples are descriptive",
+        p50:
+          durations[Math.max(0, Math.ceil(durations.length * 0.5) - 1)] ?? null,
+        p95:
+          durations[Math.max(0, Math.ceil(durations.length * 0.95) - 1)] ??
+          null,
+      },
+      cases,
+    };
+    await writeFile(destination, `${JSON.stringify(report, null, 2)}\n`, {
+      mode: 0o600,
+    });
+  },
 };

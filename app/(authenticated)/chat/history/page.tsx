@@ -1,7 +1,7 @@
 import { getI18n } from "@web/i18n/server";
 import styles from "../../_components/panel.module.css";
 import { MessageSquareIcon, PlusIcon } from "lucide-react";
-import Link from "next/link";
+import { PanelLink } from "../../_components/panel-link";
 import {
   combineChatUsage,
   formatChatUsage,
@@ -34,7 +34,11 @@ export default async function AllChatsPage() {
             {formatChatUsage(totalUsage, locale)}
           </p>
         </div>
-        <Button nativeButton={false} render={<Link href="/chat" />} size="sm">
+        <Button
+          nativeButton={false}
+          render={<PanelLink href="/chat" />}
+          size="sm"
+        >
           <PlusIcon />
           {t("Nova conversa")}
         </Button>
@@ -54,7 +58,9 @@ export default async function AllChatsPage() {
               key={chat.sessionId}
               nativeButton={false}
               render={
-                <Link href={`/chat/${encodeURIComponent(chat.sessionId)}`} />
+                <PanelLink
+                  href={`/chat/${encodeURIComponent(chat.sessionId)}`}
+                />
               }
               variant="surface"
             >

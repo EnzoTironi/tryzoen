@@ -73,6 +73,12 @@
   color: #fff;
   font-size: 0.875rem;
 }
+.headerLanguage [data-slot="select-trigger"] {
+  height: 38px;
+  border-color: transparent;
+  border-radius: 50px;
+  padding: 8px;
+}
 .landingShell > footer {
   background: #081627;
 }
@@ -85,6 +91,14 @@
   line-height: 1.7;
 }
 @media (max-width: 540px) {
+  .headerLanguage [data-slot="select-trigger"] {
+    width: 38px;
+    justify-content: center;
+  }
+  .headerLanguage [data-slot="select-value"],
+  .headerLanguage [data-slot="select-trigger"] > svg:last-child {
+    display: none;
+  }
   .landingShell > header {
     top: 16px;
     max-width: calc(100% - 24px);

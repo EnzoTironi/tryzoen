@@ -1,5 +1,7 @@
+import { jsonString, isValid } from "@shared/validation";
+import { z } from "zod";
 import type { channelProviderSchema } from "@shared/identity/channel-auth";
-import { Effect, Result, Schema } from "effect";
+
 import {
   channelStartResultSchema,
   deviceBindingSchema,
@@ -11,34 +13,31 @@ import {
   channelChallengeRequestSchema,
 } from "@shared/identity/channel-auth";
 
-const localCallbackSchema = Schema.String.check(
-  Schema.makeFilter((value) => {
-    try {
-      const decoded = decodeURIComponent(value);
-      return (
-        value.startsWith("/") &&
-        !value.startsWith("//") &&
-        !decoded.startsWith("//") &&
-        !/[\\\s]/u.test(decoded) &&
-        !decoded
-          .split("")
-          .some(
-            (character) =>
-              character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
-          ) &&
-        new URL(value, "https://callback.invalid").origin ===
-          "https://callback.invalid"
-      );
-    } catch {
-      return false;
-    }
-  })
-);
+const localCallbackSchema = z.string().refine((value) => {
+  try {
+    const decoded = decodeURIComponent(value);
+    return (
+      value.startsWith("/") &&
+      !value.startsWith("//") &&
+      !decoded.startsWith("//") &&
+      !/[\\\s]/u.test(decoded) &&
+      !decoded
+        .split("")
+        .some(
+          (character) =>
+            character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+        ) &&
+      new URL(value, "https://callback.invalid").origin ===
+        "https://callback.invalid"
+    );
+  } catch {
+    return false;
+  }
+});
 
 export function safeCallbackUrl(value: string | undefined) {
-  return Result.getOrElse(
-    Schema.decodeUnknownResult(localCallbackSchema)(value),
-    () => "/"
+  return ((parsed) => (parsed.success ? parsed.data : (() => "/")()))(
+    localCallbackSchema.safeParse(value)
   );
 }
 
@@ -63,15 +62,22 @@ export function reauthenticationDestination(
   return `/sign-in?callbackUrl=${encodeURIComponent(safeCallbackUrl(callbackUrl))}`;
 }
 
-export class ChannelAuthorizationError extends Schema.TaggedError<ChannelAuthorizationError>()(
-  "ChannelAuthorizationError",
-  {
-    message: Schema.String,
-    category: Schema.Literals(["terminal", "rate-limit", "transient"]),
-    status: Schema.Number,
-    retryAfter: Schema.NullOr(Schema.String),
+export class ChannelAuthorizationError extends Error {
+  readonly _tag = "ChannelAuthorizationError";
+  declare readonly category: "terminal" | "rate-limit" | "transient";
+  declare readonly status: number;
+  declare readonly retryAfter: string | null;
+  constructor(input: {
+    readonly message: string;
+    readonly category: "terminal" | "rate-limit" | "transient";
+    readonly status: number;
+    readonly retryAfter: string | null;
+  }) {
+    super(input.message);
+    this.name = "ChannelAuthorizationError";
+    Object.assign(this, input);
   }
-) {}
+}
 
 export function channelHttpError(
   status: number,
@@ -106,19 +112,17 @@ export function invalidChannelChallenge(status: number) {
 }
 
 export type ChannelAuthorizationStatus =
-  | typeof channelChallengeStatusSchema.Type.status
+  | z.output<typeof channelChallengeStatusSchema>["status"]
   | "invalid";
 
 // Better Auth resets its attempt counter after an idle window, not periodically.
 // Leave the default ten-second window between successful status requests.
 export const channelAuthorizationPollIntervalMs = 10_000;
 
-const retrySecondsSchema = Schema.String.check(Schema.isPattern(/^\d+$/u));
-const retryDateSchema = Schema.String.check(
-  Schema.isPattern(
-    /^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/u
-  )
-);
+const retrySecondsSchema = z.string().regex(/^\d+$/u);
+const retryDateSchema = z
+  .string()
+  .regex(/^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/u);
 
 export function channelPollFailure(
   failure: ChannelAuthorizationError,
@@ -138,9 +142,9 @@ export function channelPollFailure(
   const retryAfter =
     header === null
       ? Number.NaN
-      : Schema.is(retrySecondsSchema)(header)
+      : isValid(retrySecondsSchema, header)
         ? Math.min(Number(header) * 1000, expiresAt - now)
-        : Schema.is(retryDateSchema)(header)
+        : isValid(retryDateSchema, header)
           ? Date.parse(header) - now
           : Number.NaN;
   const fallback =
@@ -158,97 +162,108 @@ export function channelPollFailure(
   };
 }
 
-const requestJson = Effect.fn("channelAuthorization.request")(
-  function* <A>(
-    path: string,
-    init: RequestInit,
-    responseSchema: Schema.Codec<A, unknown>
-  ) {
-    const response = yield* Effect.tryPromise({
-      try: (signal) =>
-        fetch(`/api/auth/channel-auth/${path}`, {
-          ...init,
-          cache: "no-store",
-          credentials: "same-origin",
-          redirect: "error",
-          signal,
-        }),
-      catch: () => channelHttpError(0),
+async function requestJson<A>(
+  path: string,
+  init: RequestInit,
+  responseSchema: z.ZodType<A>,
+  signal?: AbortSignal
+): Promise<A> {
+  const deadline = AbortSignal.timeout(10_000);
+  try {
+    const response = await fetch(`/api/auth/channel-auth/${path}`, {
+      ...init,
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "error",
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     });
     if (!response.ok)
-      return yield* channelHttpError(
+      throw channelHttpError(
         response.status,
         response.headers.get("Retry-After") ??
           response.headers.get("X-Retry-After")
       );
-    const body = yield* Effect.tryPromise({
-      try: () => response.text(),
-      catch: () => channelHttpError(0),
-    });
-    return yield* Schema.decodeEffect(Schema.fromJsonString(responseSchema))(
-      body
-    ).pipe(Effect.mapError(() => invalidChannelChallenge(response.status)));
-  },
-  Effect.timeout("10 seconds"),
-  Effect.catchTag("TimeoutError", () => Effect.fail(channelHttpError(0)))
-);
+    const parsed = jsonString(responseSchema).safeParse(await response.text());
+    if (!parsed.success) throw invalidChannelChallenge(response.status);
+    return parsed.data;
+  } catch (error) {
+    if (error instanceof ChannelAuthorizationError) throw error;
+    throw channelHttpError(0);
+  }
+}
 
-export const startChannelAuthorization = Effect.fn(
-  "channelAuthorization.start"
-)(function* (
-  channel: typeof channelProviderSchema.Type,
-  purpose: typeof channelChallengeRequestSchema.Type.purpose
+export const startChannelAuthorization = async function (
+  channel: z.output<typeof channelProviderSchema>,
+  purpose: z.output<typeof channelChallengeRequestSchema>["purpose"],
+  signal?: AbortSignal
 ) {
-  const intent = yield* Schema.decodeEffect(channelChallengeRequestSchema)({
-    channel,
-    purpose,
-  }).pipe(Effect.mapError(() => channelHttpError(400)));
-  const challenge = yield* requestJson(
+  const intent = await Promise.try(async () =>
+    channelChallengeRequestSchema.parseAsync({
+      channel,
+      purpose,
+    })
+  ).catch(() => {
+    throw channelHttpError(400);
+  });
+  const challenge = await requestJson(
     "start",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(intent),
     },
-    channelStartResultSchema
+    channelStartResultSchema,
+    signal
   );
-  if (challenge.channel !== channel) return yield* invalidChannelChallenge(200);
+  if (challenge.channel !== channel) throw invalidChannelChallenge(200);
   return challenge;
-});
+};
 
-export const checkChannelAuthorization = Effect.fn(
-  "channelAuthorization.status"
-)(function* (id: string) {
-  const input = yield* Schema.decodeEffect(channelChallengeIdSchema)({
-    id,
-  }).pipe(Effect.mapError(() => channelHttpError(400)));
-  return yield* requestJson(
+export const checkChannelAuthorization = async function (
+  id: string,
+  signal?: AbortSignal
+) {
+  const input = await Promise.try(async () =>
+    channelChallengeIdSchema.parseAsync({
+      id,
+    })
+  ).catch(() => {
+    throw channelHttpError(400);
+  });
+  return await requestJson(
     `status?id=${encodeURIComponent(input.id)}`,
     { method: "GET" },
-    channelChallengeStatusSchema
+    channelChallengeStatusSchema,
+    signal
   );
-});
+};
 
-export const completeChannelAuthorization = Effect.fn(
-  "channelAuthorization.complete"
-)(function* (id: string) {
-  const input = yield* Schema.decodeEffect(channelChallengeIdSchema)({
-    id,
-  }).pipe(Effect.mapError(() => channelHttpError(400)));
-  yield* requestJson(
+export const completeChannelAuthorization = async function (
+  id: string,
+  signal?: AbortSignal
+) {
+  const input = await Promise.try(async () =>
+    channelChallengeIdSchema.parseAsync({
+      id,
+    })
+  ).catch(() => {
+    throw channelHttpError(400);
+  });
+  await requestJson(
     "complete",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
-    channelChallengeCompletionSchema
+    channelChallengeCompletionSchema,
+    signal
   );
-});
+};
 
 export function channelFailureMessage(
   failure: ChannelAuthorizationError,
-  purpose: typeof channelChallengeRequestSchema.Type.purpose
+  purpose: z.output<typeof channelChallengeRequestSchema>["purpose"]
 ) {
   if (failure.status === 412)
     return "Esta conta tem conexões, cofre ou acesso a equipes. A vinculação precisa de uma revisão para preservar esses acessos.";
@@ -264,26 +279,34 @@ export function channelFailureMessage(
   return failure.message;
 }
 
-export const bindNativeBrowser = Effect.fn("channelAuthorization.bind")(
-  function* (input: typeof deviceBindingSchema.Type) {
-    const body = yield* Schema.decodeEffect(deviceBindingSchema)(input).pipe(
-      Effect.mapError(() => channelHttpError(400))
-    );
-    return yield* requestJson(
-      "device-bind",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-      deviceBoundSchema
-    );
-  }
-);
+export const bindNativeBrowser = async function (
+  input: z.output<typeof deviceBindingSchema>,
+  signal?: AbortSignal
+) {
+  const body = await Promise.try(async () =>
+    deviceBindingSchema.parseAsync(input)
+  ).catch(() => {
+    throw channelHttpError(400);
+  });
+  return await requestJson(
+    "device-bind",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    deviceBoundSchema,
+    signal
+  );
+};
 
-export const resumeNativeBrowser = (input: typeof deviceRequestSchema.Type) =>
+export const resumeNativeBrowser = (
+  input: z.output<typeof deviceRequestSchema>,
+  signal?: AbortSignal
+) =>
   requestJson(
     `device?id=${encodeURIComponent(input.id)}&purpose=${input.purpose}`,
     { method: "GET" },
-    deviceBoundSchema
+    deviceBoundSchema,
+    signal
   );

@@ -1,30 +1,31 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { expect, test } from "vitest";
-import { toolInputSchema } from "../tool-input-schema";
+import { privateMessageTool } from "../../../server/tools/native/private-message-tool";
 
-test("Eve can persist the Effect input schema and still reject invalid or extra arguments", async () => {
-  const input = toolInputSchema(
-    Schema.Struct({
-      text: Schema.NonEmptyString.check(Schema.isMaxLength(20)),
-    })
-  );
-  expect(input).toBeTypeOf("object");
+test("Eve persists native Zod tool schemas and rejects invalid or extra arguments", async () => {
+  const input = privateMessageTool("telegram").inputSchema;
+  if (!(input instanceof z.ZodType))
+    throw new Error("Expected the native Zod schema");
   const json = input["~standard"].jsonSchema.input({ target: "draft-07" });
   expect(JSON.parse(JSON.stringify(json))).toEqual(json);
   expect(json).toMatchObject({
     type: "object",
-    properties: { text: { type: "string", maxLength: 20 } },
-    required: ["text"],
-  });
-  expect(await input["~standard"].validate({ text: "A stable fact" })).toEqual({
-    value: { text: "A stable fact" },
+    additionalProperties: false,
+    properties: { text: { type: "string", maxLength: 16384 } },
   });
   expect(
-    (await input["~standard"].validate({ text: "" })).issues
+    await input["~standard"].validate({
+      kind: "message",
+      text: "A stable fact",
+    })
+  ).toEqual({ value: { kind: "message", text: "A stable fact" } });
+  expect(
+    (await input["~standard"].validate({ kind: "message", text: "" })).issues
   ).toBeDefined();
   expect(
     (
       await input["~standard"].validate({
+        kind: "message",
         text: "Fact",
         credentials: "forbidden",
       })

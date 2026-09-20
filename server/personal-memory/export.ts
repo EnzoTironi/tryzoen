@@ -1,47 +1,43 @@
-import { Effect } from "effect";
+import { AuthUnavailable } from "../../db/services/auth/index";
 import { readAuthSession } from "@db/services/auth/session";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import { PersonalMemory } from "./index";
 import { PersonalMemoryError, requirePersonalMemoryWebSession } from "./access";
 
-export const inspectPersonalMemory = Effect.fn("inspectPersonalMemory")(
-  function* (headers: Headers) {
-    const scope = yield* requirePersonalMemorySession(headers);
-    const memory = yield* PersonalMemory;
-    const snapshot = yield* memory.inspect(scope);
+export const inspectPersonalMemory = async function (headers: Headers) {
+  try {
+    const scope = await requirePersonalMemorySession(headers);
+    const memory = PersonalMemory;
+    const snapshot = await memory.inspect(scope);
     // Better Auth may cache a session. The access operation also checks its live SQL row.
-    yield* requirePersonalMemorySession(headers);
+    await requirePersonalMemorySession(headers);
     return snapshot;
-  },
-  Effect.catchTag(
-    "AuthUnavailable",
-    () => new PersonalMemoryError({ reason: "unavailable" })
-  )
-);
-
-export const exportPersonalMemory = Effect.fn("exportPersonalMemory")(
-  function* (headers: Headers) {
-    const snapshot = yield* inspectPersonalMemory(headers);
-    return new Response(JSON.stringify(snapshot, null, 2), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "content-disposition":
-          'attachment; filename="companion-personal-memory.json"',
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-      },
-    });
+  } catch (error) {
+    if (error instanceof AuthUnavailable) {
+      throw new PersonalMemoryError({ reason: "unavailable" });
+    }
+    throw error;
   }
-);
+};
 
-const requirePersonalMemorySession = Effect.fn("requirePersonalMemorySession")(
-  function* (headers: Headers) {
-    const session = yield* readAuthSession(headers);
-    if (!session)
-      return yield* new PersonalMemoryError({ reason: "unauthenticated" });
-    return yield* requirePersonalMemoryWebSession(
-      accessScopeForUser(`better-auth:${session.user.id}`),
-      session.session.id
-    );
-  }
-);
+export const exportPersonalMemory = async function (headers: Headers) {
+  const snapshot = await inspectPersonalMemory(headers);
+  return new Response(JSON.stringify(snapshot, null, 2), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition":
+        'attachment; filename="companion-personal-memory.json"',
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
+};
+
+const requirePersonalMemorySession = async function (headers: Headers) {
+  const session = await readAuthSession(headers);
+  if (!session) throw new PersonalMemoryError({ reason: "unauthenticated" });
+  return await requirePersonalMemoryWebSession(
+    accessScopeForUser(`better-auth:${session.user.id}`),
+    session.session.id
+  );
+};

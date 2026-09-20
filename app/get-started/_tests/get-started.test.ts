@@ -2,11 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { redirect } from "next/navigation";
-import { ConfigProvider, Effect } from "effect";
 import type * as Destination from "../../../server/channels/destination";
 import GetStartedPage from "../page";
 import { GetStartedPanel } from "../_components/get-started-panel";
-
 const channelConfig = vi.hoisted(() => ({
   KAPSO_PHONE_NUMBER_ID: "test-installation",
   KAPSO_PHONE_NUMBER: "+15551234567",
@@ -14,27 +12,35 @@ const channelConfig = vi.hoisted(() => ({
   TELEGRAM_BOT_USERNAME: "companion_test_bot",
   LINQ_PHONE_NUMBER: "+15557654321",
   LINQ_CONNECTOR: "",
+  MARKETING_WHATSAPP_NUMBER: "",
+  MARKETING_TELEGRAM_USERNAME: "",
+  MARKETING_IMESSAGE_NUMBER: "",
 }));
-
 vi.mock("../../../server/channels/destination", async (importOriginal) => {
   const actual = await importOriginal<typeof Destination>();
   return {
     ...actual,
-    conversationDestinations: actual.conversationDestinations.pipe(
-      Effect.provideService(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.fromUnknown(channelConfig)
-      )
-    ),
+    conversationDestinations: actual.conversationDestinations,
   };
 });
-
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, key): unknown {
+        return key in channelConfig
+          ? Reflect.get(channelConfig, key)
+          : Reflect.get(target, key);
+      },
+    }),
+  };
+});
 vi.mock("next/navigation", () => ({
   redirect: vi.fn<typeof redirect>(() => {
     throw new Error("redirect");
   }),
 }));
-
 beforeEach(() => {
   vi.clearAllMocks();
   channelConfig.KAPSO_PHONE_NUMBER_ID = "test-installation";
@@ -43,29 +49,21 @@ beforeEach(() => {
   channelConfig.LINQ_PHONE_NUMBER = "+15557654321";
   channelConfig.LINQ_CONNECTOR = "";
 });
-
 describe("conversation entry", () => {
   it("keeps public conversation destinations independent from channel authentication", async () => {
     const actual = await vi.importActual<typeof Destination>(
       "../../../server/channels/destination"
     );
-    const result = await Effect.runPromise(
-      Effect.all({
-        conversations: actual.conversationDestinations,
-        authorization: actual.channelDestination("telegram"),
-      }).pipe(
-        Effect.provideService(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({
-            ...channelConfig,
-            MARKETING_WHATSAPP_NUMBER: "+553798136141",
-            MARKETING_TELEGRAM_USERNAME: "TryZoenBot",
-            MARKETING_IMESSAGE_NUMBER: "+553798136141",
-            LINQ_CONNECTOR: "linq/synthetic-test",
-          })
-        )
-      )
-    );
+    Object.assign(channelConfig, {
+      MARKETING_WHATSAPP_NUMBER: "+553798136141",
+      MARKETING_TELEGRAM_USERNAME: "TryZoenBot",
+      MARKETING_IMESSAGE_NUMBER: "+553798136141",
+      LINQ_CONNECTOR: "linq/synthetic-test",
+    });
+    const result = {
+      conversations: actual.conversationDestinations(),
+      authorization: actual.channelDestination("telegram"),
+    };
     expect(result.conversations).toEqual({
       whatsapp: "https://wa.me/553798136141?text=Oi%2C+Zoen%21",
       telegram: "https://t.me/TryZoenBot",

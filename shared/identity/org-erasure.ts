@@ -1,4 +1,3 @@
-import { Effect, Schema } from "effect";
 import { canManageMembers, type CompanyRole } from "./org-rbac";
 
 /**
@@ -9,18 +8,26 @@ import { canManageMembers, type CompanyRole } from "./org-rbac";
  * record policy outcomes so callers cannot claim a complete erase succeeded.
  */
 
-export class OrgErasureDenied extends Schema.TaggedError<OrgErasureDenied>()(
-  "OrgErasureDenied",
-  {
-    reason: Schema.Literals([
-      "not_admin",
-      "cascade_unimplemented",
-      "retention_hold",
-      "audit_required",
-    ]),
-    message: Schema.String,
+export class OrgErasureDenied extends Error {
+  readonly _tag = "OrgErasureDenied";
+  declare readonly reason:
+    | "not_admin"
+    | "cascade_unimplemented"
+    | "retention_hold"
+    | "audit_required";
+  constructor(input: {
+    readonly reason:
+      | "not_admin"
+      | "cascade_unimplemented"
+      | "retention_hold"
+      | "audit_required";
+    readonly message: string;
+  }) {
+    super(input.message);
+    this.name = "OrgErasureDenied";
+    Object.assign(this, input);
   }
-) {}
+}
 
 /** Surfaces that org erase must eventually cover (documented retention map). */
 export const orgErasureSurfaces = [
@@ -70,37 +77,35 @@ export interface OrgErasureDecision {
  * Fail-closed org erase gate. Always denies cascade until a future worker
  * implements an audited multi-table wipe; still requires org admin.
  */
-export function assertOrgErasureAllowed(
+export async function assertOrgErasureAllowed(
   input: OrgErasureRequest
-): Effect.Effect<OrgErasureDecision> {
-  return Effect.sync(() => {
-    if (!canManageMembers(input.actorRole)) {
-      return {
-        status: "denied" as const,
-        reason: "not_admin" as const,
-        notErased: orgErasureSurfaces,
-        limits: "Only an organization admin may request org-scoped erasure.",
-      };
-    }
-
-    if (input.retentionHold) {
-      return {
-        status: "denied" as const,
-        reason: "retention_hold" as const,
-        notErased: orgErasureSurfaces,
-        limits:
-          "Organization erasure is blocked while a retention hold is active. Audit receipts remain append-only.",
-      };
-    }
-
+): Promise<OrgErasureDecision> {
+  if (!canManageMembers(input.actorRole)) {
     return {
       status: "denied" as const,
-      reason: "cascade_unimplemented" as const,
+      reason: "not_admin" as const,
+      notErased: orgErasureSurfaces,
+      limits: "Only an organization admin may request org-scoped erasure.",
+    };
+  }
+
+  if (input.retentionHold) {
+    return {
+      status: "denied" as const,
+      reason: "retention_hold" as const,
       notErased: orgErasureSurfaces,
       limits:
-        "Org-scoped cascade erase is not implemented. Personal online wipe does not delete organization memberships, invites, company workspaces, audit receipts, or backups. Fail closed — do not claim org deletion succeeded.",
+        "Organization erasure is blocked while a retention hold is active. Audit receipts remain append-only.",
     };
-  });
+  }
+
+  return {
+    status: "denied" as const,
+    reason: "cascade_unimplemented" as const,
+    notErased: orgErasureSurfaces,
+    limits:
+      "Org-scoped cascade erase is not implemented. Personal online wipe does not delete organization memberships, invites, company workspaces, audit receipts, or backups. Fail closed — do not claim org deletion succeeded.",
+  };
 }
 
 export function orgErasureFailureMessage(decision: OrgErasureDecision): string {

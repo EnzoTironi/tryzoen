@@ -35,10 +35,11 @@ describe("chat conversation", () => {
       error: undefined,
       events: [sendMessageResult("The visible iMessage response.")],
       respond: async () => undefined,
+      resume: async () => undefined,
       status: "ready",
     } satisfies Pick<
       ChatAgent,
-      "data" | "error" | "events" | "respond" | "status"
+      "data" | "error" | "events" | "respond" | "resume" | "status"
     >;
 
     const markup = renderToStaticMarkup(
@@ -97,10 +98,11 @@ describe("chat conversation", () => {
       ],
       error: undefined,
       respond: async () => undefined,
+      resume: async () => undefined,
       status: "ready",
     } satisfies Pick<
       ChatAgent,
-      "data" | "error" | "events" | "respond" | "status"
+      "data" | "error" | "events" | "respond" | "resume" | "status"
     >;
     const render = () =>
       renderToStaticMarkup(
@@ -135,7 +137,7 @@ describe("chat conversation", () => {
       },
     } satisfies Pick<
       ChatAgent,
-      "data" | "error" | "events" | "respond" | "status"
+      "data" | "error" | "events" | "respond" | "resume" | "status"
     >;
     expect(
       renderToStaticMarkup(
@@ -165,10 +167,11 @@ describe("chat conversation", () => {
       error: undefined,
       events,
       respond: async () => undefined,
+      resume: async () => undefined,
       status: "streaming",
     } satisfies Pick<
       ChatAgent,
-      "data" | "error" | "events" | "respond" | "status"
+      "data" | "error" | "events" | "respond" | "resume" | "status"
     >;
 
     const markup = renderToStaticMarkup(
@@ -186,10 +189,11 @@ describe("chat conversation", () => {
       error: new Error("Internal runtime failure"),
       events: [],
       respond: async () => undefined,
+      resume: async () => undefined,
       status: "error",
     } satisfies Pick<
       ChatAgent,
-      "data" | "error" | "events" | "respond" | "status"
+      "data" | "error" | "events" | "respond" | "resume" | "status"
     >;
 
     const markup = renderToStaticMarkup(
@@ -200,6 +204,7 @@ describe("chat conversation", () => {
     expect(markup).toContain("O pedido falhou");
     expect(markup).toContain("Não foi possível concluir o pedido.");
     expect(markup).not.toContain("Internal runtime failure");
+    expect(markup).toContain("Tentar novamente");
   });
 
   it.each([
@@ -226,10 +231,11 @@ describe("chat conversation", () => {
         error: undefined,
         events: [],
         respond: async () => undefined,
+        resume: async () => undefined,
         status: "ready",
       } satisfies Pick<
         ChatAgent,
-        "data" | "error" | "events" | "respond" | "status"
+        "data" | "error" | "events" | "respond" | "resume" | "status"
       >;
       const markup = renderToStaticMarkup(
         <ChatConversation agent={agent} traceView="imessage" />
@@ -296,7 +302,12 @@ function workerCancellation(taskId: string): MessageStreamEvent {
 
 function delivery(turnId: string, messageText: string): MessageStreamEvent {
   return {
-    data: { message: messageText, sequence: 0, source: "task", turnId },
+    data: {
+      message: messageText,
+      sequence: 0,
+      kind: "execution.background_task",
+      turnId,
+    },
     meta: { at: "2026-08-27T20:00:01.000Z", id: "delivery" },
     type: "message.received",
   };

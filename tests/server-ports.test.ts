@@ -1,5 +1,5 @@
+import { z } from "zod";
 import { createServer } from "node:net";
-import { Effect, Schema } from "effect";
 import { expect, test } from "vitest";
 import { requireServerPort } from "../scripts/server-ports";
 
@@ -8,13 +8,11 @@ test("startup rejects a busy port without disturbing its existing owner, then ac
   await new Promise<void>((resolve) => {
     server.listen(0, "127.0.0.1", resolve);
   });
-  const { port } = Schema.decodeUnknownSync(
-    Schema.Struct({ port: Schema.Number })
-  )(server.address());
+  const { port } = z.object({ port: z.number() }).parse(server.address());
   try {
-    await expect(
-      Effect.runPromise(requireServerPort("127.0.0.1", port))
-    ).rejects.toThrow("unavailable");
+    await expect(requireServerPort("127.0.0.1", port)).rejects.toThrow(
+      "unavailable"
+    );
     expect(server.listening).toBe(true);
   } finally {
     await new Promise<void>((resolve) => {
@@ -23,7 +21,5 @@ test("startup rejects a busy port without disturbing its existing owner, then ac
       });
     });
   }
-  await expect(
-    Effect.runPromise(requireServerPort("127.0.0.1", port))
-  ).resolves.toBeUndefined();
+  await expect(requireServerPort("127.0.0.1", port)).resolves.toBeUndefined();
 });

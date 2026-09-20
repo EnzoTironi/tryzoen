@@ -3,7 +3,6 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { jwt } from "better-auth/plugins";
 import { APIError } from "better-auth/api";
 import { and, eq } from "drizzle-orm";
-import { Effect, Redacted, Schema } from "effect";
 import { db, oauthClient, user } from "@db";
 import { env } from "@shared/environment";
 
@@ -12,39 +11,41 @@ const scopes = ["openid", "email", "profile", "offline_access"];
 const hashClientSecret = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
 
-class VaultIdentityUnavailable extends Schema.TaggedError<VaultIdentityUnavailable>()(
-  "VaultIdentityUnavailable",
-  {}
-) {}
+class VaultIdentityUnavailable extends Error {
+  readonly _tag = "VaultIdentityUnavailable";
 
-const vaultIdentityClaims = Effect.fn("vaultIdentityClaims")(function* (
+  constructor() {
+    super("VaultIdentityUnavailable");
+    this.name = "VaultIdentityUnavailable";
+  }
+}
+
+const vaultIdentityClaims = async function (
   identity: Pick<typeof user.$inferSelect, "id">
 ) {
-  const rows = yield* Effect.tryPromise({
-    try: () =>
-      db
-        .select({ email: user.email, name: user.name })
-        .from(user)
-        .where(and(eq(user.id, identity.id), eq(user.emailVerified, true)))
-        .limit(1),
-    catch: () => new VaultIdentityUnavailable(),
+  const rows = await Promise.try(async () =>
+    db
+      .select({ email: user.email, name: user.name })
+      .from(user)
+      .where(and(eq(user.id, identity.id), eq(user.emailVerified, true)))
+      .limit(1)
+  ).catch(() => {
+    throw new VaultIdentityUnavailable();
   });
   const current = rows[0];
-  if (!current) return yield* new VaultIdentityUnavailable();
+  if (!current) throw new VaultIdentityUnavailable();
   return { email: current.email, email_verified: true, name: current.name };
-});
+};
 
-const claims = (identity: Pick<typeof user.$inferSelect, "id">) =>
-  Effect.runPromise(
-    vaultIdentityClaims(identity).pipe(
-      Effect.mapError(
-        () =>
-          new APIError("FORBIDDEN", {
-            message: "A verified Zoen account is required.",
-          })
-      )
-    )
-  );
+const claims = async (identity: Pick<typeof user.$inferSelect, "id">) => {
+  try {
+    return await vaultIdentityClaims(identity);
+  } catch {
+    throw new APIError("FORBIDDEN", {
+      message: "A verified Zoen account is required.",
+    });
+  }
+};
 
 export const vaultwardenAuthPlugins = () =>
   env.ZOEN_VAULTWARDEN_URL && env.ZOEN_VAULTWARDEN_CLIENT_SECRET
@@ -70,22 +71,20 @@ export const vaultwardenAuthPlugins = () =>
           customUserInfoClaims: ({ user: identity }) => claims(identity),
           customAccessTokenClaims: ({ user: identity }) => {
             if (!identity) throw new APIError("FORBIDDEN");
-            return claims(identity).then(() => ({}));
+            return claims(identity).then(async () => ({}));
           },
         }),
       ]
     : [];
 
 /** One immutable first-party client; no public or user-managed client registration. */
-export const provisionVaultwardenClient = Effect.fn(
-  "provisionVaultwardenClient"
-)(function* () {
+export const provisionVaultwardenClient = async function () {
   const url = env.ZOEN_VAULTWARDEN_URL;
   const secret = env.ZOEN_VAULTWARDEN_CLIENT_SECRET;
   if (!url || !secret) return;
   const client = {
     clientId,
-    clientSecret: hashClientSecret(Redacted.value(secret)),
+    clientSecret: hashClientSecret(secret.reveal()),
     name: "Zoen Vault",
     scopes,
     disabled: false,
@@ -98,12 +97,12 @@ export const provisionVaultwardenClient = Effect.fn(
     redirectUris: [`${url}/identity/connect/oidc-signin`],
     requirePKCE: true,
   };
-  yield* Effect.tryPromise({
-    try: () =>
-      db
-        .insert(oauthClient)
-        .values({ id: clientId, ...client })
-        .onConflictDoUpdate({ target: oauthClient.clientId, set: client }),
-    catch: () => new VaultIdentityUnavailable(),
+  await Promise.try(async () =>
+    db
+      .insert(oauthClient)
+      .values({ id: clientId, ...client })
+      .onConflictDoUpdate({ target: oauthClient.clientId, set: client })
+  ).catch(() => {
+    throw new VaultIdentityUnavailable();
   });
-});
+};

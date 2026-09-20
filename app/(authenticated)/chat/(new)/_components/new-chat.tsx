@@ -54,7 +54,7 @@ export function NewChat({
         title: pendingTitle.current,
       })
         .catch(() => undefined)
-        .then(() => {
+        .then(async () => {
           router.replace(path);
           return undefined;
         });

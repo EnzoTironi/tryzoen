@@ -1,18 +1,28 @@
-import { NativeDeviceAuth } from "../../server/accounts/device";
+const configuration = vi.hoisted((): Record<string, unknown> => ({}));
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, name): unknown {
+        if (
+          typeof name === "string" &&
+          (name.startsWith("TELEGRAM_") || name.startsWith("KAPSO_"))
+        )
+          return configuration[name];
+        return Reflect.get(target, name);
+      },
+    }),
+  };
+});
+import { env } from "@shared/environment/env";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
-import { PgClient } from "@effect/sql-pg";
 import { betterAuth } from "better-auth";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import {
-  Config,
-  ConfigProvider,
-  Schema,
-  Effect,
-  Layer,
-  ManagedRuntime,
-} from "effect";
 import { Pool } from "pg";
 import { test, vi } from "vitest";
 import { channelAuthorizationPollIntervalMs } from "../../web/auth/channel/client";
@@ -23,37 +33,21 @@ import {
 } from "../../shared/identity/channel-auth.ts";
 import { ChannelAccounts } from "../../server/accounts/index.ts";
 import { channelAuthPlugin } from "../../server/channel-auth/index.ts";
-
-import { runtimeDatabase } from "./database";
 import { linkedIdentity } from "./identity-fixture";
-
 const cookieHeader = (response: Response) =>
   response.headers
     .getSetCookie()
     .map((cookie) => cookie.split(";")[0])
     .join("; ");
-
 test("real BetterAuth router, signed browser challenge and database session", async () => {
-  const url = await Effect.runPromise(
-    Config.string("DATABASE_URL").pipe(Effect.provide(runtimeDatabase))
-  );
+  const url = env.DATABASE_URL;
   const secret = randomBytes(32).toString("base64url");
-  const runtime = ManagedRuntime.make(
-    NativeDeviceAuth.layer.pipe(
-      Layer.provideMerge(ChannelAccounts.layer),
-      Layer.provideMerge(
-        ResolvedInstallationSecrets.layerFromResolved({
-          betterAuthSecret: secret,
-          secretEncryptionKey: randomBytes(32).toString("base64"),
-        })
-      ),
-      Layer.provideMerge(runtimeDatabase)
-    )
-  );
-  const pool = new Pool({ connectionString: url });
+  const pool = new Pool({
+    connectionString: url,
+  });
   const installationId = `plugin-test-${randomUUID()}`;
   const baseURL = "http://localhost:3000";
-  let configuration = ConfigProvider.fromUnknown({
+  Object.assign(configuration, {
     TELEGRAM_BOT_ID: installationId,
     TELEGRAM_BOT_USERNAME: "channel_test_bot",
   });
@@ -62,30 +56,32 @@ test("real BetterAuth router, signed browser challenge and database session", as
     database: pool,
     secret,
     trustedOrigins: [baseURL],
-    rateLimit: { enabled: true },
-    advanced: { disableOriginCheck: false, disableCSRFCheck: false },
-    plugins: [
-      channelAuthPlugin((program) =>
-        runtime.runPromise(
-          program.pipe(
-            Effect.provideService(ConfigProvider.ConfigProvider, configuration)
-          )
-        )
-      ),
-    ],
+    rateLimit: {
+      enabled: true,
+    },
+    advanced: {
+      disableOriginCheck: false,
+      disableCSRFCheck: false,
+    },
+    plugins: [channelAuthPlugin()],
   });
   const request = (
     path: string,
     method: string,
     cookie = "",
     body?:
-      | typeof channelChallengeIdSchema.Type
-      | typeof channelChallengeRequestSchema.Type,
+      | z.output<typeof channelChallengeIdSchema>
+      | z.output<typeof channelChallengeRequestSchema>,
     origin = baseURL
   ) => {
-    const headers = new Headers({ origin });
+    const headers = new Headers({
+      origin,
+    });
     if (cookie) headers.set("cookie", cookie);
-    const init: RequestInit = { method, headers };
+    const init: RequestInit = {
+      method,
+      headers,
+    };
     if (body) {
       headers.set("content-type", "application/json");
       init.body = JSON.stringify(body);
@@ -103,7 +99,10 @@ test("real BetterAuth router, signed browser challenge and database session", as
       "/channel-auth/start",
       "POST",
       "",
-      { channel: "telegram", purpose: "login" },
+      {
+        channel: "telegram",
+        purpose: "login",
+      },
       "https://attacker.invalid"
     );
     assert.equal(forbidden.status, 403);
@@ -117,9 +116,7 @@ test("real BetterAuth router, signed browser challenge and database session", as
       purpose: "login",
     });
     assert.equal(started.status, 200);
-    const challenge = Schema.decodeUnknownSync(channelChallengeSchema)(
-      await started.json()
-    );
+    const challenge = channelChallengeSchema.parse(await started.json());
     assert.equal(challenge.channel, "telegram");
     assert.equal(Object.hasOwn(challenge, "token"), false);
     const token = new URL(challenge.deepLink).searchParams.get("start");
@@ -148,10 +145,14 @@ test("real BetterAuth router, signed browser challenge and database session", as
       "GET",
       browser
     );
-    assert.deepEqual(await pending.json(), { status: "pending" });
+    assert.deepEqual(await pending.json(), {
+      status: "pending",
+    });
     assert.equal(pending.headers.get("cache-control"), "no-store");
     const waitingSince = Date.now();
-    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.useFakeTimers({
+      toFake: ["Date"],
+    });
     try {
       for (
         let at = waitingSince;
@@ -159,7 +160,6 @@ test("real BetterAuth router, signed browser challenge and database session", as
         at += channelAuthorizationPollIntervalMs
       ) {
         vi.setSystemTime(at);
-        // oxlint-disable-next-line no-await-in-loop -- Finish each request before advancing the rate-limit clock.
         const waiting = await request(
           `/channel-auth/status?id=${challenge.id}`,
           "GET",
@@ -183,24 +183,29 @@ test("real BetterAuth router, signed browser challenge and database session", as
       installationId,
       senderId: randomUUID(),
     };
-    await runtime.runPromise(
-      Effect.gen(function* () {
-        yield* linkedIdentity(sender);
-        const accounts = yield* ChannelAccounts;
-        yield* accounts.confirmChallenge({ token, sender });
-      })
-    );
+    await (async function () {
+      await linkedIdentity(sender);
+      const accounts = ChannelAccounts;
+      await accounts.confirmChallenge({
+        token,
+        sender,
+      });
+    })();
     const confirmed = await request(
       `/channel-auth/status?id=${challenge.id}`,
       "GET",
       browser
     );
-    assert.deepEqual(await confirmed.json(), { status: "confirmed" });
+    assert.deepEqual(await confirmed.json(), {
+      status: "confirmed",
+    });
     const crossSite = await request(
       "/channel-auth/complete",
       "POST",
       browser,
-      { id: challenge.id },
+      {
+        id: challenge.id,
+      },
       "https://attacker.invalid"
     );
     assert.equal(crossSite.status, 403);
@@ -208,20 +213,24 @@ test("real BetterAuth router, signed browser challenge and database session", as
       id: challenge.id,
     });
     assert.equal(completed.status, 200);
-    assert.deepEqual(await completed.json(), { ok: true });
-    const identity = await runtime.runPromise(
-      Effect.gen(function* () {
-        const accounts = yield* ChannelAccounts;
-        return yield* accounts.getActiveIdentity(sender);
-      })
-    );
+    assert.deepEqual(await completed.json(), {
+      ok: true,
+    });
+    const identity = await (async function () {
+      const accounts = ChannelAccounts;
+      return await accounts.getActiveIdentity(sender);
+    })();
     userIds.add(identity.userId);
     const sessionCookie = cookieHeader(completed);
     const sessionResponse = await request("/get-session", "GET", sessionCookie);
     assert.equal(sessionResponse.status, 200);
-    const authenticated = Schema.decodeUnknownSync(
-      Schema.Struct({ user: Schema.Struct({ id: Schema.String }) })
-    )(await sessionResponse.json());
+    const authenticated = z
+      .object({
+        user: z.object({
+          id: z.string(),
+        }),
+      })
+      .parse(await sessionResponse.json());
     assert.equal(authenticated.user.id, identity.userId);
     const replay = await request("/channel-auth/complete", "POST", browser, {
       id: challenge.id,
@@ -231,36 +240,42 @@ test("real BetterAuth router, signed browser challenge and database session", as
       "/channel-auth/start",
       "POST",
       sessionCookie,
-      { channel: "telegram", purpose: "link" }
+      {
+        channel: "telegram",
+        purpose: "link",
+      }
     );
     assert.equal(linking.status, 200);
-    const linkChallenge = Schema.decodeUnknownSync(channelChallengeSchema)(
-      await linking.json()
-    );
+    const linkChallenge = channelChallengeSchema.parse(await linking.json());
     const linkToken = new URL(linkChallenge.deepLink).searchParams.get("start");
     assert.ok(linkToken);
-    await runtime.runPromise(
-      Effect.gen(function* () {
-        const accounts = yield* ChannelAccounts;
-        yield* accounts.confirmChallenge({
-          token: linkToken,
-          sender: { ...sender, senderId: randomUUID() },
-        });
-      })
-    );
+    await (async function () {
+      const accounts = ChannelAccounts;
+      await accounts.confirmChallenge({
+        token: linkToken,
+        sender: {
+          ...sender,
+          senderId: randomUUID(),
+        },
+      });
+    })();
     const linkBrowser = cookieHeader(linking);
     const missingLinkSession = await request(
       "/channel-auth/complete",
       "POST",
       linkBrowser,
-      { id: linkChallenge.id }
+      {
+        id: linkChallenge.id,
+      }
     );
     assert.equal(missingLinkSession.status, 401);
     const linked = await request(
       "/channel-auth/complete",
       "POST",
       `${sessionCookie}; ${linkBrowser}`,
-      { id: linkChallenge.id }
+      {
+        id: linkChallenge.id,
+      }
     );
     assert.equal(linked.status, 200);
     assert.equal(
@@ -269,12 +284,14 @@ test("real BetterAuth router, signed browser challenge and database session", as
         .some((cookie) => cookie.includes("session_token=")),
       false
     );
-    const sessionCount = await pool.query<{ count: number }>(
+    const sessionCount = await pool.query<{
+      count: number;
+    }>(
       'SELECT count(*)::int AS count FROM public.session WHERE "userId" = $1',
       [identity.userId]
     );
     assert.equal(sessionCount.rows[0]?.count, 1);
-    configuration = ConfigProvider.fromUnknown({
+    Object.assign(configuration, {
       KAPSO_PHONE_NUMBER_ID: installationId,
       KAPSO_PHONE_NUMBER: "+5511999999999",
     });
@@ -283,9 +300,7 @@ test("real BetterAuth router, signed browser challenge and database session", as
       purpose: "login",
     });
     assert.equal(kapsoStarted.status, 200);
-    const entry = Schema.decodeUnknownSync(channelChallengeSchema)(
-      await kapsoStarted.json()
-    );
+    const entry = channelChallengeSchema.parse(await kapsoStarted.json());
     const whatsapp = new URL(entry.deepLink);
     assert.equal(whatsapp.origin, "https://wa.me");
     assert.equal(whatsapp.pathname, "/5511999999999");
@@ -304,20 +319,24 @@ test("real BetterAuth router, signed browser challenge and database session", as
       "GET",
       waBrowser
     );
-    assert.deepEqual(await waiting.json(), { status: "pending" });
+    assert.deepEqual(await waiting.json(), {
+      status: "pending",
+    });
   } finally {
-    await runtime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`DELETE FROM public.channel_auth_challenge WHERE installation_id = ${installationId}`;
-        yield* sql`DELETE FROM public.channel_identity WHERE installation_id = ${installationId}`;
-        for (const id of userIds) {
-          yield* sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${id}`).workspaceId}`;
-          yield* sql`DELETE FROM public."user" WHERE id = ${id}`;
-        }
-      })
-    );
-    await runtime.dispose();
+    await (async function () {
+      await query(
+        sql`DELETE FROM public.channel_auth_challenge WHERE installation_id = ${installationId}`
+      );
+      await query(
+        sql`DELETE FROM public.channel_identity WHERE installation_id = ${installationId}`
+      );
+      for (const id of userIds) {
+        await query(
+          sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${id}`).workspaceId}`
+        );
+        await query(sql`DELETE FROM public."user" WHERE id = ${id}`);
+      }
+    })();
     await pool.end();
   }
 });

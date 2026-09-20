@@ -1,5 +1,7 @@
 name: Zoen native agent evals
 
+# Each manual dispatch needs a fresh dedicated Codex login in ZOEN_EVAL_PROVIDERS.
+# Never reuse a desktop/production refresh grant; this ephemeral job discards its grant.
 on:
   workflow_dispatch:
     inputs:
@@ -51,6 +53,7 @@ jobs:
       ZOEN_MATRIX_SERVER_NAME: matrix.zoen.test
       ZOEN_MATRIX_AS_TOKEN: synthetic-native-matrix-appservice-token-2026
       ZOEN_MATRIX_HS_TOKEN: synthetic-native-matrix-homeserver-token-2026
+      CODEX_HOME: ${{ runner.temp }}/zoen-eval-codex
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -59,6 +62,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install the native ChatGPT credential owner
+        run: npm install --global @openai/codex@0.155.1 && codex --version
       - name: Prepare isolated database roles and migrations
         env:
           DATABASE_URL_UNPOOLED: postgresql://zoen_migrator:eval-migration-password@127.0.0.1:5432/companion_runtime_test
@@ -70,7 +75,7 @@ jobs:
               '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-application.sh
           }
           bootstrap
-          node scripts/migrate-hosted.ts
+          node --import tsx scripts/migrate-hosted.ts
           bootstrap
           docker exec -i -e ZOEN_VAULTWARDEN_DATABASE_PASSWORD=eval-vault-password \
             '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-vaultwarden.sh
@@ -92,7 +97,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:8008/health
-      - name: Prepare only model and browser provider credentials
+      - name: Prepare the dedicated evaluation login and browser credentials
         env:
           EVAL_PROVIDERS: ${{ secrets.ZOEN_EVAL_PROVIDERS }}
         run: |
@@ -101,7 +106,7 @@ jobs:
           node --input-type=module <<'JS'
           import { randomBytes } from 'node:crypto';
           import { mkdirSync, writeFileSync } from 'node:fs';
-          import { homedir } from 'node:os';
+          import { execFileSync } from 'node:child_process';
           import { join } from 'node:path';
           import { parseEnv } from 'node:util';
           const source = parseEnv(process.env.EVAL_PROVIDERS ?? '');
@@ -115,16 +120,22 @@ jobs:
           };
           mask(source);
           const selected = {};
-          for (const name of ['CHATGPT_AUTH_JSON', 'KERNEL_API_KEY']) {
+          for (const name of ['CODEX_AUTH_JSON', 'KERNEL_API_KEY']) {
             if (!source[name]) throw new Error(`Missing eval provider: ${name}`);
             selected[name] = source[name];
           }
           selected.BETTER_AUTH_SECRET = randomBytes(32).toString('hex');
           selected.SECRET_ENCRYPTION_KEY = randomBytes(32).toString('base64');
           mask(selected);
-          const authDirectory = join(homedir(), '.eve', 'auth');
+          const authDirectory = process.env.CODEX_HOME;
+          if (!authDirectory) throw new Error('The isolated Codex credential directory is missing');
           mkdirSync(authDirectory, { recursive: true, mode: 0o700 });
-          writeFileSync(join(authDirectory, 'chatgpt.json'), selected.CHATGPT_AUTH_JSON, { mode: 0o600 });
+          execFileSync('sh', ['scripts/seed-credential.sh', join(authDirectory, 'auth.json')], {
+            input: selected.CODEX_AUTH_JSON,
+            stdio: ['pipe', 'ignore', 'pipe'],
+          });
+          writeFileSync(join(authDirectory, 'config.toml'), 'cli_auth_credentials_store = "file"\n', { mode: 0o600 });
+          delete selected.CODEX_AUTH_JSON;
           const lines = Object.entries(selected).map(([key, value]) => {
             const quote = ['"', "'", '`'].find(candidate => !value.includes(candidate));
             if (!quote) throw new Error(`Cannot encode eval provider: ${key}`);
@@ -137,13 +148,14 @@ jobs:
           }
           writeFileSync('.eve/eval.env', encoded, { mode: 0o600 });
           JS
+          codex login status >/dev/null 2>&1 || { echo 'Native Codex login is unavailable'; exit 1; }
       - name: Build and evaluate the native agent
         env:
           REPETITIONS: ${{ inputs.repetitions }}
         run: |
           set -euo pipefail
           node --env-file=.eve/eval.env -e 'const {spawnSync}=require("node:child_process");process.exit(spawnSync("pnpm",["build","--force"],{stdio:"inherit",env:process.env}).status ?? 1)'
-          node --env-file=.eve/eval.env scripts/start.ts --port 4351 --eve-port 4352 > .eve/agent-server.log 2>&1 &
+          node --env-file=.eve/eval.env --import tsx scripts/start.ts --port 4351 --eve-port 4352 > .eve/agent-server.log 2>&1 &
           app_pid=$!
           trap 'kill -TERM "$app_pid" 2>/dev/null || true; wait "$app_pid" || true; rm -f .eve/eval.env' EXIT
           for attempt in {1..60}; do
@@ -176,4 +188,4 @@ jobs:
           retention-days: 14
       - name: Remove ephemeral credentials
         if: always()
-        run: rm -f .eve/eval.env "$HOME/.eve/auth/chatgpt.json"
+        run: rm -f .eve/eval.env "$CODEX_HOME/auth.json" "$CODEX_HOME/auth.json.seed-digest" "$CODEX_HOME/config.toml"

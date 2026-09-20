@@ -34,7 +34,7 @@ export function GetStartedPanel({
           {[
             { label: "WhatsApp", url: whatsappUrl },
             { label: "Telegram", url: telegramUrl },
-            { label: "iMessage", url: imessageUrl },
+            { label: "Mensagens", url: imessageUrl },
           ].map(
             ({ label, url }) =>
               url && (

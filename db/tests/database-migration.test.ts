@@ -1,17 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, describe, expect, it } from "vitest";
-
 const databases: PGlite[] = [];
-
 afterEach(async () => {
   await Promise.all(databases.splice(0).map((database) => database.close()));
 });
-
 describe("database migrations", () => {
   it("creates a validated schema and keeps adoption migrations idempotent", async () => {
     const database = createDatabase();
-
     await applyMigration(database, "0000_fluffy_the_spike.sql");
     await applyMigration(database, "0001_better-auth.sql");
     await applyMigration(database, "0002_heavy_celestials.sql");
@@ -22,7 +18,6 @@ describe("database migrations", () => {
     await applyMigration(database, "0007_known_fenris.sql");
     await applyMigration(database, "0000_fluffy_the_spike.sql");
     await applyMigration(database, "0001_better-auth.sql");
-
     await database.exec(`
       INSERT INTO workspaces VALUES ('workspace-1', '2026-01-01');
       INSERT INTO vault_items VALUES (
@@ -40,9 +35,9 @@ describe("database migrations", () => {
     await applyMigration(database, "0010_rapid_cerise.sql");
     await applyMigration(database, "0011_faulty_unicorn.sql");
     await applyMigration(database, "0012_harsh_domino.sql");
-
-    const tables = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count
+    const tables = await database.query<{
+      count: number;
+    }>(`SELECT count(*)::int AS count
        FROM information_schema.tables
        WHERE table_schema = 'public'
          AND table_name IN (
@@ -65,19 +60,20 @@ describe("database migrations", () => {
            'session',
            'account',
            'verification'
-         )`
-    );
+         )`);
     const pendingConstraints = await pendingConstraintCount(database);
-
     expect(tables.rows[0]?.count).toBe(19);
     expect(pendingConstraints).toBe(0);
     await expect(
       database.query("SELECT id FROM vault_items WHERE id = 'contact-1'")
     ).resolves.toMatchObject({
-      rows: [{ id: "contact-1" }],
+      rows: [
+        {
+          id: "contact-1",
+        },
+      ],
     });
   }, 15_000);
-
   it("reconciles the pre-merge reply-anchor migration", async () => {
     const database = createDatabase();
     await database.exec(`
@@ -87,23 +83,25 @@ describe("database migrations", () => {
         reply_anchor_message_id text
       );
     `);
-
     await applyMigration(database, "0012_harsh_domino.sql");
-
-    const columns = await database.query<{ columnName: string }>(`
+    const columns = await database.query<{
+      columnName: string;
+    }>(`
       SELECT column_name AS "columnName"
       FROM information_schema.columns
       WHERE (table_name = 'chats' AND column_name = 'channel')
          OR (table_name = 'scheduled_agent_jobs' AND column_name = 'reply_anchor_message_id')
       ORDER BY column_name
     `);
-
     expect(columns.rows).toEqual([
-      { columnName: "channel" },
-      { columnName: "reply_anchor_message_id" },
+      {
+        columnName: "channel",
+      },
+      {
+        columnName: "reply_anchor_message_id",
+      },
     ]);
   }, 15_000);
-
   it("preserves legacy rows while enforcing constraints for new writes", async () => {
     const database = createDatabase();
     await database.exec(legacyRuntimeSchema);
@@ -132,13 +130,12 @@ describe("database migrations", () => {
         '2026-01-01'
       );
       `);
-
     await applyMigration(database, "0000_fluffy_the_spike.sql");
     await applyMigration(database, "0002_heavy_celestials.sql");
-
-    const vault = await database.query<{ id: string; kind: string }>(
-      "SELECT id, kind FROM vault_items WHERE id = 'legacy-item'"
-    );
+    const vault = await database.query<{
+      id: string;
+      kind: string;
+    }>("SELECT id, kind FROM vault_items WHERE id = 'legacy-item'");
     const chat = await database.query<{
       costUsd: number | null;
       inputTokens: number;
@@ -149,10 +146,18 @@ describe("database migrations", () => {
       output_tokens AS "outputTokens"
     FROM chats
     WHERE session_id = 'legacy-chat'`);
-
-    expect(vault.rows).toEqual([{ id: "legacy-item", kind: "legacy-kind" }]);
+    expect(vault.rows).toEqual([
+      {
+        id: "legacy-item",
+        kind: "legacy-kind",
+      },
+    ]);
     expect(chat.rows).toEqual([
-      { costUsd: null, inputTokens: 0, outputTokens: 0 },
+      {
+        costUsd: null,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
     ]);
     expect(await pendingConstraintCount(database)).toBe(14);
     await expect(
@@ -170,7 +175,6 @@ describe("database migrations", () => {
         `)
     ).rejects.toThrow(/constraint/);
   }, 15_000);
-
   it("adopts existing Better Auth tables without changing their rows", async () => {
     const database = createDatabase();
     await database.exec(legacyAuthSchema);
@@ -238,7 +242,6 @@ describe("database migrations", () => {
         '2026-01-01T00:00:00Z'
       );
     `);
-
     await applyMigration(database, "0001_better-auth.sql");
     await applyMigration(database, "0001_better-auth.sql");
     await database.exec(`
@@ -246,7 +249,6 @@ describe("database migrations", () => {
       SET "phoneNumber" = '+12125550123', "phoneNumberVerified" = true
       WHERE id = 'auth-user'
     `);
-
     const rows = await database.query<{
       accountId: string;
       sessionId: string;
@@ -263,7 +265,6 @@ describe("database migrations", () => {
       JOIN "session" ON "session"."userId" = "user".id
       JOIN "verification" ON "verification".identifier = "user"."phoneNumber"
     `);
-
     expect(rows.rows).toEqual([
       {
         accountId: "auth-account",
@@ -293,35 +294,29 @@ describe("database migrations", () => {
     ).rejects.toThrow(/foreign key constraint/);
   }, 15_000);
 });
-
 function createDatabase() {
   const database = new PGlite();
   databases.push(database);
   return database;
 }
-
 async function applyMigration(database: PGlite, name: string) {
   const migration = await readFile(
     new URL(`../migrations/${name}`, import.meta.url),
     "utf8"
   );
-  /* oxlint-disable eslint/no-await-in-loop -- SQL migration statements must execute in file order. */
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }
-  /* oxlint-enable eslint/no-await-in-loop */
 }
-
 async function pendingConstraintCount(database: PGlite) {
-  const result = await database.query<{ count: number }>(
-    `SELECT count(*)::int AS count
+  const result = await database.query<{
+    count: number;
+  }>(`SELECT count(*)::int AS count
      FROM pg_constraint
      WHERE NOT convalidated
-       AND connamespace = 'public'::regnamespace`
-  );
+       AND connamespace = 'public'::regnamespace`);
   return result.rows[0]?.count;
 }
-
 const legacyRuntimeSchema = `
   CREATE TABLE workspaces (
     id TEXT PRIMARY KEY,
@@ -377,7 +372,6 @@ const legacyRuntimeSchema = `
     PRIMARY KEY (workspace_id, namespace, id)
   );
 `;
-
 const legacyAuthSchema = `
   CREATE TABLE "user" (
     id TEXT PRIMARY KEY,

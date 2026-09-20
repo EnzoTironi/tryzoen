@@ -230,20 +230,9 @@ export const hosted = Effect.gen(function* () {
     region,
     count: 1,
     existingMachineIds: prod ? [production.memory.machine] : undefined,
-    existingVolumeIds: prod ? { "/data": production.memory.volume } : undefined,
     image: memoryImage,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 1024 },
-    env: { MEM0_TELEMETRY: "false", ZOEN_MEMORY_DATA: "/data" },
-    mounts: [
-      {
-        path: "/data",
-        name: "zoen_memory_data",
-        sizeGb: 3,
-        encrypted: true,
-        autoBackupEnabled: true,
-        snapshotRetention: 14,
-      },
-    ],
+    env: { MEM0_TELEMETRY: "false" },
     services: [],
     checks: {
       health: {

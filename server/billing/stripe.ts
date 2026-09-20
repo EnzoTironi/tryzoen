@@ -1,4 +1,3 @@
-import { Redacted } from "effect";
 import { Stripe } from "stripe";
 import { env } from "@shared/environment";
 
@@ -19,7 +18,7 @@ function requirePaidConfiguration<T>(value: T | undefined) {
 
 export function requireStripe(): Stripe {
   const key = requirePaidConfiguration(env.STRIPE_SECRET_KEY);
-  return new Stripe(Redacted.value(key), {
+  return new Stripe(key.reveal(), {
     apiVersion: "2025-08-27.basil",
     typescript: true,
   });
@@ -32,7 +31,7 @@ export function stripePriceIdForPlan(plan: "pro" | "org") {
 }
 
 export function stripeWebhookSecret() {
-  return Redacted.value(requirePaidConfiguration(env.STRIPE_WEBHOOK_SECRET));
+  return requirePaidConfiguration(env.STRIPE_WEBHOOK_SECRET).reveal();
 }
 
 /** True when Checkout can run for a paid plan (secret + that plan's Price id). */

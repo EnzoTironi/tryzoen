@@ -1,13 +1,24 @@
+import { readBody, BodyTooLarge } from "../http/body";
+import type { Secret } from "@shared/environment/secret";
+import { withTimeout } from "../operations/async";
+import { TimeoutError } from "../operations/async";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { Effect, Redacted, Schema, Stream } from "effect";
+
 import type { channelProviderSchema } from "@shared/identity/channel-auth";
 
 const maximumBodyBytes = 256 * 1024;
 
-class WebhookRejected extends Schema.TaggedError<WebhookRejected>()(
-  "WebhookRejected",
-  { status: Schema.Literals([400, 401, 413, 408]) }
-) {}
+export class WebhookRejected extends Error {
+  readonly _tag = "WebhookRejected";
+  declare readonly status: 400 | 401 | 413 | 408;
+  constructor(input: { readonly status: 400 | 401 | 413 | 408 }) {
+    super("WebhookRejected");
+    this.name = "WebhookRejected";
+    Object.assign(this, input);
+  }
+}
 
 const matchesSecret = (received: string, expected: string) => {
   const left = Buffer.from(received);
@@ -19,65 +30,53 @@ const matchesSecret = (received: string, expected: string) => {
   );
 };
 
-export const readVerifiedWebhook = Effect.fn("readVerifiedWebhook")(function* (
+export const readVerifiedWebhook = async function (
   request: Request,
-  channel: typeof channelProviderSchema.Type,
-  secret: Redacted.Redacted
+  channel: z.output<typeof channelProviderSchema>,
+  secret: Secret
 ) {
-  if (Redacted.value(secret).length === 0) {
-    return yield* new WebhookRejected({ status: 401 });
+  if (secret.reveal().length === 0) {
+    throw new WebhookRejected({ status: 401 });
   }
   if (
     channel === "telegram" &&
     !matchesSecret(
       request.headers.get("x-telegram-bot-api-secret-token") ?? "",
-      Redacted.value(secret)
+      secret.reveal()
     )
   ) {
-    return yield* new WebhookRejected({ status: 401 });
+    throw new WebhookRejected({ status: 401 });
   }
 
   const source = request.body;
-  if (!source) return yield* new WebhookRejected({ status: 400 });
-  const cancelBody = Effect.tryPromise({
-    try: () => source.cancel(),
-    catch: () => new WebhookRejected({ status: 400 }),
-  }).pipe(Effect.interruptible, Effect.timeout("100 millis"), Effect.ignore);
-  const received = yield* Stream.fromReadableStream({
-    evaluate: () => source,
-    onError: () => new WebhookRejected({ status: 400 }),
-    releaseLockOnEnd: true,
-  }).pipe(
-    Stream.runFoldEffect(
-      () => ({ size: 0, chunks: new Array<Uint8Array>() }),
-      (acc, chunk) =>
-        acc.size + chunk.length > maximumBodyBytes
-          ? Effect.fail(new WebhookRejected({ status: 413 }))
-          : Effect.sync(() => {
-              acc.size += chunk.length;
-              acc.chunks.push(chunk);
-              return acc;
-            })
-    ),
-    Effect.timeout("5 seconds"),
-    Effect.catchTag("TimeoutError", () =>
-      Effect.fail(new WebhookRejected({ status: 408 }))
-    ),
-    Effect.ensuring(cancelBody)
-  );
-  const body = Buffer.concat(received.chunks, received.size);
+  if (!source) throw new WebhookRejected({ status: 400 });
+  let body: Buffer;
+  try {
+    body = await withTimeout(() => readBody(source, maximumBodyBytes), 5_000);
+  } catch (error) {
+    throw new WebhookRejected({
+      status:
+        error instanceof TimeoutError
+          ? 408
+          : error instanceof BodyTooLarge
+            ? 413
+            : 400,
+    });
+  }
 
   if (
     channel === "kapso" &&
     !matchesSecret(
       request.headers.get("x-webhook-signature") ?? "",
-      createHmac("sha256", Redacted.value(secret)).update(body).digest("hex")
+      createHmac("sha256", secret.reveal()).update(body).digest("hex")
     )
   ) {
-    return yield* new WebhookRejected({ status: 401 });
+    throw new WebhookRejected({ status: 401 });
   }
 
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(
-    body.toString("utf8")
-  ).pipe(Effect.mapError(() => new WebhookRejected({ status: 400 })));
-});
+  try {
+    return await jsonString(z.json()).parseAsync(body.toString("utf8"));
+  } catch {
+    throw new WebhookRejected({ status: 400 });
+  }
+};

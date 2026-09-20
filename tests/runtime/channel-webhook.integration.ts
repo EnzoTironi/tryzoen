@@ -1,28 +1,49 @@
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, name): unknown {
+        if (name === "TELEGRAM_WEBHOOK_SECRET" || name === "TELEGRAM_BOT_TOKEN")
+          return new Secret(z.string().min(1).parse(process.env[name]));
+        if (
+          typeof name === "string" &&
+          ["TELEGRAM_BOT_ID", "TELEGRAM_BOT_USERNAME"].includes(name)
+        )
+          return process.env[name];
+        return Reflect.get(target, name);
+      },
+    }),
+  };
+});
+import { Secret } from "@shared/environment/secret";
+import { env } from "@shared/environment/env";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
 import assert from "node:assert/strict";
 import { randomBytes, randomInt } from "node:crypto";
-import { PgClient } from "@effect/sql-pg";
-import { Config, Effect, Schema } from "effect";
+
 import type { RouteHandlerArgs } from "eve/channels";
 import { afterAll, test, vi } from "vitest";
 import { privateChannel } from "../../agent/lib/private-channel";
 import { ChannelAccounts } from "../../server/accounts";
-import { serverRuntime } from "../../server/runtime";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import { linkedIdentity } from "./identity-fixture";
 
-const telegramRequest = Schema.Struct({
-  text: Schema.String,
-  chat_id: Schema.optionalKey(Schema.String),
-  message_id: Schema.optionalKey(Schema.Number),
-  callback_query_id: Schema.optionalKey(Schema.String),
-  show_alert: Schema.optionalKey(Schema.Boolean),
-  reply_markup: Schema.optionalKey(
-    Schema.Struct({
-      inline_keyboard: Schema.Array(
-        Schema.Array(
-          Schema.Struct({
-            text: Schema.String,
-            callback_data: Schema.String,
+const telegramRequest = z.object({
+  text: z.string(),
+  chat_id: z.optional(z.string()),
+  message_id: z.optional(z.number()),
+  callback_query_id: z.optional(z.string()),
+  show_alert: z.optional(z.boolean()),
+  reply_markup: z.optional(
+    z.object({
+      inline_keyboard: z.array(
+        z.array(
+          z.object({
+            text: z.string(),
+            callback_data: z.string(),
           })
         )
       ),
@@ -50,20 +71,22 @@ afterAll(() => {
 });
 
 test("refused Telegram logins are acknowledged without blocking a fresh confirmation", async () => {
-  const configuration = await serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const sql = yield* PgClient.PgClient;
-      const rows = yield* sql<{
-        name: string;
-      }>`SELECT current_database() AS name`;
-      assert.equal(rows[0]?.name, "companion_runtime_test");
-      return yield* Config.all({
-        installationId: Config.string("TELEGRAM_BOT_ID"),
-        secret: Config.string("TELEGRAM_WEBHOOK_SECRET"),
-      });
-    })
-  );
-  const delivery: { method: string; body: typeof telegramRequest.Type }[] = [];
+  const configuration = await (async function () {
+    const rows = await query<{
+      name: string;
+    }>(sql`SELECT current_database() AS name`);
+    assert.equal(rows[0]?.name, "companion_runtime_test");
+    return {
+      installationId: z.string().min(1).parse(env.TELEGRAM_BOT_ID),
+      secret: z
+        .string()
+        .parse(
+          z.instanceof(Secret).parse(env.TELEGRAM_WEBHOOK_SECRET).reveal()
+        ),
+    };
+  })();
+  const delivery: { method: string; body: z.output<typeof telegramRequest> }[] =
+    [];
   let rejectNextAnswer = false;
   // Keep parsing, dispatch and storage real; replace only the external HTTP boundary.
   outbound = async (request) => {
@@ -71,9 +94,7 @@ test("refused Telegram logins are acknowledged without blocking a fresh confirma
     assert.equal(url.origin, "https://api.telegram.org");
     const method = url.pathname.split("/").at(-1);
     assert.ok(method);
-    const body = Schema.decodeUnknownSync(telegramRequest)(
-      await request.json()
-    );
+    const body = telegramRequest.parse(await request.json());
     delivery.push({ method, body });
     if (method === "answerCallbackQuery") {
       if (rejectNextAnswer) {
@@ -97,22 +118,19 @@ test("refused Telegram logins are acknowledged without blocking a fresh confirma
     installationId: configuration.installationId,
     senderId: String(senderId),
   };
-  const identity = await serverRuntime.runPromise(linkedIdentity(sender));
+  const identity = await linkedIdentity(sender);
   const challenges: string[] = [];
-  const issue = () =>
-    serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const accounts = yield* ChannelAccounts;
-        const challenge = yield* accounts.issueChallenge({
-          purpose: "login",
-          channel: "telegram",
-          installationId: configuration.installationId,
-          browserSecret: randomBytes(32).toString("base64url"),
-        });
-        challenges.push(challenge.challengeId);
-        return challenge;
-      })
-    );
+  const issue = async () => {
+    const accounts = ChannelAccounts;
+    const challenge = await accounts.issueChallenge({
+      purpose: "login",
+      channel: "telegram",
+      installationId: configuration.installationId,
+      browserSecret: randomBytes(32).toString("base64url"),
+    });
+    challenges.push(challenge.challengeId);
+    return challenge;
+  };
   const route = privateChannel("telegram").routes[0];
   assert.ok(route && route.transport !== "websocket");
   const background: Promise<unknown>[] = [];
@@ -172,12 +190,11 @@ test("refused Telegram logins are acknowledged without blocking a fresh confirma
   };
   try {
     const expired = await issue();
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`UPDATE public.channel_auth_challenge SET created_at = clock_timestamp() - interval '6 minutes', expires_at = clock_timestamp() - interval '1 second' WHERE id = ${expired.challengeId}`;
-      })
-    );
+    await (async function () {
+      await query(
+        sql`UPDATE public.channel_auth_challenge SET created_at = clock_timestamp() - interval '6 minutes', expires_at = clock_timestamp() - interval '1 second' WHERE id = ${expired.challengeId}`
+      );
+    })();
     const refused = await Promise.all([
       request(expired.token),
       request(expired.token, { confirm: true }),
@@ -224,18 +241,18 @@ test("refused Telegram logins are acknowledged without blocking a fresh confirma
     const fresh = await issue();
     assert.equal((await request(fresh.token)).status, 200);
     await Promise.all(background);
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        const prompts = yield* sql<{
-          status: string;
-        }>`SELECT status FROM public.channel_auth_prompt WHERE challenge_id = ${fresh.challengeId}`;
-        assert.deepEqual(prompts, [{ status: "sent" }]);
-        const rejectedPrompts =
-          yield* sql`SELECT challenge_id FROM public.channel_auth_prompt WHERE challenge_id = ${expired.challengeId}`;
-        assert.equal(rejectedPrompts.length, 0);
-      })
-    );
+    await (async function () {
+      const prompts = await query<{
+        status: string;
+      }>(
+        sql`SELECT status FROM public.channel_auth_prompt WHERE challenge_id = ${fresh.challengeId}`
+      );
+      assert.deepEqual(prompts, [{ status: "sent" }]);
+      const rejectedPrompts = await query(
+        sql`SELECT challenge_id FROM public.channel_auth_prompt WHERE challenge_id = ${expired.challengeId}`
+      );
+      assert.equal(rejectedPrompts.length, 0);
+    })();
     const prompt = delivery.find(({ body }) => Boolean(body.reply_markup));
     assert.ok(prompt);
     assert.match(prompt.body.text, /return to that tab to finish signing in/i);
@@ -271,45 +288,49 @@ test("refused Telegram logins are acknowledged without blocking a fresh confirma
       ]
     );
     assert.match(repeated[0]?.body.text ?? "", /^Confirmed/);
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        const rows = yield* sql<{
-          confirmed: boolean;
-        }>`SELECT confirmed_at IS NOT NULL AS confirmed FROM public.channel_auth_challenge WHERE id = ${expired.challengeId}`;
-        assert.deepEqual(rows, [{ confirmed: false }]);
-        const accepted = yield* sql<{
-          senderId: string;
-        }>`SELECT confirmed_sender_id AS "senderId" FROM public.channel_auth_challenge WHERE id = ${fresh.challengeId} AND confirmed_at IS NOT NULL`;
-        assert.deepEqual(accepted, [{ senderId: sender.senderId }]);
-      })
-    );
+    await (async function () {
+      const rows = await query<{
+        confirmed: boolean;
+      }>(
+        sql`SELECT confirmed_at IS NOT NULL AS confirmed FROM public.channel_auth_challenge WHERE id = ${expired.challengeId}`
+      );
+      assert.deepEqual(rows, [{ confirmed: false }]);
+      const accepted = await query<{
+        senderId: string;
+      }>(
+        sql`SELECT confirmed_sender_id AS "senderId" FROM public.channel_auth_challenge WHERE id = ${fresh.challengeId} AND confirmed_at IS NOT NULL`
+      );
+      assert.deepEqual(accepted, [{ senderId: sender.senderId }]);
+    })();
   } finally {
     await Promise.all(background);
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`DELETE FROM public.channel_auth_challenge WHERE id IN ${sql.in(challenges)}`;
-        yield* sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${identity.userId}`).workspaceId}`;
-        yield* sql`DELETE FROM public."user" WHERE id = ${identity.userId}`;
-      })
-    );
+    await (async function () {
+      await query(
+        sql`DELETE FROM public.channel_auth_challenge WHERE id IN (${sql.join(
+          challenges.map((value) => sql`${value}`),
+          sql`, `
+        )})`
+      );
+      await query(
+        sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${identity.userId}`).workspaceId}`
+      );
+      await query(sql`DELETE FROM public."user" WHERE id = ${identity.userId}`);
+    })();
   }
 });
 
 test("an unknown Telegram sender is told to sign in once and never becomes a user", async () => {
-  const secret = await serverRuntime.runPromise(
-    Config.string("TELEGRAM_WEBHOOK_SECRET")
-  );
-  const delivery: { method: string; body: typeof telegramRequest.Type }[] = [];
+  const secret = z
+    .string()
+    .parse(z.instanceof(Secret).parse(env.TELEGRAM_WEBHOOK_SECRET).reveal());
+  const delivery: { method: string; body: z.output<typeof telegramRequest> }[] =
+    [];
   outbound = async (request) => {
     const url = new URL(request.url);
     assert.equal(url.origin, "https://api.telegram.org");
     const method = url.pathname.split("/").at(-1);
     assert.equal(method, "sendMessage");
-    const body = Schema.decodeUnknownSync(telegramRequest)(
-      await request.json()
-    );
+    const body = telegramRequest.parse(await request.json());
     delivery.push({ method, body });
     return Response.json({
       ok: true,
@@ -360,28 +381,24 @@ test("an unknown Telegram sender is told to sign in once and never becomes a use
       context
     );
   };
-  const observe = () =>
-    serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        const users = yield* sql<{
-          count: number;
-        }>`SELECT count(*)::int AS count FROM public."user"`;
-        const identities = yield* sql<{
-          count: number;
-        }>`SELECT count(*)::int AS count FROM public.channel_identity
-          WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`;
-        const pending = yield* sql<{
-          contactCount: number;
-        }>`SELECT contact_count AS "contactCount" FROM public.channel_pending_sender
-          WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`;
-        return {
-          users: users[0]?.count,
-          identities: identities[0]?.count,
-          pending,
-        };
-      })
-    );
+  const observe = async () => {
+    const users = await query<{
+      count: number;
+    }>(sql`SELECT count(*)::int AS count FROM public."user"`);
+    const identities = await query<{
+      count: number;
+    }>(sql`SELECT count(*)::int AS count FROM public.channel_identity
+          WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`);
+    const pending = await query<{
+      contactCount: number;
+    }>(sql`SELECT contact_count AS "contactCount" FROM public.channel_pending_sender
+          WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`);
+    return {
+      users: users[0]?.count,
+      identities: identities[0]?.count,
+      pending,
+    };
+  };
   try {
     const before = await observe();
     const group = await message(
@@ -422,11 +439,10 @@ test("an unknown Telegram sender is told to sign in once and never becomes a use
     });
   } finally {
     await Promise.all(background);
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`DELETE FROM public.channel_pending_sender WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`;
-      })
-    );
+    await (async function () {
+      await query(
+        sql`DELETE FROM public.channel_pending_sender WHERE channel = 'telegram' AND installation_id = ${botId} AND sender_id = ${String(senderId)}`
+      );
+    })();
   }
 });

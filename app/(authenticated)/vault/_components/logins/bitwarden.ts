@@ -1,250 +1,227 @@
-import { Effect, Redacted, Schema } from "effect";
+import type { Secret } from "@shared/environment/secret";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { argon2id } from "hash-wasm";
 import {
   loginIdentifierSchema,
   serializeLoginVaultPayload,
   type VaultImportItems,
 } from "@shared/vault/schema";
-
-const boundedText = Schema.String.check(Schema.isMaxLength(14_000_000));
+const boundedText = z.string().max(14_000_000);
 const encryptedFields = {
-  encrypted: Schema.Literal(true),
-  passwordProtected: Schema.Literal(true),
-  salt: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  encrypted: z.literal(true),
+  passwordProtected: z.literal(true),
+  salt: z.string().min(1).max(256),
   encKeyValidation_DO_NOT_EDIT: boundedText,
   data: boundedText,
 };
-const exportSchema = Schema.Union([
-  Schema.Struct({
+const exportSchema = z.union([
+  z.object({
     ...encryptedFields,
-    kdfType: Schema.Literal(0),
-    kdfIterations: Schema.Int.check(
-      Schema.isBetween({ minimum: 5_000, maximum: 2_000_000 })
-    ),
+    kdfType: z.literal(0),
+    kdfIterations: z.number().int().min(5_000).max(2_000_000),
   }),
-  Schema.Struct({
+  z.object({
     ...encryptedFields,
-    kdfType: Schema.Literal(1),
-    kdfIterations: Schema.Int.check(
-      Schema.isBetween({ minimum: 2, maximum: 10 })
-    ),
-    kdfMemory: Schema.Int.check(
-      Schema.isBetween({ minimum: 16, maximum: 128 })
-    ),
-    kdfParallelism: Schema.Int.check(
-      Schema.isBetween({ minimum: 1, maximum: 8 })
-    ),
+    kdfType: z.literal(1),
+    kdfIterations: z.number().int().min(2).max(10),
+    kdfMemory: z.number().int().min(16).max(128),
+    kdfParallelism: z.number().int().min(1).max(8),
   }),
 ]);
-const documentSchema = Schema.Struct({
-  items: Schema.Array(
-    Schema.Struct({
-      type: Schema.Number,
-      name: Schema.String,
-      deletedDate: Schema.optional(Schema.NullOr(Schema.String)),
-      login: Schema.optional(
-        Schema.NullOr(
-          Schema.Struct({
-            username: Schema.optional(Schema.NullOr(Schema.String)),
-            password: Schema.optional(Schema.NullOr(Schema.String)),
-            totp: Schema.optional(Schema.NullOr(Schema.String)),
-            uris: Schema.optional(
-              Schema.NullOr(
-                Schema.Array(
-                  Schema.Struct({
-                    uri: Schema.optional(Schema.NullOr(Schema.String)),
-                  })
+const documentSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        type: z.number(),
+        name: z.string(),
+        deletedDate: z.optional(z.nullable(z.string())),
+        login: z.optional(
+          z.nullable(
+            z.object({
+              username: z.optional(z.nullable(z.string())),
+              password: z.optional(z.nullable(z.string())),
+              totp: z.optional(z.nullable(z.string())),
+              uris: z.optional(
+                z.nullable(
+                  z.array(
+                    z.object({
+                      uri: z.optional(z.nullable(z.string())),
+                    })
+                  )
                 )
-              )
-            ),
-          })
-        )
-      ),
-    })
-  ).check(Schema.isMaxLength(3_000)),
+              ),
+            })
+          )
+        ),
+      })
+    )
+    .max(3_000),
 });
-
-export class VaultImportFailed extends Schema.TaggedError<VaultImportFailed>()(
-  "VaultImportFailed",
-  {}
-) {}
+export class VaultImportFailed extends Error {
+  readonly _tag = "VaultImportFailed";
+  constructor() {
+    super("VaultImportFailed");
+    this.name = "VaultImportFailed";
+  }
+}
 
 /** Portable password-protected exports only; never accepts a user's account key. */
-export const openBitwardenExport = Effect.fn("openBitwardenExport")(
-  function* (source: string, password: Redacted.Redacted) {
-    const bounded = yield* Schema.decodeUnknownEffect(boundedText)(source);
-    const envelope = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(exportSchema)
-    )(bounded);
-    const material = yield* exportKey(envelope, password);
-    return yield* Effect.acquireUseRelease(
-      Effect.succeed(material),
-      Effect.fn(function* (key) {
-        const hmac = yield* Effect.tryPromise(() =>
-          crypto.subtle.importKey(
-            "raw",
-            key,
-            { name: "HMAC", hash: "SHA-256" },
-            false,
-            ["sign"]
-          )
-        );
-        // Bitwarden uses HKDF-expand, without extract, on the password-derived key.
-        const enc = yield* Effect.tryPromise(() =>
-          crypto.subtle.sign(
-            "HMAC",
-            hmac,
-            new Uint8Array([...new TextEncoder().encode("enc"), 1])
-          )
-        );
-        const mac = yield* Effect.tryPromise(() =>
-          crypto.subtle.sign(
-            "HMAC",
-            hmac,
-            new Uint8Array([...new TextEncoder().encode("mac"), 1])
-          )
-        );
-        const encryption = yield* Effect.tryPromise(() =>
-          crypto.subtle.importKey("raw", enc, "AES-CBC", false, ["decrypt"])
-        );
-        const authentication = yield* Effect.tryPromise(() =>
-          crypto.subtle.importKey(
-            "raw",
-            mac,
-            { name: "HMAC", hash: "SHA-256" },
-            false,
-            ["verify"]
-          )
-        );
-        new Uint8Array(enc).fill(0);
-        new Uint8Array(mac).fill(0);
-        const validation = yield* decryptExportCipher(
-          envelope.encKeyValidation_DO_NOT_EDIT,
-          encryption,
-          authentication
-        );
-        validation.fill(0);
-        const plaintext = yield* decryptExportCipher(
-          envelope.data,
-          encryption,
-          authentication
-        );
-        return yield* Effect.acquireUseRelease(
-          Effect.succeed(plaintext),
-          Effect.fn(function* (bytes) {
-            const document = yield* Schema.decodeUnknownEffect(
-              Schema.fromJsonString(documentSchema)
-            )(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-            return convertLogins(document);
-          }),
-          (bytes) =>
-            Effect.sync(() => {
-              bytes.fill(0);
-            })
-        );
-      }),
-      (key) =>
-        Effect.sync(() => {
-          key.fill(0);
-        })
+export async function openBitwardenExport(source: string, password: Secret) {
+  let material: Uint8Array | undefined;
+  let enc: ArrayBuffer | undefined;
+  let mac: ArrayBuffer | undefined;
+  let plaintext: Uint8Array | undefined;
+  try {
+    const envelope = jsonString(exportSchema).parse(boundedText.parse(source));
+    const key = await exportKey(envelope, password);
+    material = key;
+    const hmac = await crypto.subtle.importKey(
+      "raw",
+      key,
+      {
+        name: "HMAC",
+        hash: "SHA-256",
+      },
+      false,
+      ["sign"]
     );
-  },
-  Effect.mapError(() => new VaultImportFailed())
-);
-
-const exportKey = Effect.fn("bitwardenExportKey")(function* (
-  envelope: typeof exportSchema.Type,
-  password: Redacted.Redacted
+    // Bitwarden uses HKDF-expand, without extract, on the password-derived key.
+    enc = await crypto.subtle.sign(
+      "HMAC",
+      hmac,
+      new Uint8Array([...new TextEncoder().encode("enc"), 1])
+    );
+    mac = await crypto.subtle.sign(
+      "HMAC",
+      hmac,
+      new Uint8Array([...new TextEncoder().encode("mac"), 1])
+    );
+    const encryption = await crypto.subtle.importKey(
+      "raw",
+      enc,
+      "AES-CBC",
+      false,
+      ["decrypt"]
+    );
+    const authentication = await crypto.subtle.importKey(
+      "raw",
+      mac,
+      {
+        name: "HMAC",
+        hash: "SHA-256",
+      },
+      false,
+      ["verify"]
+    );
+    const validation = await decryptExportCipher(
+      envelope.encKeyValidation_DO_NOT_EDIT,
+      encryption,
+      authentication
+    );
+    validation.fill(0);
+    plaintext = await decryptExportCipher(
+      envelope.data,
+      encryption,
+      authentication
+    );
+    return convertLogins(
+      jsonString(documentSchema).parse(
+        new TextDecoder("utf-8", {
+          fatal: true,
+        }).decode(plaintext)
+      )
+    );
+  } catch {
+    throw new VaultImportFailed();
+  } finally {
+    material?.fill(0);
+    if (enc) new Uint8Array(enc).fill(0);
+    if (mac) new Uint8Array(mac).fill(0);
+    plaintext?.fill(0);
+  }
+}
+async function exportKey(
+  envelope: z.output<typeof exportSchema>,
+  password: Secret
 ) {
   const salt = new TextEncoder().encode(envelope.salt);
-  const passwordBytes = new TextEncoder().encode(Redacted.value(password));
-  return yield* Effect.acquireUseRelease(
-    Effect.succeed(passwordBytes),
-    Effect.fn(function* (bytes) {
-      if (envelope.kdfType === 1) {
-        const saltHash = yield* Effect.tryPromise(() =>
-          crypto.subtle.digest("SHA-256", salt)
-        );
-        return new Uint8Array(
-          yield* Effect.tryPromise(() =>
-            argon2id({
-              password: bytes,
-              salt: new Uint8Array(saltHash),
-              hashLength: 32,
-              iterations: envelope.kdfIterations,
-              memorySize: envelope.kdfMemory * 1024,
-              parallelism: envelope.kdfParallelism,
-              outputType: "binary",
-            })
-          )
-        );
-      }
-      const key = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey("raw", bytes, "PBKDF2", false, ["deriveBits"])
-      );
+  const bytes = new TextEncoder().encode(password.reveal());
+  try {
+    if (envelope.kdfType === 1) {
+      const saltHash = await crypto.subtle.digest("SHA-256", salt);
       return new Uint8Array(
-        yield* Effect.tryPromise(() =>
-          crypto.subtle.deriveBits(
-            {
-              name: "PBKDF2",
-              hash: "SHA-256",
-              salt,
-              iterations: envelope.kdfIterations,
-            },
-            key,
-            256
-          )
-        )
+        await argon2id({
+          password: bytes,
+          salt: new Uint8Array(saltHash),
+          hashLength: 32,
+          iterations: envelope.kdfIterations,
+          memorySize: envelope.kdfMemory * 1024,
+          parallelism: envelope.kdfParallelism,
+          outputType: "binary",
+        })
       );
-    }),
-    (bytes) =>
-      Effect.sync(() => {
-        bytes.fill(0);
-      })
-  );
-});
-
-const decryptExportCipher = Effect.fn("decryptBitwardenExportCipher")(
-  function* (cipher: string, encryption: CryptoKey, authentication: CryptoKey) {
-    const parts =
-      /^2\.([A-Za-z0-9+/]+=*)\|([A-Za-z0-9+/]+=*)\|([A-Za-z0-9+/]+=*)$/.exec(
-        cipher
-      );
-    if (!parts) return yield* new VaultImportFailed();
-    const [iv, encrypted, signature] = yield* Effect.try(() =>
-      parts
-        .slice(1)
-        .map((part) =>
-          Uint8Array.from(atob(part), (char) => char.charCodeAt(0))
-        )
-    );
-    if (
-      !iv ||
-      !encrypted ||
-      !signature ||
-      iv.length !== 16 ||
-      signature.length !== 32 ||
-      encrypted.length % 16 !== 0
-    )
-      return yield* new VaultImportFailed();
-    const valid = yield* Effect.tryPromise(() =>
-      crypto.subtle.verify(
-        "HMAC",
-        authentication,
-        signature,
-        new Uint8Array([...iv, ...encrypted])
-      )
-    );
-    if (!valid) return yield* new VaultImportFailed();
+    }
+    const key = await crypto.subtle.importKey("raw", bytes, "PBKDF2", false, [
+      "deriveBits",
+    ]);
     return new Uint8Array(
-      yield* Effect.tryPromise(() =>
-        crypto.subtle.decrypt({ name: "AES-CBC", iv }, encryption, encrypted)
+      await crypto.subtle.deriveBits(
+        {
+          name: "PBKDF2",
+          hash: "SHA-256",
+          salt,
+          iterations: envelope.kdfIterations,
+        },
+        key,
+        256
       )
     );
+  } finally {
+    bytes.fill(0);
   }
-);
-
-function convertLogins(document: typeof documentSchema.Type) {
+}
+const decryptExportCipher = async function (
+  cipher: string,
+  encryption: CryptoKey,
+  authentication: CryptoKey
+) {
+  const parts =
+    /^2\.([A-Za-z0-9+/]+=*)\|([A-Za-z0-9+/]+=*)\|([A-Za-z0-9+/]+=*)$/.exec(
+      cipher
+    );
+  if (!parts) throw new VaultImportFailed();
+  const [iv, encrypted, signature] = parts
+    .slice(1)
+    .map((part) => Uint8Array.from(atob(part), (char) => char.charCodeAt(0)));
+  if (
+    !iv ||
+    !encrypted ||
+    !signature ||
+    iv.length !== 16 ||
+    signature.length !== 32 ||
+    encrypted.length % 16 !== 0
+  )
+    throw new VaultImportFailed();
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    authentication,
+    signature,
+    new Uint8Array([...iv, ...encrypted])
+  );
+  if (!valid) throw new VaultImportFailed();
+  return new Uint8Array(
+    await crypto.subtle.decrypt(
+      {
+        name: "AES-CBC",
+        iv,
+      },
+      encryption,
+      encrypted
+    )
+  );
+};
+function convertLogins(document: z.output<typeof documentSchema>) {
   const items: VaultImportItems = [];
   let skipped = 0;
   for (const item of document.items) {
@@ -307,5 +284,8 @@ function convertLogins(document: typeof documentSchema.Type) {
       }),
     });
   }
-  return { items, skipped };
+  return {
+    items,
+    skipped,
+  };
 }

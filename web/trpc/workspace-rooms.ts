@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { serverRuntime } from "../../server/runtime";
+import { withSignal } from "../../server/operations/async";
+
 import { workspaceProcedure } from "./workspace-procedure";
 import {
   MatrixCreateInput,
@@ -14,28 +14,26 @@ import {
 
 export const workspaceRoomsRouter = {
   list: workspaceProcedure.query(({ ctx, signal }) =>
-    serverRuntime.runPromise(listMatrixRooms(ctx.actor), { signal })
+    withSignal(signal, async () => listMatrixRooms(ctx.actor))
   ),
   create: workspaceProcedure
-    .input(Schema.toStandardSchemaV1(MatrixCreateInput))
+    .input(MatrixCreateInput)
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(createMatrixRoom(ctx.actor, input), { signal })
+      withSignal(signal, async () => createMatrixRoom(ctx.actor, input))
     ),
   messages: workspaceProcedure
-    .input(Schema.toStandardSchemaV1(MatrixRoomInput))
+    .input(MatrixRoomInput)
     .query(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(readMatrixMessages(ctx.actor, input.id), {
-        signal,
-      })
+      withSignal(signal, async () => readMatrixMessages(ctx.actor, input.id))
     ),
   send: workspaceProcedure
-    .input(Schema.toStandardSchemaV1(MatrixMessageInput))
+    .input(MatrixMessageInput)
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(sendMatrixMessage(ctx.actor, input), { signal })
+      withSignal(signal, async () => sendMatrixMessage(ctx.actor, input))
     ),
   close: workspaceProcedure
-    .input(Schema.toStandardSchemaV1(MatrixRoomInput))
+    .input(MatrixRoomInput)
     .mutation(({ ctx, input, signal }) =>
-      serverRuntime.runPromise(closeMatrixRoom(ctx.actor, input.id), { signal })
+      withSignal(signal, async () => closeMatrixRoom(ctx.actor, input.id))
     ),
 };
