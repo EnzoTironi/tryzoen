@@ -80,7 +80,8 @@ export function publicHostRedirect(
   const app = host === zoenAppHost;
 
   if (legacy || www) {
-    if (pathname === "/" || pathname === "/welcome") return marketingHome(search);
+    if (pathname === "/" || pathname === "/welcome")
+      return marketingHome(search);
     if (isMarketingPath(pathname))
       return withOrigin(zoenMarketingOrigin, pathname, search);
     return withOrigin(zoenAppOrigin, pathname, search);

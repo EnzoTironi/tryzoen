@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/require-mock-type-parameters -- The auth mock implements only the proxy boundary exercised here. */
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { getAuthSession } from "@db/services/auth/session";
 import { config, proxy } from "../../../proxy";
 
 const mocks = vi.hoisted(() => ({
-  getAuthSession: vi.fn<typeof getAuthSession>(),
+  getAuthSession: vi.fn(),
 }));
 
 vi.mock("@db/services/auth/session", () => ({
@@ -114,7 +115,7 @@ describe("auth proxy matcher", () => {
   });
 
   it("lets an authenticated visitor keep the workspace on a combined host", async () => {
-    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } });
     const response = await proxy(new NextRequest("https://example.com/"));
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(response.headers.has("location")).toBe(false);
@@ -162,7 +163,7 @@ describe("auth proxy matcher", () => {
   });
 
   it("keeps the authenticated app home on app.tryzoen.com", async () => {
-    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mocks.getAuthSession.mockResolvedValue({ user: { id: "user-1" } });
     const response = await proxy(new NextRequest("https://app.tryzoen.com/"));
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(response.headers.has("location")).toBe(false);

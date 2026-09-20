@@ -104,10 +104,7 @@ export function MarketingShell({
         <Separator />
         <MarketingFrame className="flex flex-col gap-8 py-12 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex max-w-sm flex-col gap-2">
-            <Link
-              className="flex items-center gap-2 type-label"
-              href="/"
-            >
+            <Link className="flex items-center gap-2 type-label" href="/">
               <Logo />
               <span>Zoen</span>
             </Link>

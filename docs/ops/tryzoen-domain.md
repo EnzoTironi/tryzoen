@@ -3,12 +3,12 @@
 One Fly app (`companion-tironi`) serves both public hosts. The operator points
 DNS and Fly certificates; this repo owns host-based redirects and canonical URLs.
 
-| Host                 | Role                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------- |
-| `tryzoen.com`        | Marketing. Landing is `/`. `/welcome` permanently redirects to `/`.                       |
-| `www.tryzoen.com`    | Permanent redirect onto the same marketing/app split as the apex.                         |
-| `app.tryzoen.com`    | Product app: sign-in, workspace, Better Auth, Eve, channel webhooks.                      |
-| `zoen.tironi.xyz`    | Legacy. `/` and `/welcome` → `https://tryzoen.com/`; other app paths → `app.tryzoen.com`. |
+| Host              | Role                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `tryzoen.com`     | Marketing. Landing is `/`. `/welcome` permanently redirects to `/`.                       |
+| `www.tryzoen.com` | Permanent redirect onto the same marketing/app split as the apex.                         |
+| `app.tryzoen.com` | Product app: sign-in, workspace, Better Auth, Eve, channel webhooks.                      |
+| `zoen.tironi.xyz` | Legacy. `/` and `/welcome` → `https://tryzoen.com/`; other app paths → `app.tryzoen.com`. |
 
 Localhost and `*.fly.dev` stay combined (no host split). Health (`/eve/v1/health`,
 `/api/health`), Eve, Matrix (`/_matrix/…`), channel webhooks, and `/internal/…`
@@ -35,10 +35,10 @@ fly certs add app.tryzoen.com -a companion-tironi
 Set these on `companion-tironi` **after** `app.tryzoen.com` resolves and has a
 certificate. There are no secret renames.
 
-| Secret                      | Hosted value                   | Why                                                                                          |
-| --------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_URL`           | `https://app.tryzoen.com`      | Sessions, Google callback `{BETTER_AUTH_URL}/api/auth/callback/google`, Vaultwarden issuer   |
-| `COMPANION_PUBLIC_BASE_URL` | `https://app.tryzoen.com`      | Telegram / Kapso webhook origin                                                              |
+| Secret                      | Hosted value              | Why                                                                                        |
+| --------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `BETTER_AUTH_URL`           | `https://app.tryzoen.com` | Sessions, Google callback `{BETTER_AUTH_URL}/api/auth/callback/google`, Vaultwarden issuer |
+| `COMPANION_PUBLIC_BASE_URL` | `https://app.tryzoen.com` | Telegram / Kapso webhook origin                                                            |
 
 A later Alchemy prod deploy writes the same two values from
 `production.appHostname`. It will also retarget channel webhooks from

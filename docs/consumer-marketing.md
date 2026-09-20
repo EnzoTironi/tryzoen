@@ -4,13 +4,13 @@ Public Instinct / Companion marketing pages inspired by Poke + Town **structure*
 (hero → audience → how it works → trust → pricing → docs), not their assets or
 copy.
 
-| Route                         | Purpose                                                               |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `https://tryzoen.com/`        | Consumer landing (hero, people/orgs/prosumers, trust, pricing teaser) |
-| `/welcome`                    | Permanent redirect to `/`                                             |
-| `/pricing`                    | Redirects to `/get-started`                                           |
-| `/docs`                       | Consumer first-run summary linking to `/get-started`                  |
-| `https://app.tryzoen.com`     | Sign-in, workspace, Eve, channel webhooks                             |
+| Route                     | Purpose                                                               |
+| ------------------------- | --------------------------------------------------------------------- |
+| `https://tryzoen.com/`    | Consumer landing (hero, people/orgs/prosumers, trust, pricing teaser) |
+| `/welcome`                | Permanent redirect to `/`                                             |
+| `/pricing`                | Redirects to `/get-started`                                           |
+| `/docs`                   | Consumer first-run summary linking to `/get-started`                  |
+| `https://app.tryzoen.com` | Sign-in, workspace, Eve, channel webhooks                             |
 
 Primary conversion CTAs point at `/get-started`. Returning users use
 `https://app.tryzoen.com/sign-in`.
