@@ -14,7 +14,7 @@ export function toolContextFor({
   parentSessionId,
   sessionId = "test-session",
   toolName = "test-tool",
-}: TestToolContextOptions = {}): ToolContext {
+}: TestToolContextOptions = {}): ToolContext & { model: null } {
   const parent = parentSessionId
     ? {
         callId: "parent-call",
@@ -25,6 +25,7 @@ export function toolContextFor({
     : undefined;
   return {
     abortSignal,
+    model: null,
     callId,
     async getSandbox() {
       throw new Error("Sandbox access is outside this focused test.");

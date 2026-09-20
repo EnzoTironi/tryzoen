@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
 export const workspacePlugins = [
   {
@@ -22,12 +22,11 @@ export const workspacePlugins = [
     description: "Entidades, relações e ações com origem verificável.",
   },
 ] as const;
-export const WorkspaceCapabilitiesSchema = Schema.Struct({
-  version: Schema.Literal(1),
-  enabled: Schema.Array(
-    Schema.Literals(["files", "memory", "google", "ontology"])
-  ).check(Schema.isMaxLength(4)),
+export const WorkspaceCapabilitiesSchema = z.object({
+  version: z.literal(1),
+  enabled: z.array(z.enum(["files", "memory", "google", "ontology"])).max(4),
 });
 export const capabilitiesPath = "plugins/workspace.json";
-export const defaultWorkspaceCapabilities: typeof WorkspaceCapabilitiesSchema.Type =
-  { version: 1, enabled: ["files", "memory"] };
+export const defaultWorkspaceCapabilities: z.output<
+  typeof WorkspaceCapabilitiesSchema
+> = { version: 1, enabled: ["files", "memory", "ontology"] };

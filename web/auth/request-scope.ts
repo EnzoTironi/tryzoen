@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { cache } from "react";
 import { getAuthSession } from "@db/services/auth/session";
-import { serverRuntime } from "../../server/runtime";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
 import {
   accessScopeForUser,
@@ -14,9 +13,7 @@ export const requireRequestScope = cache(async (): Promise<AccessScope> => {
   const requestHeaders = await headers();
   if (!requestHeaders.has("x-zoen-workspace"))
     return accessScopeForUser(`better-auth:${session.user.id}`);
-  const actor = await serverRuntime.runPromise(
-    resolveWorkspaceActor(requestHeaders)
-  );
+  const actor = await resolveWorkspaceActor(requestHeaders);
   return { userId: actor.userId, workspaceId: actor.workspaceId };
 });
 

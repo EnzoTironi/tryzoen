@@ -1,12 +1,29 @@
+import { Secret } from "@shared/environment/secret";
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, name): unknown {
+        if (name === "KAPSO_WEBHOOK_SECRET" || name === "KAPSO_API_KEY")
+          return new Secret(z.string().min(1).parse(process.env[name]));
+        if (typeof name === "string" && name.startsWith("KAPSO_"))
+          return process.env[name];
+        return Reflect.get(target, name);
+      },
+    }),
+  };
+});
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
 import assert from "node:assert/strict";
 import { createHmac, randomBytes, randomInt } from "node:crypto";
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema, Result } from "effect";
+
 import type { RouteHandlerArgs } from "eve/channels";
 import { test, vi } from "vitest";
 import { privateChannel } from "../../agent/lib/private-channel";
 import { ChannelAccounts } from "../../server/accounts";
-import { serverRuntime } from "../../server/runtime";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import { linkedIdentity } from "./identity-fixture";
 
@@ -18,24 +35,24 @@ test("signed WhatsApp button confirms only its recipient and original browser wi
   vi.stubEnv("KAPSO_PHONE_NUMBER", "+15550001111");
   vi.stubEnv("KAPSO_API_KEY", "synthetic-kapso-key");
   vi.stubEnv("KAPSO_WEBHOOK_SECRET", secret);
-  const bodySchema = Schema.Struct({
-    to: Schema.String,
-    type: Schema.Literals(["text", "interactive"]),
-    interactive: Schema.optionalKey(
-      Schema.Struct({
-        type: Schema.Literal("button"),
-        action: Schema.Struct({
-          buttons: Schema.Array(
-            Schema.Struct({
-              type: Schema.Literal("reply"),
-              reply: Schema.Struct({ id: Schema.String, title: Schema.String }),
+  const bodySchema = z.object({
+    to: z.string(),
+    type: z.enum(["text", "interactive"]),
+    interactive: z.optional(
+      z.object({
+        type: z.literal("button"),
+        action: z.object({
+          buttons: z.array(
+            z.object({
+              type: z.literal("reply"),
+              reply: z.object({ id: z.string(), title: z.string() }),
             })
           ),
         }),
       })
     ),
   });
-  const sent: (typeof bodySchema.Type)[] = [];
+  const sent: z.output<typeof bodySchema>[] = [];
   vi.stubGlobal(
     "fetch",
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -44,7 +61,7 @@ test("signed WhatsApp button confirms only its recipient and original browser wi
         request.url,
         `https://api.kapso.ai/meta/whatsapp/v24.0/${installationId}/messages`
       );
-      const body = Schema.decodeUnknownSync(bodySchema)(await request.json());
+      const body = bodySchema.parse(await request.json());
       sent.push(body);
       return Response.json({
         messaging_product: "whatsapp",
@@ -55,23 +72,20 @@ test("signed WhatsApp button confirms only its recipient and original browser wi
   );
   const browserSecret = randomBytes(32).toString("base64url");
   const sender = { channel: "kapso" as const, installationId, senderId };
-  const setup = await serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const sql = yield* PgClient.PgClient;
-      const [database] = yield* sql<{
-        name: string;
-      }>`SELECT current_database() AS name`;
-      assert.equal(database?.name, "companion_runtime_test");
-      const accounts = yield* ChannelAccounts;
-      const identity = yield* linkedIdentity(sender);
-      const challenge = yield* accounts.issueChallenge({
-        ...sender,
-        purpose: "login",
-        browserSecret,
-      });
-      return { identity, challenge };
-    })
-  );
+  const setup = await (async function () {
+    const [database] = await query<{
+      name: string;
+    }>(sql`SELECT current_database() AS name`);
+    assert.equal(database?.name, "companion_runtime_test");
+    const accounts = ChannelAccounts;
+    const identity = await linkedIdentity(sender);
+    const challenge = await accounts.issueChallenge({
+      ...sender,
+      purpose: "login",
+      browserSecret,
+    });
+    return { identity, challenge };
+  })();
   const route = privateChannel("kapso").routes[0];
   assert.ok(route && route.transport !== "websocket");
   const background: Promise<unknown>[] = [];
@@ -128,13 +142,11 @@ test("signed WhatsApp button confirms only its recipient and original browser wi
     return response;
   };
   const status = () =>
-    serverRuntime.runPromise(
-      Effect.flatMap(ChannelAccounts, (accounts) =>
-        accounts.getChallengeStatus({
-          challengeId: setup.challenge.challengeId,
-          browserSecret,
-        })
-      )
+    Promise.try(async () => ChannelAccounts).then((accounts) =>
+      accounts.getChallengeStatus({
+        challengeId: setup.challenge.challengeId,
+        browserSecret,
+      })
     );
   try {
     assert.equal((await deliver("start")).status, 200);
@@ -166,36 +178,42 @@ test("signed WhatsApp button confirms only its recipient and original browser wi
     assert.deepEqual(await status(), { status: "pending" });
     assert.equal((await deliver("confirm", true)).status, 200);
     assert.deepEqual(await status(), { status: "confirmed" });
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const accounts = yield* ChannelAccounts;
-        const wrongBrowser = yield* accounts
-          .consumeChallenge({
-            challengeId: setup.challenge.challengeId,
-            browserSecret: "a-different-browser",
-          })
-          .pipe(Effect.result);
-        assert.equal(Result.isFailure(wrongBrowser), true);
-        const owner = yield* accounts.consumeChallenge({
+    await (async function () {
+      const accounts = ChannelAccounts;
+      const wrongBrowser = await Promise.try(async () =>
+        accounts.consumeChallenge({
           challengeId: setup.challenge.challengeId,
-          browserSecret,
-        });
-        assert.equal(owner.userId, setup.identity.userId);
-      })
-    );
+          browserSecret: "a-different-browser",
+        })
+      ).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error })
+      );
+      assert.equal(!wrongBrowser.ok, true);
+      const owner = await accounts.consumeChallenge({
+        challengeId: setup.challenge.challengeId,
+        browserSecret,
+      });
+      assert.equal(owner.userId, setup.identity.userId);
+    })();
     assert.equal((await deliver("replay", true)).status, 200);
     assert.deepEqual(await status(), { status: "consumed" });
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`DELETE FROM public.channel_auth_challenge WHERE installation_id = ${installationId}`;
-        yield* sql`DELETE FROM public.channel_identity WHERE installation_id = ${installationId}`;
-        yield* sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${setup.identity.userId}`).workspaceId}`;
-        yield* sql`DELETE FROM public.user WHERE id = ${setup.identity.userId}`;
-      })
-    );
+    await (async function () {
+      await query(
+        sql`DELETE FROM public.channel_auth_challenge WHERE installation_id = ${installationId}`
+      );
+      await query(
+        sql`DELETE FROM public.channel_identity WHERE installation_id = ${installationId}`
+      );
+      await query(
+        sql`DELETE FROM workspaces WHERE id = ${accessScopeForUser(`better-auth:${setup.identity.userId}`).workspaceId}`
+      );
+      await query(
+        sql`DELETE FROM public.user WHERE id = ${setup.identity.userId}`
+      );
+    })();
   }
 });

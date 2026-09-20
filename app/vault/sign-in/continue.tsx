@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Effect } from "effect";
 import { ShieldCheckIcon } from "lucide-react";
 import { authClient } from "@web/auth/client";
 import { Button } from "@web/components/ui/button";
@@ -25,20 +24,16 @@ export function VaultContinue() {
         onClick={() => {
           start(async () => {
             setFailed(false);
-            await Effect.runPromise(
-              Effect.tryPromise(() =>
-                authClient.oauth2.consent({ accept: true })
-              ).pipe(
-                Effect.match({
-                  onFailure: () => {
-                    setFailed(true);
-                  },
-                  onSuccess: (result) => {
-                    if (result.error || !result.data.url) setFailed(true);
-                    else window.location.assign(result.data.url);
-                  },
-                })
-              )
+            await Promise.try(async () => {
+              return await authClient.oauth2.consent({ accept: true });
+            }).then(
+              (result) => {
+                if (result.error || !result.data.url) setFailed(true);
+                else window.location.assign(result.data.url);
+              },
+              () => {
+                setFailed(true);
+              }
             );
           });
         }}

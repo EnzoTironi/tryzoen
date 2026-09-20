@@ -2,8 +2,7 @@
 
 import { useI18n } from "@web/i18n/context";
 
-import { useEffect, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -75,11 +74,31 @@ const examples = [
   },
 ] as const;
 
+function subscribeToMotionPreference(onChange: () => void) {
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", onChange);
+  return () => {
+    query.removeEventListener("change", onChange);
+  };
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function serverMotionPreference() {
+  return false;
+}
+
 export function ConnectionCarousel() {
   const { t } = useI18n();
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useSyncExternalStore(
+    subscribeToMotionPreference,
+    prefersReducedMotion,
+    serverMotionPreference
+  );
   const active = examples[current] ?? examples[0];
   const Icon = active.icon;
   useEffect(() => {

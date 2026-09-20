@@ -1,9 +1,11 @@
 "use client";
 
+import { z } from "zod";
+
 import { useI18n } from "@web/i18n/context";
 
 import { useState } from "react";
-import { Option, Schema } from "effect";
+
 import {
   accountOnlineWipeLimits,
   accountOnlineWipeNotWiped,
@@ -12,11 +14,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button, buttonVariants } from "@web/components/ui/button";
 
-const wipeResponseSchema = Schema.Struct({
-  status: Schema.optionalKey(Schema.String),
-  wiped: Schema.optionalKey(Schema.Array(Schema.String)),
-  notWiped: Schema.optionalKey(Schema.Array(Schema.String)),
-  limits: Schema.optionalKey(Schema.String),
+const wipeResponseSchema = z.object({
+  status: z.optional(z.string()),
+  wiped: z.optional(z.array(z.string())),
+  notWiped: z.optional(z.array(z.string())),
+  limits: z.optional(z.string()),
 });
 
 export function AccountPrivacyWipeSection() {
@@ -47,8 +49,8 @@ export function AccountPrivacyWipeSection() {
         return;
       }
       const raw: unknown = await response.json();
-      const decoded = Schema.decodeUnknownOption(wipeResponseSchema)(raw);
-      const body = Option.isSome(decoded) ? decoded.value : {};
+      const decoded = wipeResponseSchema.safeParse(raw);
+      const body = decoded.success ? decoded.data : {};
       if (body.status && body.status !== "partial_online_wipe") {
         setError(
           t(

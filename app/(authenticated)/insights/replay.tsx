@@ -1,7 +1,10 @@
 "use client";
 
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
+
 import { useEffect, useRef, useState } from "react";
-import { Option, Schema } from "effect";
+
 import type { Replayer } from "@rrweb/replay";
 import { Button } from "@web/components/ui/button";
 import { useI18n } from "@web/i18n/context";
@@ -33,20 +36,18 @@ export function DiagnosticReplay({
         if (disposed) return undefined;
         const data = batches.flatMap((batch) => {
           if (!batch.payload) return [];
-          const result = Schema.decodeUnknownOption(
-            Schema.fromJsonString(
-              Schema.Struct({
-                events: Schema.Array(
-                  Schema.Struct({
-                    type: Schema.Number,
-                    data: Schema.Json,
-                    timestamp: Schema.Number,
-                  })
-                ),
-              })
-            )
-          )(batch.payload);
-          return Option.isSome(result) ? result.value.events : [];
+          const result = jsonString(
+            z.object({
+              events: z.array(
+                z.object({
+                  type: z.number(),
+                  data: z.json(),
+                  timestamp: z.number(),
+                })
+              ),
+            })
+          ).safeParse(batch.payload);
+          return result.success ? result.data.events : [];
         });
         // The replayer accepts runtime-validated events and renders inside its sandboxed iframe.
         if (data.length < 2) return undefined;

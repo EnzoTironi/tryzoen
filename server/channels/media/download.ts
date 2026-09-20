@@ -1,64 +1,40 @@
-import { Effect, Schema, Stream } from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  type HttpClientRequest,
-} from "effect/unstable/http";
+import { operationSignal, withTimeout } from "../../operations/async";
+import { BodyTooLarge, readBody } from "../../http/body";
 import { ChannelMediaError } from "./policy";
 
-const contentLength = Schema.String.check(Schema.isPattern(/^[0-9]+$/u));
-
-export const downloadMediaBytes = Effect.fn("downloadMediaBytes")(
-  function* (
-    client: HttpClient.HttpClient,
-    request: HttpClientRequest.HttpClientRequest,
-    maxBytes: number
-  ) {
-    const response = yield* HttpClient.withScope(client)
-      .execute(request)
-      .pipe(
-        Effect.mapError(
-          () => new ChannelMediaError({ reason: "download_failed" })
-        )
-      );
-    if (response.status !== 200)
-      return yield* new ChannelMediaError({ reason: "download_failed" });
-    const declared = response.headers["content-length"];
-    if (declared !== undefined) {
-      const length = yield* Schema.decodeUnknownEffect(contentLength)(
-        declared
-      ).pipe(
-        Effect.mapError(
-          () => new ChannelMediaError({ reason: "download_failed" })
-        )
-      );
-      if (Number(length) > maxBytes)
-        return yield* new ChannelMediaError({ reason: "too_large" });
-    }
-    const body = yield* response.stream.pipe(
-      Stream.mapError(
-        () => new ChannelMediaError({ reason: "download_failed" })
-      ),
-      Stream.runFoldEffect(
-        () => ({ size: 0, chunks: new Array<Uint8Array>() }),
-        (state, chunk) => {
-          if (state.size + chunk.length > maxBytes)
-            return Effect.fail(new ChannelMediaError({ reason: "too_large" }));
-          state.size += chunk.length;
-          state.chunks.push(chunk);
-          return Effect.succeed(state);
+export async function downloadMediaBytes(
+  url: string,
+  maxBytes: number,
+  init: RequestInit = {}
+) {
+  try {
+    return await withTimeout(async () => {
+      const response = await fetch(url, {
+        ...init,
+        redirect: "error",
+        signal: operationSignal(),
+      });
+      try {
+        if (response.status !== 200)
+          throw new ChannelMediaError({ reason: "download_failed" });
+        const declared = response.headers.get("content-length");
+        if (declared !== null) {
+          if (!/^[0-9]+$/u.test(declared))
+            throw new ChannelMediaError({ reason: "download_failed" });
+          if (Number(declared) > maxBytes) throw new BodyTooLarge();
         }
-      )
-    );
-    return Buffer.concat(body.chunks, body.size);
-  },
-  Effect.scoped,
-  Effect.timeout("15 seconds"),
-  Effect.catchTag(
-    "TimeoutError",
-    () => new ChannelMediaError({ reason: "download_failed" })
-  ),
-  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-  Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-  Effect.provideService(HttpClient.TracerPropagationEnabled, false)
-);
+        return await readBody(response.body, maxBytes);
+      } finally {
+        void response.body?.cancel().catch(() => {
+          /* Closing an already cancelled stream needs no recovery. */
+        });
+      }
+    }, 15_000);
+  } catch (error) {
+    operationSignal().throwIfAborted();
+    if (error instanceof ChannelMediaError) throw error;
+    throw new ChannelMediaError({
+      reason: error instanceof BodyTooLarge ? "too_large" : "download_failed",
+    });
+  }
+}

@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { jsonString } from "@shared/validation";
+import type { z } from "zod";
 import {
   capabilitiesPath,
   defaultWorkspaceCapabilities,
@@ -7,17 +8,15 @@ import {
 import type { WorkspaceActorSchema } from "./access";
 import { WorkspaceRepository } from "./repository";
 
-export const readWorkspaceCapabilities = Effect.fn("readWorkspaceCapabilities")(
-  function* (actor: typeof WorkspaceActorSchema.Type) {
-    const selection = yield* (yield* WorkspaceRepository).selection(actor, [
-      capabilitiesPath,
-    ]);
-    const document = selection.documents[0];
-    const capabilities = document
-      ? yield* Schema.decodeUnknownEffect(
-          Schema.fromJsonString(WorkspaceCapabilitiesSchema)
-        )(document.content)
-      : defaultWorkspaceCapabilities;
-    return { ...capabilities, revision: selection.revision };
-  }
-);
+export const readWorkspaceCapabilities = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
+) {
+  const selection = await WorkspaceRepository.selection(actor, [
+    capabilitiesPath,
+  ]);
+  const document = selection.documents[0];
+  const capabilities = document
+    ? await jsonString(WorkspaceCapabilitiesSchema).parseAsync(document.content)
+    : defaultWorkspaceCapabilities;
+  return { ...capabilities, revision: selection.revision };
+};

@@ -14,7 +14,7 @@ providers. PostgreSQL is self-hosted; no managed Postgres product is provisioned
 | Private vault            | zoen-vault-tironi, gru, 1 shared CPU / 512 MB; Vaultwarden 1.37.3, restricted database zoen_vaultwarden, encrypted 3 GB volume     |
 | Private Matrix           | zoen-matrix-tironi, gru, 1 shared CPU / 1 GB; Synapse 1.160.0, database zoen_matrix                                                |
 | Private WhatsApp bridge  | zoen-whatsapp-tironi, gru, 1 shared CPU / 512 MB; mautrix-whatsapp v0.2608.0, restricted database zoen_whatsapp; not started in CI |
-| Memory persistence       | PostgreSQL database zoen_memory, separate login; original encrypted 3 GB volume retained for legacy import/recovery                |
+| Memory persistence       | PostgreSQL database zoen_memory and separate login; stateless API without a local memory volume                                    |
 | Backups                  | Private Tigris bucket, pgBackRest client-side AES-256 encryption, continuous WAL archive                                           |
 | Domain                   | Cloudflare A + AAAA records and Fly TLS certificate for zoen.tironi.xyz                                                            |
 | Infrastructure state     | Alchemy Cloudflare remote state, encrypted with a separate key in Cloudflare Secrets Store                                         |
@@ -95,7 +95,7 @@ pnpm exec alchemy deploy --stage prod --env-file "$PWD/.env.prod" --yes
 pnpm check:production
 ```
 
-Inspect the plan: production database and memory volumes must never be replaced.
+Inspect the plan: the production PostgreSQL volume must never be replaced implicitly.
 Their exact IDs are pinned in `production.ts`. Changes to those IDs are recovery
 operations, not routine deployment. Apps, machines, volumes, backup
 storage and encryption keys are retained on stack removal. Do not use `--force`

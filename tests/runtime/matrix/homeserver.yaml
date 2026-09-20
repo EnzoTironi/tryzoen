@@ -1,0 +1,36 @@
+server_name: zoen-eve.test
+signing_key_path: /data/signing.key
+report_stats: false
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    bind_addresses: ["0.0.0.0"]
+    resources:
+      - names: [client, health]
+database:
+  name: psycopg2
+  args:
+    user: synapse_runtime
+    password: synthetic-matrix
+    database: synapse_runtime
+    host: postgres
+    port: 5432
+    cp_min: 1
+    cp_max: 5
+app_service_config_files: [/config/registration.yaml]
+trusted_key_servers: []
+suppress_key_server_warning: true
+federation_domain_whitelist: []
+enable_registration: false
+enable_media_repo: false
+rc_message:
+  per_second: 1000
+  burst_count: 10000
+rc_invites:
+  per_room:
+    per_second: 1000
+    burst_count: 10000
+  per_user:
+    per_second: 1000
+    burst_count: 10000

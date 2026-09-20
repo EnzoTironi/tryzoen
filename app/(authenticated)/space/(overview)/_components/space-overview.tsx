@@ -269,6 +269,8 @@ export function SpaceOverview() {
           onSubmit={(event) => {
             event.preventDefault();
             const slug = name
+              .trim()
+              .replace(/\.md$/i, "")
               .normalize("NFKD")
               .replace(/[\u0300-\u036f]/g, "")
               .toLowerCase()

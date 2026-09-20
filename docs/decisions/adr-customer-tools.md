@@ -12,7 +12,7 @@ Executor adds the current publication to its existing catalog. Its ID is `custom
 
 ## Execution boundary
 
-Customer JavaScript runs only in the existing pinned QuickJS isolate. It receives a JSON input object and returns a schema-validated JSON object. There is no environment, host filesystem, network, credential broker, package loader or host execution fallback. CPU interrupts, memory/stack bounds, host-call limits, cancellation and a wall deadline apply. A separate four-slot customer computation limit prevents deadlock when all four outer Code Mode slots invoke customer computations.
+Customer JavaScript runs only in the existing pinned QuickJS isolate. It receives a JSON input object and returns a schema-validated JSON object. There is no environment, host filesystem, network, credential broker, package loader or host execution fallback. CPU interrupts, memory/stack bounds, host-call limits, cancellation and a wall deadline apply. A four-slot limit bounds concurrent customer computations.
 
 A definition may declare existing workspace read dependencies. Every call is mediated by `invokeWorkspaceTool` with current workspace authorization and capability checks. Other customer tools, Google tools and native mutations cannot be nested inside this code. External bot grants do not inherit customer code execution from a file grant. Disabling the files capability removes customer tools from discovery.
 
@@ -20,6 +20,6 @@ Input/output JSON Schema uses a bounded subset: objects, arrays, strings, number
 
 ## Evidence and limits
 
-`tests/runtime/customer-tools.integration.ts` exercises personal publication, repeat-safe publication, a skill pinned to the tool ID, four simultaneous nested Code Mode calls, another personal workspace, stale descriptors after disable, rollback, member proposals, direct-write rejection, bound-group use and membership removal. Malicious code attempts environment access, filesystem access, an infinite loop and an undeclared dependency. The existing repository and skill integration suites cover Git concurrency and permission boundaries.
+`tests/runtime/customer-tools.integration.ts` exercises personal publication, repeat-safe publication, a skill pinned to the tool ID, four simultaneous customer-tool calls, another personal workspace, stale descriptors after disable, rollback, member proposals, direct-write rejection, bound-group use and membership removal. Malicious code attempts environment access, filesystem access, an infinite loop and an undeclared dependency. The existing repository and skill integration suites cover Git concurrency and permission boundaries.
 
 A local browser proof uses a synthetic user in `companion_runtime_test`, not Google OAuth. Mobile UI transitions create, test, publish and disable a tool without another document request. It is not an end-to-end Eve reasoning or live-provider pass. Remote connector fixture proofs are recorded separately in [Customer connectors](adr-customer-connectors.md). A customer provider pilot and native agent evals remain separate acceptance gates.

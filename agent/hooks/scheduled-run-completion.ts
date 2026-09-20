@@ -1,5 +1,4 @@
 import { defineHook } from "eve/hooks";
-import { serverRuntime } from "../../server/runtime";
 import { dispatchItem } from "../../server/channels/dispatch";
 import { deliverNativeScheduledReport } from "../../server/schedules/native-report";
 import { scheduledRunIdentity } from "@agent/lib/schedules/identity";
@@ -154,11 +153,9 @@ export default defineHook({
         const channel =
           ctx.session.auth.initiator?.attributes.conversationChannel;
         if (channel === "telegram" || channel === "kapso") {
-          await serverRuntime.runPromise(
-            dispatchItem(
-              completed.run.id,
-              deliverNativeScheduledReport(completed.run.id)
-            )
+          await dispatchItem(
+            completed.run.id,
+            deliverNativeScheduledReport(completed.run.id)
           );
         }
       }

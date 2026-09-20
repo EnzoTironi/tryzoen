@@ -1,5 +1,6 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect } from "effect";
+import type { z } from "zod";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
 import {
   type WorkspaceActorSchema,
   requireWorkspaceAccess,
@@ -7,26 +8,23 @@ import {
 } from "../workspaces/access";
 
 /** An event is authorized by its sender, current room epoch and live workspace membership. */
-export const matrixDeliveryActor = Effect.fn("matrix.deliveryActor")(function* (
-  eventId: string
-) {
-  const sql = yield* PgClient.PgClient;
-  const rows = yield* sql<{
+export const matrixDeliveryActor = async function (eventId: string) {
+  const rows = await query<{
     userId: string;
     workspaceId: string;
     matrixIdentityId: string;
     groupBindingId: string;
     groupEpoch: string;
-  }>`SELECT d.user_id AS "userId", b.workspace_id AS "workspaceId", i.matrix_id AS "matrixIdentityId",
+  }>(sql`SELECT d.user_id AS "userId", b.workspace_id AS "workspaceId", i.matrix_id AS "matrixIdentityId",
     b.id AS "groupBindingId", d.epoch AS "groupEpoch"
     FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id = d.binding_id
     JOIN matrix_identities i ON i.user_id = d.user_id
-    WHERE d.event_id = ${eventId} AND d.state IN ('pending', 'dispatched', 'answer_ready')`;
-  if (!rows[0]) return yield* new WorkspaceAccessDenied();
-  return yield* requireWorkspaceAccess(rows[0]);
-});
+    WHERE d.event_id = ${eventId} AND d.state IN ('pending', 'dispatched', 'answer_ready')`);
+  if (!rows[0]) throw new WorkspaceAccessDenied();
+  return await requireWorkspaceAccess(rows[0]);
+};
 
-export function matrixPrincipal(actor: typeof WorkspaceActorSchema.Type) {
+export function matrixPrincipal(actor: z.output<typeof WorkspaceActorSchema>) {
   return {
     authenticator: "matrix",
     principalType: "user" as const,
@@ -40,4 +38,14 @@ export function matrixPrincipal(actor: typeof WorkspaceActorSchema.Type) {
       conversationChannel: "matrix",
     },
   };
+}
+
+/** The native session and event must both belong to the currently authorized requester. */
+export async function matrixSessionActor(eventId: string, sessionId: string) {
+  const actor = await matrixDeliveryActor(eventId);
+  const rows = await query(
+    sql`SELECT event_id FROM matrix_deliveries WHERE event_id = ${eventId} AND session_id = ${sessionId}`
+  );
+  if (rows.length !== 1) throw new WorkspaceAccessDenied();
+  return actor;
 }

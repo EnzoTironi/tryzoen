@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import { artifactLimits } from "../../artifacts/model";
 import type { MessagePayload } from "../../messaging/model";
 import { sniffBrowserImageMediaType } from "../../../shared/browser/artifact";
@@ -14,22 +15,35 @@ export const mediaLimits = {
   audioSeconds: 120,
 } as const;
 
-export class ChannelMediaError extends Schema.TaggedError<ChannelMediaError>()(
-  "ChannelMediaError",
-  {
-    reason: Schema.Literals([
-      "unsupported_type",
-      "model_input_unavailable",
-      "too_large",
-      "invalid_media",
-      "download_failed",
-      "wrong_installation",
-      "transcription_unavailable",
-      "transcription_failed",
-      "duration_limit",
-    ]),
+export class ChannelMediaError extends Error {
+  readonly _tag = "ChannelMediaError";
+  declare readonly reason:
+    | "unsupported_type"
+    | "model_input_unavailable"
+    | "too_large"
+    | "invalid_media"
+    | "download_failed"
+    | "wrong_installation"
+    | "transcription_unavailable"
+    | "transcription_failed"
+    | "duration_limit";
+  constructor(input: {
+    readonly reason:
+      | "unsupported_type"
+      | "model_input_unavailable"
+      | "too_large"
+      | "invalid_media"
+      | "download_failed"
+      | "wrong_installation"
+      | "transcription_unavailable"
+      | "transcription_failed"
+      | "duration_limit";
+  }) {
+    super("ChannelMediaError");
+    this.name = "ChannelMediaError";
+    Object.assign(this, input);
   }
-) {}
+}
 
 export function mediaFailureMessage(error: ChannelMediaError) {
   switch (error.reason) {
@@ -48,18 +62,14 @@ export function mediaFailureMessage(error: ChannelMediaError) {
   }
 }
 
-const textType = Schema.Literals([
-  "text/plain",
-  "text/csv",
-  "application/json",
-]);
+const textType = z.enum(["text/plain", "text/csv", "application/json"]);
 
-export const identifyMedia = Effect.fn("identifyMedia")(function* (
+export const identifyMedia = async function (
   bytes: Uint8Array,
   reference: MediaReference
 ) {
   if (bytes.length === 0)
-    return yield* new ChannelMediaError({ reason: "invalid_media" });
+    throw new ChannelMediaError({ reason: "invalid_media" });
   const head = Buffer.from(
     bytes.buffer,
     bytes.byteOffset,
@@ -77,60 +87,58 @@ export const identifyMedia = Effect.fn("identifyMedia")(function* (
           : head.subarray(0, 4).toString("ascii") === "RIFF" &&
               head.subarray(8, 12).toString("ascii") === "WAVE"
             ? "audio/wav"
-            : Schema.is(textType)(claimed)
+            : isValid(textType, claimed)
               ? claimed
               : undefined;
-  if (!mediaType)
-    return yield* new ChannelMediaError({ reason: "unsupported_type" });
+  if (!mediaType) throw new ChannelMediaError({ reason: "unsupported_type" });
   const allowedClaim =
     claimed === "application/octet-stream" ||
     claimed === mediaType ||
     (mediaType === "audio/ogg" && claimed === "application/ogg") ||
     (mediaType === "audio/wav" && claimed === "audio/x-wav");
-  if (!allowedClaim)
-    return yield* new ChannelMediaError({ reason: "invalid_media" });
+  if (!allowedClaim) throw new ChannelMediaError({ reason: "invalid_media" });
   const limit = mediaType.startsWith("image/")
     ? mediaLimits.imageBytes
     : mediaType.startsWith("audio/")
       ? mediaLimits.audioBytes
-      : Schema.is(textType)(mediaType)
+      : isValid(textType, mediaType)
         ? mediaLimits.textBytes
         : mediaLimits.totalBytes;
   if (bytes.length > limit)
-    return yield* new ChannelMediaError({ reason: "too_large" });
+    throw new ChannelMediaError({ reason: "too_large" });
   return mediaType;
-});
+};
 
-export const decodeMediaText = Effect.fn("decodeMediaText")(function* (
-  bytes: Uint8Array
-) {
-  const text = yield* Effect.try({
-    try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-    catch: () => new ChannelMediaError({ reason: "invalid_media" }),
+export const decodeMediaText = async function (bytes: Uint8Array) {
+  const text = await Promise.try(async () =>
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  ).catch(() => {
+    throw new ChannelMediaError({ reason: "invalid_media" });
   });
-  return yield* Schema.decodeUnknownEffect(
-    Schema.String.check(
-      Schema.isMinLength(1),
-      Schema.makeFilter((value) =>
+  try {
+    return await z
+      .string()
+      .min(1)
+      .refine((value) =>
         value.split("").every((character) => {
           const code = character.charCodeAt(0);
           return code >= 32 || code === 9 || code === 10 || code === 13;
         })
       )
-    )
-  )(text).pipe(
-    Effect.mapError(() => new ChannelMediaError({ reason: "invalid_media" }))
-  );
-});
+      .parseAsync(text);
+  } catch {
+    throw new ChannelMediaError({ reason: "invalid_media" });
+  }
+};
 
 /** No current model resolver exposes verified binary input capabilities.
  * Spark and the configured free model are text-only; unknown models fail closed.
  */
-export const requireChannelModelInput = Effect.fn("requireChannelModelInput")(
-  function* (mediaType: string) {
-    if (mediaType.startsWith("image/") || mediaType === "application/pdf")
-      yield* new ChannelMediaError({
+export const requireChannelModelInput = async function (mediaType: string) {
+  if (mediaType.startsWith("image/") || mediaType === "application/pdf")
+    await Promise.reject(
+      new ChannelMediaError({
         reason: "model_input_unavailable",
-      });
-  }
-);
+      })
+    );
+};

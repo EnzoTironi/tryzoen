@@ -1,50 +1,51 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
-import { authentication } from "@db/services/auth";
-import { Effect, Schema } from "effect";
+import { getAuth } from "@db/services/auth";
 import {
   ModelConnectionError,
   ModelProviderSchema,
 } from "../../shared/models/catalog";
 
-const Envelope = Schema.Struct({
-  workspaceId: Schema.String,
+const Envelope = z.object({
+  workspaceId: z.string(),
   provider: ModelProviderSchema,
-  value: Schema.String,
+  value: z.string(),
 });
 
-export const sealModelSecret = Effect.fn("sealModelSecret")(function* (
+export const sealModelSecret = async function (
   workspaceId: string,
-  provider: typeof ModelProviderSchema.Type,
+  provider: z.output<typeof ModelProviderSchema>,
   value: string
 ) {
-  const auth = yield* authentication;
-  return yield* Effect.tryPromise({
-    try: async () =>
-      symmetricEncrypt({
-        key: (await auth.$context).secretConfig,
-        data: JSON.stringify({ workspaceId, provider, value }),
-      }),
-    catch: () => new ModelConnectionError({ reason: "unavailable" }),
-  });
-});
+  const auth = await getAuth();
+  try {
+    return await symmetricEncrypt({
+      key: (await auth.$context).secretConfig,
+      data: JSON.stringify({ workspaceId, provider, value }),
+    });
+  } catch {
+    throw new ModelConnectionError({ reason: "unavailable" });
+  }
+};
 
-export const openModelSecret = Effect.fn("openModelSecret")(function* (
+export const openModelSecret = async function (
   workspaceId: string,
-  provider: typeof ModelProviderSchema.Type,
+  provider: z.output<typeof ModelProviderSchema>,
   data: string
 ) {
-  const auth = yield* authentication;
-  const plain = yield* Effect.tryPromise({
-    try: async () =>
-      symmetricDecrypt({ key: (await auth.$context).secretConfig, data }),
-    catch: () => new ModelConnectionError({ reason: "reconnect" }),
+  const auth = await getAuth();
+  const plain = await Promise.try(async () =>
+    symmetricDecrypt({ key: (await auth.$context).secretConfig, data })
+  ).catch(() => {
+    throw new ModelConnectionError({ reason: "reconnect" });
   });
-  const envelope = yield* Schema.decodeUnknownEffect(
-    Schema.fromJsonString(Envelope)
-  )(plain).pipe(
-    Effect.mapError(() => new ModelConnectionError({ reason: "reconnect" }))
-  );
+  const envelope = await Promise.try(async () =>
+    jsonString(Envelope).parseAsync(plain)
+  ).catch(() => {
+    throw new ModelConnectionError({ reason: "reconnect" });
+  });
   if (envelope.workspaceId !== workspaceId || envelope.provider !== provider)
-    return yield* new ModelConnectionError({ reason: "reconnect" });
+    throw new ModelConnectionError({ reason: "reconnect" });
   return envelope.value;
-});
+};

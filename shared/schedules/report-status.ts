@@ -1,6 +1,6 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-export const scheduledReportStatusSchema = Schema.Literals([
+export const scheduledReportStatusSchema = z.enum([
   "not_ready",
   "not_needed",
   "pending",

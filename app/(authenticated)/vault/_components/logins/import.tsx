@@ -1,6 +1,5 @@
 "use client";
 
-import { Effect, Result } from "effect";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheckIcon } from "lucide-react";
@@ -21,13 +20,14 @@ import {
 } from "@shared/vault/schema";
 import { api } from "@web/trpc/client";
 import { parseChromePasswordsCsv } from "./chrome";
-
 export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
   const { t } = useI18n();
   const router = useRouter();
   const [file, setFile] = useState<File>();
   const [selection, setSelection] = useState<{
-    items: (VaultImportItems[number] & { importId: string })[];
+    items: (VaultImportItems[number] & {
+      importId: string;
+    })[];
     skipped: number;
   }>();
   const [chosen, setChosen] = useState<ReadonlySet<number>>(new Set());
@@ -42,7 +42,9 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
     },
     []
   );
-  const importer = api.vault.import.useMutation({ gcTime: 0 });
+  const importer = api.vault.import.useMutation({
+    gcTime: 0,
+  });
   const encrypted = file?.name.toLowerCase().endsWith(".json");
   const busy = opening || importer.isPending;
   const read = () => {
@@ -51,28 +53,35 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
       setError(false);
       const controller = new AbortController();
       abort.current = controller;
-      const result = await Effect.runPromise(
-        Effect.tryPromise(async () => {
-          if (file.size > 10 * 1024 * 1024) throw new Error("size");
-          const source = await file.text();
-          return encrypted
-            ? await openInWorker(
-                source,
-                password.current?.value ?? "",
-                controller.signal
-              )
-            : parseChromePasswordsCsv(source);
-        }).pipe(Effect.result)
+      const result = await Promise.try(async () => {
+        if (file.size > 10 * 1024 * 1024) throw new Error("size");
+        const source = await file.text();
+        return encrypted
+          ? await openInWorker(
+              source,
+              password.current?.value ?? "",
+              controller.signal
+            )
+          : parseChromePasswordsCsv(source);
+      }).then(
+        (value) => ({
+          ok: true as const,
+          value,
+        }),
+        (cause: unknown) => ({
+          ok: false as const,
+          error: cause,
+        })
       );
       if (password.current) password.current.value = "";
       if (controller.signal.aborted) return;
-      if (Result.isFailure(result)) {
+      if (!result.ok) {
         setError(true);
         return;
       }
       setSelection({
-        ...result.success,
-        items: result.success.items.map((item) => ({
+        ...result.value,
+        items: result.value.items.map((item) => ({
           account: item.account,
           kind: item.kind,
           label: item.label,
@@ -143,7 +152,7 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
                   <span className="min-w-0">
                     <span className="block truncate">{item.label}</span>
                     <span className="block truncate type-caption text-muted-foreground">
-                      {login && "origin" in login ? login.origin : ""}
+                      {login?.origin ?? ""}
                     </span>
                     <span className="block truncate type-caption text-muted-foreground">
                       {login?.identifier.value}
@@ -157,7 +166,9 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
             <p className="type-caption text-muted-foreground">
               {t(
                 "Itens não compatíveis: {count}. Use acessos com um único site HTTPS.",
-                { count: selection.skipped }
+                {
+                  count: selection.skipped,
+                }
               )}
             </p>
           ) : null}
@@ -240,7 +251,9 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
               {t("Voltar")}
             </Button>
             <Button disabled={busy || chosen.size === 0} onClick={save}>
-              {t("Adicionar selecionados ({count})", { count: chosen.size })}
+              {t("Adicionar selecionados ({count})", {
+                count: chosen.size,
+              })}
             </Button>
           </>
         ) : (
@@ -252,59 +265,73 @@ export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {
     </div>
   );
 }
-
 async function openInWorker(
   source: string,
   password: string,
   signal: AbortSignal
 ) {
-  return await new Promise<{ items: VaultImportItems; skipped: number }>(
-    (resolve, reject) => {
-      if (signal.aborted) {
-        reject(new Error("cancelled"));
-        return;
-      }
-      const worker = new Worker(
-        new URL("./bitwarden.worker.ts", import.meta.url),
-        { type: "module" }
-      );
-      const cleanup = () => {
-        clearTimeout(timer);
-        worker.terminate();
-        signal.removeEventListener("abort", stop);
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("timeout"));
-      }, 20_000);
-      const stop = () => {
-        cleanup();
-        reject(new Error("cancelled"));
-      };
-      signal.addEventListener("abort", stop, { once: true });
-      worker.addEventListener(
-        "message",
-        (
-          event: MessageEvent<{
-            items: VaultImportItems;
-            skipped: number;
-          } | null>
-        ) => {
-          cleanup();
-          if (event.data) resolve(event.data);
-          else reject(new Error("export"));
-        },
-        { once: true }
-      );
-      worker.addEventListener(
-        "error",
-        () => {
-          cleanup();
-          reject(new Error("worker"));
-        },
-        { once: true }
-      );
-      worker.postMessage({ source, password }, []);
+  return await new Promise<{
+    items: VaultImportItems;
+    skipped: number;
+  }>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("cancelled"));
+      return;
     }
-  );
+    const worker = new Worker(
+      new URL("./bitwarden.worker.ts", import.meta.url),
+      {
+        type: "module",
+      }
+    );
+    const cleanup = () => {
+      clearTimeout(timer);
+      worker.terminate();
+      signal.removeEventListener("abort", stop);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("timeout"));
+    }, 20_000);
+    const stop = () => {
+      cleanup();
+      reject(new Error("cancelled"));
+    };
+    signal.addEventListener("abort", stop, {
+      once: true,
+    });
+    worker.addEventListener(
+      "message",
+      (
+        event: MessageEvent<{
+          items: VaultImportItems;
+          skipped: number;
+        } | null>
+      ) => {
+        cleanup();
+        if (event.data) resolve(event.data);
+        else reject(new Error("export"));
+      },
+      {
+        once: true,
+      }
+    );
+    worker.addEventListener(
+      "error",
+      () => {
+        cleanup();
+        reject(new Error("worker"));
+      },
+      {
+        once: true,
+      }
+    );
+    worker.postMessage(
+      {
+        source,
+        password,
+      },
+      []
+    );
+  });
 }

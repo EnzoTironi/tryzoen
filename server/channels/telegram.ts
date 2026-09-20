@@ -1,17 +1,6 @@
-import {
-  Clock,
-  Config,
-  Context,
-  Effect,
-  Layer,
-  Redacted,
-  Schema,
-} from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { ZodError as SchemaError } from "zod";
+import { z } from "zod";
+import { env } from "@shared/environment/env";
 import {
   LoginTokenSchema,
   normalizeInbound,
@@ -35,86 +24,89 @@ import {
 } from "./provider-errors";
 import { downloadMediaBytes } from "./media/download";
 import { ChannelMediaError } from "./media/policy";
-
-const positiveId = Schema.Int.check(
-  Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
-);
-const stringId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]{0,15}$/));
-const username = Schema.String.check(
-  Schema.isPattern(/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/)
-);
-export const TelegramInstallationSchema = Schema.Struct({
+const positiveId = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+const stringId = z.string().regex(/^[1-9][0-9]{0,15}$/);
+const username = z.string().regex(/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/);
+export const TelegramInstallationSchema = z.object({
   botId: stringId,
   botUsername: username,
 });
-export type TelegramInstallation = typeof TelegramInstallationSchema.Type;
-const user = Schema.Struct({ id: positiveId, is_bot: Schema.Boolean });
-const file = Schema.Struct({
+export type TelegramInstallation = z.output<typeof TelegramInstallationSchema>;
+const user = z.object({
+  id: positiveId,
+  is_bot: z.boolean(),
+});
+const file = z.object({
   file_id: ProviderReferenceSchema,
-  mime_type: Schema.optionalKey(ProviderReferenceSchema),
-  file_name: Schema.optionalKey(ProviderReferenceSchema),
+  mime_type: z.optional(ProviderReferenceSchema),
+  file_name: z.optional(ProviderReferenceSchema),
 });
-const messageEntity = Schema.Struct({
-  type: Schema.String,
-  offset: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  length: Schema.Int.check(Schema.isGreaterThan(0)),
-  user: Schema.optionalKey(user),
+const messageEntity = z.object({
+  type: z.string(),
+  offset: z.number().int().min(0),
+  length: z.number().int().gt(0),
+  user: z.optional(user),
 });
-const message = Schema.Struct({
+const message = z.object({
   message_id: positiveId,
-  date: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  from: Schema.optionalKey(user),
-  chat: Schema.Struct({ id: Schema.Int, type: Schema.String }),
-  text: Schema.optionalKey(Schema.String),
-  caption: Schema.optionalKey(Schema.String),
-  photo: Schema.optionalKey(Schema.Array(file).check(Schema.isMaxLength(20))),
-  document: Schema.optionalKey(file),
-  audio: Schema.optionalKey(file),
-  voice: Schema.optionalKey(file),
-  video: Schema.optionalKey(file),
-  sticker: Schema.optionalKey(file),
-  entities: Schema.optionalKey(
-    Schema.Array(messageEntity).check(Schema.isMaxLength(100))
-  ),
-  caption_entities: Schema.optionalKey(
-    Schema.Array(messageEntity).check(Schema.isMaxLength(100))
-  ),
-  reply_to_message: Schema.optionalKey(
-    Schema.Struct({
+  date: z.number().int().min(0),
+  from: z.optional(user),
+  chat: z.object({
+    id: z.number().int(),
+    type: z.string(),
+  }),
+  text: z.optional(z.string()),
+  caption: z.optional(z.string()),
+  photo: z.optional(z.array(file).max(20)),
+  document: z.optional(file),
+  audio: z.optional(file),
+  voice: z.optional(file),
+  video: z.optional(file),
+  sticker: z.optional(file),
+  entities: z.optional(z.array(messageEntity).max(100)),
+  caption_entities: z.optional(z.array(messageEntity).max(100)),
+  reply_to_message: z.optional(
+    z.object({
       message_id: positiveId,
-      from: Schema.optionalKey(user),
+      from: z.optional(user),
     })
   ),
 });
-const callback = Schema.Struct({
+const callback = z.object({
   id: ProviderReferenceSchema,
   from: user,
-  message: Schema.optionalKey(message),
-  data: Schema.optionalKey(Schema.String),
+  message: z.optional(message),
+  data: z.optional(z.string()),
 });
-const update = Schema.Struct({
-  update_id: Schema.Int.check(
-    Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
-  ),
-  message: Schema.optionalKey(message),
-  callback_query: Schema.optionalKey(callback),
+const update = z.object({
+  update_id: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  message: z.optional(message),
+  callback_query: z.optional(callback),
 });
-const malformed = () =>
-  new ProviderInputError({ provider: "telegram", reason: "malformed" });
+function malformed(): never {
+  throw new ProviderInputError({
+    provider: "telegram",
+    reason: "malformed",
+  });
+}
 
 /** Expects verified JSON. Pure normalization; no credentials or network access. */
-export const parseTelegramUpdate = Effect.fn("parseTelegramUpdate")(function* (
-  value: Schema.Json,
+export const parseTelegramUpdate = async function (
+  value: unknown,
   configuration: TelegramInstallation,
   nowMs: number
-): Effect.fn.Return<readonly InboundEvent[], ProviderInputError> {
-  const installation = yield* Schema.decodeUnknownEffect(
-    TelegramInstallationSchema
-  )(configuration).pipe(Effect.mapError(malformed));
-  const incoming = yield* Schema.decodeUnknownEffect(update)(value).pipe(
-    Effect.mapError(malformed)
-  );
-  if (incoming.message && incoming.callback_query) return yield* malformed();
+): Promise<InboundEvent[]> {
+  const installation = await Promise.try(async () =>
+    TelegramInstallationSchema.parseAsync(configuration)
+  ).catch(() => {
+    return malformed();
+  });
+  const incoming = await Promise.try(async () =>
+    update.parseAsync(value)
+  ).catch(() => {
+    return malformed();
+  });
+  if (incoming.message && incoming.callback_query) return malformed();
   const source = incoming.callback_query?.message ?? incoming.message;
   const sender = incoming.callback_query?.from ?? incoming.message?.from;
   if (!source || !sender || sender.is_bot) return [];
@@ -139,10 +131,16 @@ export const parseTelegramUpdate = Effect.fn("parseTelegramUpdate")(function* (
     const replyToBot = Boolean(
       replyFrom?.is_bot && String(replyFrom.id) === installation.botId
     );
-    if (!evaluateGroupMentionPolicy({ mentionedBot, replyToBot })) return [];
+    if (
+      !evaluateGroupMentionPolicy({
+        mentionedBot,
+        replyToBot,
+      })
+    )
+      return [];
   }
   // A callback is a new click on an older message. Challenge expiry gates auth.
-  const occurredAt = yield* validateEventAge(
+  const occurredAt = await validateEventAge(
     "telegram",
     incoming.callback_query ? nowMs / 1000 : source.date,
     nowMs
@@ -162,17 +160,14 @@ export const parseTelegramUpdate = Effect.fn("parseTelegramUpdate")(function* (
     if (!source.from?.is_bot || String(source.from.id) !== installation.botId)
       return [];
     if (!query.data?.startsWith("confirm:")) return [];
-    if (Buffer.byteLength(query.data, "utf8") > 64) return yield* malformed();
-    const token = yield* Schema.decodeUnknownEffect(LoginTokenSchema)(
-      query.data.slice(8)
-    ).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderInputError({
-            provider: "telegram",
-            reason: "invalid_command",
-          })
-      )
+    if (Buffer.byteLength(query.data, "utf8") > 64) return malformed();
+    const token = await LoginTokenSchema.parseAsync(query.data.slice(8)).catch(
+      () => {
+        throw new ProviderInputError({
+          provider: "telegram",
+          reason: "invalid_command",
+        });
+      }
     );
     return [
       {
@@ -206,50 +201,49 @@ export const parseTelegramUpdate = Effect.fn("parseTelegramUpdate")(function* (
       ? String(source.reply_to_message.message_id)
       : undefined,
   };
-  const event = yield* normalizeInbound(
+  const event = await normalizeInbound(
     coordinates,
     payload,
     installation.botUsername.replace(/^@/, "")
   );
   return event ? [event] : [];
-});
-
-const readInstallation = Config.all({
-  botId: Config.string("TELEGRAM_BOT_ID"),
-  botUsername: Config.string("TELEGRAM_BOT_USERNAME"),
-}).pipe(
-  Effect.flatMap(Schema.decodeUnknownEffect(TelegramInstallationSchema)),
-  Effect.mapError(
-    () =>
-      new ProviderInputError({ provider: "telegram", reason: "configuration" })
-  )
-);
+};
+function readInstallation() {
+  const result = TelegramInstallationSchema.safeParse({
+    botId: env.TELEGRAM_BOT_ID,
+    botUsername: env.TELEGRAM_BOT_USERNAME,
+  });
+  if (!result.success)
+    throw new ProviderInputError({
+      provider: "telegram",
+      reason: "configuration",
+    });
+  return result.data;
+}
 /** Private peers are positive; Telegram groups/supergroups use negative chat ids. */
-const chatTargetId = Schema.String.check(
-  Schema.isPattern(/^-?[1-9][0-9]{0,15}$/)
-);
-const sendInput = Schema.Struct({
+const chatTargetId = z.string().regex(/^-?[1-9][0-9]{0,15}$/);
+const sendInput = z.object({
   targetId: chatTargetId,
-  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096)),
-  reply: Schema.optional(stringId),
+  text: z.string().min(1).max(4096),
+  reply: z.optional(stringId),
 });
-const response = Schema.Union([
-  Schema.Struct({
-    ok: Schema.Literal(true),
-    result: Schema.Struct({
+const response = z.union([
+  z.object({
+    ok: z.literal(true),
+    result: z.object({
       message_id: positiveId,
-      chat: Schema.Struct({
-        id: Schema.Int,
-        type: Schema.Literals(["private", "group", "supergroup"]),
+      chat: z.object({
+        id: z.number().int(),
+        type: z.enum(["private", "group", "supergroup"]),
       }),
     }),
   }),
-  Schema.Struct({
-    ok: Schema.Literal(false),
-    error_code: Schema.Int,
-    parameters: Schema.optionalKey(
-      Schema.Struct({
-        retry_after: Schema.optionalKey(Schema.Number),
+  z.object({
+    ok: z.literal(false),
+    error_code: z.number().int(),
+    parameters: z.optional(
+      z.object({
+        retry_after: z.optional(z.number()),
       })
     ),
   }),
@@ -258,7 +252,9 @@ const response = Schema.Union([
 /** Maps Telegram application-level send failures after a 2xx HTTP envelope. */
 export const telegramSendFailure = (failure: {
   error_code: number;
-  parameters?: { retry_after?: number };
+  parameters?: {
+    retry_after?: number;
+  };
 }): ProviderRetryable | ProviderRejected | ProviderUncertain => {
   if (failure.error_code === 429) {
     return new ProviderRetryable({
@@ -284,288 +280,312 @@ export const telegramSendFailure = (failure: {
     reason: "server_error",
   });
 };
-
-const downloadableFile = Schema.Struct({
-  ok: Schema.Literal(true),
-  result: Schema.Struct({
+const downloadableFile = z.object({
+  ok: z.literal(true),
+  result: z.object({
     file_id: ProviderReferenceSchema,
-    file_size: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
-    file_path: Schema.String.check(
-      Schema.isPattern(/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/u),
-      Schema.makeFilter((path) =>
+    file_size: z.optional(z.number().int().gt(0)),
+    file_path: z
+      .string()
+      .regex(/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/u)
+      .refine((path) =>
         path.split("/").every((part) => part !== "." && part !== "..")
-      )
-    ),
+      ),
   }),
 });
-
-const makeTelegram = Effect.gen(function* () {
-  const http = yield* HttpClient.HttpClient;
-  const request = Effect.fn("Telegram.request")(function* (
-    method:
-      | "sendMessage"
-      | "answerCallbackQuery"
-      | "editMessageText"
-      | "getFile",
-    body: Schema.Json
-  ) {
-    const installation = yield* readInstallation;
-    const secret = yield* Config.redacted("TELEGRAM_BOT_TOKEN").pipe(
-      Effect.mapError(
-        () =>
-          new ProviderInputError({
-            provider: "telegram",
-            reason: "configuration",
-          })
-      )
-    );
-    const token = Redacted.value(secret);
-    yield* Schema.decodeUnknownEffect(
-      Schema.String.check(Schema.isPattern(/^[1-9][0-9]*:[A-Za-z0-9_-]+$/))
-    )(token).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderInputError({
-            provider: "telegram",
-            reason: "configuration",
-          })
-      )
-    );
-    if (token.split(":")[0] !== installation.botId) {
-      return yield* new ProviderInputError({
-        provider: "telegram",
-        reason: "configuration",
-      });
-    }
-    return yield* requestProviderJson(
-      http,
-      "telegram",
-      HttpClientRequest.post(
-        `https://api.telegram.org/bot${token}/${method}`
-      ).pipe(HttpClientRequest.bodyJsonUnsafe(body))
-    );
+const request = async function (
+  method: "sendMessage" | "answerCallbackQuery" | "editMessageText" | "getFile",
+  body: unknown
+) {
+  const installation = readInstallation();
+  const secret = await Promise.try(async () => {
+    if (!env.TELEGRAM_BOT_TOKEN) throw new Error("Channel is not configured");
+    return env.TELEGRAM_BOT_TOKEN;
+  }).catch(() => {
+    throw new ProviderInputError({
+      provider: "telegram",
+      reason: "configuration",
+    });
   });
-  const send = Effect.fn("Telegram.send")(function* (
-    targetId: string,
-    text: string,
-    reply?: string,
-    confirmation?: { data: string; purpose: "login" | "link" }
-  ) {
-    const input = yield* Schema.decodeUnknownEffect(sendInput)({
+  const token = secret.reveal();
+  await Promise.try(async () =>
+    z
+      .string()
+      .regex(/^[1-9][0-9]*:[A-Za-z0-9_-]+$/)
+      .parseAsync(token)
+  ).catch(() => {
+    throw new ProviderInputError({
+      provider: "telegram",
+      reason: "configuration",
+    });
+  });
+  if (token.split(":")[0] !== installation.botId) {
+    throw new ProviderInputError({
+      provider: "telegram",
+      reason: "configuration",
+    });
+  }
+  return await requestProviderJson(
+    "telegram",
+    `https://api.telegram.org/bot${token}/${method}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+};
+const send = async function (
+  targetId: string,
+  text: string,
+  reply?: string,
+  confirmation?: {
+    data: string;
+    purpose: "login" | "link";
+  }
+) {
+  const input = await Promise.try(async () =>
+    sendInput.parseAsync({
       targetId,
       text,
       reply,
-    }).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderInputError({
-            provider: "telegram",
-            reason: "invalid_target",
-          })
-      )
-    );
-    const body: Schema.MutableJsonObject = {
-      chat_id: input.targetId,
-      text: input.text,
-      link_preview_options: { is_disabled: true },
+    })
+  ).catch(() => {
+    throw new ProviderInputError({
+      provider: "telegram",
+      reason: "invalid_target",
+    });
+  });
+  const body: Record<string, unknown> = {
+    chat_id: input.targetId,
+    text: input.text,
+    link_preview_options: {
+      is_disabled: true,
+    },
+  };
+  if (input.reply)
+    body.reply_parameters = {
+      message_id: Number(input.reply),
+      allow_sending_without_reply: false,
     };
-    if (input.reply)
-      body.reply_parameters = {
-        message_id: Number(input.reply),
-        allow_sending_without_reply: false,
-      };
-    if (confirmation)
-      body.reply_markup = {
-        inline_keyboard: [
-          [
-            {
-              text:
-                confirmation.purpose === "login"
-                  ? "Confirm sign-in"
-                  : "Confirm account link",
-              callback_data: confirmation.data,
-            },
-          ],
+  if (confirmation)
+    body.reply_markup = {
+      inline_keyboard: [
+        [
+          {
+            text:
+              confirmation.purpose === "login"
+                ? "Confirm sign-in"
+                : "Confirm account link",
+            callback_data: confirmation.data,
+          },
         ],
-      };
-    const result = yield* request("sendMessage", body).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(response)),
-      Effect.catchTag(
-        "SchemaError",
-        () =>
-          new ProviderUncertain({
+      ],
+    };
+  const result = await Promise.try(async () => {
+    return await Promise.try(async () => request("sendMessage", body)).then(
+      (value: unknown) => response.parseAsync(value)
+    );
+  }).catch((error: unknown) => {
+    if (error instanceof SchemaError)
+      return (() => {
+        throw new ProviderUncertain({
+          provider: "telegram",
+          reason: "malformed_receipt",
+        });
+      })();
+    throw error;
+  });
+  if (!result.ok) {
+    throw telegramSendFailure(result);
+  }
+  if (String(result.result.chat.id) !== input.targetId) {
+    throw new ProviderUncertain({
+      provider: "telegram",
+      reason: "malformed_receipt",
+    });
+  }
+  return {
+    providerMessageId: String(result.result.message_id),
+  };
+};
+export const Telegram = {
+  downloadMedia: async function (
+    installationId: string,
+    fileId: string,
+    maxBytes: number
+  ) {
+    const installation = readInstallation();
+    if (installation.botId !== installationId)
+      throw new ChannelMediaError({
+        reason: "wrong_installation",
+      });
+    const id = await Promise.try(async () =>
+      ProviderReferenceSchema.parseAsync(fileId)
+    ).catch(() => {
+      throw new ChannelMediaError({
+        reason: "invalid_media",
+      });
+    });
+    const metadata = await Promise.try(async () => {
+      return await Promise.try(async () =>
+        request("getFile", {
+          file_id: id,
+        })
+      ).then((value: unknown) => downloadableFile.parseAsync(value));
+    }).catch(() => {
+      throw new ChannelMediaError({
+        reason: "download_failed",
+      });
+    });
+    if (metadata.result.file_id !== id)
+      throw new ChannelMediaError({
+        reason: "invalid_media",
+      });
+    if (
+      metadata.result.file_size !== undefined &&
+      metadata.result.file_size > maxBytes
+    )
+      throw new ChannelMediaError({
+        reason: "too_large",
+      });
+    const secret = await Promise.try(async () => {
+      if (!env.TELEGRAM_BOT_TOKEN) throw new Error("Channel is not configured");
+      return env.TELEGRAM_BOT_TOKEN;
+    }).catch(() => {
+      throw new ChannelMediaError({
+        reason: "download_failed",
+      });
+    });
+    const bytes = await downloadMediaBytes(
+      `https://api.telegram.org/file/bot${secret.reveal()}/${metadata.result.file_path}`,
+      maxBytes
+    );
+    if (
+      metadata.result.file_size !== undefined &&
+      bytes.length !== metadata.result.file_size
+    )
+      throw new ChannelMediaError({
+        reason: "invalid_media",
+      });
+    return bytes;
+  },
+  parse: async function (value: unknown) {
+    return await parseTelegramUpdate(value, readInstallation(), Date.now());
+  },
+  sendText: async function (targetId: string, text: string, reply?: string) {
+    return await send(targetId, text, reply);
+  },
+  sendLoginConfirmation: async function (
+    targetId: string,
+    token: string,
+    purpose: "login" | "link"
+  ) {
+    const valid = await Promise.try(async () =>
+      LoginTokenSchema.parseAsync(token)
+    ).catch(() => {
+      return malformed();
+    });
+    const data = `confirm:${valid}`;
+    if (Buffer.byteLength(data, "utf8") > 64) return malformed();
+    return await send(
+      targetId,
+      purpose === "login"
+        ? "Confirm this sign-in only if you requested it in your Zoen browser tab. Then return to that tab to finish signing in."
+        : "Confirm linking this Telegram account only if you requested it in your Zoen browser tab. Then return to that tab to finish linking.",
+      undefined,
+      {
+        data,
+        purpose,
+      }
+    );
+  },
+  editLoginConfirmation: async function (targetId: string, messageId: string) {
+    const input = await Promise.try(async () =>
+      z
+        .object({
+          targetId: stringId,
+          messageId: stringId,
+        })
+        .parseAsync({
+          targetId,
+          messageId,
+        })
+    ).catch(() => {
+      return malformed();
+    });
+    const result = await Promise.try(async () => {
+      return await Promise.try(async () =>
+        request("editMessageText", {
+          chat_id: input.targetId,
+          message_id: Number(input.messageId),
+          text: "Confirmed. Return to the Zoen browser tab where you started this request and finish there. You can close this Telegram chat.",
+          reply_markup: {
+            inline_keyboard: [],
+          },
+        })
+      ).then((value: unknown) => response.parseAsync(value));
+    }).catch((error: unknown) => {
+      if (error instanceof SchemaError)
+        return (() => {
+          throw new ProviderUncertain({
             provider: "telegram",
             reason: "malformed_receipt",
-          })
-      )
-    );
-    if (!result.ok) {
-      return yield* telegramSendFailure(result);
-    }
-    if (String(result.result.chat.id) !== input.targetId) {
-      return yield* new ProviderUncertain({
+          });
+        })();
+      throw error;
+    });
+    if (!result.ok) throw telegramSendFailure(result);
+    if (
+      String(result.result.chat.id) !== input.targetId ||
+      String(result.result.message_id) !== input.messageId
+    ) {
+      throw new ProviderUncertain({
         provider: "telegram",
         reason: "malformed_receipt",
       });
     }
-    return { providerMessageId: String(result.result.message_id) };
-  });
-  return {
-    downloadMedia: Effect.fn("Telegram.downloadMedia")(function* (
-      installationId: string,
-      fileId: string,
-      maxBytes: number
-    ) {
-      const installation = yield* readInstallation;
-      if (installation.botId !== installationId)
-        return yield* new ChannelMediaError({ reason: "wrong_installation" });
-      const id = yield* Schema.decodeUnknownEffect(ProviderReferenceSchema)(
-        fileId
-      ).pipe(
-        Effect.mapError(
-          () => new ChannelMediaError({ reason: "invalid_media" })
-        )
-      );
-      const metadata = yield* request("getFile", { file_id: id }).pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(downloadableFile)),
-        Effect.mapError(
-          () => new ChannelMediaError({ reason: "download_failed" })
-        )
-      );
-      if (metadata.result.file_id !== id)
-        return yield* new ChannelMediaError({ reason: "invalid_media" });
-      if (
-        metadata.result.file_size !== undefined &&
-        metadata.result.file_size > maxBytes
-      )
-        return yield* new ChannelMediaError({ reason: "too_large" });
-      const secret = yield* Config.redacted("TELEGRAM_BOT_TOKEN").pipe(
-        Effect.mapError(
-          () => new ChannelMediaError({ reason: "download_failed" })
-        )
-      );
-      const bytes = yield* downloadMediaBytes(
-        http,
-        HttpClientRequest.get(
-          `https://api.telegram.org/file/bot${Redacted.value(secret)}/${metadata.result.file_path}`
-        ),
-        maxBytes
-      );
-      if (
-        metadata.result.file_size !== undefined &&
-        bytes.length !== metadata.result.file_size
-      )
-        return yield* new ChannelMediaError({ reason: "invalid_media" });
-      return bytes;
-    }),
-    parse: Effect.fn("Telegram.parse")(function* (value: Schema.Json) {
-      return yield* parseTelegramUpdate(
-        value,
-        yield* readInstallation,
-        yield* Clock.currentTimeMillis
-      );
-    }),
-    sendText: Effect.fn("Telegram.sendText")(function* (
-      targetId: string,
-      text: string,
-      reply?: string
-    ) {
-      return yield* send(targetId, text, reply);
-    }),
-    sendLoginConfirmation: Effect.fn("Telegram.sendLoginConfirmation")(
-      function* (targetId: string, token: string, purpose: "login" | "link") {
-        const valid = yield* Schema.decodeUnknownEffect(LoginTokenSchema)(
-          token
-        ).pipe(Effect.mapError(malformed));
-        const data = `confirm:${valid}`;
-        if (Buffer.byteLength(data, "utf8") > 64) return yield* malformed();
-        return yield* send(
-          targetId,
-          purpose === "login"
-            ? "Confirm this sign-in only if you requested it in your Zoen browser tab. Then return to that tab to finish signing in."
-            : "Confirm linking this Telegram account only if you requested it in your Zoen browser tab. Then return to that tab to finish linking.",
-          undefined,
-          { data, purpose }
-        );
-      }
-    ),
-    editLoginConfirmation: Effect.fn("Telegram.editLoginConfirmation")(
-      function* (targetId: string, messageId: string) {
-        const input = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ targetId: stringId, messageId: stringId })
-        )({ targetId, messageId }).pipe(Effect.mapError(malformed));
-        const result = yield* request("editMessageText", {
-          chat_id: input.targetId,
-          message_id: Number(input.messageId),
-          text: "Confirmed. Return to the Zoen browser tab where you started this request and finish there. You can close this Telegram chat.",
-          reply_markup: { inline_keyboard: [] },
-        }).pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(response)),
-          Effect.catchTag(
-            "SchemaError",
-            () =>
-              new ProviderUncertain({
-                provider: "telegram",
-                reason: "malformed_receipt",
-              })
-          )
-        );
-        if (!result.ok) return yield* telegramSendFailure(result);
-        if (
-          String(result.result.chat.id) !== input.targetId ||
-          String(result.result.message_id) !== input.messageId
-        ) {
-          return yield* new ProviderUncertain({
-            provider: "telegram",
-            reason: "malformed_receipt",
-          });
-        }
-        return undefined;
-      }
-    ),
-    answerCallbackQuery: Effect.fn("Telegram.answerCallbackQuery")(function* (
-      callbackQueryId: string,
-      text: string,
-      showAlert: boolean
-    ) {
-      const input = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
+    return undefined;
+  },
+  answerCallbackQuery: async function (
+    callbackQueryId: string,
+    text: string,
+    showAlert: boolean
+  ) {
+    const input = await Promise.try(async () =>
+      z
+        .object({
           callbackQueryId: ProviderReferenceSchema,
-          text: Schema.String.check(
-            Schema.isMinLength(1),
-            Schema.isMaxLength(200)
-          ),
-          showAlert: Schema.Boolean,
+          text: z.string().min(1).max(200),
+          showAlert: z.boolean(),
         })
-      )({ callbackQueryId, text, showAlert }).pipe(Effect.mapError(malformed));
-      const body = yield* request("answerCallbackQuery", {
-        callback_query_id: input.callbackQueryId,
-        text: input.text,
-        show_alert: input.showAlert,
+        .parseAsync({
+          callbackQueryId,
+          text,
+          showAlert,
+        })
+    ).catch(() => {
+      return malformed();
+    });
+    const body = await request("answerCallbackQuery", {
+      callback_query_id: input.callbackQueryId,
+      text: input.text,
+      show_alert: input.showAlert,
+    });
+    await Promise.try(async () =>
+      z
+        .object({
+          ok: z.literal(true),
+          result: z.literal(true),
+        })
+        .parseAsync(body)
+    ).catch(() => {
+      throw new ProviderUncertain({
+        provider: "telegram",
+        reason: "malformed_receipt",
       });
-      yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          ok: Schema.Literal(true),
-          result: Schema.Literal(true),
-        })
-      )(body).pipe(
-        Effect.mapError(
-          () =>
-            new ProviderUncertain({
-              provider: "telegram",
-              reason: "malformed_receipt",
-            })
-        )
-      );
-    }),
-  };
-});
-
-export class Telegram extends Context.Service<
-  Telegram,
-  Effect.Success<typeof makeTelegram>
->()("companion/server/channels/Telegram") {
-  static readonly layer = Layer.effect(Telegram, makeTelegram).pipe(
-    Layer.provide(FetchHttpClient.layer)
-  );
-}
+    });
+  },
+};

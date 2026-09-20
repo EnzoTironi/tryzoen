@@ -1,8 +1,9 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
+
 import { ProviderReferenceSchema } from "./inbound";
 
-const ChatKindSchema = Schema.Literals(["private", "group"]);
-export type ChatKind = typeof ChatKindSchema.Type;
+const ChatKindSchema = z.enum(["private", "group"]);
+export type ChatKind = z.output<typeof ChatKindSchema>;
 
 export interface GroupMentionSignals {
   readonly mentionedBot: boolean;
@@ -70,18 +71,18 @@ export const telegramTextMentionsBot = (
   return false;
 };
 
-const GroupIdentityBindingSchema = Schema.Struct({
-  identityId: Schema.String.check(Schema.isUUID()),
-  channel: Schema.Literals(["telegram", "kapso"]),
+const GroupIdentityBindingSchema = z.object({
+  identityId: z.uuid(),
+  channel: z.enum(["telegram", "kapso"]),
   installationId: ProviderReferenceSchema,
   senderId: ProviderReferenceSchema,
   chatId: ProviderReferenceSchema,
-  chatKind: Schema.Literal("group"),
-  conversationScope: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(320),
-    Schema.isTrimmed()
-  ),
+  chatKind: z.literal("group"),
+  conversationScope: z
+    .string()
+    .min(1)
+    .max(320)
+    .refine((value) => value === value.trim(), "Expected trimmed text"),
   /** Outbound target is the group chat, never the private sender DM. */
   deliveryTargetId: ProviderReferenceSchema,
 });
@@ -122,27 +123,25 @@ export const groupBindingFromPayload = (payload: {
   };
 };
 
-export const bindGroupChannelIdentity = Effect.fn("bindGroupChannelIdentity")(
-  function* (input: {
-    readonly identityId: string;
-    readonly channel: "telegram" | "kapso";
-    readonly installationId: string;
-    readonly senderId: string;
-    readonly chatId: string;
-  }) {
-    const conversationScope = `group:${input.channel}:${input.installationId}:${input.chatId}`;
-    return yield* Schema.decodeUnknownEffect(GroupIdentityBindingSchema)({
-      identityId: input.identityId,
-      channel: input.channel,
-      installationId: input.installationId,
-      senderId: input.senderId,
-      chatId: input.chatId,
-      chatKind: "group",
-      conversationScope,
-      deliveryTargetId: input.chatId,
-    });
-  }
-);
+export const bindGroupChannelIdentity = async function (input: {
+  readonly identityId: string;
+  readonly channel: "telegram" | "kapso";
+  readonly installationId: string;
+  readonly senderId: string;
+  readonly chatId: string;
+}) {
+  const conversationScope = `group:${input.channel}:${input.installationId}:${input.chatId}`;
+  return await GroupIdentityBindingSchema.parseAsync({
+    identityId: input.identityId,
+    channel: input.channel,
+    installationId: input.installationId,
+    senderId: input.senderId,
+    chatId: input.chatId,
+    chatKind: "group",
+    conversationScope,
+    deliveryTargetId: input.chatId,
+  });
+};
 
 const digitsOnly = (value: string) => value.replace(/^\+/, "");
 

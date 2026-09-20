@@ -1,12 +1,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Effect } from "effect";
 import { getAuthSession } from "@db/services/auth/session";
 import { safeCallbackUrl } from "@web/auth/channel/client";
 import { OnboardingShell } from "@web/auth/onboarding/shell";
 import { OnboardingSetup } from "@web/auth/onboarding/setup";
 import { getI18n } from "@web/i18n/server";
-import { serverRuntime } from "../../server/runtime";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
 import { listUserWorkspaces } from "../../server/workspaces/directory";
 import { readLinkedChannelIdentities } from "../../server/accounts/controls";
@@ -29,15 +27,13 @@ export default async function OnboardingPage({
       ? params.callbackUrl[0]
       : params.callbackUrl
   );
-  const setup = await serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const actor = yield* resolveWorkspaceActor(requestHeaders);
-      const workspaces = yield* listUserWorkspaces(actor);
-      const identities = yield* readLinkedChannelIdentities(requestHeaders);
-      const destinations = yield* conversationDestinations;
-      return { workspaces, identities, destinations };
-    })
-  );
+  const setup = await (async function () {
+    const actor = await resolveWorkspaceActor(requestHeaders);
+    const workspaces = await listUserWorkspaces(actor);
+    const identities = await readLinkedChannelIdentities(requestHeaders);
+    const destinations = conversationDestinations();
+    return { workspaces, identities, destinations };
+  })();
   return (
     <OnboardingShell>
       <OnboardingSetup

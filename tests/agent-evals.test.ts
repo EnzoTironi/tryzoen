@@ -1,9 +1,10 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Schema } from "effect";
 import {
   SUPERVISOR_TEST_TIMEOUT_MS,
   waitForSupervisorClose,
@@ -33,14 +34,12 @@ describe(
         "executor",
       ]);
       expect(result.code).toBe(0);
-      const command = Schema.decodeUnknownSync(
-        Schema.fromJsonString(
-          Schema.Struct({
-            args: Schema.Array(Schema.String),
-            environment: Schema.Array(Schema.String),
-          })
-        )
-      )(result.commands);
+      const command = jsonString(
+        z.object({
+          args: z.array(z.string()),
+          environment: z.array(z.string()),
+        })
+      ).parse(result.commands);
       expect(command.args).toEqual([
         "eval",
         "launch",
@@ -83,11 +82,7 @@ describe(
         ["--suite", "launch/../../other"],
         "Use --suite launch",
       ],
-      [
-        "unsupported concurrency",
-        ["--max-concurrency", "8"],
-        "Unrecognized flag",
-      ],
+      ["unsupported concurrency", ["--max-concurrency", "8"], "Unknown option"],
       ["unbounded repetitions", ["--repeat", "1000"], "20"],
     ])(
       "rejects %s before starting a provider or child process",

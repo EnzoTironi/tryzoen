@@ -1,5 +1,9 @@
 # Native parallel work: September 9 qualification
 
+Historical evidence from the pre-rebuild implementation. It does not qualify the
+current Eve 0.63.0 runtime. Current architecture and verification are recorded in
+[the rewrite report](eve/rebuild.md).
+
 This increment uses Eve 0.49.0 native Tasks, the installed PostgreSQL Workflow
 world, the existing authenticated Codex Spark provider and the application's real
 composition. It does not add a scheduler or a second conversation engine.
@@ -75,4 +79,4 @@ There is no fabricated timestamp, lock or provider response in this evidence.
 Private-channel external delivery, groups, correction races, arbitrary crash
 windows between completion and delivery, and the interrupted application-to-Eve
 acceptance handoff require their own evidence. These results do not complete all
-release gates in the [blueprint](companion-blueprint.md).
+release gates in the [blueprint](eve/architecture.md).

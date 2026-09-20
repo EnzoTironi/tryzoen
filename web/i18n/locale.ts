@@ -1,7 +1,8 @@
-import { Schema } from "effect";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 
-export const localeSchema = Schema.Literals(["pt-BR", "en", "es"]);
-export type Locale = typeof localeSchema.Type;
+export const localeSchema = z.enum(["pt-BR", "en", "es"]);
+export type Locale = z.output<typeof localeSchema>;
 export const localeCookie = "zoen-locale";
 
 export const localeNames = {
@@ -14,7 +15,7 @@ export function resolveLocale(
   preference?: string,
   acceptLanguage?: string | null
 ): Locale {
-  if (Schema.is(localeSchema)(preference)) return preference;
+  if (isValid(localeSchema, preference)) return preference;
   const languages = (acceptLanguage ?? "")
     .split(",")
     .map((part) => {

@@ -1,3 +1,9 @@
+import { query, transaction as withDatabaseTransaction } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { ZodError as SchemaError } from "zod";
+import { SqlError } from "../../db/queries";
+import { jsonString, isValid } from "@shared/validation";
+import { z } from "zod";
 import {
   decodeCustomerTool,
   PublishedToolPath,
@@ -9,8 +15,6 @@ import {
   type OntologyActionSchema,
 } from "@shared/workspaces/ontology";
 import { createHash } from "node:crypto";
-import { PgClient } from "@effect/sql-pg";
-import { Context, Effect, Layer, Schema } from "effect";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -35,43 +39,49 @@ import {
   SkillProposalPath,
   skillPathFromProposal,
 } from "./skill-document";
-
-export const WorkspaceWriteSchema = Schema.Struct({
-  operationId: Schema.String.check(Schema.isUUID()),
-  expectedRevision: Schema.NullOr(GitRevisionSchema),
+export const WorkspaceWriteSchema = z.object({
+  operationId: z.uuid(),
+  expectedRevision: z.nullable(GitRevisionSchema),
   path: WorkspacePathSchema,
-  content: Schema.NullOr(Schema.String.check(Schema.isMaxLength(262_144))),
+  content: z.nullable(z.string().max(262_144)),
 });
-
-export class WorkspaceRepositoryError extends Schema.TaggedError<WorkspaceRepositoryError>()(
-  "WorkspaceRepositoryError",
-  {
-    reason: Schema.Literals([
-      "conflict",
-      "not_found",
-      "invalid_input",
-      "unavailable",
-    ]),
+export class WorkspaceRepositoryError extends Error {
+  readonly _tag = "WorkspaceRepositoryError";
+  declare readonly reason:
+    | "conflict"
+    | "not_found"
+    | "invalid_input"
+    | "unavailable";
+  constructor(input: {
+    readonly reason: "conflict" | "not_found" | "invalid_input" | "unavailable";
+  }) {
+    super("WorkspaceRepositoryError");
+    this.name = "WorkspaceRepositoryError";
+    Object.assign(this, input);
   }
-) {}
-
-const repositorySchema = Schema.Struct({
+}
+const repositorySchema = z.object({
   head: GitRevisionSchema,
-  bundle: Schema.Uint8Array,
+  bundle: z.instanceof(Uint8Array),
 });
-const revisionSchema = Schema.Struct({
+const revisionSchema = z.object({
   revision: GitRevisionSchema,
-  parent: Schema.NullOr(GitRevisionSchema),
+  parent: z.nullable(GitRevisionSchema),
   path: WorkspacePathSchema,
-  author: Schema.String,
-  createdAt: Schema.String,
-  source: Schema.String,
+  author: z.string(),
+  createdAt: z.string(),
+  source: z.string(),
 });
-const unavailable = () =>
-  new WorkspaceRepositoryError({ reason: "unavailable" });
-const importSourceSchema = Schema.Struct({
-  filename: Schema.NonEmptyString.check(Schema.isMaxLength(255)),
-  bytes: Schema.Uint8Array.check(Schema.isMaxLength(10_485_760)),
+function unavailable(): never {
+  throw new WorkspaceRepositoryError({
+    reason: "unavailable",
+  });
+}
+const importSourceSchema = z.object({
+  filename: z.string().min(1).max(255),
+  bytes: z
+    .instanceof(Uint8Array)
+    .refine((value) => value.byteLength <= 10_485_760),
 });
 
 /** Shared executions never receive the owner's private profile or old versions. */
@@ -92,50 +102,50 @@ const visibleToGrant = (path: string, grants: readonly string[] | null) =>
   (path.startsWith("ontology/")
     ? grants.includes("ontology")
     : grants.includes("files"));
-const sharedExecution = (actor: typeof WorkspaceActorSchema.Type) =>
+const sharedExecution = (actor: z.output<typeof WorkspaceActorSchema>) =>
   !!(actor.agentGrantId ?? actor.groupBindingId);
-
-const makeRepository = Effect.gen(function* () {
-  const sql = yield* PgClient.PgClient;
-  const snapshot = Effect.fn("WorkspaceRepository.snapshot")(function* (
-    workspaceId: string
+const snapshot = async function (workspaceId: string) {
+  const rows = await query(
+    sql`SELECT head_sha AS head, bundle FROM workspace_repository WHERE workspace_id = ${workspaceId}`
+  );
+  return rows[0] ? await repositorySchema.parseAsync(rows[0]) : null;
+};
+const replay = async function (
+  workspaceId: string,
+  operationId: string,
+  hash: string
+) {
+  const rows = await query<{
+    revision: string;
+    request_hash: string;
+  }>(sql`SELECT revision, request_hash
+      FROM workspace_revision WHERE workspace_id = ${workspaceId} AND operation_id = ${operationId}`);
+  const previous = rows[0];
+  if (previous && previous.request_hash !== hash)
+    throw new WorkspaceRepositoryError({
+      reason: "conflict",
+    });
+  return previous?.revision ?? null;
+};
+export const WorkspaceRepository = {
+  selection: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    paths: readonly string[]
   ) {
-    const rows =
-      yield* sql`SELECT head_sha AS head, bundle FROM workspace_repository WHERE workspace_id = ${workspaceId}`;
-    return rows[0]
-      ? yield* Schema.decodeUnknownEffect(repositorySchema)(rows[0])
-      : null;
-  });
-  const replay = Effect.fn("WorkspaceRepository.replay")(function* (
-    workspaceId: string,
-    operationId: string,
-    hash: string
-  ) {
-    const rows = yield* sql<{
-      revision: string;
-      request_hash: string;
-    }>`SELECT revision, request_hash
-      FROM workspace_revision WHERE workspace_id = ${workspaceId} AND operation_id = ${operationId}`;
-    const previous = rows[0];
-    if (previous && previous.request_hash !== hash)
-      return yield* new WorkspaceRepositoryError({ reason: "conflict" });
-    return previous?.revision ?? null;
-  });
-
-  return {
-    selection: Effect.fn("WorkspaceRepository.selection")(
-      function* (
-        actor: typeof WorkspaceActorSchema.Type,
-        paths: readonly string[]
-      ) {
-        yield* requireWorkspaceAccess(actor);
+    try {
+      return await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(actor);
         const grants = actor.agentGrantId
-          ? yield* readAgentGrantCapabilities(actor)
+          ? await readAgentGrantCapabilities(actor)
           : null;
-        const stored = yield* snapshot(actor.workspaceId);
-        if (!stored) return { revision: null, documents: [] };
-        const listing = yield* readWorkspaceGit(stored.bundle, stored.head);
-        const documents = yield* readWorkspaceGitSelection(
+        const stored = await snapshot(actor.workspaceId);
+        if (!stored)
+          return {
+            revision: null,
+            documents: [],
+          };
+        const listing = await readWorkspaceGit(stored.bundle, stored.head);
+        const documents = await readWorkspaceGitSelection(
           stored.bundle,
           stored.head,
           paths.filter(
@@ -145,44 +155,72 @@ const makeRepository = Effect.gen(function* () {
               (!sharedExecution(actor) || visibleInSharedExecution(path))
           )
         );
-        return { revision: stored.head, documents };
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    search: Effect.fn("WorkspaceRepository.search")(
-      function* (actor: typeof WorkspaceActorSchema.Type, query: string) {
-        yield* requireWorkspaceAccess(actor);
+        return {
+          revision: stored.head,
+          documents,
+        };
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  search: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    localQuery: string
+  ) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(actor);
         const grants = actor.agentGrantId
-          ? yield* readAgentGrantCapabilities(actor)
+          ? await readAgentGrantCapabilities(actor)
           : null;
-        const stored = yield* snapshot(actor.workspaceId);
-        if (!stored) return { revision: null, matches: [] };
+        const stored = await snapshot(actor.workspaceId);
+        if (!stored)
+          return {
+            revision: null,
+            matches: [],
+          };
         return {
           revision: stored.head,
           matches:
             grants !== null && !grants.includes("files")
               ? []
-              : yield* searchWorkspaceGit(stored.bundle, stored.head, query),
+              : await searchWorkspaceGit(
+                  stored.bundle,
+                  stored.head,
+                  localQuery
+                ),
         };
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    read: Effect.fn("WorkspaceRepository.read")(
-      function* (
-        actor: typeof WorkspaceActorSchema.Type,
-        path?: string,
-        revision?: string
-      ) {
-        yield* requireWorkspaceAccess(actor);
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  read: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    path?: string,
+    revision?: string
+  ) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(actor);
         const grants = actor.agentGrantId
-          ? yield* readAgentGrantCapabilities(actor)
+          ? await readAgentGrantCapabilities(actor)
           : null;
-        const stored = yield* snapshot(actor.workspaceId);
+        const stored = await snapshot(actor.workspaceId);
         if (!stored) {
           const files: string[] = [];
-          return { revision: null, content: null, files };
+          return {
+            revision: null,
+            content: null,
+            files,
+          };
         }
         const sha = revision ?? stored.head;
         if (
@@ -192,18 +230,23 @@ const makeRepository = Effect.gen(function* () {
               (!visibleInSharedExecution(path) ||
                 !visibleToGrant(path, grants))))
         )
-          return yield* new WorkspaceAccessDenied();
-        const published = yield* sql`SELECT revision FROM workspace_revision
-          WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`;
+          throw new WorkspaceAccessDenied();
+        const published =
+          await query(sql`SELECT revision FROM workspace_revision
+          WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
         if (published.length !== 1)
-          return yield* new WorkspaceRepositoryError({ reason: "not_found" });
-        const listing = yield* readWorkspaceGit(stored.bundle, sha);
+          throw new WorkspaceRepositoryError({
+            reason: "not_found",
+          });
+        const listing = await readWorkspaceGit(stored.bundle, sha);
         if (path !== undefined && !listing.files.includes(path))
-          return yield* new WorkspaceRepositoryError({ reason: "not_found" });
+          throw new WorkspaceRepositoryError({
+            reason: "not_found",
+          });
         const value =
           path === undefined
             ? listing
-            : yield* readWorkspaceGit(stored.bundle, sha, path);
+            : await readWorkspaceGit(stored.bundle, sha, path);
         return {
           revision: sha,
           ...value,
@@ -213,312 +256,344 @@ const makeRepository = Effect.gen(function* () {
               (!sharedExecution(actor) || visibleInSharedExecution(filename))
           ),
         };
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    history: Effect.fn("WorkspaceRepository.history")(
-      function* (actor: typeof WorkspaceActorSchema.Type, path: string) {
-        if (sharedExecution(actor)) return yield* new WorkspaceAccessDenied();
-        yield* requireWorkspaceAccess(actor);
-        const filename =
-          yield* Schema.decodeUnknownEffect(WorkspacePathSchema)(path);
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  history: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    path: string
+  ) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        if (sharedExecution(actor)) throw new WorkspaceAccessDenied();
+        await requireWorkspaceAccess(actor);
+        const filename = await WorkspacePathSchema.parseAsync(path);
         const rows =
-          yield* sql`SELECT revision, parent_revision AS parent, path, author_user_id AS author,
+          await query(sql`SELECT revision, parent_revision AS parent, path, author_user_id AS author,
           created_at::text AS "createdAt", source FROM workspace_revision
-          WHERE workspace_id = ${actor.workspaceId} AND path = ${filename} ORDER BY created_at DESC, revision DESC LIMIT 50`;
-        return yield* Schema.decodeUnknownEffect(Schema.Array(revisionSchema))(
-          rows
-        );
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    export: Effect.fn("WorkspaceRepository.export")(
-      function* (actor: typeof WorkspaceActorSchema.Type) {
-        if (sharedExecution(actor)) return yield* new WorkspaceAccessDenied();
-        yield* requireWorkspaceAccess(actor);
-        return yield* snapshot(actor.workspaceId);
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    source: Effect.fn("WorkspaceRepository.source")(
-      function* (actor: typeof WorkspaceActorSchema.Type, revision: string) {
-        if (sharedExecution(actor)) return yield* new WorkspaceAccessDenied();
-        yield* requireWorkspaceAccess(actor);
-        const sha =
-          yield* Schema.decodeUnknownEffect(GitRevisionSchema)(revision);
+          WHERE workspace_id = ${actor.workspaceId} AND path = ${filename} ORDER BY created_at DESC, revision DESC LIMIT 50`);
+        return await z.array(revisionSchema).parseAsync(rows);
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  export: async function (actor: z.output<typeof WorkspaceActorSchema>) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        if (sharedExecution(actor)) throw new WorkspaceAccessDenied();
+        await requireWorkspaceAccess(actor);
+        return await snapshot(actor.workspaceId);
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  source: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    revision: string
+  ) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        if (sharedExecution(actor)) throw new WorkspaceAccessDenied();
+        await requireWorkspaceAccess(actor);
+        const sha = await GitRevisionSchema.parseAsync(revision);
         const rows =
-          yield* sql`SELECT filename, content AS bytes FROM workspace_source
-          WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`;
+          await query(sql`SELECT filename, content AS bytes FROM workspace_source
+          WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
         if (!rows[0])
-          return yield* new WorkspaceRepositoryError({ reason: "not_found" });
-        return yield* Schema.decodeUnknownEffect(importSourceSchema)(rows[0]);
-      },
-      sql.withTransaction,
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-    write: Effect.fn("WorkspaceRepository.write")(
-      function* (
-        actor: typeof WorkspaceActorSchema.Type,
-        raw: typeof WorkspaceWriteSchema.Type,
-        source:
-          | { readonly kind: "editor" | "agent" }
-          | {
-              readonly kind: "ontology";
-              readonly action?: Pick<
-                typeof OntologyActionSchema.Type,
-                "actionId" | "entityId"
-              >;
-            }
-          | {
-              readonly kind: "import";
-              readonly filename: string;
-              readonly bytes: Uint8Array;
-            }
-          | {
-              readonly kind: "publication" | "tool-publication";
-              readonly proposal: string;
-            }
-          | {
-              readonly kind: "rollback" | "tool-rollback";
-              readonly revision: string;
-            }
-          | { readonly kind: "tool-disable" } = {
-          kind: "editor",
+          throw new WorkspaceRepositoryError({
+            reason: "not_found",
+          });
+        return await importSourceSchema.parseAsync(rows[0]);
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+  write: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    raw: z.output<typeof WorkspaceWriteSchema>,
+    source:
+      | {
+          readonly kind: "editor" | "agent";
         }
-      ) {
-        if (
-          actor.agentGrantId ||
-          (raw.path === ontologyPath && source.kind !== "ontology")
+      | {
+          readonly kind: "ontology";
+          readonly action?: Pick<
+            z.output<typeof OntologyActionSchema>,
+            "actionId" | "entityId"
+          >;
+        }
+      | {
+          readonly kind: "import";
+          readonly filename: string;
+          readonly bytes: Uint8Array;
+        }
+      | {
+          readonly kind: "publication" | "tool-publication";
+          readonly proposal: string;
+        }
+      | {
+          readonly kind: "rollback" | "tool-rollback";
+          readonly revision: string;
+        }
+      | {
+          readonly kind: "tool-disable";
+        } = {
+      kind: "editor",
+    }
+  ) {
+    try {
+      if (
+        actor.agentGrantId ||
+        (raw.path === ontologyPath && source.kind !== "ontology")
+      )
+        throw new WorkspaceAccessDenied();
+      const input = await Promise.try(async () =>
+        WorkspaceWriteSchema.parseAsync(raw)
+      ).catch(() => {
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      });
+      if (
+        isValid(PublishedToolPath, input.path) &&
+        !["tool-publication", "tool-rollback", "tool-disable"].includes(
+          source.kind
         )
-          return yield* new WorkspaceAccessDenied();
-        const input = yield* Schema.decodeUnknownEffect(WorkspaceWriteSchema)(
-          raw
-        ).pipe(
-          Effect.mapError(
-            () => new WorkspaceRepositoryError({ reason: "invalid_input" })
-          )
+      )
+        throw new WorkspaceAccessDenied();
+      if (
+        (isValid(PublishedToolPath, input.path) ||
+          isValid(ToolProposalPath, input.path)) &&
+        input.content !== null
+      )
+        await decodeCustomerTool(input.content);
+      if (
+        source.kind === "tool-publication" &&
+        (!isValid(ToolProposalPath, source.proposal) ||
+          source.proposal.replace(/^proposals\//u, "") !== input.path)
+      )
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      if (
+        source.kind === "tool-rollback" &&
+        (!isValid(PublishedToolPath, input.path) ||
+          !isValid(GitRevisionSchema, source.revision))
+      )
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      if (
+        source.kind === "tool-disable" &&
+        (!isValid(PublishedToolPath, input.path) || input.content !== null)
+      )
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      if (input.path === capabilitiesPath && input.content !== null)
+        await jsonString(WorkspaceCapabilitiesSchema.strict()).parseAsync(
+          input.content
         );
-        if (
-          Schema.is(PublishedToolPath)(input.path) &&
-          !["tool-publication", "tool-rollback", "tool-disable"].includes(
-            source.kind
-          )
-        )
-          return yield* new WorkspaceAccessDenied();
-        if (
-          (Schema.is(PublishedToolPath)(input.path) ||
-            Schema.is(ToolProposalPath)(input.path)) &&
-          input.content !== null
-        )
-          yield* decodeCustomerTool(input.content);
-        if (
-          source.kind === "tool-publication" &&
-          (!Schema.is(ToolProposalPath)(source.proposal) ||
-            source.proposal.replace(/^proposals\//u, "") !== input.path)
-        )
-          return yield* new WorkspaceRepositoryError({
+      if (isSkillContentPath(input.path) && input.content !== null)
+        await Promise.try(async () =>
+          SkillDocumentSchema.parseAsync(input.content)
+        ).catch(() => {
+          throw new WorkspaceRepositoryError({
             reason: "invalid_input",
           });
+        });
+      if (source.kind === "publication") {
         if (
-          source.kind === "tool-rollback" &&
-          (!Schema.is(PublishedToolPath)(input.path) ||
-            !Schema.is(GitRevisionSchema)(source.revision))
+          !isValid(SkillProposalPath, source.proposal) ||
+          skillPathFromProposal(source.proposal) !== input.path
         )
-          return yield* new WorkspaceRepositoryError({
+          throw new WorkspaceRepositoryError({
             reason: "invalid_input",
           });
-        if (
-          source.kind === "tool-disable" &&
-          (!Schema.is(PublishedToolPath)(input.path) || input.content !== null)
-        )
-          return yield* new WorkspaceRepositoryError({
-            reason: "invalid_input",
-          });
-        if (input.path === capabilitiesPath && input.content !== null)
-          yield* Schema.decodeUnknownEffect(
-            Schema.fromJsonString(WorkspaceCapabilitiesSchema)
-          )(input.content, { onExcessProperty: "error" });
-        if (isSkillContentPath(input.path) && input.content !== null)
-          yield* Schema.decodeUnknownEffect(SkillDocumentSchema)(
-            input.content
-          ).pipe(
-            Effect.mapError(
-              () => new WorkspaceRepositoryError({ reason: "invalid_input" })
-            )
-          );
-        if (source.kind === "publication") {
-          if (
-            !Schema.is(SkillProposalPath)(source.proposal) ||
-            skillPathFromProposal(source.proposal) !== input.path
-          )
-            return yield* new WorkspaceRepositoryError({
-              reason: "invalid_input",
-            });
-        }
-        if (
-          source.kind === "rollback" &&
-          (!Schema.is(PublishedSkillPath)(input.path) ||
-            !Schema.is(GitRevisionSchema)(source.revision))
-        )
-          return yield* new WorkspaceRepositoryError({
-            reason: "invalid_input",
-          });
-        if (
-          (input.path.startsWith("agent/") || isSkillContentPath(input.path)) &&
-          (input.content?.length ?? 0) > 16_000
-        )
-          return yield* new WorkspaceRepositoryError({
-            reason: "invalid_input",
-          });
-        const original =
-          source.kind === "import"
-            ? yield* Schema.decodeUnknownEffect(importSourceSchema)(source)
-            : null;
-        const sourceSha =
-          original === null
-            ? null
-            : createHash("sha256").update(original.bytes).digest("hex");
-        const hash = createHash("sha256")
-          .update(
-            JSON.stringify({
-              userId: actor.userId,
-              input,
-              source: {
-                kind: source.kind,
-                sha256: sourceSha,
-                filename: original?.filename,
-                action: source.kind === "ontology" ? source.action : undefined,
-                proposal:
-                  ["publication", "tool-publication"].includes(source.kind) &&
-                  "proposal" in source
-                    ? source.proposal
-                    : undefined,
-                revision:
-                  ["rollback", "tool-rollback"].includes(source.kind) &&
-                  "revision" in source
-                    ? source.revision
-                    : undefined,
-              },
-            })
-          )
-          .digest("hex");
-        const initial = yield* sql.withTransaction(
-          Effect.gen(function* () {
-            yield* requireWorkspaceAccess(
-              actor,
-              !input.path.startsWith("knowledge/") &&
-                !input.path.startsWith("proposals/skills/") &&
-                !input.path.startsWith("proposals/tools/")
-            );
-            const prior = yield* replay(
-              actor.workspaceId,
-              input.operationId,
-              hash
-            );
-            return { prior, stored: yield* snapshot(actor.workspaceId) };
+      }
+      if (
+        source.kind === "rollback" &&
+        (!isValid(PublishedSkillPath, input.path) ||
+          !isValid(GitRevisionSchema, source.revision))
+      )
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      if (
+        (input.path.startsWith("agent/") || isSkillContentPath(input.path)) &&
+        (input.content?.length ?? 0) > 16_000
+      )
+        throw new WorkspaceRepositoryError({
+          reason: "invalid_input",
+        });
+      const original =
+        source.kind === "import"
+          ? await importSourceSchema.parseAsync(source)
+          : null;
+      const sourceSha =
+        original === null
+          ? null
+          : createHash("sha256").update(original.bytes).digest("hex");
+      const hash = createHash("sha256")
+        .update(
+          JSON.stringify({
+            userId: actor.userId,
+            input,
+            source: {
+              kind: source.kind,
+              sha256: sourceSha,
+              filename: original?.filename,
+              action: source.kind === "ontology" ? source.action : undefined,
+              proposal:
+                ["publication", "tool-publication"].includes(source.kind) &&
+                "proposal" in source
+                  ? source.proposal
+                  : undefined,
+              revision:
+                ["rollback", "tool-rollback"].includes(source.kind) &&
+                "revision" in source
+                  ? source.revision
+                  : undefined,
+            },
           })
+        )
+        .digest("hex");
+      const initial = await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(
+          actor,
+          !input.path.startsWith("knowledge/") &&
+            !input.path.startsWith("proposals/skills/") &&
+            !input.path.startsWith("proposals/tools/")
         );
-        if (initial.prior) return { revision: initial.prior };
-        if ((initial.stored?.head ?? null) !== input.expectedRevision)
-          return yield* new WorkspaceRepositoryError({ reason: "conflict" });
-        const metadata =
-          source.kind === "ontology"
+        const prior = await replay(actor.workspaceId, input.operationId, hash);
+        return {
+          prior,
+          stored: await snapshot(actor.workspaceId),
+        };
+      });
+      if (initial.prior)
+        return {
+          revision: initial.prior,
+        };
+      if ((initial.stored?.head ?? null) !== input.expectedRevision)
+        throw new WorkspaceRepositoryError({
+          reason: "conflict",
+        });
+      const metadata =
+        source.kind === "ontology"
+          ? {
+              actor: actor.userId,
+              operation: input.operationId,
+              action: source.action,
+            }
+          : source.kind === "publication" || source.kind === "tool-publication"
             ? {
                 actor: actor.userId,
                 operation: input.operationId,
-                action: source.action,
+                source: "publication",
+                proposal: source.proposal,
               }
-            : source.kind === "publication" ||
-                source.kind === "tool-publication"
+            : source.kind === "rollback" || source.kind === "tool-rollback"
               ? {
                   actor: actor.userId,
                   operation: input.operationId,
-                  source: "publication",
-                  proposal: source.proposal,
+                  source: "rollback",
+                  revision: source.revision,
                 }
-              : source.kind === "rollback" || source.kind === "tool-rollback"
-                ? {
-                    actor: actor.userId,
-                    operation: input.operationId,
-                    source: "rollback",
-                    revision: source.revision,
-                  }
-                : { actor: actor.userId, operation: input.operationId };
-        const gitInput = {
-          bundle: initial.stored?.bundle ?? null,
-          parent: input.expectedRevision,
-          path: input.path,
-          content: input.content,
-          message: `${input.content === null ? "Remove" : "Update"} ${input.path}\n\nZoen-Metadata: ${JSON.stringify(metadata)}`,
-        };
-        const candidate = yield* publishWorkspaceGit(
-          source.kind === "publication" || source.kind === "tool-publication"
-            ? { ...gitInput, remove: source.proposal }
-            : gitInput
+              : {
+                  actor: actor.userId,
+                  operation: input.operationId,
+                };
+      const gitInput = {
+        bundle: initial.stored?.bundle ?? null,
+        parent: input.expectedRevision,
+        path: input.path,
+        content: input.content,
+        message: `${input.content === null ? "Remove" : "Update"} ${input.path}\n\nZoen-Metadata: ${JSON.stringify(metadata)}`,
+      };
+      const candidate = await publishWorkspaceGit(
+        source.kind === "publication" || source.kind === "tool-publication"
+          ? {
+              ...gitInput,
+              remove: source.proposal,
+            }
+          : gitInput
+      );
+      return await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(
+          actor,
+          !input.path.startsWith("knowledge/") &&
+            !input.path.startsWith("proposals/skills/") &&
+            !input.path.startsWith("proposals/tools/")
         );
-        return yield* sql.withTransaction(
-          Effect.gen(function* () {
-            yield* requireWorkspaceAccess(
-              actor,
-              !input.path.startsWith("knowledge/") &&
-                !input.path.startsWith("proposals/skills/") &&
-                !input.path.startsWith("proposals/tools/")
-            );
-            const prior = yield* replay(
-              actor.workspaceId,
-              input.operationId,
-              hash
-            );
-            if (prior) return { revision: prior };
-            const published =
-              yield* sql`INSERT INTO workspace_repository (workspace_id, head_sha, bundle)
+        const prior = await replay(actor.workspaceId, input.operationId, hash);
+        if (prior)
+          return {
+            revision: prior,
+          };
+        const published =
+          await query(sql`INSERT INTO workspace_repository (workspace_id, head_sha, bundle)
             VALUES (${actor.workspaceId}, ${candidate.revision}, ${candidate.bundle})
             ON CONFLICT (workspace_id) DO UPDATE SET head_sha = EXCLUDED.head_sha,
               bundle = EXCLUDED.bundle, updated_at = clock_timestamp()
               WHERE workspace_repository.head_sha = ${input.expectedRevision}
-            RETURNING head_sha`;
-            if (published.length !== 1) {
-              const racedReplay = yield* replay(
-                actor.workspaceId,
-                input.operationId,
-                hash
-              );
-              if (racedReplay) return { revision: racedReplay };
-              return yield* new WorkspaceRepositoryError({
-                reason: "conflict",
-              });
-            }
-            yield* sql`INSERT INTO workspace_revision (workspace_id, revision, parent_revision, operation_id,
+            RETURNING head_sha`);
+        if (published.length !== 1) {
+          const racedReplay = await replay(
+            actor.workspaceId,
+            input.operationId,
+            hash
+          );
+          if (racedReplay)
+            return {
+              revision: racedReplay,
+            };
+          throw new WorkspaceRepositoryError({
+            reason: "conflict",
+          });
+        }
+        await query(sql`INSERT INTO workspace_revision (workspace_id, revision, parent_revision, operation_id,
             request_hash, path, author_user_id, source, source_sha256)
             VALUES (${actor.workspaceId}, ${candidate.revision}, ${input.expectedRevision}, ${input.operationId},
-              ${hash}, ${input.path}, ${actor.userId}, ${source.kind}, ${sourceSha})`;
-            if (original !== null) {
-              const totals = yield* sql<{
-                bytes: number;
-              }>`SELECT coalesce(sum(octet_length(content)), 0)::int AS bytes
-              FROM workspace_source WHERE workspace_id = ${actor.workspaceId}`;
-              if ((totals[0]?.bytes ?? 0) + original.bytes.length > 104_857_600)
-                return yield* new WorkspaceRepositoryError({
-                  reason: "invalid_input",
-                });
-              yield* sql`INSERT INTO workspace_source (workspace_id, revision, filename, content)
-              VALUES (${actor.workspaceId}, ${candidate.revision}, ${original.filename}, ${original.bytes})`;
-            }
-            return { revision: candidate.revision };
-          })
-        );
-      },
-      Effect.catchTag(["SqlError", "SchemaError"], unavailable)
-    ),
-  };
-});
-
-export class WorkspaceRepository extends Context.Service<
-  WorkspaceRepository,
-  Effect.Success<typeof makeRepository>
->()("zoen/WorkspaceRepository") {
-  static readonly layer = Layer.effect(WorkspaceRepository, makeRepository);
-}
+              ${hash}, ${input.path}, ${actor.userId}, ${source.kind}, ${sourceSha})`);
+        if (original !== null) {
+          const totals = await query<{
+            bytes: number;
+          }>(sql`SELECT coalesce(sum(octet_length(content)), 0)::int AS bytes
+              FROM workspace_source WHERE workspace_id = ${actor.workspaceId}`);
+          if ((totals[0]?.bytes ?? 0) + original.bytes.length > 104_857_600)
+            throw new WorkspaceRepositoryError({
+              reason: "invalid_input",
+            });
+          await query(sql`INSERT INTO workspace_source (workspace_id, revision, filename, content)
+              VALUES (${actor.workspaceId}, ${candidate.revision}, ${original.filename}, ${original.bytes})`);
+        }
+        return {
+          revision: candidate.revision,
+        };
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError) {
+        return unavailable();
+      }
+      throw error;
+    }
+  },
+};

@@ -1,14 +1,15 @@
 "use client";
 
+import { z } from "zod";
+
 import { useState } from "react";
-import { Schema } from "effect";
 import type { OntologySchema } from "@shared/workspaces/ontology";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import styles from "../space.module.css";
 
-type Graph = typeof OntologySchema.Type;
+type Graph = z.output<typeof OntologySchema>;
 export function OntologyValueField({
   property,
   name = "value",
@@ -64,9 +65,9 @@ export function OntologyEntityForm({
         const values = new FormData(event.currentTarget);
         const properties = Object.fromEntries(
           (type?.properties ?? []).flatMap((property) => {
-            const value = Schema.decodeUnknownSync(Schema.String)(
-              values.get(property.id) ?? ""
-            );
+            const value = z
+              .string()
+              .parse(values.get(`property:${property.id}`) ?? "");
             return value === ""
               ? []
               : [
@@ -87,9 +88,7 @@ export function OntologyEntityForm({
             ...graph.entities,
             {
               id: `e_${crypto.randomUUID()}`,
-              name: Schema.decodeUnknownSync(Schema.String)(
-                values.get("name")
-              ).trim(),
+              name: z.string().parse(values.get("name")).trim(),
               type: typeId,
               properties,
               sources: [],
@@ -123,7 +122,7 @@ export function OntologyEntityForm({
         <OntologyValueField
           key={`${typeId}:${property.id}`}
           property={property}
-          name={property.id}
+          name={`property:${property.id}`}
         />
       ))}
       <Button type="submit" disabled={pending || !type}>
@@ -161,9 +160,9 @@ export function OntologyRelations({
         className={styles.create}
         onSubmit={(event) => {
           event.preventDefault();
-          const target = Schema.decodeUnknownSync(Schema.String)(
-            new FormData(event.currentTarget).get("target")
-          );
+          const target = z
+            .string()
+            .parse(new FormData(event.currentTarget).get("target"));
           const link = { type: relationId, from: entity.id, to: target };
           if (
             !graph.links.some(

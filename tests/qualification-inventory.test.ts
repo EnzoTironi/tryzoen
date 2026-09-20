@@ -21,7 +21,7 @@ describe("qualification inventory", () => {
         "search",
         "whatsapp-send",
         "fill_from_vault",
-        "workspace.files.list",
+        "workspace_files_list",
       ])
     );
     expect(livePassedRows()).toEqual([]);

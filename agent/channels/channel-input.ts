@@ -1,56 +1,110 @@
-import { ConfigProvider, Effect, Schema } from "effect";
+import { withSignal } from "../../server/operations/async";
+import { TimeoutError } from "../../server/operations/async";
+import { InvalidMessage } from "../../server/messaging/model";
+import { IdentityInactive } from "../../server/messaging/model";
+import { ChannelTransportError } from "../../server/channels/transport";
+import { ChannelResponseUncertain } from "../lib/channel-response";
+import { ChannelResponseRejected } from "../lib/channel-response";
+import { ZodError as SchemaError } from "zod";
+import { InternalCallbackRejected } from "../../server/internal/callback-auth";
+import { jsonString } from "@shared/validation";
 import { defineChannel, POST } from "eve/channels";
 import {
   internalCallbackBodies,
   readAuthenticatedInternalCallback,
 } from "../../server/internal/callback-auth";
-import { serverRuntime } from "../../server/runtime";
 import { submitChannelResponse } from "../lib/channel-response";
-
 const route = "/internal/channel-input/respond";
-
 export default defineChannel({
   routes: [
     POST(route, (request, { attachSession }) =>
-      serverRuntime.runPromise(
-        Effect.gen(function* () {
-          const raw = yield* readAuthenticatedInternalCallback(request, route);
-          if (raw instanceof Response) return raw;
-          const input = yield* Schema.decodeUnknownEffect(
-            Schema.fromJsonString(internalCallbackBodies[route]),
-            { onExcessProperty: "error" }
-          )(raw.toString("utf8"));
-          yield* submitChannelResponse(input, attachSession(input.sessionId));
-          return Response.json(
-            { status: "accepted", requestId: input.requestId },
-            { status: 202 }
-          );
-        }).pipe(
-          Effect.catchTags({
-            InternalCallbackRejected: (error) =>
-              Effect.succeed(new Response(null, { status: error.status })),
-            SchemaError: () =>
-              Effect.succeed(new Response(null, { status: 400 })),
-            ChannelResponseRejected: () =>
-              Effect.succeed(new Response(null, { status: 409 })),
-            ChannelResponseUncertain: () =>
-              Effect.succeed(new Response(null, { status: 503 })),
-            ChannelTransportError: () =>
-              Effect.succeed(new Response(null, { status: 401 })),
-            IdentityInactive: () =>
-              Effect.succeed(new Response(null, { status: 401 })),
-            InvalidMessage: () =>
-              Effect.succeed(new Response(null, { status: 409 })),
-            TimeoutError: () =>
-              Effect.succeed(new Response(null, { status: 503 })),
-          }),
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromEnv()
-          )
-        ),
-        { signal: request.signal }
-      )
+      withSignal(request.signal, async () => {
+        try {
+          try {
+            try {
+              try {
+                try {
+                  try {
+                    try {
+                      try {
+                        const raw = await readAuthenticatedInternalCallback(
+                          request,
+                          route
+                        );
+                        if (raw instanceof Response) return raw;
+                        const input = await jsonString(
+                          internalCallbackBodies[route].strict()
+                        ).parseAsync(raw.toString("utf8"));
+                        await submitChannelResponse(
+                          input,
+                          attachSession(input.sessionId)
+                        );
+                        return Response.json(
+                          {
+                            status: "accepted",
+                            requestId: input.requestId,
+                          },
+                          {
+                            status: 202,
+                          }
+                        );
+                      } catch (error) {
+                        if (error instanceof InternalCallbackRejected)
+                          return new Response(null, {
+                            status: error.status,
+                          });
+                        throw error;
+                      }
+                    } catch (error) {
+                      if (error instanceof SchemaError)
+                        return new Response(null, {
+                          status: 400,
+                        });
+                      throw error;
+                    }
+                  } catch (error) {
+                    if (error instanceof ChannelResponseRejected)
+                      return new Response(null, {
+                        status: 409,
+                      });
+                    throw error;
+                  }
+                } catch (error) {
+                  if (error instanceof ChannelResponseUncertain)
+                    return new Response(null, {
+                      status: 503,
+                    });
+                  throw error;
+                }
+              } catch (error) {
+                if (error instanceof ChannelTransportError)
+                  return new Response(null, {
+                    status: 401,
+                  });
+                throw error;
+              }
+            } catch (error) {
+              if (error instanceof IdentityInactive)
+                return new Response(null, {
+                  status: 401,
+                });
+              throw error;
+            }
+          } catch (error) {
+            if (error instanceof InvalidMessage)
+              return new Response(null, {
+                status: 409,
+              });
+            throw error;
+          }
+        } catch (error) {
+          if (error instanceof TimeoutError)
+            return new Response(null, {
+              status: 503,
+            });
+          throw error;
+        }
+      })
     ),
   ],
 });

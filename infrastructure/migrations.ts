@@ -42,7 +42,7 @@ export const MigrateApplication = Action(
             init: {
               entrypoint: ["/bin/sh", "-c"],
               cmd: [
-                "node scripts/migrate-hosted.ts >/tmp/migration.log 2>&1; printf '%s' \"$?\" >/tmp/migration.exit; exec sleep infinity",
+                "node --import tsx scripts/migrate-hosted.ts >/tmp/migration.log 2>&1; printf '%s' \"$?\" >/tmp/migration.exit; exec sleep infinity",
               ],
             },
             env: {

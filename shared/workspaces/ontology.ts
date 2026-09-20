@@ -1,59 +1,58 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-const key = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,63}$/));
-const label = Schema.Trimmed.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(120)
-);
-const value = Schema.Union([
-  Schema.String.check(Schema.isMaxLength(2000)),
-  Schema.Finite,
-  Schema.Boolean,
-  Schema.Null,
+const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
+const label = z.string().trim().min(1).max(120);
+const value = z.union([
+  z.string().max(2000),
+  z.number(),
+  z.boolean(),
+  z.null(),
 ]);
-const property = Schema.Struct({
+const property = z.object({
   id: key,
   name: label,
-  type: Schema.Literals(["string", "number", "boolean", "date"]),
-  required: Schema.Boolean,
+  type: z.enum(["string", "number", "boolean", "date"]),
+  required: z.boolean(),
 });
-export const OntologySchema = Schema.Struct({
-  version: Schema.Literal(1),
-  types: Schema.Array(
-    Schema.Struct({
-      id: key,
-      name: label,
-      properties: Schema.Array(property).check(Schema.isMaxLength(30)),
-    })
-  ).check(Schema.isMaxLength(30)),
-  relations: Schema.Array(
-    Schema.Struct({ id: key, name: label, from: key, to: key })
-  ).check(Schema.isMaxLength(50)),
-  entities: Schema.Array(
-    Schema.Struct({
-      id: key,
-      type: key,
-      name: label,
-      properties: Schema.Record(key, value),
-      sources: Schema.Array(
-        Schema.Struct({
-          path: Schema.String.check(
-            Schema.isPattern(/^knowledge\/[a-zA-Z0-9_./-]+\.md$/)
-          ),
-          revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/)),
-        })
-      ).check(Schema.isMaxLength(10)),
-    })
-  ).check(Schema.isMaxLength(500)),
-  links: Schema.Array(Schema.Struct({ type: key, from: key, to: key })).check(
-    Schema.isMaxLength(2000)
-  ),
-  actions: Schema.Array(
-    Schema.Struct({ id: key, name: label, entityType: key, property: key })
-  ).check(Schema.isMaxLength(30)),
+export const OntologySchema = z.object({
+  version: z.literal(1),
+  types: z
+    .array(
+      z.object({
+        id: key,
+        name: label,
+        properties: z.array(property).max(30),
+      })
+    )
+    .max(30),
+  relations: z
+    .array(z.object({ id: key, name: label, from: key, to: key }))
+    .max(50),
+  entities: z
+    .array(
+      z.object({
+        id: key,
+        type: key,
+        name: label,
+        properties: z.record(key, value),
+        sources: z
+          .array(
+            z.object({
+              path: z.string().regex(/^knowledge\/[a-zA-Z0-9_./-]+\.md$/),
+              revision: z.string().regex(/^[a-f0-9]{40}$/),
+            })
+          )
+          .max(10),
+      })
+    )
+    .max(500),
+  links: z.array(z.object({ type: key, from: key, to: key })).max(2000),
+  actions: z
+    .array(z.object({ id: key, name: label, entityType: key, property: key }))
+    .max(30),
 });
 
-export const emptyOntology: typeof OntologySchema.Type = {
+export const emptyOntology: z.output<typeof OntologySchema> = {
   version: 1,
   types: [
     {
@@ -96,22 +95,32 @@ export const emptyOntology: typeof OntologySchema.Type = {
   ],
 };
 export const ontologyPath = "ontology/workspace.json";
-export const OntologyActionSchema = Schema.Struct({
+export const OntologyActionSchema = z.object({
   entityId: key,
   actionId: key,
   value,
 });
 
-export class OntologyInvalid extends Schema.TaggedError<OntologyInvalid>()(
-  "OntologyInvalid",
-  {
-    reason: Schema.Literals([
-      "duplicate",
-      "type",
-      "property",
-      "link",
-      "source",
-      "action",
-    ]),
+export class OntologyInvalid extends Error {
+  readonly _tag = "OntologyInvalid";
+  declare readonly reason:
+    | "duplicate"
+    | "type"
+    | "property"
+    | "link"
+    | "source"
+    | "action";
+  constructor(input: {
+    readonly reason:
+      | "duplicate"
+      | "type"
+      | "property"
+      | "link"
+      | "source"
+      | "action";
+  }) {
+    super("OntologyInvalid");
+    this.name = "OntologyInvalid";
+    Object.assign(this, input);
   }
-) {}
+}

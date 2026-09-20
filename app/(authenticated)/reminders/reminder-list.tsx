@@ -5,8 +5,8 @@ import { cn } from "@web/components/class-names";
 import { PanelIntro } from "../_components/panel-intro";
 import { Button } from "@web/components/ui/button";
 import styles from "../_components/panel.module.css";
-import type { Effect } from "effect";
-import Link from "next/link";
+
+import { PanelLink } from "../_components/panel-link";
 import type { listReminders } from "../../../server/schedules/queries";
 import { Badge } from "@web/components/ui/badge";
 import { PauseIcon, PlayIcon } from "lucide-react";
@@ -42,7 +42,7 @@ const channelLabels = {
   kapso: "WhatsApp",
 } as const;
 
-type ReminderPage = Effect.Success<ReturnType<typeof listReminders>>;
+type ReminderPage = Awaited<ReturnType<typeof listReminders>>;
 
 export function ReminderList({ reminders, hasMore }: ReminderPage) {
   const { t } = useI18n();
@@ -58,13 +58,13 @@ export function ReminderList({ reminders, hasMore }: ReminderPage) {
           <div className={styles.actions}>
             <Button
               nativeButton={false}
-              render={<Link href="/chat?starter=reminder" />}
+              render={<PanelLink href="/chat?starter=reminder" />}
             >
               {t("Criar minha primeira automação")}
             </Button>
-            <Link className={styles.subtleLink} href="/recipes">
+            <PanelLink className={styles.subtleLink} href="/recipes">
               {t("Explorar ideias")}
-            </Link>
+            </PanelLink>
           </div>
         </>
       ) : (
@@ -181,12 +181,12 @@ function ReminderCard({
         ) : null}
       </dl>
       {reminder.originalSessionId ? (
-        <Link
+        <PanelLink
           className="type-label underline underline-offset-4"
           href={`/chat/${encodeURIComponent(reminder.originalSessionId)}`}
         >
           {t("Abrir conversa original")}
-        </Link>
+        </PanelLink>
       ) : (
         <p className="type-caption text-muted-foreground">
           {reminder.conversationChannel !== "eve"

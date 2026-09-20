@@ -1,8 +1,6 @@
-# Product direction: the final lens
+# Product direction
 
-2026-09-08. A product review inspired by Steve Jobs's emphasis on focus and an
-integrated experience. This is our interpretation, not a quotation or a claim
-about what he would have decided. Proposed product direction; not shipped behavior.
+Current direction: 2026-09-19. Zoen is prelaunch.
 
 ## One promise
 
@@ -13,83 +11,28 @@ an outcome, contribute a missing detail when necessary, authorize what needs the
 decision, and receive a useful result. The product remembers enough to make the
 next interaction easier. It stays quiet when it has nothing useful to add.
 
-WhatsApp and Telegram are the front door. The same assistant works through both.
-Effect, Eve, Kernel and MCP are implementation choices supporting that promise.
-They should not become the onboarding curriculum. Operational ontology (Worlds)
-lives in [Operon](https://github.com/EnzoTironi/operon), not Companion.
+## Experience and implementation
 
-## Founder direction, 2026-09-12
+Keep the existing landing, mascot, photographic sky cycle, messenger examples,
+rotating headline, connection carousel and multilingual app. The current primary
+CTA opens the configured messenger; a single configured SMS destination opens the
+existing draft directly. Multiple available channels use `/get-started`.
 
-The product vision covers personal life, families, study, professional work and
-small businesses. Companion is both the conversational assistant and an AI FDE:
-it uses Operon tools to organize supplied information, build useful domain
-models and retain governed memory. Operon owns raw sources, document indexing,
-ontology, memory, permissions and operational records. Eve continues to own
-agent turns, sessions and durable execution.
+The ambition spans personal life, families, study, work and small businesses.
+Conversation is the entry point; the app provides clear controls for workspaces,
+files, connections, memory, schedules and trusted people. The landing describes
+that product ambition; provider readiness is established by separate evidence.
 
-Sharing uses intention-based access: the model interprets the authorized
-purpose and selects an appropriate disclosure. Runtime enforcement binds that
-decision to the actual owner grant, audience, evidence, task revision and output.
-A trusted-person network lets each person's Companion coordinate with accepted
-peers while keeping personal context and organizational authority separate.
-These capabilities are now part of the intended product scope; their delivery
-follows the dependencies in the
-[integration specification](companion-operon-integration.md).
+Eve owns the agent, native tools, skills, connections, approvals and durable work.
+Zoen owns product records, authorization and the existing interface. Treg can widen
+API access through a workspace-authorized native MCP connection. Alchemy can
+continue provisioning infrastructure. Neither framework details nor integration
+catalog sizes belong in the customer onboarding flow.
 
-The user can ask Companion to connect a service in conversation. It reuses a
-qualified connector or builds and validates one in the background. Eve owns that
-durable work; Operon owns the versioned artifacts and grants; the Executor-based
-gateway executes the allowed operations. Generated code never grants itself new
-permissions, and sharing an adapter never shares its creator's credentials.
-
-The public product name is Zoen (formerly Companion), as requested by the
-founder on 2026-09-12. The supplied green mascot is the website logo, favicon,
-mockup avatar and profile photo of the selected Telegram bot, `@TryZoenBot`.
-
-The landing uses a rotating hero phrase, plain solid call-to-action buttons,
-original device mockups and a carousel of six connection examples. Optional
-animation respects reduced-motion preferences, and the carousel has manual and
-pause controls. The hero keeps one primary action; public plan selectors and
-pricing navigation are removed. Public copy does not mention credit cards or
-promote web chat in the hero; the invitation stays focused on the messengers.
-The hero has three clickable 44 px messenger icons and no supporting paragraphs
-around the primary button. **Começar** opens a minimal chooser on the same page,
-with WhatsApp, Telegram and iMessage buttons: a bottom sheet on mobile and a
-centered card on desktop. Configured hero icons open their messenger directly,
-without opening the chooser or another browser tab.
-This UI does not qualify new-account intake for a provider; current iMessage
-intake still requires an already verified phone number.
-
-The landing retains the reference's narrative with an original photographic sky
-cycle from night through dawn, day, sunset and nightfall. Original WhatsApp,
-iMessage and Telegram mockups illustrate the intended conversations. Channel
-artwork is a product concept, separate from provider qualification.
-
-The founder explicitly requested a Memorae-inspired landing that promises this
-complete experience before all underlying capabilities are implemented. The
-landing communicates that destination. Engineering status and acceptance
-evidence continue to distinguish implemented behavior from the roadmap. This
-supersedes the earlier restriction on advertising only completed release scope;
-it does not change runtime authorization or real-user qualification criteria.
-
-Public acquisition has one primary action: start a conversation. There is no
-pricing page, plan selection, browser signup or card collection before the first
-request. When a subscription becomes relevant, Companion offers a Stripe link
-inside the existing private conversation; the person sees the amount and decides
-at Checkout. Do not invent a price or treat opening/returning from that link as
-payment. Stripe's verified webhook remains the entitlement authority.
-
-## The critique of our plan
-
-The architecture is thoughtful, but a list of fifteen implementation packages
-cannot carry the product story. We risk making users configure an agent platform
-before they experience an assistant. We also risk treating voice, memory, browser
-work and integrations as disconnected demonstrations.
-
-Focus requires choosing what receives launch-quality attention. Keep the ambitious
-architecture, but make the first complete experience unmistakable. Generality
-belongs in the shared runtime; it does not require a menu of every capability on
-day one. Personal and professional scenarios stay in evals, never separate handlers.
+The [architecture](eve/architecture.md) and [validation](eve/rebuild.md) describe
+the implemented boundaries. Prefer the smallest coherent design that serves this
+experience. Remove obsolete interfaces directly; there is no production data to
+carry through transitional code.
 
 ## Design the whole interaction
 
@@ -199,80 +142,3 @@ the same care as the successful path.
 Do not replace this work with branding, a larger integration count or speculative
 framework design. Every launch feature needs an end-to-end owner and a real user
 journey that demonstrates its value.
-
-## What earns a place in release 1
-
-| Launch focus                             | What must feel complete                                                                                                    |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| WhatsApp and Telegram                    | Start, continue, correct, stop and receive results; deliberate adaptation to each channel                                  |
-| Text, voice notes and useful attachments | Understand input, clarify important ambiguity and deliver readable output                                                  |
-| Calendar and explicit reminders          | Connect when needed, act within permission, confirm results, change/cancel and recover                                     |
-| Durable memory                           | Remember permitted preferences, show sources, correct and forget                                                           |
-| Account and connection controls          | Verified channel linking, recovery, revocation, export/delete and clear usage limits                                       |
-| Dependable operation                     | Isolation, budgets, notification restraint, failure recovery and a supported self-host recipe                              |
-| Kernel browser tasks, conditional        | Add only after the same identity, action, privacy, cost and recovery gates pass; not a prerequisite for every installation |
-
-Build and test complete journeys incrementally. Text-only engineering demos can
-precede voice and files; they do not count as the finished first release. A
-Telegram pilot may precede WhatsApp activation, but is explicitly a limited pilot.
-No real-user admission bypasses the required identity, privacy and operations gates.
-
-The following remain expansion work: arbitrary user-installed MCPs/CLIs, general
-personal computers, a marketplace, live voice calls, payments,
-BYO ChatGPT execution and the Zoen connector. Preserve their architectural
-fit. Do not build their screens, abstract engines or placeholder source now.
-Existing browser/Google/UI code remains a reuse asset; defer exposure rather than
-destroying useful implementation indiscriminately.
-
-## How this changes execution
-
-The engineering package table in the blueprint remains a dependency map. It is
-not a requirement to finish every subsystem before touching the user experience.
-The current development priority is to connect and polish existing product flows.
-Record unresolved recovery and provider limits in the runtime evidence rather
-than blocking all product implementation on exhaustive qualification. Keep focused
-checks and independent review for changes; schedule comprehensive crash, chaos,
-load and provider qualification for release readiness. This changes development
-order, not the real-user admission gates below.
-
-Implement the smallest complete cross-package slice and test it immediately:
-
-1. Real text request → verified identity → Eve response → durable delivery → restart.
-2. Connection at point of need → return to the same task → permitted action → verified result.
-3. Correction/cancellation → remembered preference → scheduled follow-through → forget/revoke.
-4. Voice/files and second-channel parity → adverse conditions → release readiness.
-
-An internal demo may use an explicitly limited feature set, but never fabricated
-provider output, a privileged identity bypass or an implied production guarantee.
-Use the founder direction above for vision-led marketing; product qualification
-still requires the declared runtime evidence. Effect adoption is required across
-owned application logic; demonstrate it through real
-consumer slices rather than postponing product feedback until a wholesale rewrite.
-
-Before adding or keeping a feature, answer:
-
-- Which part of the promise becomes better for the user?
-- Can it be understood without learning our architecture?
-- Can a considered default remove a choice?
-- Is its failure/return path as coherent as its success path?
-- Can a supported library provide it without a second authority or runtime?
-- Which real journey and observation justify its cost?
-
-If those answers are weak, reduce or defer the feature. If a critical trust or
-recovery property is missing, complete it rather than hiding it behind a cleaner UI.
-
-## The product acceptance review
-
-Review the product from a new conversation through completion, return, correction
-and failure. The demonstration must include a real provider result, a process
-restart, a permission revocation and an ambiguous external failure. Check the same
-sequence on both launch channels and with a second account isolated from the first.
-
-Ask a fresh tester to complete a task without coaching. Observe what they think
-will happen, when they trust it is done, where they get stuck and whether they can
-correct or stop it. Follow up over repeated use: fewer interventions, useful
-follow-through and less time supervising are the intended outcomes. Publish numeric
-claims only after a declared workload and baseline support them.
-
-The success criterion is that people return because it reliably removes work.
-The number of adapters, services or available models is not a substitute for that.

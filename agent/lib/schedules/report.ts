@@ -1,5 +1,5 @@
+import type { z } from "zod";
 import type { scheduledConversationChannelSchema } from "../../../shared/schedules/conversation";
-import { serverRuntime } from "../../../server/runtime";
 import { deliverNativeScheduledReport } from "../../../server/schedules/native-report";
 import type { AttachSessionFn } from "eve/channels";
 import type { ScheduleToFn } from "eve/schedules";
@@ -20,10 +20,10 @@ export async function dispatchScheduledReport(
     readonly to: ScheduleToFn;
   },
   runId: string,
-  conversationChannel: typeof scheduledConversationChannelSchema.Type
+  conversationChannel: z.output<typeof scheduledConversationChannelSchema>
 ) {
   if (conversationChannel === "telegram" || conversationChannel === "kapso") {
-    await serverRuntime.runPromise(deliverNativeScheduledReport(runId));
+    await deliverNativeScheduledReport(runId);
     return;
   }
   const claimed = await claimScheduledReport(runId);

@@ -1,5 +1,5 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Effect, Schema } from "effect";
 import { beginModelOAuth, pollModelOAuth, refreshModelOAuth } from "./oauth";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,14 +30,12 @@ describe("workspace provider device authorization", () => {
         })
       );
     vi.stubGlobal("fetch", fetcher);
-    const start = await Effect.runPromise(beginModelOAuth("chatgpt"));
+    const start = await beginModelOAuth("chatgpt");
     expect(start.verificationUri).toBe("https://auth.openai.com/codex/device");
-    const result = await Effect.runPromise(
-      pollModelOAuth("chatgpt", {
-        deviceCode: start.deviceCode,
-        userCode: start.userCode,
-      })
-    );
+    const result = await pollModelOAuth("chatgpt", {
+      deviceCode: start.deviceCode,
+      userCode: start.userCode,
+    });
     expect(result).toMatchObject({
       status: "connected",
       tokens: { accountId: "synthetic-account" },
@@ -45,9 +43,9 @@ describe("workspace provider device authorization", () => {
     expect(fetcher.mock.calls[2]?.[0]).toBe(
       "https://auth.openai.com/oauth/token"
     );
-    const form = Schema.decodeUnknownSync(Schema.instanceOf(URLSearchParams))(
-      fetcher.mock.calls[2]?.[1]?.body
-    );
+    const form = z
+      .instanceof(URLSearchParams)
+      .parse(fetcher.mock.calls[2]?.[1]?.body);
     expect(form.get("code_verifier")).toBe("pkce-proof");
   });
 
@@ -59,9 +57,10 @@ describe("workspace provider device authorization", () => {
         vi.fn<typeof fetch>().mockResolvedValue(Response.json({}, { status }))
       );
       expect(
-        await Effect.runPromise(
-          pollModelOAuth("chatgpt", { deviceCode: "device", userCode: "code" })
-        )
+        await pollModelOAuth("chatgpt", {
+          deviceCode: "device",
+          userCode: "code",
+        })
       ).toEqual({ status: "pending" });
     }
   );
@@ -85,9 +84,7 @@ describe("workspace provider device authorization", () => {
           })
         )
       );
-      await expect(
-        Effect.runPromise(beginModelOAuth("grok"))
-      ).rejects.toMatchObject({
+      await expect(beginModelOAuth("grok")).rejects.toMatchObject({
         _tag: "ModelConnectionError",
         reason: "invalid_response",
       });
@@ -107,12 +104,12 @@ describe("workspace provider device authorization", () => {
         )
     );
     const request = { deviceCode: "device", userCode: "code" };
-    expect(await Effect.runPromise(pollModelOAuth("grok", request))).toEqual({
+    expect(await pollModelOAuth("grok", request)).toEqual({
       status: "slow_down",
     });
-    await expect(
-      Effect.runPromise(pollModelOAuth("grok", request))
-    ).rejects.toMatchObject({ reason: "denied" });
+    await expect(pollModelOAuth("grok", request)).rejects.toMatchObject({
+      reason: "denied",
+    });
   });
 
   it("preserves the previous refresh token when xAI does not rotate it", async () => {
@@ -124,13 +121,11 @@ describe("workspace provider device authorization", () => {
           Response.json({ access_token: "new-access", expires_in: 3600 })
         )
     );
-    const tokens = await Effect.runPromise(
-      refreshModelOAuth("grok", {
-        accessToken: "old",
-        refreshToken: "old-refresh",
-        expiresAt: 0,
-      })
-    );
+    const tokens = await refreshModelOAuth("grok", {
+      accessToken: "old",
+      refreshToken: "old-refresh",
+      expiresAt: 0,
+    });
     expect(tokens.refreshToken).toBe("old-refresh");
     expect(tokens.accessToken).toBe("new-access");
   });

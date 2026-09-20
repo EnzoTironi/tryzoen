@@ -1,5 +1,9 @@
 # Trusted-network conversations: validation
 
+Historical evidence from the pre-rebuild implementation. It does not qualify the
+current Eve 0.63.0 runtime. Current architecture and verification are recorded in
+[the rewrite report](../eve/rebuild.md).
+
 Updated 2026-09-15. This is isolated qualification, not a production deployment.
 
 ## Implemented behavior
@@ -12,7 +16,7 @@ opens the destination's files, private memory, customer tools or vault.
 Both the interface and Executor send through a private Synapse room. The verified
 application-service event creates one durable A2A task; native Eve runs the target
 bot and publishes its response using that bot's Matrix identity. The caller can
-read the response or a bounded pending receipt. Code Mode cannot bypass native
+read the response or a bounded pending receipt. Native tool invocation cannot bypass
 approval. The receiving bot cannot recursively contact another bot with this grant.
 
 A follow-up receives bounded, quoted context from earlier events in the same room.
@@ -26,7 +30,7 @@ outboxes survive application-row cascades and retry external cleanup.
   lint, formatting and unused-code checks passed after the conversation changes.
 - `pnpm build`: production Next and Eve build passed.
 - Seventeen focused PostgreSQL/Synapse tests passed, including event replay,
-  source/destination identity, same-room context, Code Mode approval, nontransitive
+  source/destination identity, same-room context, native Eve approval, nontransitive
   trust, private-file denial, project removal, cancellation and late output.
 - Native Eve with `codex/gpt-5.6-luna`, low reasoning: an initial successful batch
   executed six target sessions across three runs. Subsequent validation added a

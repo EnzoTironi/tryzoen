@@ -1,4 +1,5 @@
-import { Effect, Option, Schema } from "effect";
+import { z } from "zod";
+
 import type { ChannelSendOptions } from "eve/channels";
 import type { Identity } from "../accounts";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
@@ -6,16 +7,20 @@ import { groupSessionMemoryAttributes } from "../personal-memory/group-memory-po
 import { groupConversationMatchesIdentity } from "./group-policy";
 import { ChannelTransport } from "./transport";
 
-export class ChannelDispatchError extends Schema.TaggedError<ChannelDispatchError>()(
-  "ChannelDispatchError",
-  {
-    reason: Schema.Literals([
-      "unauthorized",
-      "handoff_unknown",
-      "unsupported_media",
-    ]),
+export class ChannelDispatchError extends Error {
+  readonly _tag = "ChannelDispatchError";
+  declare readonly reason:
+    | "unauthorized"
+    | "handoff_unknown"
+    | "unsupported_media";
+  constructor(input: {
+    readonly reason: "unauthorized" | "handoff_unknown" | "unsupported_media";
+  }) {
+    super("ChannelDispatchError");
+    this.name = "ChannelDispatchError";
+    Object.assign(this, input);
   }
-) {}
+}
 
 export const channelPrincipal = (
   identity: Identity,
@@ -52,35 +57,34 @@ export const channelPrincipal = (
   return { ...principal, attributes: { ...attributes, sourceMessageId } };
 };
 
-export const requireChannelPrincipal = Effect.fn("requireChannelPrincipal")(
-  function* (channel: Identity["channel"], auth: ChannelSendOptions["auth"]) {
-    if (!auth)
-      return yield* new ChannelDispatchError({ reason: "unauthorized" });
-    const identityId = yield* Schema.decodeUnknownEffect(
-      Schema.String.check(Schema.isUUID())
-    )(auth.attributes.channelIdentityId).pipe(
-      Effect.mapError(
-        () => new ChannelDispatchError({ reason: "unauthorized" })
-      )
-    );
-    const transport = yield* ChannelTransport;
-    const identity = yield* transport.activeIdentity(identityId, channel);
-    const expected = channelPrincipal(identity);
-    const conversationId = Option.getOrUndefined(
-      Schema.decodeUnknownOption(Schema.String)(auth.attributes.conversationId)
-    );
-    const conversationOk =
-      conversationId === identity.id ||
-      (conversationId !== undefined &&
-        groupConversationMatchesIdentity(conversationId, identity));
-    if (
-      auth.principalType !== "user" ||
-      auth.principalId !== expected.principalId ||
-      auth.attributes.workspaceId !== expected.attributes.workspaceId ||
-      auth.attributes.conversationChannel !== channel ||
-      !conversationOk
-    )
-      return yield* new ChannelDispatchError({ reason: "unauthorized" });
-    return identity;
-  }
-);
+export const requireChannelPrincipal = async function (
+  channel: Identity["channel"],
+  auth: ChannelSendOptions["auth"]
+) {
+  if (!auth) throw new ChannelDispatchError({ reason: "unauthorized" });
+  const identityId = await Promise.try(async () =>
+    z.uuid().parseAsync(auth.attributes.channelIdentityId)
+  ).catch(() => {
+    throw new ChannelDispatchError({ reason: "unauthorized" });
+  });
+  const transport = ChannelTransport;
+  const identity = await transport.activeIdentity(identityId, channel);
+  const expected = channelPrincipal(identity);
+  const conversationId = ((parsed) =>
+    parsed.success ? parsed.data : undefined)(
+    z.string().safeParse(auth.attributes.conversationId)
+  );
+  const conversationOk =
+    conversationId === identity.id ||
+    (conversationId !== undefined &&
+      groupConversationMatchesIdentity(conversationId, identity));
+  if (
+    auth.principalType !== "user" ||
+    auth.principalId !== expected.principalId ||
+    auth.attributes.workspaceId !== expected.attributes.workspaceId ||
+    auth.attributes.conversationChannel !== channel ||
+    !conversationOk
+  )
+    throw new ChannelDispatchError({ reason: "unauthorized" });
+  return identity;
+};

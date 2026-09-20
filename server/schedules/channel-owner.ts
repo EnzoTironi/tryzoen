@@ -1,42 +1,42 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+
 import type { AccessScope } from "../../shared/identity/access-scope";
 import { ChannelTransport } from "../channels/transport";
 
-export class ScheduleOwnerInactive extends Schema.TaggedError<ScheduleOwnerInactive>()(
-  "ScheduleOwnerInactive",
-  {}
-) {}
+export class ScheduleOwnerInactive extends Error {
+  readonly _tag = "ScheduleOwnerInactive";
 
-const requireScheduleMembership = Effect.fn("requireScheduleMembership")(
-  function* (scope: AccessScope) {
-    const sql = yield* PgClient.PgClient;
-    const rows = yield* sql`SELECT user_id FROM workspace_memberships
-      WHERE workspace_id = ${scope.workspaceId} AND user_id = ${scope.userId}
-      FOR KEY SHARE`;
-    if (!rows[0]) return yield* new ScheduleOwnerInactive();
-    return undefined;
+  constructor() {
+    super("ScheduleOwnerInactive");
+    this.name = "ScheduleOwnerInactive";
   }
-);
+}
 
-export const requireScheduledChannelOwner = Effect.fn(
-  "requireScheduledChannelOwner"
-)(function* (job: {
+const requireScheduleMembership = async function (scope: AccessScope) {
+  const rows = await query(sql`SELECT user_id FROM workspace_memberships
+      WHERE workspace_id = ${scope.workspaceId} AND user_id = ${scope.userId}
+      FOR KEY SHARE`);
+  if (!rows[0]) throw new ScheduleOwnerInactive();
+  return undefined;
+};
+
+export const requireScheduledChannelOwner = async function (job: {
   readonly conversationChannel: "telegram" | "kapso";
   readonly conversationId: string;
   readonly createdByUserId: string;
   readonly workspaceId: string;
 }) {
-  const transport = yield* ChannelTransport;
-  const identity = yield* transport.activeIdentity(
+  const transport = ChannelTransport;
+  const identity = await transport.activeIdentity(
     job.conversationId,
     job.conversationChannel
   );
   if (`better-auth:${identity.userId}` !== job.createdByUserId)
-    return yield* new ScheduleOwnerInactive();
-  yield* requireScheduleMembership({
+    throw new ScheduleOwnerInactive();
+  await requireScheduleMembership({
     userId: job.createdByUserId,
     workspaceId: job.workspaceId,
   });
   return identity;
-});
+};

@@ -1,5 +1,6 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { asSchema } from "ai";
-import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 // Eve 0.49's pure codec is not publicly exported. Exercise the installed codec:
@@ -10,12 +11,8 @@ import {
   serializeInputSchema,
   toInputSchema,
 } from "../../../node_modules/eve/dist/src/tools/schema.js";
-import { privateMessageTool } from "../../../server/executor/native/private-message-tool";
-
-const decodeJsonObject = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
-);
-
+import { privateMessageTool } from "../../../server/tools/native/private-message-tool";
+const decodeJsonObject = jsonString(z.record(z.string(), z.json()));
 describe.each(["telegram", "kapso"] as const)(
   "%s private message schema",
   (channel) => {
@@ -23,19 +20,29 @@ describe.each(["telegram", "kapso"] as const)(
       const tool = privateMessageTool(channel);
       expect(isToolSchema(tool.inputSchema)).toBe(true);
       const encoded = serializeInputSchema(tool.inputSchema);
-      const persisted = decodeJsonObject(JSON.stringify(encoded));
+      const persisted = decodeJsonObject.parse(JSON.stringify(encoded));
       expect(persisted).toMatchObject({
         type: "object",
         required: ["kind", "text"],
         additionalProperties: false,
         properties: {
-          kind: { enum: ["message"] },
-          text: { type: "string", minLength: 1, maxLength: 16_384 },
+          kind: {
+            const: "message",
+          },
+          text: {
+            type: "string",
+            minLength: 1,
+            maxLength: 16_384,
+          },
           replyTo: {
             type: "object",
             additionalProperties: false,
             required: ["kind"],
-            properties: { kind: { enum: ["current"] } },
+            properties: {
+              kind: {
+                const: "current",
+              },
+            },
           },
         },
       });
@@ -50,20 +57,24 @@ describe.each(["telegram", "kapso"] as const)(
         type: "object",
       });
     });
-
     it("preserves plain text and current-message replies through the codec", async () => {
       const original = privateMessageTool(channel).inputSchema;
       const restored = toInputSchema(
-        decodeJsonObject(JSON.stringify(serializeInputSchema(original)))
+        decodeJsonObject.parse(JSON.stringify(serializeInputSchema(original)))
       );
       await Promise.all(
         [toInputSchema(original), restored].flatMap((schema) =>
           [
-            { kind: "message", text: "Olá — https://example.invalid" },
+            {
+              kind: "message",
+              text: "Olá — https://example.invalid",
+            },
             {
               kind: "message",
               text: "x".repeat(16_384),
-              replyTo: { kind: "current" },
+              replyTo: {
+                kind: "current",
+              },
             },
           ].map(async (input) => {
             expect(await schema["~standard"].validate(input)).toEqual({
@@ -73,32 +84,57 @@ describe.each(["telegram", "kapso"] as const)(
         )
       );
     });
-
     it("rejects malformed and excess input before and after serialization", async () => {
       const original = privateMessageTool(channel).inputSchema;
       const restored = toInputSchema(
-        decodeJsonObject(JSON.stringify(serializeInputSchema(original)))
+        decodeJsonObject.parse(JSON.stringify(serializeInputSchema(original)))
       );
       await Promise.all(
         [toInputSchema(original), restored].flatMap((schema) =>
           [
             null,
             {},
-            { kind: "reaction", text: "hello" },
-            { kind: "message", text: "" },
-            { kind: "message", text: "x".repeat(16_385) },
-            { kind: "message", text: 123 },
-            { kind: "message", text: "hello", identityId: "another-recipient" },
-            { kind: "message", text: "hello", attachments: [] },
+            {
+              kind: "reaction",
+              text: "hello",
+            },
             {
               kind: "message",
-              text: "hello",
-              replyTo: { kind: "message", id: "other" },
+              text: "",
+            },
+            {
+              kind: "message",
+              text: "x".repeat(16_385),
+            },
+            {
+              kind: "message",
+              text: 123,
             },
             {
               kind: "message",
               text: "hello",
-              replyTo: { kind: "current", id: "other" },
+              identityId: "another-recipient",
+            },
+            {
+              kind: "message",
+              text: "hello",
+              attachments: [],
+            },
+            {
+              kind: "message",
+              text: "hello",
+              replyTo: {
+                kind: "message",
+                id: "other",
+              },
+            },
+            {
+              kind: "message",
+              text: "hello",
+              replyTo: {
+                kind: "current",
+                id: "other",
+              },
             },
           ].map(async (input) => {
             const result = await schema["~standard"].validate(input);

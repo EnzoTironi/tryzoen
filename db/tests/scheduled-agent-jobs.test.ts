@@ -1,4 +1,3 @@
-/* oxlint-disable eslint/no-await-in-loop -- Migrations and their statements must be applied in order. */
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -6,15 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Database from "@db";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import * as schema from "../schema";
-
 const databases: PGlite[] = [];
-
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.resetModules();
   await Promise.all(databases.splice(0).map((database) => database.close()));
 });
-
 describe("scheduled agent jobs", () => {
   it("materializes one occurrence, leases its worker, and persists reporting", async () => {
     const client = new PGlite();
@@ -39,8 +35,9 @@ describe("scheduled agent jobs", () => {
     ]) {
       await applyMigration(client, migration);
     }
-
-    const pgliteDatabase = drizzle(client, { schema });
+    const pgliteDatabase = drizzle(client, {
+      schema,
+    });
     // SAFETY: PGlite implements the query-builder surface exercised by this service while retaining the shared Drizzle schema.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The focused test swaps only the database driver.
     vi.spyOn(Database, "db", "get").mockReturnValue(pgliteDatabase as never);
@@ -59,7 +56,6 @@ describe("scheduled agent jobs", () => {
     };
     await scope.ensureScope(alice);
     await scope.ensureScope(bob);
-
     const now = new Date("2026-09-01T12:00:00.000Z");
     const created = await jobs.createScheduledAgentJob(
       alice,
@@ -82,13 +78,20 @@ describe("scheduled agent jobs", () => {
       []
     );
     expect(await jobs.listScheduledAgentJobs(alice, aliceConversation)).toEqual(
-      [{ ...created, latestRun: null }]
+      [
+        {
+          ...created,
+          latestRun: null,
+        },
+      ]
     );
     await jobs.updateScheduledAgentJob(
       alice,
       aliceConversation,
       created.id,
-      { prompt: "Check for a meaningful price change." },
+      {
+        prompt: "Check for a meaningful price change.",
+      },
       new Date("2026-09-01T12:30:00.000Z")
     );
     expect(await jobs.listScheduledAgentJobs(alice, aliceConversation)).toEqual(
@@ -99,11 +102,16 @@ describe("scheduled agent jobs", () => {
         }),
       ]
     );
-
     const dueAt = new Date("2026-09-01T13:00:00.000Z");
-    await jobs.materializeDueScheduledAgentRuns({ limit: 25, now: dueAt });
+    await jobs.materializeDueScheduledAgentRuns({
+      limit: 25,
+      now: dueAt,
+    });
     expect(
-      await jobs.materializeDueScheduledAgentRuns({ limit: 25, now: dueAt })
+      await jobs.materializeDueScheduledAgentRuns({
+        limit: 25,
+        now: dueAt,
+      })
     ).toEqual([]);
     let [claim] = await jobs.claimReadyScheduledAgentRuns({
       leaseForMs: 21_600_000,
@@ -112,8 +120,15 @@ describe("scheduled agent jobs", () => {
     });
     if (!claim?.run.leaseToken) throw new Error("Expected one leased run.");
     expect(claim).toMatchObject({
-      job: { id: created.id, ...aliceConversation },
-      run: { attempts: 1, scheduledFor: dueAt, startedAt: null },
+      job: {
+        id: created.id,
+        ...aliceConversation,
+      },
+      run: {
+        attempts: 1,
+        scheduledFor: dueAt,
+        startedAt: null,
+      },
     });
     expect(
       await jobs.claimReadyScheduledAgentRuns({
@@ -122,7 +137,6 @@ describe("scheduled agent jobs", () => {
         now: dueAt,
       })
     ).toEqual([]);
-
     expect(
       await jobs.setScheduledRunSession(
         claim.run.id,
@@ -178,7 +192,9 @@ describe("scheduled agent jobs", () => {
     const question = {
       action: {
         callId: "call-question",
-        input: { prompt: "Which airport should I use?" },
+        input: {
+          prompt: "Which airport should I use?",
+        },
         kind: "tool-call" as const,
         toolName: "ask_question",
       },
@@ -218,7 +234,9 @@ describe("scheduled agent jobs", () => {
         claim.run.id,
         questionReport.run.reportLeaseToken
       )
-    ).toMatchObject({ leaseToken: claim.run.leaseToken });
+    ).toMatchObject({
+      leaseToken: claim.run.leaseToken,
+    });
     expect(
       await jobs.getScheduledAgentRunInputForReport(
         claim.run.id,
@@ -239,7 +257,12 @@ describe("scheduled agent jobs", () => {
       await jobs.listRecoverableScheduledReports(
         new Date("2026-09-01T13:07:00.000Z")
       )
-    ).toEqual([{ conversationChannel: "linq", runId: claim.run.id }]);
+    ).toEqual([
+      {
+        conversationChannel: "linq",
+        runId: claim.run.id,
+      },
+    ]);
     const retriedQuestionReport = await jobs.claimScheduledReport(
       claim.run.id,
       new Date("2026-09-01T13:07:00.000Z")
@@ -275,7 +298,10 @@ describe("scheduled agent jobs", () => {
       new Date("2026-09-01T13:02:00.000Z")
     );
     expect(resumed).toMatchObject({
-      run: { pendingInputRequests: [question], status: "running" },
+      run: {
+        pendingInputRequests: [question],
+        status: "running",
+      },
     });
     await jobs.finishScheduledAgentRunInput(
       claim.run.id,
@@ -343,7 +369,9 @@ describe("scheduled agent jobs", () => {
         },
         new Date("2026-09-01T13:02:00.000Z")
       )
-    ).toEqual({ status: "deferred" });
+    ).toEqual({
+      status: "deferred",
+    });
     expect(
       await jobs.completeScheduledAgentRun(
         claim.run.id,
@@ -355,7 +383,9 @@ describe("scheduled agent jobs", () => {
         },
         new Date("2026-09-01T13:02:01.000Z")
       )
-    ).toEqual({ status: "deferred" });
+    ).toEqual({
+      status: "deferred",
+    });
     const completed = await jobs.completeScheduledAgentRun(
       claim.run.id,
       claim.run.leaseToken,
@@ -379,8 +409,12 @@ describe("scheduled agent jobs", () => {
     });
     const report = await jobs.claimScheduledReport(claim.run.id, dueAt);
     expect(report).toMatchObject({
-      job: { id: created.id },
-      run: { reportStatus: "queued" },
+      job: {
+        id: created.id,
+      },
+      run: {
+        reportStatus: "queued",
+      },
     });
     const recovered = await Promise.all([
       jobs.listRecoverableScheduledReports(
@@ -416,7 +450,6 @@ describe("scheduled agent jobs", () => {
       "delivered"
     );
     expect(await jobs.listRecoverableScheduledReports(dueAt)).toEqual([]);
-
     expect(
       await jobs.updateScheduledAgentJob(bob, aliceConversation, created.id, {
         status: "paused",
@@ -452,7 +485,6 @@ describe("scheduled agent jobs", () => {
       },
       now
     );
-
     const recoveredAt = new Date("2026-09-08T13:30:00.000Z");
     await jobs.materializeDueScheduledAgentRuns({
       limit: 25,
@@ -463,10 +495,13 @@ describe("scheduled agent jobs", () => {
       limit: 25,
       now: recoveredAt,
     });
-
     expect(latestClaim).toMatchObject({
-      job: { nextRunAt: new Date("2026-09-08T14:00:00.000Z") },
-      run: { scheduledFor: new Date("2026-09-08T13:00:00.000Z") },
+      job: {
+        nextRunAt: new Date("2026-09-08T14:00:00.000Z"),
+      },
+      run: {
+        scheduledFor: new Date("2026-09-08T13:00:00.000Z"),
+      },
     });
     let retryAt = recoveredAt;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -486,9 +521,10 @@ describe("scheduled agent jobs", () => {
         now: retryAt,
       });
     }
-
     expect(await jobs.listScheduledAgentJobs(bob, bobConversation)).toEqual([
-      expect.objectContaining({ lastError: "Source unavailable." }),
+      expect.objectContaining({
+        lastError: "Source unavailable.",
+      }),
     ]);
     expect(
       await jobs.listScheduledAgentJobs(bob, {
@@ -496,7 +532,6 @@ describe("scheduled agent jobs", () => {
         conversationId: "linq:another-chat",
       })
     ).toEqual([]);
-
     const [acceptedRun] = await pgliteDatabase
       .insert(schema.scheduledAgentRuns)
       .values({
@@ -518,7 +553,6 @@ describe("scheduled agent jobs", () => {
         now: new Date("2026-09-09T13:06:00.000Z"),
       })
     ).toEqual([]);
-
     const [exhaustedRun] = await pgliteDatabase
       .insert(schema.scheduledAgentRuns)
       .values({
@@ -556,7 +590,6 @@ describe("scheduled agent jobs", () => {
     });
   }, 20_000);
 });
-
 async function applyMigration(database: PGlite, filename: string) {
   const source = await readFile(
     new URL(`../migrations/${filename}`, import.meta.url),

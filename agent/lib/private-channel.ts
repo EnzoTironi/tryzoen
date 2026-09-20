@@ -1,4 +1,15 @@
-import { Config, DateTime, Effect } from "effect";
+import { mapAsync } from "../../server/operations/async";
+import { env } from "@shared/environment/env";
+import { withSignal } from "../../server/operations/async";
+import {
+  deliveryContext,
+  deliverOnce,
+  type DeliveryState,
+} from "./durable-delivery";
+import { ChannelAccountError } from "../../server/accounts";
+import { ChannelAuthPromptError } from "../../server/channel-auth/prompts";
+import { PayloadConflict } from "../../server/messaging/model";
+import { WebhookRejected } from "../../server/channels/webhook";
 import { defineChannel, POST, type ChannelDefinition } from "eve/channels";
 import { ChannelAccounts, type Identity } from "../../server/accounts";
 import { Messaging, type Lease } from "../../server/messaging";
@@ -17,20 +28,19 @@ import type { InboundEvent } from "../../server/channels/inbound";
 import { Telegram } from "../../server/channels/telegram";
 import { Kapso } from "../../server/channels/kapso";
 import { readVerifiedWebhook } from "../../server/channels/webhook";
-import { serverRuntime } from "../../server/runtime";
 import { drainChannelInbox, handoffChannelMessage } from "./channel-session";
 import { privateChannelEvents } from "./private-channel-events";
-import type { ProviderInputError } from "../../server/channels/provider-errors";
+import { ProviderInputError } from "../../server/channels/provider-errors";
 
 type Acceptance =
   | { readonly status: "accepted"; readonly identity: Identity }
   | { readonly status: "unlinked"; readonly prompt: boolean };
 
-const acceptChannelMessage = Effect.fn("acceptChannelMessage")(function* (
+const acceptChannelMessage = async function (
   event: Extract<InboundEvent, { kind: "message" }>
 ) {
-  const accounts = yield* ChannelAccounts;
-  const resolution = yield* accounts.resolveVerifiedSender({
+  const accounts = ChannelAccounts;
+  const resolution = await accounts.resolveVerifiedSender({
     channel: event.channel,
     installationId: event.installationId,
     senderId: event.senderId,
@@ -38,13 +48,13 @@ const acceptChannelMessage = Effect.fn("acceptChannelMessage")(function* (
   if (resolution.status === "unlinked") {
     if (event.chatKind === "group")
       return { status: "unlinked", prompt: false } satisfies Acceptance;
-    const contact = yield* accounts.recordUnlinkedContact(resolution.sender);
+    const contact = await accounts.recordUnlinkedContact(resolution.sender);
     return { status: "unlinked", prompt: contact.prompt } satisfies Acceptance;
   }
   const { identity } = resolution;
   const group =
     event.chatKind === "group"
-      ? yield* bindGroupChannelIdentity({
+      ? await bindGroupChannelIdentity({
           identityId: identity.id,
           channel: event.channel,
           installationId: event.installationId,
@@ -54,11 +64,9 @@ const acceptChannelMessage = Effect.fn("acceptChannelMessage")(function* (
       : undefined;
   const payload = {
     ...event.payload,
-    sourceOccurredAtMs: DateTime.toEpochMillis(
-      DateTime.makeUnsafe(event.occurredAt)
-    ),
+    sourceOccurredAtMs: new Date(event.occurredAt).getTime(),
   };
-  yield* (yield* Messaging).accept({
+  await Messaging.accept({
     identityId: identity.id,
     eventId: event.eventId,
     sourceMessageId: event.messageId,
@@ -71,7 +79,7 @@ const acceptChannelMessage = Effect.fn("acceptChannelMessage")(function* (
       : payload,
   });
   return { status: "accepted", identity } satisfies Acceptance;
-});
+};
 
 function channelInputResponse(
   channel: Identity["channel"],
@@ -80,191 +88,165 @@ function channelInputResponse(
   if (
     channel === "telegram" &&
     ["invalid_command", "stale_event"].includes(error.reason)
-  )
-    return Effect.logInfo("Telegram update refused", {
-      reason: error.reason,
-    }).pipe(Effect.as(new Response("ignored")));
-  return Effect.logWarning("Channel input rejected", {
-    channel,
-    reason: error.reason,
-  }).pipe(
-    Effect.as(
-      new Response("invalid event", {
-        status: error.reason === "configuration" ? 503 : 400,
-      })
-    )
-  );
+  ) {
+    console.info("Telegram update refused", { reason: error.reason });
+    return new Response("ignored");
+  }
+  console.warn("Channel input rejected", { channel, reason: error.reason });
+  return new Response("invalid event", {
+    status: error.reason === "configuration" ? 503 : 400,
+  });
 }
 
-const acceptLoginCommand = Effect.fn("acceptLoginCommand")(
-  function* (event: Extract<InboundEvent, { kind: "command" }>) {
+async function acceptLoginCommand(
+  event: Extract<InboundEvent, { kind: "command" }>
+) {
+  try {
     const sender = {
       channel: event.channel,
       installationId: event.installationId,
       senderId: event.senderId,
     };
     if (event.command === "confirm") {
-      const accounts = yield* ChannelAccounts;
-      yield* accounts.confirmChallenge({ token: event.token, sender });
+      await ChannelAccounts.confirmChallenge({ token: event.token, sender });
       return { status: "confirmed" as const };
     }
-    const authPrompts = yield* ChannelAuthPrompts;
-    const prompt = yield* authPrompts.prepare({
+    const prompt = await ChannelAuthPrompts.prepare({
       token: event.token,
       sender,
       eventId: event.eventId,
     });
     return { status: "prompt" as const, challengeId: prompt.challengeId };
-  },
-  (operation, event) =>
-    operation.pipe(
-      // Refused logins are terminal; provider retries must not block later messages.
-      Effect.catchTag("ChannelAccountError", (error) =>
-        Effect.logInfo("Channel login command refused", {
-          channel: event.channel,
-          command: event.command,
-          reason: error.reason,
-        }).pipe(Effect.as({ status: "refused" as const, reason: error.reason }))
-      ),
-      Effect.catchTag("ChannelAuthPromptError", (error) =>
-        error.reason === "invalid_input" || error.reason === "conflict"
-          ? Effect.logInfo("Channel login prompt refused", {
-              channel: event.channel,
-              reason: error.reason,
-            }).pipe(Effect.as({ status: "refused" as const }))
-          : Effect.fail(error)
-      )
-    )
-);
+  } catch (error) {
+    if (
+      error instanceof ChannelAccountError ||
+      (error instanceof ChannelAuthPromptError &&
+        ["invalid_input", "conflict"].includes(error.reason))
+    ) {
+      console.info("Channel login command refused", {
+        channel: event.channel,
+        reason: error.reason,
+      });
+      return { status: "refused" as const, reason: error.reason };
+    }
+    throw error;
+  }
+}
 
 export function privateChannel(channel: Identity["channel"]) {
-  const definition: ChannelDefinition<undefined, void, Lease> = {
+  const definition: ChannelDefinition<
+    DeliveryState,
+    ReturnType<typeof deliveryContext>,
+    Lease
+  > = {
     turnPolicy: "queue",
+    state: { receipts: {} },
+    context: deliveryContext,
+    deliver: deliverOnce,
     routes: [
       POST(`/channels/${channel}`, (request, context) =>
-        serverRuntime.runPromise(
-          Effect.gen(function* () {
-            const secret = yield* Config.redacted(
-              channel === "telegram"
-                ? "TELEGRAM_WEBHOOK_SECRET"
-                : "KAPSO_WEBHOOK_SECRET"
-            );
-            const body = yield* readVerifiedWebhook(request, channel, secret);
-            const provider =
-              channel === "telegram" ? yield* Telegram : yield* Kapso;
-            const events = yield* provider.parse(body);
+        withSignal(request.signal, async () => {
+          try {
+            const secret =
+              env[
+                channel === "telegram"
+                  ? "TELEGRAM_WEBHOOK_SECRET"
+                  : "KAPSO_WEBHOOK_SECRET"
+              ];
+            if (!secret)
+              throw new ProviderInputError({
+                provider: channel,
+                reason: "configuration",
+              });
+            const body = await readVerifiedWebhook(request, channel, secret);
+            const provider = channel === "telegram" ? Telegram : Kapso;
+            const events = await provider.parse(body);
             const identities = new Map<string, Identity>();
             const prompts: string[] = [];
             for (const event of events) {
               if (event.kind === "command") {
-                const result = yield* acceptLoginCommand(event);
+                const result = await acceptLoginCommand(event);
                 if (result.status === "prompt") {
                   prompts.push(result.challengeId);
                 } else {
+                  const refusal =
+                    result.status === "refused" &&
+                    result.reason === "sender_unlinked"
+                      ? unlinkedSenderCopy(
+                          event.channel,
+                          await signInUrl(event.channel)
+                        )
+                      : undefined;
                   context.waitUntil(
-                    serverRuntime.runPromise(
-                      dispatchItem(
-                        event.eventId,
-                        Effect.gen(function* () {
-                          const refusal =
-                            result.status === "refused" &&
-                            "reason" in result &&
-                            result.reason === "sender_unlinked"
-                              ? unlinkedSenderCopy(
-                                  event.channel,
-                                  yield* signInUrl(event.channel)
-                                )
-                              : undefined;
-                          yield* dispatchAuthFeedback(
-                            event,
-                            result.status === "confirmed",
-                            refusal
-                          );
-                        })
+                    dispatchItem(
+                      event.eventId,
+                      dispatchAuthFeedback(
+                        event,
+                        result.status === "confirmed",
+                        refusal
                       )
                     )
                   );
                 }
               } else {
-                const acceptance = yield* acceptChannelMessage(event);
-                if (acceptance.status === "accepted") {
+                const acceptance = await acceptChannelMessage(event);
+                if (acceptance.status === "accepted")
                   identities.set(acceptance.identity.id, acceptance.identity);
-                } else if (acceptance.prompt) {
+                else if (acceptance.prompt)
                   context.waitUntil(
-                    serverRuntime.runPromise(
-                      dispatchItem(
-                        event.eventId,
-                        dispatchUnlinkedSenderPrompt(event)
-                      )
+                    dispatchItem(
+                      event.eventId,
+                      dispatchUnlinkedSenderPrompt(event)
                     )
                   );
-                }
               }
             }
-            // Both ordinary inputs and login prompts are durable before ACK.
+            // ACK only after inputs and login prompts have durable receipts.
             context.waitUntil(
-              serverRuntime.runPromise(
-                Effect.gen(function* () {
-                  yield* Effect.forEach(
-                    prompts,
-                    (id) => dispatchItem(id, dispatchAuthPrompt(id)),
-                    {
-                      concurrency: 4,
-                      discard: true,
-                    }
-                  );
-                  yield* Effect.forEach(
-                    [...identities.values()],
-                    (identity) =>
-                      dispatchItem(
-                        identity.id,
-                        Effect.gen(function* () {
-                          yield* dispatchItem(
-                            identity.id,
-                            drainChannelInbox(identity, context)
-                          );
-                          const transport = yield* ChannelTransport;
-                          yield* transport.drainOutbox(identity.id);
-                        })
-                      ),
-                    { concurrency: 4, discard: true }
-                  );
-                })
-              )
+              (async () => {
+                await mapAsync(
+                  prompts,
+                  (id) => dispatchItem(id, dispatchAuthPrompt(id)),
+                  4
+                );
+                await mapAsync(
+                  [...identities.values()],
+                  async (identity) => {
+                    await dispatchItem(
+                      identity.id,
+                      drainChannelInbox(identity, context)
+                    );
+                    await dispatchItem(
+                      identity.id,
+                      ChannelTransport.drainOutbox(identity.id)
+                    );
+                  },
+                  4
+                );
+              })()
             );
             return new Response("ok");
-          }).pipe(
-            Effect.catchTags({
-              WebhookRejected: (error) =>
-                Effect.succeed(
-                  new Response("rejected", { status: error.status })
-                ),
-              ProviderInputError: (error) =>
-                channelInputResponse(channel, error),
-              ChannelAccountError: () =>
-                Effect.succeed(
-                  new Response("invalid challenge or identity", {
-                    status: 400,
-                  })
-                ),
-              PayloadConflict: () =>
-                Effect.succeed(
-                  new Response("conflicting replay", { status: 409 })
-                ),
-            }),
-            Effect.catch((error) =>
-              Effect.logError("Channel acceptance failed", {
-                tag: error.name,
-              }).pipe(Effect.as(new Response("unavailable", { status: 503 })))
-            )
-          )
-        )
+          } catch (error) {
+            if (error instanceof WebhookRejected)
+              return new Response("rejected", { status: error.status });
+            if (error instanceof ProviderInputError)
+              return channelInputResponse(channel, error);
+            if (error instanceof ChannelAccountError)
+              return new Response("invalid challenge or identity", {
+                status: 400,
+              });
+            if (error instanceof PayloadConflict)
+              return new Response("conflicting replay", { status: 409 });
+            console.error("Channel acceptance failed", {
+              tag: error instanceof Error ? error.name : "unknown",
+            });
+            return new Response("unavailable", { status: 503 });
+          }
+        })
       ),
     ],
     receive: ({ target, auth }, context) =>
-      serverRuntime.runPromise(
-        handoffChannelMessage(channel, target, auth, context)
-      ),
+      handoffChannelMessage(channel, target, auth, context),
     events: privateChannelEvents(channel),
   };
   return defineChannel(definition);

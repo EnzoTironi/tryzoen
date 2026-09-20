@@ -3,7 +3,6 @@ import type { EveMessage } from "eve/react";
 import { describe, expect, it } from "vitest";
 import {
   backgroundWorkerDeliveryMessageIds,
-  hasPendingBackgroundWorker,
   messagesForTraceView,
 } from "./trace-view";
 
@@ -122,34 +121,9 @@ describe("trace view", () => {
       receivedMessage("user-copy", text, "user"),
     ];
     expect(backgroundWorkerDeliveryMessageIds(events).size).toBe(0);
-    expect(hasPendingBackgroundWorker(events)).toBe(true);
   });
 
-  it("keeps a worker pending when its update quotes a terminal status", () => {
-    expect(
-      hasPendingBackgroundWorker([
-        workerActionReceipt("task_worker"),
-        receivedMessage(
-          "quoted-completion",
-          "Background task task_worker (browser-agent) update: Example: (agent) is completed."
-        ),
-      ])
-    ).toBe(true);
-  });
-
-  it("keeps a worker pending while its authorization is unresolved", () => {
-    expect(
-      hasPendingBackgroundWorker([
-        workerActionReceipt("task_worker"),
-        receivedMessage(
-          "authorization",
-          "Background task task_worker needs authorization."
-        ),
-      ])
-    ).toBe(true);
-  });
-
-  it("recognizes generic task receipts and keeps parked questions pending", () => {
+  it("hides native generic task questions and completion notifications", () => {
     const receipt: MessageStreamEvent = {
       type: "action.result",
       meta: { at: "2026-09-09T00:00:00.000Z", id: "generic-receipt" },
@@ -178,31 +152,11 @@ describe("trace view", () => {
       "generic-done",
       'Background task task_generic (agent) is completed.\n\nResult:\n{"message":"Done"}'
     );
-    expect(hasPendingBackgroundWorker([receipt, waiting])).toBe(true);
-    expect(hasPendingBackgroundWorker([receipt, waiting, done])).toBe(false);
     expect(
       backgroundWorkerDeliveryMessageIds([receipt, waiting, done])
     ).toEqual(new Set(["generic-wait:user", "generic-done:user"]));
     expect(backgroundWorkerDeliveryMessageIds([waiting, done])).toEqual(
       new Set(["generic-wait:user", "generic-done:user"])
-    );
-  });
-
-  it("tracks a worker only between its receipt and terminal delivery", () => {
-    const receipt = workerActionReceipt("task_worker");
-    const update = receivedMessage(
-      "task-update",
-      "Background task task_worker (browser-agent) update: Still working"
-    );
-    const completed = receivedMessage(
-      "task-completed",
-      'Background task task_worker (browser-agent) is completed.\n\nResult:\n{"message":"Done"}'
-    );
-
-    expect(hasPendingBackgroundWorker([receipt])).toBe(true);
-    expect(hasPendingBackgroundWorker([receipt, update])).toBe(true);
-    expect(hasPendingBackgroundWorker([receipt, update, completed])).toBe(
-      false
     );
   });
 });
@@ -296,7 +250,7 @@ function receivedMessage(
       message,
       sequence: 0,
       turnId,
-      source: source === "task" ? "task" : undefined,
+      kind: source === "task" ? "execution.background_task" : undefined,
     },
     meta: { at: "2026-08-27T20:00:01.000Z", id: `event-${turnId}` },
     type: "message.received",

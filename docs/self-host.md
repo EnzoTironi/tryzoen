@@ -1,4 +1,4 @@
-# Companion Release-1 self-host / ops
+# Zoen self-hosting
 
 Operator recipe for running this repository on your own host.
 End users on the hosted product should follow [consumer first-run](consumer-first-run.md), not this page.
@@ -8,7 +8,7 @@ live proof is in the
 [customer-platform release map](decisions/adr-customer-platform-release.md).
 For deeper evidence and limits, see
 [local runtime setup](local-runtime-setup.md). Product contracts live in the
-[blueprint](companion-blueprint.md).
+[architecture](eve/architecture.md).
 
 **Requirements:** Node.js 24, pnpm `11.24.0`, Docker (for Alchemy Postgres), and
 a local Docker context selected before deploy.
@@ -61,8 +61,8 @@ Confirm readiness with
 healthcheck. The published port binds to `127.0.0.1` and is chosen by Docker;
 update application URLs if a container replacement changes the port.
 
-Legacy `compose.yaml` remains available for disposable Compose databases
-(benchmarks / older loops). Prefer Alchemy stages for Release-1/R2 ops.
+For disposable integration tests, use `pnpm test:runtime:setup`. Its isolated
+Compose project is separate from Alchemy-managed installations.
 
 ## 2. Install, migrate, run
 
@@ -78,8 +78,7 @@ pnpm build
 pnpm start --port 3000
 ```
 
-`pnpm build` builds Eve and Next. `pnpm start` launches both in one Effect
-scope: Eve on loopback `4274`, Next default loopback `3000`. Use
+`pnpm build` builds Eve and Next. `pnpm start` launches both in one process supervisor: Eve on loopback `4274`, Next default loopback `3000`. Use
 `--hostname 0.0.0.0` only behind your own TLS proxy. The launcher waits for Eve
 HTTP health before starting Next, fails if either child exits, and stops the
 sibling. To change Eve's port, set `EVE_NEXT_PRODUCTION_PORT` at **build** and
@@ -91,7 +90,7 @@ manifest are rejected.
 Channel webhooks are rewritten from Next to Eve at build time
 (`/api/channels/telegram|kapso` → Eve `/channels/...`). **Next without Eve on
 the baked rewrite port cannot serve Telegram or Kapso.** Prefer `pnpm start`,
-which launches both in one Effect scope, waits for Eve health, and stops the
+which launches both in one process supervisor, waits for Eve health, and stops the
 sibling if either exits.
 
 Default paired ports: Next `3000`, Eve `4274`. Keep them matched across build
@@ -124,7 +123,8 @@ Validation (does **not** prove live provider delivery):
 ```sh
 pnpm check
 pnpm db:check
-pnpm test:runtime   # needs companion_runtime_test + ignored .env.runtime.local
+pnpm test:runtime:setup
+pnpm test:runtime
 pnpm build
 ```
 
@@ -382,7 +382,7 @@ Index: [docs/ops/](ops/README.md). ADR:
 - [Infrastructure / Alchemy README](../infrastructure/README.md)
 - [Durable ingress (named tunnel + webhooks)](../infrastructure/ingress/README.md)
 - [Local runtime setup & evidence](local-runtime-setup.md)
-- [Companion blueprint](companion-blueprint.md)
+- [Current architecture](eve/architecture.md)
 - [Quotas ADR](decisions/adr-quotas-admission-r1.md)
 - [Kapso path ADR](decisions/adr-kapso-path-r1.md)
 - [R2 ops checklists (O01/O02)](ops/README.md)

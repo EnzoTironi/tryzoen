@@ -1,6 +1,7 @@
 "use client";
 
-import type { Schema } from "effect";
+import type { z } from "zod";
+
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@web/trpc/client";
@@ -28,11 +29,11 @@ export function ExperienceRecorder() {
     const sessionId = /^\/chat\/(wrun_[A-Za-z0-9]+)$/.exec(pathname)?.[1];
     let disposed = false;
     let stop: (() => void) | undefined;
-    let events: Schema.Json[] = [];
+    let events: z.core.util.JSONType[] = [];
     let bytes = 0;
     const send = (
       kind: "replay" | "client.error" | "client.performance",
-      data: Schema.Json
+      data: z.core.util.JSONType
     ) => {
       const value = JSON.stringify(parseDiagnostic(JSON.stringify(data)));
       if (value.length > 1_000_000 || disposed) return;

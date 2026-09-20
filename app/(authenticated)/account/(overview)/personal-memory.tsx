@@ -1,10 +1,10 @@
 import { getI18n } from "@web/i18n/server";
-import { Effect, Result } from "effect";
+
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { PersonalMemoryError } from "../../../../server/personal-memory/access";
 import { inspectPersonalMemory } from "../../../../server/personal-memory/export";
-import { serverRuntime } from "../../../../server/runtime";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { buttonVariants } from "@web/components/ui/button";
 
@@ -22,20 +22,17 @@ async function MemoryUnavailable() {
 
 export async function PersonalMemorySection() {
   const { t } = await getI18n();
-  let result;
+  let snapshot;
   try {
-    result = await serverRuntime.runPromise(
-      inspectPersonalMemory(await headers()).pipe(Effect.result)
-    );
-  } catch {
-    return <MemoryUnavailable />;
-  }
-  if (Result.isFailure(result)) {
-    if (result.failure.reason === "unauthenticated")
+    snapshot = await inspectPersonalMemory(await headers());
+  } catch (error) {
+    if (
+      error instanceof PersonalMemoryError &&
+      error.reason === "unauthenticated"
+    )
       redirect("/sign-in?callbackUrl=%2Faccount");
     return <MemoryUnavailable />;
   }
-  const snapshot = result.success;
   const profile = Object.entries(snapshot.profile).filter(
     ([, value]) => value !== null
   );

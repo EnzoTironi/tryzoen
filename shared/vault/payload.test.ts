@@ -65,7 +65,7 @@ describe("versioned vault payloads", () => {
     expect(loginOriginSchema.safeParse("").success).toBe(false);
   });
 
-  it("reads legacy logins but does not accept them for new writes", () => {
+  it("rejects obsolete logins without a bound website", () => {
     const legacy = JSON.stringify({
       authentication: { password: "correct horse", type: "password" },
       identifier: { type: "email", value: "ada@example.com" },
@@ -73,7 +73,7 @@ describe("versioned vault payloads", () => {
       version: 1,
     });
 
-    expect(parseLoginVaultPayload(legacy)?.version).toBe(1);
+    expect(parseLoginVaultPayload(legacy)).toBeUndefined();
     expect(loginVaultPayloadStringSchema.safeParse(legacy).success).toBe(false);
   });
 

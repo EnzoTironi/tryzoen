@@ -1,5 +1,7 @@
+import { jsonString } from "@shared/validation";
+import type { z } from "zod";
 import { validateOntology } from "./ontology-validation";
-import { Effect, Schema } from "effect";
+
 import {
   emptyOntology,
   OntologyActionSchema,
@@ -11,48 +13,46 @@ import type { WorkspaceWriteSchema } from "./repository";
 import { WorkspaceRepository } from "./repository";
 import { requireWorkspaceAccess, type WorkspaceActorSchema } from "./access";
 
-export const readOntology = Effect.fn("readOntology")(function* (
-  actor: typeof WorkspaceActorSchema.Type
+export const readOntology = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const access = yield* requireWorkspaceAccess(actor);
-  const selection = yield* (yield* WorkspaceRepository).selection(actor, [
-    ontologyPath,
-  ]);
+  const access = await requireWorkspaceAccess(actor);
+  const selection = await WorkspaceRepository.selection(actor, [ontologyPath]);
   const document = selection.documents[0];
   const graph = document
-    ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(OntologySchema))(
-        document.content
-      ).pipe(Effect.flatMap(validateOntology))
+    ? await Promise.try(async () =>
+        jsonString(OntologySchema).parseAsync(document.content)
+      ).then(validateOntology)
     : emptyOntology;
   return {
     graph,
     revision: selection.revision,
     mayManage: access.role !== "member" && !!actor.authSessionId,
   };
-});
+};
 
-export const publishOntology = Effect.fn("publishOntology")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
+export const publishOntology = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
   input: Pick<
-    typeof WorkspaceWriteSchema.Type,
+    z.output<typeof WorkspaceWriteSchema>,
     "operationId" | "expectedRevision"
-  > & { readonly graph: typeof OntologySchema.Type },
-  action?: Pick<typeof OntologyActionSchema.Type, "actionId" | "entityId">
+  > & { readonly graph: z.output<typeof OntologySchema> },
+  action?: Pick<z.output<typeof OntologyActionSchema>, "actionId" | "entityId">
 ) {
-  yield* requireWorkspaceAccess(actor, true);
-  const graph = yield* validateOntology(input.graph);
-  const repository = yield* WorkspaceRepository;
+  await requireWorkspaceAccess(actor, true);
+  const graph = await validateOntology(input.graph);
+  const repository = WorkspaceRepository;
   const checked = new Set<string>();
   for (const entity of graph.entities)
     for (const source of entity.sources) {
       const key = `${source.revision}:${source.path}`;
       if (checked.has(key)) continue;
       if (source.path.includes(".."))
-        return yield* new OntologyInvalid({ reason: "source" });
-      yield* repository.read(actor, source.path, source.revision);
+        throw new OntologyInvalid({ reason: "source" });
+      await repository.read(actor, source.path, source.revision);
       checked.add(key);
     }
-  return yield* repository.write(
+  return await repository.write(
     actor,
     {
       path: ontologyPath,
@@ -62,28 +62,30 @@ export const publishOntology = Effect.fn("publishOntology")(function* (
     },
     { kind: "ontology", action }
   );
-});
+};
 
-export const applyOntologyAction = Effect.fn("applyOntologyAction")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
-  input: typeof OntologyActionSchema.Type &
-    Pick<typeof WorkspaceWriteSchema.Type, "operationId" | "expectedRevision">
+export const applyOntologyAction = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  input: z.output<typeof OntologyActionSchema> &
+    Pick<
+      z.output<typeof WorkspaceWriteSchema>,
+      "operationId" | "expectedRevision"
+    >
 ) {
-  yield* requireWorkspaceAccess(actor, true);
-  const actionInput =
-    yield* Schema.decodeUnknownEffect(OntologyActionSchema)(input);
+  await requireWorkspaceAccess(actor, true);
+  const actionInput = await OntologyActionSchema.parseAsync(input);
   const graph =
     input.expectedRevision === null
-      ? (yield* readOntology(actor)).graph
-      : yield* validateOntology(
-          yield* Schema.decodeUnknownEffect(
-            Schema.fromJsonString(OntologySchema)
-          )(
-            (yield* (yield* WorkspaceRepository).read(
-              actor,
-              ontologyPath,
-              input.expectedRevision
-            )).content
+      ? (await readOntology(actor)).graph
+      : await validateOntology(
+          await jsonString(OntologySchema).parseAsync(
+            (
+              await WorkspaceRepository.read(
+                actor,
+                ontologyPath,
+                input.expectedRevision
+              )
+            ).content
           )
         );
   const action = graph.actions.find((item) => item.id === actionInput.actionId);
@@ -91,8 +93,8 @@ export const applyOntologyAction = Effect.fn("applyOntologyAction")(function* (
     (item) => item.id === actionInput.entityId
   );
   if (!action || !entity || entity.type !== action.entityType)
-    return yield* new OntologyInvalid({ reason: "action" });
-  return yield* publishOntology(
+    throw new OntologyInvalid({ reason: "action" });
+  return await publishOntology(
     actor,
     {
       ...input,
@@ -112,4 +114,4 @@ export const applyOntologyAction = Effect.fn("applyOntologyAction")(function* (
     },
     { actionId: actionInput.actionId, entityId: actionInput.entityId }
   );
-});
+};

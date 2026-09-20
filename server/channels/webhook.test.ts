@@ -1,9 +1,10 @@
+import { WebhookRejected } from "./webhook";
+import { Secret } from "@shared/environment/secret";
 import { createHmac } from "node:crypto";
-import { Effect, Redacted } from "effect";
 import { describe, expect, it } from "vitest";
 import { readVerifiedWebhook } from "./webhook";
 
-const testSecret = Redacted.make("unit-test-webhook-secret");
+const testSecret = new Secret("unit-test-webhook-secret");
 
 describe("webhook byte and authentication boundaries", () => {
   it("rejects Telegram before reading an unauthenticated body", async () => {
@@ -11,8 +12,16 @@ describe("webhook byte and authentication boundaries", () => {
       method: "POST",
       body: "not json",
     });
-    const result = await Effect.runPromise(
-      readVerifiedWebhook(request, "telegram", testSecret).pipe(Effect.flip)
+    const result = await Promise.try(async () =>
+      readVerifiedWebhook(request, "telegram", testSecret)
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof WebhookRejected) return error;
+        throw error;
+      }
     );
     expect(result.status).toBe(401);
     expect(request.bodyUsed).toBe(false);
@@ -30,10 +39,16 @@ describe("webhook byte and authentication boundaries", () => {
             .digest("hex"),
         },
       });
-      const result = await Effect.runPromise(
-        readVerifiedWebhook(request, channel, Redacted.make("")).pipe(
-          Effect.flip
-        )
+      const result = await Promise.try(async () =>
+        readVerifiedWebhook(request, channel, new Secret(""))
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       );
       expect(result.status).toBe(401);
     }
@@ -53,16 +68,24 @@ describe("webhook byte and authentication boundaries", () => {
       body,
       duplex: "half",
       headers: {
-        "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
+        "x-telegram-bot-api-secret-token": testSecret.reveal(),
       },
     };
     const started = performance.now();
-    const result = await Effect.runPromise(
+    const result = await Promise.try(async () =>
       readVerifiedWebhook(
         new Request("https://test.invalid/channels/telegram", options),
         "telegram",
         testSecret
-      ).pipe(Effect.flip)
+      )
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof WebhookRejected) return error;
+        throw error;
+      }
     );
     expect(result.status).toBe(408);
     expect(cancellationRequested).toBe(true);
@@ -72,7 +95,7 @@ describe("webhook byte and authentication boundaries", () => {
 
   it("verifies Kapso over the original bytes, including whitespace", async () => {
     const body = '{ "message": { "text": "Olá" } }';
-    const signature = createHmac("sha256", Redacted.value(testSecret))
+    const signature = createHmac("sha256", testSecret.reveal())
       .update(body)
       .digest("hex");
     const request = new Request("https://test.invalid/channels/kapso", {
@@ -80,17 +103,25 @@ describe("webhook byte and authentication boundaries", () => {
       body,
       headers: { "x-webhook-signature": signature },
     });
-    expect(
-      await Effect.runPromise(readVerifiedWebhook(request, "kapso", testSecret))
-    ).toEqual({ message: { text: "Olá" } });
+    expect(await readVerifiedWebhook(request, "kapso", testSecret)).toEqual({
+      message: { text: "Olá" },
+    });
     const changed = new Request("https://test.invalid/channels/kapso", {
       method: "POST",
       body: '{"message":{"text":"Olá"}}',
       headers: { "x-webhook-signature": signature },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(changed, "kapso", testSecret).pipe(Effect.flip)
+      await Promise.try(async () =>
+        readVerifiedWebhook(changed, "kapso", testSecret)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       )
     ).toMatchObject({ status: 401 });
   });
@@ -100,12 +131,20 @@ describe("webhook byte and authentication boundaries", () => {
       method: "POST",
       body: "x".repeat(256 * 1024 + 1),
       headers: {
-        "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
+        "x-telegram-bot-api-secret-token": testSecret.reveal(),
       },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(request, "telegram", testSecret).pipe(Effect.flip)
+      await Promise.try(async () =>
+        readVerifiedWebhook(request, "telegram", testSecret)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       )
     ).toMatchObject({ status: 413 });
   });
@@ -115,12 +154,20 @@ describe("webhook byte and authentication boundaries", () => {
       method: "POST",
       body: "{",
       headers: {
-        "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
+        "x-telegram-bot-api-secret-token": testSecret.reveal(),
       },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(request, "telegram", testSecret).pipe(Effect.flip)
+      await Promise.try(async () =>
+        readVerifiedWebhook(request, "telegram", testSecret)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       )
     ).toMatchObject({ status: 400 });
   });
@@ -140,13 +187,11 @@ describe("webhook byte and authentication boundaries", () => {
       method: "POST",
       body,
       headers: {
-        "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
+        "x-telegram-bot-api-secret-token": testSecret.reveal(),
       },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(request, "telegram", testSecret)
-      )
+      await readVerifiedWebhook(request, "telegram", testSecret)
     ).toMatchObject({
       update_id: 42,
       message: {
@@ -164,8 +209,16 @@ describe("webhook byte and authentication boundaries", () => {
         "x-telegram-bot-api-secret-token": "not-the-configured-secret",
       },
     });
-    const result = await Effect.runPromise(
-      readVerifiedWebhook(request, "telegram", testSecret).pipe(Effect.flip)
+    const result = await Promise.try(async () =>
+      readVerifiedWebhook(request, "telegram", testSecret)
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof WebhookRejected) return error;
+        throw error;
+      }
     );
     expect(result.status).toBe(401);
     expect(request.bodyUsed).toBe(false);
@@ -176,12 +229,20 @@ describe("webhook byte and authentication boundaries", () => {
       method: "POST",
       body: "{}",
       headers: {
-        "x-telegram-bot-api-secret-token": `${Redacted.value(testSecret)}x`,
+        "x-telegram-bot-api-secret-token": `${testSecret.reveal()}x`,
       },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(request, "telegram", testSecret).pipe(Effect.flip)
+      await Promise.try(async () =>
+        readVerifiedWebhook(request, "telegram", testSecret)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       )
     ).toMatchObject({ status: 401 });
   });
@@ -196,8 +257,16 @@ describe("webhook byte and authentication boundaries", () => {
           .digest("hex"),
       },
     });
-    const result = await Effect.runPromise(
-      readVerifiedWebhook(request, "kapso", testSecret).pipe(Effect.flip)
+    const result = await Promise.try(async () =>
+      readVerifiedWebhook(request, "kapso", testSecret)
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof WebhookRejected) return error;
+        throw error;
+      }
     );
     expect(result.status).toBe(401);
     expect(request.bodyUsed).toBe(true);
@@ -205,7 +274,7 @@ describe("webhook byte and authentication boundaries", () => {
 
   it("rejects a length-mismatched Kapso HMAC signature", async () => {
     const body = "{}";
-    const signature = createHmac("sha256", Redacted.value(testSecret))
+    const signature = createHmac("sha256", testSecret.reveal())
       .update(body)
       .digest("hex");
     const request = new Request("https://test.invalid/channels/kapso", {
@@ -214,8 +283,16 @@ describe("webhook byte and authentication boundaries", () => {
       headers: { "x-webhook-signature": `${signature}00` },
     });
     expect(
-      await Effect.runPromise(
-        readVerifiedWebhook(request, "kapso", testSecret).pipe(Effect.flip)
+      await Promise.try(async () =>
+        readVerifiedWebhook(request, "kapso", testSecret)
+      ).then(
+        () => {
+          throw new Error("Expected rejection");
+        },
+        (error: unknown) => {
+          if (error instanceof WebhookRejected) return error;
+          throw error;
+        }
       )
     ).toMatchObject({ status: 401 });
   });
@@ -240,7 +317,7 @@ describe("webhook byte and authentication boundaries", () => {
         phone_number: "+15550002222",
       },
     });
-    const signature = createHmac("sha256", Redacted.value(testSecret))
+    const signature = createHmac("sha256", testSecret.reveal())
       .update(body)
       .digest("hex");
     const request = new Request("https://test.invalid/channels/kapso", {
@@ -249,7 +326,7 @@ describe("webhook byte and authentication boundaries", () => {
       headers: { "x-webhook-signature": signature },
     });
     expect(
-      await Effect.runPromise(readVerifiedWebhook(request, "kapso", testSecret))
+      await readVerifiedWebhook(request, "kapso", testSecret)
     ).toMatchObject({
       phone_number_id: "123456789",
       message: {

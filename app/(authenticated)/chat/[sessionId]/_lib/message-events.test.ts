@@ -1,6 +1,7 @@
-import type { MessageStreamEvent } from "eve/client";
+import { defaultMessageReducer, type MessageStreamEvent } from "eve/client";
 import { describe, expect, it } from "vitest";
 import {
+  conversationStreamEvents,
   imessageTimestamps,
   messageTimestamps,
   sentMessages,
@@ -12,6 +13,98 @@ type ToolResultOutput = Extract<
 >["output"];
 
 describe("iMessage event projection", () => {
+  it("keeps approval continuations with blank native turn IDs separate and chronological", () => {
+    const raw = [
+      {
+        type: "message.completed",
+        meta: { id: "after-cancel", at: "2026-09-19T18:00:00.000Z" },
+        data: {
+          finishReason: "stop",
+          message: "First approval response",
+          turnId: "",
+          sequence: 3,
+          stepIndex: 0,
+        },
+      },
+      {
+        type: "message.received",
+        meta: { id: "new-request", at: "2026-09-19T18:01:00.000Z" },
+        data: {
+          message: "Create a new proposal",
+          turnId: "turn_4",
+          sequence: 4,
+        },
+      },
+      {
+        type: "message.completed",
+        meta: { id: "after-approve", at: "2026-09-19T18:02:00.000Z" },
+        data: {
+          finishReason: "stop",
+          message: "Second approval response",
+          turnId: "",
+          sequence: 5,
+          stepIndex: 0,
+        },
+      },
+    ] satisfies MessageStreamEvent[];
+    const events = conversationStreamEvents(raw);
+    const reducer = defaultMessageReducer();
+    const { messages } = events.reduce(
+      (state, event) => reducer.reduce(state, event),
+      reducer.initial()
+    );
+    expect(messages.map((message) => message.id)).toEqual([
+      "continuation:3:assistant",
+      "new-request:user",
+      "continuation:5:assistant",
+    ]);
+    expect(
+      messages.map((message) =>
+        message.parts.find((part) => part.type === "text")
+      )
+    ).toEqual([
+      expect.objectContaining({ text: "First approval response" }),
+      expect.objectContaining({ text: "Create a new proposal" }),
+      expect.objectContaining({ text: "Second approval response" }),
+    ]);
+    const timestamps = messageTimestamps(events);
+    expect(messages.map((message) => timestamps.get(message.id))).toEqual(
+      raw.map((event) => event.meta.at)
+    );
+    expect(raw.map((event) => event.data.turnId)).toEqual(["", "turn_4", ""]);
+    expect(events[1]).toBe(raw[1]);
+  });
+
+  it("keeps persisted timestamps aligned with native user message IDs", () => {
+    const first = {
+      type: "message.received",
+      meta: { id: "event-one", at: "2026-09-19T18:00:00.000Z" },
+      data: {
+        turnId: "turn-1",
+        sequence: 0,
+        message: "First request",
+      },
+    } satisfies MessageStreamEvent;
+    const events = [
+      first,
+      {
+        ...first,
+        meta: { id: "event-two", at: "2026-09-19T18:01:00.000Z" },
+        data: { ...first.data, sequence: 1, message: "Follow-up request" },
+      },
+    ];
+    const reducer = defaultMessageReducer();
+    const messages = events.reduce(
+      (state, event) => reducer.reduce(state, event),
+      reducer.initial()
+    ).messages;
+    for (const timestamps of [messageTimestamps, imessageTimestamps]) {
+      expect(
+        messages.map((message) => timestamps(events).get(message.id))
+      ).toEqual([first.meta.at, "2026-09-19T18:01:00.000Z"]);
+    }
+  });
+
   it("projects only successful send_message results", () => {
     const events = [
       completedMessage("Internal terminal output", "2026-09-01T12:00:00.000Z"),

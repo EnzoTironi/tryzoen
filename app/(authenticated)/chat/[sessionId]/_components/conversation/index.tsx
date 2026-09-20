@@ -32,7 +32,7 @@ export function ChatConversation({
 }: {
   readonly agent: Pick<
     ChatAgent,
-    "data" | "error" | "events" | "respond" | "status"
+    "data" | "error" | "events" | "respond" | "resume" | "status"
   >;
   readonly history?: {
     readonly hasOlder: boolean;
@@ -166,6 +166,7 @@ export function ChatConversation({
         {showPendingThinking ? <PendingThinking /> : null}
         {errorMessage ? (
           <ErrorMessage
+            onRetry={agent.error ? agent.resume : undefined}
             message={
               traceView === "trace"
                 ? errorMessage
@@ -201,7 +202,13 @@ function toErrorMessage(cause: unknown): string {
   return cause.message;
 }
 
-function ErrorMessage({ message }: { readonly message: string }) {
+function ErrorMessage({
+  message,
+  onRetry,
+}: {
+  readonly message: string;
+  readonly onRetry?: () => Promise<void>;
+}) {
   const { t } = useI18n();
   return (
     <Message className="max-w-full" from="assistant">
@@ -209,7 +216,18 @@ function ErrorMessage({ message }: { readonly message: string }) {
         <Alert variant="destructive">
           <AlertCircleIcon />
           <AlertTitle>{t("Request failed")}</AlertTitle>
-          <AlertDescription>{message}</AlertDescription>
+          <AlertDescription>
+            <p>{message}</p>
+            {onRetry ? (
+              <Button
+                onClick={() => void onRetry()}
+                size="sm"
+                variant="outline"
+              >
+                {t("Try again")}
+              </Button>
+            ) : null}
+          </AlertDescription>
         </Alert>
       </MessageContent>
     </Message>

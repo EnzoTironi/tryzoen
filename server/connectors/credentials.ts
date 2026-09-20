@@ -1,58 +1,65 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
-import { authentication } from "@db/services/auth";
-import { Effect, Schema } from "effect";
+import { getAuth } from "@db/services/auth";
 import { ConnectorError } from "./definition";
 
-const Envelope = Schema.Struct({
-  purpose: Schema.Literal("tool-connector"),
-  workspaceId: Schema.String,
-  id: Schema.String,
-  revision: Schema.String,
-  value: Schema.String,
+const Envelope = z.object({
+  purpose: z.literal("tool-connector"),
+  workspaceId: z.string(),
+  id: z.string(),
+  revision: z.string(),
+  value: z.string(),
 });
 
-export const sealConnectorCredential = Effect.fn("Connector.sealCredential")(
-  function* (workspaceId: string, id: string, revision: string, value: string) {
-    const auth = yield* authentication;
-    return yield* Effect.tryPromise({
-      try: async () =>
-        symmetricEncrypt({
-          key: (await auth.$context).secretConfig,
-          data: JSON.stringify({
-            purpose: "tool-connector",
-            workspaceId,
-            id,
-            revision,
-            value,
-          }),
-        }),
-      catch: () => new ConnectorError({ reason: "unavailable" }),
+export const sealConnectorCredential = async function (
+  workspaceId: string,
+  id: string,
+  revision: string,
+  value: string
+) {
+  const auth = await getAuth();
+  try {
+    return await symmetricEncrypt({
+      key: (await auth.$context).secretConfig,
+      data: JSON.stringify({
+        purpose: "tool-connector",
+        workspaceId,
+        id,
+        revision,
+        value,
+      }),
     });
+  } catch {
+    throw new ConnectorError({ reason: "unavailable" });
   }
-);
+};
 
-export const openConnectorCredential = Effect.fn("Connector.openCredential")(
-  function* (workspaceId: string, id: string, revision: string, data: string) {
-    const auth = yield* authentication;
-    const plain = yield* Effect.tryPromise({
-      try: async () =>
-        symmetricDecrypt({ key: (await auth.$context).secretConfig, data }),
-      catch: () => new ConnectorError({ reason: "unavailable" }),
-    });
-    const envelope = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Envelope)
-    )(plain).pipe(
-      Effect.mapError(() => new ConnectorError({ reason: "denied" }))
-    );
-    if (
-      envelope.workspaceId !== workspaceId ||
-      envelope.id !== id ||
-      envelope.revision !== revision
-    )
-      return yield* new ConnectorError({ reason: "denied" });
-    return envelope.value;
-  }
-);
+export const openConnectorCredential = async function (
+  workspaceId: string,
+  id: string,
+  revision: string,
+  data: string
+) {
+  const auth = await getAuth();
+  const plain = await Promise.try(async () =>
+    symmetricDecrypt({ key: (await auth.$context).secretConfig, data })
+  ).catch(() => {
+    throw new ConnectorError({ reason: "unavailable" });
+  });
+  const envelope = await Promise.try(async () =>
+    jsonString(Envelope).parseAsync(plain)
+  ).catch(() => {
+    throw new ConnectorError({ reason: "denied" });
+  });
+  if (
+    envelope.workspaceId !== workspaceId ||
+    envelope.id !== id ||
+    envelope.revision !== revision
+  )
+    throw new ConnectorError({ reason: "denied" });
+  return envelope.value;
+};
 
 /** Remove this connection's credential if a provider echoes it in metadata or output. */
 export function redactConnectorCredential(

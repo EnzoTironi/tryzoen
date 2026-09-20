@@ -9,13 +9,11 @@ import {
   extractImageArtifactMarkdownReferences,
   stripImageArtifactMarkdownReferences,
 } from "./markdown";
-
 interface LinqImageArtifactFile {
   readonly data: Buffer;
   readonly filename: string;
   readonly mimeType: string;
 }
-
 export async function prepareLinqImageArtifactDelivery(
   message: string,
   input: {
@@ -26,9 +24,12 @@ export async function prepareLinqImageArtifactDelivery(
 ) {
   const references = extractImageArtifactMarkdownReferences(message);
   if (references.length === 0) {
-    return { failedArtifactIds: [], files: [], text: message };
+    return {
+      failedArtifactIds: [],
+      files: [],
+      text: message,
+    };
   }
-
   const selected = references.slice(0, maximumWorkerCompletionImages);
   const loaded = await Promise.all(
     selected.map(async (reference) => ({
@@ -58,18 +59,19 @@ export async function prepareLinqImageArtifactDelivery(
         ]
       : []
   );
-
   return {
     failedArtifactIds,
     files,
     text: stripImageArtifactMarkdownReferences(message),
   };
 }
-
 async function readLinqImageArtifact(
   scope: AccessScope,
   artifactId: string,
-  options: { readonly rootSessionId: string; readonly signal?: AbortSignal }
+  options: {
+    readonly rootSessionId: string;
+    readonly signal?: AbortSignal;
+  }
 ) {
   const artifact = await readReadyBrowserImageArtifact(scope, artifactId, {
     rootSessionId: options.rootSessionId,
@@ -96,7 +98,6 @@ async function readLinqImageArtifact(
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
-    /* oxlint-disable eslint/no-await-in-loop -- Blob response chunks form an ordered stream. */
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -104,7 +105,6 @@ async function readLinqImageArtifact(
       if (total > maximumBrowserImageBytes) return undefined;
       chunks.push(value);
     }
-    /* oxlint-enable eslint/no-await-in-loop */
   } finally {
     reader.releaseLock();
   }

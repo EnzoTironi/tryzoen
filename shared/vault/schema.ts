@@ -86,23 +86,12 @@ const loginVaultPayloadBaseSchema = z.object({
   kind: z.literal("login"),
 });
 
-const legacyLoginVaultPayloadSchema = loginVaultPayloadBaseSchema
-  .extend({
-    version: z.literal(1),
-  })
-  .superRefine(validateLoginVaultPayload);
-
 export const loginVaultPayloadSchema = loginVaultPayloadBaseSchema
   .extend({
     origin: loginOriginSchema,
     version: z.literal(2),
   })
   .superRefine(validateLoginVaultPayload);
-
-const readableLoginVaultPayloadSchema = z.union([
-  loginVaultPayloadSchema,
-  legacyLoginVaultPayloadSchema,
-]);
 
 function validateLoginVaultPayload(
   payload: z.infer<typeof loginVaultPayloadBaseSchema>,
@@ -306,7 +295,7 @@ export function paymentCardType(number: string) {
 }
 
 export function parseLoginVaultPayload(value: string) {
-  return parseSerializedPayload(readableLoginVaultPayloadSchema, value);
+  return parseSerializedPayload(loginVaultPayloadSchema, value);
 }
 
 export function parseAddressVaultPayload(value: string) {

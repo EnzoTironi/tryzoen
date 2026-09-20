@@ -64,7 +64,10 @@ export function collectSubagentSessions(
 function terminalTaskStatuses(events: readonly MessageStreamEvent[]) {
   const statuses = new Map<string, SubagentSession["terminalStatus"]>();
   for (const event of events) {
-    if (event.type !== "message.received" || event.data.source !== "task")
+    if (
+      event.type !== "message.received" ||
+      event.data.kind !== "execution.background_task"
+    )
       continue;
     const notification =
       /^Background task (\S+) \([^\r\n]+\) (is completed|failed|is cancelled)\./u.exec(

@@ -17,7 +17,7 @@ Read [product decisions](product-decisions.md), then
 Use [catalog coverage](coverage.md) to select a small relevant inventory. Do not
 load every catalog into an agent's context. The existing
 [product direction](../product-direction.md),
-[blueprint](../companion-blueprint.md), and root AGENTS.md govern implementation.
+[blueprint](../eve/architecture.md), and root AGENTS.md govern implementation.
 
 ## Inventory files
 
@@ -47,7 +47,7 @@ revisions and extraction counts are in [sources.json](sources.json).
 4. Read the pinned implementation and applicable license before reusing code.
    Prefer an existing native integration. Evaluate a selective Sim port only for
    a concrete missing capability. Treg and n8n have restrictions described below.
-5. Keep Eve responsible for sessions and durable execution; use Effect 4 for
+5. Keep Eve responsible for sessions and durable execution; use plain async TypeScript and Zod for
    application logic. Do not introduce another scheduler or agent loop.
 6. Implement a complete, narrow slice, including account binding, authorization,
    cancellation, error mapping, evidence and the conversational control surface.

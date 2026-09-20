@@ -1,10 +1,13 @@
+import { env } from "@shared/environment/env";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { requirePersonalMemoryMembership } from "../../server/personal-memory/access";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { PgClient } from "@effect/sql-pg";
-import { Config, Effect, Schema } from "effect";
 import { test } from "vitest";
 import type { MemoryTurnStartedContext, MemoryToolsContext } from "eve/memory";
 import type { ToolContext } from "eve/tools";
@@ -16,23 +19,20 @@ import { applicationOrigin } from "../../shared/environment/origin";
 import { ChannelAccounts, type Identity } from "../../server/accounts";
 import { PersonalMemory } from "../../server/personal-memory";
 import { inspectPersonalMemory } from "../../server/personal-memory/export";
-import { serverRuntime } from "../../server/runtime";
 import { createMemoryDocumentBackend } from "../../agent/lib/memory-document-backend";
-import { personalMemoryProvider } from "../../server/executor/memory/personal-memory-provider";
+import { personalMemoryProvider } from "../../server/tools/memory/personal-memory-provider";
 import { channelPrincipal } from "../../server/channels/principal";
-import { inspectStoredPersonalMemory } from "../../server/executor/tools/personal-memory";
+import { inspectStoredPersonalMemory } from "../../server/tools/tools/personal-memory";
 import { GET } from "../../app/api/account/personal-memory/export/route";
-import { runtimeDatabase } from "./database";
 import { linkedIdentity } from "./identity-fixture";
-
-const memoryDocumentBackend = createMemoryDocumentBackend(Effect.void);
-
+const memoryDocumentBackend = createMemoryDocumentBackend(() =>
+  Promise.resolve()
+);
 const cookies = (response: Response) =>
   response.headers
     .getSetCookie()
     .map((value) => value.split(";")[0])
     .join("; ");
-
 async function fromProcess(cookie: string) {
   const child = spawn(
     process.execPath,
@@ -59,28 +59,31 @@ async function fromProcess(cookie: string) {
     child.on("exit", resolve);
   });
   assert.equal(code, 0, stderr);
-  return Schema.decodeUnknownSync(
-    Schema.fromJsonString(
-      Schema.Struct({
-        status: Schema.String,
-        reason: Schema.optionalKey(Schema.String),
-        snapshot: Schema.optionalKey(
-          Schema.Struct({ profile: Schema.Unknown, notes: Schema.Unknown })
-        ),
-      })
-    )
-  )(output);
+  return jsonString(
+    z.object({
+      status: z.string(),
+      reason: z.optional(z.string()),
+      snapshot: z.optional(
+        z.object({
+          profile: z.unknown(),
+          notes: z.unknown(),
+        })
+      ),
+    })
+  ).parse(output);
 }
-
 function memoryContext(
   identity: Identity
-): MemoryTurnStartedContext & Pick<MemoryToolsContext, "channel"> {
+): MemoryTurnStartedContext & Pick<MemoryToolsContext, "channel" | "model"> {
   const principal = channelPrincipal(identity);
   const scope = accessScopeForUser(principal.principalId);
   const id = randomUUID();
   return {
+    model: null,
     abortSignal: new AbortController().signal,
-    channel: { kind: identity.channel },
+    channel: {
+      kind: identity.channel,
+    },
     memory: {
       scope: {
         key: `personal-memory-test:${randomUUID()}`,
@@ -93,10 +96,20 @@ function memoryContext(
     operationId: randomUUID(),
     session: {
       id,
-      auth: { current: principal, initiator: principal },
-      turn: { id, sequence: 1 },
+      auth: {
+        current: principal,
+        initiator: principal,
+      },
+      turn: {
+        id,
+        sequence: 1,
+      },
     },
-    turn: { id, input: [], sequence: 1 },
+    turn: {
+      id,
+      input: [],
+      sequence: 1,
+    },
     getSandbox() {
       throw new Error("Personal memory must not request a sandbox.");
     },
@@ -105,7 +118,6 @@ function memoryContext(
     },
   };
 }
-
 function toolContext(context: MemoryTurnStartedContext): ToolContext {
   return {
     ...context,
@@ -121,13 +133,9 @@ function toolContext(context: MemoryTurnStartedContext): ToolContext {
     },
   };
 }
-
 test("actual account auth, profile store, Eve provider, private tool and export isolate owners across processes and reject revoked access", async () => {
-  await Effect.runPromise(Effect.void.pipe(Effect.provide(runtimeDatabase)));
-  const installationId = await Effect.runPromise(
-    Config.string("TELEGRAM_BOT_ID")
-  );
-  const accounts = await serverRuntime.runPromise(ChannelAccounts);
+  const installationId = z.string().min(1).parse(env.TELEGRAM_BOT_ID);
+  const accounts = ChannelAccounts;
   const auth = await getAuth();
   const origin = applicationOrigin();
   const users: Identity[] = [];
@@ -135,13 +143,24 @@ test("actual account auth, profile store, Eve provider, private tool and export 
   const login = async (senderId: string = randomUUID()) => {
     const request = (
       path: string,
-      body: { channel: "telegram"; purpose: "login" } | { id: string },
+      body:
+        | {
+            channel: "telegram";
+            purpose: "login";
+          }
+        | {
+            id: string;
+          },
       cookie = ""
     ) =>
       auth.handler(
         new Request(`${origin}/api/auth/channel-auth/${path}`, {
           method: "POST",
-          headers: { origin, "content-type": "application/json", cookie },
+          headers: {
+            origin,
+            "content-type": "application/json",
+            cookie,
+          },
           body: JSON.stringify(body),
         })
       );
@@ -150,9 +169,7 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       purpose: "login",
     });
     assert.equal(started.status, 200);
-    const challenge = Schema.decodeUnknownSync(channelChallengeSchema)(
-      await started.json()
-    );
+    const challenge = channelChallengeSchema.parse(await started.json());
     const token = new URL(challenge.deepLink).searchParams.get("start");
     assert.ok(token);
     const sender = {
@@ -160,30 +177,38 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       installationId,
       senderId,
     };
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const resolution = yield* accounts.resolveVerifiedSender(sender);
-        if (resolution.status === "unlinked") yield* linkedIdentity(sender);
-        yield* accounts.confirmChallenge({ token, sender });
-      })
-    );
+    await (async function () {
+      const resolution = await accounts.resolveVerifiedSender(sender);
+      if (resolution.status === "unlinked") await linkedIdentity(sender);
+      await accounts.confirmChallenge({
+        token,
+        sender,
+      });
+    })();
     const complete = await request(
       "complete",
-      { id: challenge.id },
+      {
+        id: challenge.id,
+      },
       cookies(started)
     );
     assert.equal(complete.status, 200);
-    const identity = await serverRuntime.runPromise(
-      accounts.getActiveIdentity(sender)
-    );
+    const identity = await accounts.getActiveIdentity(sender);
     users.push(identity);
-    return { identity, cookie: cookies(complete) };
+    return {
+      identity,
+      cookie: cookies(complete),
+    };
   };
   try {
     const owner = await login();
     const other = await login();
-    const ownerHeaders = new Headers({ cookie: owner.cookie });
-    const otherHeaders = new Headers({ cookie: other.cookie });
+    const ownerHeaders = new Headers({
+      cookie: owner.cookie,
+    });
+    const otherHeaders = new Headers({
+      cookie: other.cookie,
+    });
     const ownerScope = accessScopeForUser(
       `better-auth:${owner.identity.userId}`
     );
@@ -191,26 +216,25 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       `better-auth:${other.identity.userId}`
     );
     assert.equal(
-      (await auth.api.getSession({ headers: ownerHeaders }))?.user.id,
+      (
+        await auth.api.getSession({
+          headers: ownerHeaders,
+        })
+      )?.user.id,
       owner.identity.userId
     );
     assert.equal(
-      (await serverRuntime.runPromise(inspectPersonalMemory(ownerHeaders)))
-        .notes.status,
+      (await inspectPersonalMemory(ownerHeaders)).notes.status,
       "unresolved"
     );
-    await serverRuntime.runPromise(
-      patchUserProfile(requirePersonalMemoryMembership(ownerScope), {
-        firstName: "Personal-memory owner",
-        city: "Owner-only city",
-      })
-    );
-    await serverRuntime.runPromise(
-      patchUserProfile(requirePersonalMemoryMembership(otherScope), {
-        firstName: "Second owner",
-        city: "Foreign-only city",
-      })
-    );
+    await patchUserProfile(() => requirePersonalMemoryMembership(ownerScope), {
+      firstName: "Personal-memory owner",
+      city: "Owner-only city",
+    });
+    await patchUserProfile(() => requirePersonalMemoryMembership(otherScope), {
+      firstName: "Second owner",
+      city: "Foreign-only city",
+    });
     const ownerContext = memoryContext(owner.identity);
     const otherContext = memoryContext(other.identity);
     await Promise.all(
@@ -230,22 +254,20 @@ test("actual account auth, profile store, Eve provider, private tool and export 
         );
       })
     );
-    const memory = await serverRuntime.runPromise(PersonalMemory);
+    const memory = PersonalMemory;
     await assert.rejects(
-      serverRuntime.runPromise(
-        memory.bind(otherScope, {
-          ...ownerContext.memory,
-          scope: {
-            ...ownerContext.memory.scope,
-            value: otherScope.workspaceId,
-          },
-        })
-      ),
-      { reason: "invalid_binding" }
+      memory.bind(otherScope, {
+        ...ownerContext.memory,
+        scope: {
+          ...ownerContext.memory.scope,
+          value: otherScope.workspaceId,
+        },
+      }),
+      {
+        reason: "invalid_binding",
+      }
     );
-    const snapshot = await serverRuntime.runPromise(
-      inspectPersonalMemory(ownerHeaders)
-    );
+    const snapshot = await inspectPersonalMemory(ownerHeaders);
     assert.equal(snapshot.profile.city, "Owner-only city");
     assert.equal(snapshot.notes.status, "located");
     assert.equal(snapshot.notes.documents.length, 1);
@@ -257,7 +279,9 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     const response = await GET(
       new Request(
         `${origin}/api/account/personal-memory/export?key=${encodeURIComponent(otherContext.memory.scope.key)}&workspaceId=${otherScope.workspaceId}`,
-        { headers: ownerHeaders }
+        {
+          headers: ownerHeaders,
+        }
       )
     );
     assert.equal(response.status, 200);
@@ -266,13 +290,13 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       response.headers.get("content-disposition") ?? "",
       /attachment/
     );
-    const exported = Schema.decodeUnknownSync(
-      Schema.Struct({
-        scope: Schema.String,
-        profile: Schema.Unknown,
-        notes: Schema.Unknown,
+    const exported = z
+      .object({
+        scope: z.string(),
+        profile: z.unknown(),
+        notes: z.unknown(),
       })
-    )(await response.json());
+      .parse(await response.json());
     assert.equal(exported.scope, "stored-personal-memory");
     assert.deepEqual(exported.profile, snapshot.profile);
     assert.deepEqual(exported.notes, snapshot.notes);
@@ -311,11 +335,15 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     await assert.rejects(async () =>
       save.execute(
         // @ts-expect-error The native heterogeneous tool map erases its input type.
-        { text: "Another account cannot use this bound tool" },
+        {
+          text: "Another account cannot use this bound tool",
+        },
         toolContext(otherContext)
       )
     );
-    const browserSession = await auth.api.getSession({ headers: ownerHeaders });
+    const browserSession = await auth.api.getSession({
+      headers: ownerHeaders,
+    });
     assert.ok(browserSession);
     const webPrincipal = {
       principalId: ownerScope.userId,
@@ -331,7 +359,10 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       ...ownerContext,
       session: {
         ...ownerContext.session,
-        auth: { current: webPrincipal, initiator: webPrincipal },
+        auth: {
+          current: webPrincipal,
+          initiator: webPrincipal,
+        },
       },
     };
     assert.match(
@@ -362,7 +393,9 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     assert.ok(webTools?.save_memory);
     const secondLogin = await login(owner.identity.senderId);
     const secondSession = await auth.api.getSession({
-      headers: new Headers({ cookie: secondLogin.cookie }),
+      headers: new Headers({
+        cookie: secondLogin.cookie,
+      }),
     });
     assert.ok(secondSession);
     // A different active session for the same account must not authorize this captured web principal.
@@ -381,7 +414,9 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     assert.equal(
       (
         await auth.api.getSession({
-          headers: new Headers({ cookie: secondLogin.cookie }),
+          headers: new Headers({
+            cookie: secondLogin.cookie,
+          }),
         })
       )?.user.id,
       owner.identity.userId
@@ -392,55 +427,46 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     await assert.rejects(async () =>
       webTools.save_memory?.execute(
         // @ts-expect-error Synthetic input exercises the real native save_memory tool.
-        { text: "Must not use another active browser session" },
+        {
+          text: "Must not use another active browser session",
+        },
         toolContext(webContext)
       )
     );
     const browserSecret = randomBytes(32).toString("base64url");
-    const link = await serverRuntime.runPromise(
-      accounts.issueChallenge({
-        purpose: "link" as const,
-        userId: owner.identity.userId,
-        sessionId: secondSession.session.id,
-        channel: "telegram",
-        installationId,
-        browserSecret,
-      })
-    );
+    const link = await accounts.issueChallenge({
+      purpose: "link" as const,
+      userId: owner.identity.userId,
+      sessionId: secondSession.session.id,
+      channel: "telegram",
+      installationId,
+      browserSecret,
+    });
     const linkedSender = {
       channel: "telegram" as const,
       installationId,
       senderId: randomUUID(),
     };
-    await serverRuntime.runPromise(
-      accounts.confirmChallenge({ token: link.token, sender: linkedSender })
-    );
-    await serverRuntime.runPromise(
-      accounts.consumeChallenge({
-        challengeId: link.challengeId,
-        browserSecret,
-        currentSessionId: secondSession.session.id,
-      })
-    );
-    users.push(
-      await serverRuntime.runPromise(accounts.getActiveIdentity(linkedSender))
-    );
+    await accounts.confirmChallenge({
+      token: link.token,
+      sender: linkedSender,
+    });
+    await accounts.consumeChallenge({
+      challengeId: link.challengeId,
+      browserSecret,
+      currentSessionId: secondSession.session.id,
+    });
+    users.push(await accounts.getActiveIdentity(linkedSender));
     const beforeRevocation = await memoryDocumentBackend.read({
       key: ownerContext.memory.scope.key,
       signal: ownerContext.abortSignal,
     });
-    await serverRuntime.runPromise(
-      accounts.revokeIdentity({
-        identityId: owner.identity.id,
-        userId: owner.identity.userId,
-      })
-    );
+    await accounts.revokeIdentity({
+      identityId: owner.identity.id,
+      userId: owner.identity.userId,
+    });
     // Revoking one channel preserves the account membership and the other linked channel.
-    assert.equal(
-      (await serverRuntime.runPromise(memory.inspect(ownerScope))).notes
-        .documents.length,
-      1
-    );
+    assert.equal((await memory.inspect(ownerScope)).notes.documents.length, 1);
     await assert.rejects(
       personalMemoryProvider.recall["turn.started"](ownerContext)
     );
@@ -449,14 +475,18 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       save.execute(
         // The public heterogeneous memory-tool map erases each tool's input type.
         // @ts-expect-error Synthetic input exercises the real native save_memory tool.
-        { text: "Must never be saved through a revoked channel" },
+        {
+          text: "Must never be saved through a revoked channel",
+        },
         toolContext(ownerContext)
       )
     );
     await assert.rejects(async () =>
       remove.execute(
         // @ts-expect-error Synthetic input exercises the real native remove_memory tool.
-        { index: 0 },
+        {
+          index: 0,
+        },
         toolContext(ownerContext)
       )
     );
@@ -467,16 +497,14 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       }),
       beforeRevocation
     );
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`DELETE FROM workspace_memberships WHERE workspace_id = ${otherScope.workspaceId} AND user_id = ${otherScope.userId}`;
-      })
-    );
-    await assert.rejects(
-      serverRuntime.runPromise(inspectPersonalMemory(otherHeaders)),
-      { reason: "unauthenticated" }
-    );
+    await (async function () {
+      await query(
+        sql`DELETE FROM workspace_memberships WHERE workspace_id = ${otherScope.workspaceId} AND user_id = ${otherScope.userId}`
+      );
+    })();
+    await assert.rejects(inspectPersonalMemory(otherHeaders), {
+      reason: "unauthenticated",
+    });
     await assert.rejects(async () =>
       inspectStoredPersonalMemory.execute({}, toolContext(otherContext))
     );
@@ -486,7 +514,9 @@ test("actual account auth, profile store, Eve provider, private tool and export 
     });
     await assert.rejects(
       personalMemoryProvider.recall["turn.started"](otherContext),
-      { reason: "unauthenticated" }
+      {
+        reason: "unauthenticated",
+      }
     );
     const signedOut = await auth.handler(
       new Request(`${origin}/api/auth/sign-out`, {
@@ -500,28 +530,32 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       })
     );
     assert.equal(signedOut.status, 200);
-    await assert.rejects(
-      serverRuntime.runPromise(inspectPersonalMemory(ownerHeaders)),
-      { reason: "unauthenticated" }
-    );
+    await assert.rejects(inspectPersonalMemory(ownerHeaders), {
+      reason: "unauthenticated",
+    });
     assert.deepEqual(await fromProcess(owner.cookie), {
       status: "Failure",
       reason: "unauthenticated",
     });
   } finally {
-    await serverRuntime.runPromise(
-      Effect.gen(function* () {
-        const sql = yield* PgClient.PgClient;
-        for (const key of keys)
-          yield* sql`DELETE FROM memory_document WHERE key = ${key}`;
-        for (const identity of users) {
-          const scope = accessScopeForUser(`better-auth:${identity.userId}`);
-          yield* sql`DELETE FROM public.channel_auth_challenge WHERE identity_id = ${identity.id}`;
-          yield* sql`DELETE FROM public.channel_identity WHERE id = ${identity.id}`;
-          yield* sql`DELETE FROM workspaces WHERE id = ${scope.workspaceId}`;
-          yield* sql`DELETE FROM public."user" WHERE id = ${identity.userId}`;
-        }
-      })
-    );
+    await (async function () {
+      for (const key of keys)
+        await query(sql`DELETE FROM memory_document WHERE key = ${key}`);
+      for (const identity of users) {
+        const scope = accessScopeForUser(`better-auth:${identity.userId}`);
+        await query(
+          sql`DELETE FROM public.channel_auth_challenge WHERE identity_id = ${identity.id}`
+        );
+        await query(
+          sql`DELETE FROM public.channel_identity WHERE id = ${identity.id}`
+        );
+        await query(
+          sql`DELETE FROM workspaces WHERE id = ${scope.workspaceId}`
+        );
+        await query(
+          sql`DELETE FROM public."user" WHERE id = ${identity.userId}`
+        );
+      }
+    })();
   }
 }, 60_000);

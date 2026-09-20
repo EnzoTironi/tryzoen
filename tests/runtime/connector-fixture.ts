@@ -1,7 +1,8 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import type { Socket } from "node:net";
-import { Schema } from "effect";
 
 const connectorSchema = {
   type: "object",
@@ -28,12 +29,12 @@ export const connectorDocument = JSON.stringify({
     },
   },
 });
-const Rpc = Schema.Struct({
-  id: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
-  method: Schema.String,
-  params: Schema.optional(
-    Schema.Struct({
-      arguments: Schema.optional(Schema.Struct({ text: Schema.String })),
+const Rpc = z.object({
+  id: z.optional(z.union([z.number(), z.string()])),
+  method: z.string(),
+  params: z.optional(
+    z.object({
+      arguments: z.optional(z.object({ text: z.string() })),
     })
   ),
 });
@@ -52,8 +53,7 @@ export async function connectorFixture() {
     void (async () => {
       const chunks: string[] = [];
       request.setEncoding("utf8");
-      for await (const chunk of request)
-        chunks.push(Schema.decodeUnknownSync(Schema.String)(chunk));
+      for await (const chunk of request) chunks.push(z.string().parse(chunk));
       const content = chunks.join("");
       credentials.push(request.headers.authorization ?? "");
       response.setHeader("Content-Type", "application/json");
@@ -63,9 +63,7 @@ export async function connectorFixture() {
         return;
       }
       if (request.url === "/api/notes") {
-        const input = Schema.decodeUnknownSync(
-          Schema.fromJsonString(Schema.Struct({ text: Schema.String }))
-        )(content);
+        const input = jsonString(z.object({ text: z.string() })).parse(content);
         writes.push(input.text);
         if (input.text === "lose response") {
           response.destroy();
@@ -79,7 +77,7 @@ export async function connectorFixture() {
         response.end(JSON.stringify(input));
         return;
       }
-      const rpc = Schema.decodeUnknownSync(Schema.fromJsonString(Rpc))(content);
+      const rpc = jsonString(Rpc).parse(content);
       if (rpc.method === "initialize" && paused.initialize) {
         paused.reached.resolve(undefined);
         await paused.resume.promise;
@@ -139,9 +137,7 @@ export async function connectorFixture() {
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  const address = Schema.decodeUnknownSync(
-    Schema.Struct({ port: Schema.Number })
-  )(server.address());
+  const address = z.object({ port: z.number() }).parse(server.address());
   return {
     origin: `http://127.0.0.1:${String(address.port)}`,
     writes,

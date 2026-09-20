@@ -1,12 +1,13 @@
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  # Eve 0.44.4's current official scaffold resolves the matching AI SDK release cohort.
+  # Match the AI SDK and workflow cohort supported by the installed Eve release.
   - "@ai-sdk/*"
   - ai
   - "@vercel/*"
   - "@onkernel/*"
   - eve
+  - "@workflow/*"
   # These browser and rendering transitive releases are locked by the current Eve UI scaffold.
   - baseline-browser-mapping
   - caniuse-lite
@@ -31,7 +32,3 @@ overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:
   "@linqapp/chat-sdk-adapter@0.5.1": patches/@linqapp__chat-sdk-adapter@0.5.1.patch
-  "@workflow/world-postgres@5.0.0-beta.39": patches/@workflow__world-postgres@5.0.0-beta.39.patch
-  "@workflow/world@5.0.0-beta.32": patches/@workflow__world@5.0.0-beta.32.patch
-  # URL dependencies are patched by name; package.json pins the immutable source SHA.
-  eve: patches/eve@0.52.2+main.59ec96cc99f65a80.patch

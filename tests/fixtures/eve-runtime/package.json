@@ -1,0 +1,8 @@
+{
+  "name": "zoen-eve-runtime-proof",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "eve": "0.63.0"
+  }
+}

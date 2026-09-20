@@ -6,12 +6,11 @@ import {
   browserBenchmarkLiveStatusSchema,
   type BrowserBenchmarkLiveStatus,
 } from "./live-status-schema.ts";
-
 export type { BrowserBenchmarkLiveStatus } from "./live-status-schema.ts";
-
 const writes = new Map<string, Promise<void>>();
-const nodeErrorSchema = z.object({ code: z.string() });
-
+const nodeErrorSchema = z.object({
+  code: z.string(),
+});
 export async function readBrowserBenchmarkLiveStatus(path: string) {
   try {
     return browserBenchmarkLiveStatusSchema.parse(
@@ -23,14 +22,15 @@ export async function readBrowserBenchmarkLiveStatus(path: string) {
     throw error;
   }
 }
-
 export async function writeBrowserBenchmarkLiveStatus(
   path: string,
   status: BrowserBenchmarkLiveStatus
 ) {
   const parsed = browserBenchmarkLiveStatusSchema.parse(status);
   const temporaryPath = `${path}.${String(process.pid)}.${randomUUID()}.tmp`;
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(path), {
+    recursive: true,
+  });
   await writeFile(
     temporaryPath,
     `${JSON.stringify(parsed, null, 2)}\n`,
@@ -38,7 +38,6 @@ export async function writeBrowserBenchmarkLiveStatus(
   );
   await rename(temporaryPath, path);
 }
-
 export async function updateBrowserBenchmarkLiveStatus(
   path: string,
   runId: string,
@@ -63,13 +62,13 @@ export async function updateBrowserBenchmarkLiveStatus(
     if (writes.get(path) === next) writes.delete(path);
   }
 }
-
 async function withFileLock(path: string, action: () => Promise<void>) {
   const lockPath = `${path}.lock`;
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(path), {
+    recursive: true,
+  });
   for (let attempt = 0; ; attempt += 1) {
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- lock creation is the sequential acquisition attempt itself
       await mkdir(lockPath);
       break;
     } catch (error) {
@@ -77,12 +76,12 @@ async function withFileLock(path: string, action: () => Promise<void>) {
       if (!parsed.success || parsed.data.code !== "EEXIST" || attempt >= 600) {
         throw error;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- lock acquisition retries must inspect the current lock before the next sequential attempt
       if (attempt % 100 === 99 && (await lockIsStale(lockPath))) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- stale lock cleanup must finish before retrying acquisition
-        await rm(lockPath, { force: true, recursive: true });
+        await rm(lockPath, {
+          force: true,
+          recursive: true,
+        });
       } else {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- bounded backoff intentionally serializes lock acquisition attempts
         await delay(50);
       }
     }
@@ -90,10 +89,12 @@ async function withFileLock(path: string, action: () => Promise<void>) {
   try {
     await action();
   } finally {
-    await rm(lockPath, { force: true, recursive: true });
+    await rm(lockPath, {
+      force: true,
+      recursive: true,
+    });
   }
 }
-
 async function lockIsStale(path: string) {
   try {
     return Date.now() - (await stat(path)).mtimeMs > 30_000;
@@ -103,7 +104,6 @@ async function lockIsStale(path: string) {
     throw error;
   }
 }
-
 function delay(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

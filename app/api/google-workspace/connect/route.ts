@@ -1,9 +1,9 @@
+import { withSignal } from "../../../../server/operations/async";
+import { AuthUnavailable } from "../../../../db/services/auth/index";
 import { getI18n } from "@web/i18n/server";
-import { Effect } from "effect";
-import { authentication } from "@db/services/auth";
+import { getAuth } from "@db/services/auth";
 import { applicationOrigin } from "@shared/environment/origin";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
-import { serverRuntime } from "../../../../server/runtime";
 import {
   connectGoogleWorkspace,
   GoogleWorkspaceError,
@@ -12,46 +12,49 @@ import { readGoogleWorkspaceChallenge } from "../../../../server/google-workspac
 
 export async function GET(request: Request) {
   const i18n = await getI18n();
-  return serverRuntime.runPromise(
-    Effect.gen(function* () {
-      const params = new URL(request.url).searchParams;
-      const flow = params.get("flow");
-      if (flow !== null && (!flow || flow.length > 8192))
-        return handoffFailure("invalid_callback", i18n);
-      const auth = yield* authentication;
-      const session = yield* Effect.tryPromise({
-        try: () => auth.api.getSession({ headers: request.headers }),
-        catch: () => new GoogleWorkspaceError({ reason: "unauthenticated" }),
-      });
-      if (!session) return handoffFailure("unauthenticated", i18n);
-      const home = homeCallbacks(params.get("returnTo") ?? undefined);
-      const callbackURL =
-        flow === null
-          ? home.callbackURL
-          : yield* readGoogleWorkspaceChallenge(flow, session.user.id);
-      const result = yield* connectGoogleWorkspace(
-        request.headers,
-        callbackURL,
-        flow === null ? home.errorCallbackURL : callbackURL
-      );
-      const headers = new Headers({
-        Location: result.url,
-        "Cache-Control": "no-store",
-        "Referrer-Policy": "no-referrer",
-      });
-      for (const cookie of result.headers.getSetCookie())
-        headers.append("Set-Cookie", cookie);
-      return new Response(null, { status: 302, headers });
-    }).pipe(
-      Effect.catchTag("GoogleWorkspaceError", (error) =>
-        Effect.succeed(handoffFailure(error.reason, i18n))
-      ),
-      Effect.catchTag("AuthUnavailable", () =>
-        Effect.succeed(handoffFailure("unavailable", i18n))
-      )
-    ),
-    { signal: request.signal }
-  );
+  return withSignal(request.signal, async () => {
+    try {
+      try {
+        const params = new URL(request.url).searchParams;
+        const flow = params.get("flow");
+        if (flow !== null && (!flow || flow.length > 8192))
+          return handoffFailure("invalid_callback", i18n);
+        const auth = await getAuth();
+        const session = await Promise.try(async () =>
+          auth.api.getSession({ headers: request.headers })
+        ).catch(() => {
+          throw new GoogleWorkspaceError({ reason: "unauthenticated" });
+        });
+        if (!session) return handoffFailure("unauthenticated", i18n);
+        const home = homeCallbacks(params.get("returnTo") ?? undefined);
+        const callbackURL =
+          flow === null
+            ? home.callbackURL
+            : await readGoogleWorkspaceChallenge(flow, session.user.id);
+        const result = await connectGoogleWorkspace(
+          request.headers,
+          callbackURL,
+          flow === null ? home.errorCallbackURL : callbackURL
+        );
+        const headers = new Headers({
+          Location: result.url,
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+        });
+        for (const cookie of result.headers.getSetCookie())
+          headers.append("Set-Cookie", cookie);
+        return new Response(null, { status: 302, headers });
+      } catch (error) {
+        if (error instanceof GoogleWorkspaceError)
+          return handoffFailure(error.reason, i18n);
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof AuthUnavailable)
+        return handoffFailure("unavailable", i18n);
+      throw error;
+    }
+  });
 }
 
 function handoffFailure(

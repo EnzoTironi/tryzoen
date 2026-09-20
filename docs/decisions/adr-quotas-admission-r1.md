@@ -3,18 +3,18 @@
 - **Status:** Accepted
 - **Date:** 2026-09-09 (America/Sao_Paulo)
 - **Decision:** Ship self-host **minimum quotas** that fail closed with a typed
-  Effect error before expensive work; document limits in this ADR and
+  typed error before expensive work; document limits in this ADR and
   `server/operations/quotas.ts`.
 - **Worker:** U10 — Release-1 minimum quotas / admission
 
 ## Context
 
-P11 (`docs/companion-blueprint.md`) requires per-user and installation budgets
+P11 (`docs/eve/architecture.md`) requires per-user and installation budgets
 for model tokens, tools, sandbox time, storage and proactive work, plus
 concurrency/fairness so one user cannot starve the service. Real-user admission
 must not bypass operations gates (`docs/product-direction.md`).
 
-No admission/quota Effect module existed on `origin/main` @ bc139c1. Media
+No admission/quota module existed on `origin/main` @ bc139c1. Media
 attachment byte caps already live in `server/channels/media/policy.ts` and stay
 there.
 
@@ -23,7 +23,7 @@ there.
 Add `server/operations/quotas.ts`:
 
 1. Named Release-1 limits (`release1QuotaLimits`).
-2. `admitQuota(usage, demand)` — pure Effect gate; over-limit →
+2. `admitQuota(usage, demand)` — pure admission gate; over-limit →
    `QuotaAdmissionError` with `reason: "exceeded"` (fail closed).
 3. `reserveQuota` / `settleConcurrentTurns` — reserve before expensive work,
    settle concurrent turns after completion.

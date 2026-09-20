@@ -1,5 +1,7 @@
 "use client";
 
+import type { z } from "zod";
+
 import { useState } from "react";
 import type { OntologySchema } from "@shared/workspaces/ontology";
 import { api } from "@web/trpc/client";
@@ -7,7 +9,7 @@ import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import styles from "../space.module.css";
 
-type Graph = typeof OntologySchema.Type;
+type Graph = z.output<typeof OntologySchema>;
 
 export function OntologySources({
   entity,

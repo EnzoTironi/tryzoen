@@ -244,12 +244,12 @@ function codecsForSurface(surface: DetectedAutofillSurface) {
 
 function isBoundLoginForOrigin(secret: string, origin: string) {
   const login = parseLoginVaultPayload(secret);
-  return Boolean(login && "origin" in login && login.origin === origin);
+  return login?.origin === origin;
 }
 
 function requireBoundLogin(secret: string, origin: string) {
   const login = parseLoginVaultPayload(secret);
-  if (!login || !("origin" in login)) {
+  if (!login) {
     throw new Error(
       "This saved login is not assigned to a website. Re-save it before autofill."
     );

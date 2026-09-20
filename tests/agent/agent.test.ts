@@ -1,12 +1,11 @@
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import type { DynamicResolveContext } from "eve";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Effect } from "effect";
+
 import type { isScheduledAgentRunLeaseActive } from "@db/services/scheduled-agent-run-leases";
 import type { workspaceActorFromPrincipal } from "../../server/workspaces/access";
 import type { getGatewayModel } from "@db/services/settings";
 import type { requireChannelPrincipal } from "../../server/channels/principal";
-import type * as installationModelModule from "@agent/lib/installation-model";
 
 const services = vi.hoisted(() => ({
   modelConfiguration: {
@@ -19,19 +18,13 @@ const services = vi.hoisted(() => ({
     vi.fn<
       (
         ...args: Parameters<typeof requireChannelPrincipal>
-      ) => Effect.Effect<
-        Effect.Success<ReturnType<typeof requireChannelPrincipal>>,
-        Error
-      >
+      ) => Promise<Awaited<ReturnType<typeof requireChannelPrincipal>>>
     >(),
   resolveActor:
     vi.fn<
       (
         principal: Parameters<typeof workspaceActorFromPrincipal>[0]
-      ) => Effect.Effect<
-        Effect.Success<ReturnType<typeof workspaceActorFromPrincipal>>,
-        Error
-      >
+      ) => Promise<Awaited<ReturnType<typeof workspaceActorFromPrincipal>>>
     >(),
 }));
 
@@ -47,27 +40,21 @@ vi.mock("../../server/workspaces/access", () => ({
 vi.mock("../../server/channels/principal", () => ({
   requireChannelPrincipal: services.verifyChannel,
 }));
-vi.mock("../../server/runtime", async () => {
-  const { Effect: runtimeEffect } = await import("effect");
-  return { serverRuntime: { runPromise: runtimeEffect.runPromise } };
-});
-vi.mock("@agent/lib/workspace-model", async () => {
-  const { Effect: Fx } = await import("effect");
-  return { workspaceModel: () => Fx.succeed(null) };
-});
-vi.mock("@agent/lib/installation-model", async (importOriginal) => {
-  const actual = await importOriginal<typeof installationModelModule>();
-  const { Effect: Fx, ConfigProvider } = await import("effect");
+
+vi.mock("@agent/lib/workspace-model", () => ({
+  workspaceModel: async () => null,
+}));
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
   return {
     ...actual,
-    installationModel: Fx.suspend(() =>
-      actual.installationModel.pipe(
-        Fx.provideService(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown(services.modelConfiguration)
-        )
-      )
-    ),
+    env: new Proxy(actual.env, {
+      get(target, key): unknown {
+        return key in services.modelConfiguration
+          ? Reflect.get(services.modelConfiguration, key)
+          : Reflect.get(target, key);
+      },
+    }),
   };
 });
 
@@ -82,14 +69,14 @@ beforeEach(() => {
   services.modelConfiguration.COMPANION_MODEL_PROVIDER = "gateway";
   services.getModel.mockResolvedValue("openai/gpt-5.6-sol-fast");
   services.resolveActor.mockReturnValue(
-    Effect.succeed({
+    Promise.resolve({
       ...accessScopeForUser("user-1"),
       role: "owner",
       organizationId: null,
     })
   );
   services.verifyChannel.mockReturnValue(
-    Effect.succeed({
+    Promise.resolve({
       id: "00000000-0000-4000-8000-000000000004",
       userId: "user-1",
       channel: "telegram",
@@ -115,7 +102,7 @@ describe("root agent model resolution", () => {
 
   it("refuses a revoked group sender before choosing a model", async () => {
     services.verifyChannel.mockReturnValue(
-      Effect.fail(new Error("Identity revoked"))
+      Promise.reject(new Error("Identity revoked"))
     );
     await expect(
       agent.model.events["step.started"]?.({}, groupContext())
@@ -149,7 +136,7 @@ describe("root agent model resolution", () => {
       userId: "user-1",
       workspaceId: accessScopeForUser("user-1").workspaceId,
     });
-    expect(model).toBe("openai/gpt-5.6-sol-fast");
+    expect(model).toMatchObject({ modelId: "openai/gpt-5.6-sol-fast" });
     expect(services.resolveActor).toHaveBeenCalledExactlyOnceWith(
       scheduledWorkerContext().session.auth.current
     );
@@ -168,7 +155,7 @@ describe("root agent model resolution", () => {
   it("rejects a valid lease when workspace access was revoked", async () => {
     services.isActive.mockResolvedValue(true);
     services.resolveActor.mockReturnValue(
-      Effect.fail(new Error("Workspace access was revoked"))
+      Promise.reject(new Error("Workspace access was revoked"))
     );
     await expect(
       agent.model.events["step.started"]?.({}, scheduledWorkerContext())
@@ -191,6 +178,7 @@ function groupContext(): DynamicResolveContext {
     principalType: "user",
   };
   return {
+    model: null,
     channel: { kind: "channel:telegram" },
     messages: [],
     session: {
@@ -202,6 +190,7 @@ function groupContext(): DynamicResolveContext {
 
 function scheduledWorkerContext(): DynamicResolveContext {
   return {
+    model: null,
     channel: { kind: "http" },
     messages: [],
     session: {

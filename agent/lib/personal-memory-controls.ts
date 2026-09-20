@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { MemoryOperationContext, MemoryToolsContext } from "eve/memory";
 import { readUserProfile, patchUserProfile } from "@db/services/user-profile";
 import type { UserProfilePatch } from "@shared/user-profile/schema";
@@ -7,37 +6,35 @@ import { admitPersonalMemoryFromSession } from "../../server/personal-memory/gro
 import { authorizePersonalMemoryPrincipal } from "../../server/personal-memory/principal";
 import { resolveModeValue } from "./mode";
 
-const requireProfileScope = Effect.fn("requireProfileScope")(function* (
+const requireProfileScope = async function (
   context: Pick<
     MemoryOperationContext | MemoryToolsContext,
     "session" | "memory"
   >
 ) {
-  yield* admitPersonalMemoryFromSession(context.session.auth.current);
-  const scope = yield* authorizePersonalMemoryPrincipal(
+  await admitPersonalMemoryFromSession(context.session.auth.current);
+  const scope = await authorizePersonalMemoryPrincipal(
     context.session.auth.current
   );
   if (context.memory.scope.value !== scope.workspaceId)
-    return yield* new PersonalMemoryError({ reason: "invalid_binding" });
+    throw new PersonalMemoryError({ reason: "invalid_binding" });
   return scope;
-});
+};
 
-export const recallPersonalProfile = Effect.fn("recallPersonalProfile")(
-  function* (context: MemoryOperationContext) {
-    return yield* readUserProfile(requireProfileScope(context));
-  }
-);
+export const recallPersonalProfile = async function (
+  context: MemoryOperationContext
+) {
+  return await readUserProfile(() => requireProfileScope(context));
+};
 
-export const updatePersonalProfile = Effect.fn("updatePersonalProfile")(
-  function* (
-    context: Pick<
-      MemoryOperationContext | MemoryToolsContext,
-      "session" | "memory"
-    >,
-    input: UserProfilePatch
-  ) {
-    if (resolveModeValue(context, { interactive: true }) !== true)
-      return yield* new PersonalMemoryError({ reason: "unauthenticated" });
-    return yield* patchUserProfile(requireProfileScope(context), input);
-  }
-);
+export const updatePersonalProfile = async function (
+  context: Pick<
+    MemoryOperationContext | MemoryToolsContext,
+    "session" | "memory"
+  >,
+  input: UserProfilePatch
+) {
+  if (resolveModeValue(context, { interactive: true }) !== true)
+    throw new PersonalMemoryError({ reason: "unauthenticated" });
+  return await patchUserProfile(() => requireProfileScope(context), input);
+};

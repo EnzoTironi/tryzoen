@@ -1,29 +1,25 @@
-import { Effect, Redacted } from "effect";
+import { Secret } from "@shared/environment/secret";
 import { openBitwardenExport } from "./bitwarden";
 
 self.addEventListener(
   "message",
   (event: MessageEvent<{ source: string; password: string }>) => {
-    void Effect.runPromise(
-      openBitwardenExport(
-        event.data.source,
-        Redacted.make(event.data.password)
-      ).pipe(
-        Effect.match({
-          onFailure: () => {
-            self.postMessage(null, { transfer: [] });
-          },
-          onSuccess: (result) => {
-            self.postMessage(result, { transfer: [] });
-          },
-        }),
-        Effect.catchDefect(() =>
-          Effect.sync(() => {
-            self.postMessage(null, { transfer: [] });
-          })
-        )
-      )
-    );
+    void Promise.try(async () => {
+      await Promise.try(async () =>
+        openBitwardenExport(event.data.source, new Secret(event.data.password))
+      ).then(
+        (result) => {
+          self.postMessage(result, { transfer: [] });
+        },
+        () => {
+          self.postMessage(null, { transfer: [] });
+        }
+      );
+    }).catch(() => {
+      (() => {
+        self.postMessage(null, { transfer: [] });
+      })();
+    });
   },
   { once: true }
 );

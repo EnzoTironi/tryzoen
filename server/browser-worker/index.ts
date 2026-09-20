@@ -1,5 +1,7 @@
-import { PgClient } from "@effect/sql-pg";
-import { Context, Effect, Layer, Schema } from "effect";
+import { SqlError } from "../../db/queries";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
+
 import type { SessionAuthContext } from "eve/context";
 import { channelProviderSchema } from "../../shared/identity/channel-auth";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
@@ -14,110 +16,91 @@ import {
   requireBrowserWorkerWebSession,
 } from "./access";
 
-const identifier = Schema.NonEmptyString.check(Schema.isTrimmed());
+const identifier = z
+  .string()
+  .min(1)
+  .refine((value) => value === value.trim(), "Expected trimmed text");
 
-const authorize = Effect.fn("BrowserWorkerAccess.authorize")(
-  function* (principal: SessionAuthContext) {
+const authorize = async function (principal: SessionAuthContext) {
+  try {
     if (principal.principalType !== "user")
-      return yield* new BrowserWorkerAccessError({
+      throw new BrowserWorkerAccessError({
         reason: "unauthenticated",
       });
-    const scope = yield* Effect.try({
-      try: () => scopeFromPrincipal(principal),
-      catch: () => new BrowserWorkerAccessError({ reason: "unauthenticated" }),
+    const scope = await Promise.try(async () =>
+      scopeFromPrincipal(principal)
+    ).catch(() => {
+      throw new BrowserWorkerAccessError({ reason: "unauthenticated" });
     });
     const canonical = accessScopeForUser(scope.userId);
     if (
       canonical.workspaceId !== scope.workspaceId &&
       principal.attributes.workspaceKind !== "company"
     )
-      return yield* new BrowserWorkerAccessError({
+      throw new BrowserWorkerAccessError({
         reason: "unauthenticated",
       });
     if (canonical.workspaceId !== scope.workspaceId) {
-      yield* workspaceActorFromPrincipal(principal).pipe(
-        Effect.mapError(
-          () => new BrowserWorkerAccessError({ reason: "unauthenticated" })
-        )
-      );
+      await Promise.try(async () =>
+        workspaceActorFromPrincipal(principal)
+      ).catch(() => {
+        throw new BrowserWorkerAccessError({ reason: "unauthenticated" });
+      });
     }
 
     if (principal.authenticator === "scheduled-worker") {
-      const runId = yield* Schema.decodeUnknownEffect(identifier)(
-        principal.attributes.scheduledRunId
-      ).pipe(
-        Effect.mapError(
-          () => new BrowserWorkerAccessError({ reason: "lease_inactive" })
-        )
-      );
-      const leaseToken = yield* Schema.decodeUnknownEffect(identifier)(
-        principal.attributes.scheduledRunLeaseToken
-      ).pipe(
-        Effect.mapError(
-          () => new BrowserWorkerAccessError({ reason: "lease_inactive" })
-        )
-      );
-      yield* requireBrowserWorkerLease(scope, runId, leaseToken);
+      const runId = await Promise.try(async () =>
+        identifier.parseAsync(principal.attributes.scheduledRunId)
+      ).catch(() => {
+        throw new BrowserWorkerAccessError({ reason: "lease_inactive" });
+      });
+      const leaseToken = await Promise.try(async () =>
+        identifier.parseAsync(principal.attributes.scheduledRunLeaseToken)
+      ).catch(() => {
+        throw new BrowserWorkerAccessError({ reason: "lease_inactive" });
+      });
+      await requireBrowserWorkerLease(scope, runId, leaseToken);
       const scheduleId = principal.attributes.scheduleId;
       if (scheduleId !== undefined) {
-        const id = yield* Schema.decodeUnknownEffect(identifier)(
-          scheduleId
-        ).pipe(
-          Effect.mapError(
-            () => new BrowserWorkerAccessError({ reason: "paused" })
-          )
-        );
-        yield* requireBrowserWorkerScheduleActive(scope, id);
+        const id = await Promise.try(async () =>
+          identifier.parseAsync(scheduleId)
+        ).catch(() => {
+          throw new BrowserWorkerAccessError({ reason: "paused" });
+        });
+        await requireBrowserWorkerScheduleActive(scope, id);
       }
     }
 
     if (
       principal.authenticator === "verified-channel" ||
-      Schema.is(channelProviderSchema)(principal.attributes.conversationChannel)
+      isValid(channelProviderSchema, principal.attributes.conversationChannel)
     ) {
-      const identityId = yield* Schema.decodeUnknownEffect(
-        Schema.String.check(Schema.isUUID())
-      )(principal.attributes.channelIdentityId).pipe(
-        Effect.mapError(
-          () => new BrowserWorkerAccessError({ reason: "revoked" })
-        )
-      );
-      yield* requireBrowserWorkerChannelIdentity(scope, identityId);
+      const identityId = await Promise.try(async () =>
+        z.uuid().parseAsync(principal.attributes.channelIdentityId)
+      ).catch(() => {
+        throw new BrowserWorkerAccessError({ reason: "revoked" });
+      });
+      await requireBrowserWorkerChannelIdentity(scope, identityId);
     } else if (principal.authenticator === "authjs") {
-      const sessionId = yield* Schema.decodeUnknownEffect(identifier)(
-        principal.attributes.authSessionId
-      ).pipe(
-        Effect.mapError(
-          () => new BrowserWorkerAccessError({ reason: "unauthenticated" })
-        )
-      );
-      yield* requireBrowserWorkerWebSession(scope, sessionId);
+      const sessionId = await Promise.try(async () =>
+        identifier.parseAsync(principal.attributes.authSessionId)
+      ).catch(() => {
+        throw new BrowserWorkerAccessError({ reason: "unauthenticated" });
+      });
+      await requireBrowserWorkerWebSession(scope, sessionId);
     } else if (principal.authenticator !== "scheduled-worker") {
-      yield* requireBrowserWorkerMembership(scope);
+      await requireBrowserWorkerMembership(scope);
     }
 
     return scope;
-  },
-  Effect.catchTag(
-    "SqlError",
-    () => new BrowserWorkerAccessError({ reason: "unavailable" })
-  )
-);
+  } catch (error) {
+    if (error instanceof SqlError) {
+      throw new BrowserWorkerAccessError({ reason: "unavailable" });
+    }
+    throw error;
+  }
+};
 
-const makeBrowserWorkerAccess = Effect.gen(function* () {
-  const sql = yield* PgClient.PgClient;
-  return {
-    authorize: (principal: SessionAuthContext) =>
-      authorize(principal).pipe(Effect.provideService(PgClient.PgClient, sql)),
-  };
-});
-
-export class BrowserWorkerAccess extends Context.Service<
-  BrowserWorkerAccess,
-  Effect.Success<typeof makeBrowserWorkerAccess>
->()("companion/BrowserWorkerAccess") {
-  static readonly layer = Layer.effect(
-    BrowserWorkerAccess,
-    makeBrowserWorkerAccess
-  );
-}
+export const BrowserWorkerAccess = {
+  authorize: (principal: SessionAuthContext) => authorize(principal),
+};

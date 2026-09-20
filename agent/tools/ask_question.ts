@@ -1,2 +1,8 @@
-export { default } from "../../server/executor/native/ask_question";
-export * from "../../server/executor/native/ask_question";
+import { askQuestion } from "eve/tools/ask_question";
+import { channelQuestionSchema } from "../lib/channel-input";
+
+// Configure the public native definition once; copying it loses Eve's native behavior.
+askQuestion.inputSchema = channelQuestionSchema;
+
+export { askQuestion };
+export default askQuestion;

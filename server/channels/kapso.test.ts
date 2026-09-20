@@ -1,4 +1,5 @@
-import { Effect, type Schema } from "effect";
+import type { z } from "zod";
+
 import { expect, test } from "vitest";
 import { parseKapsoWebhook } from "./kapso";
 import { ProviderInputError } from "./provider-errors";
@@ -26,8 +27,8 @@ const base = {
     contact_name: "Never an identity",
   },
 };
-const parse = (value: Schema.Json) =>
-  Effect.runPromise(parseKapsoWebhook(value, installation, now));
+const parse = (value: z.core.util.JSONType) =>
+  parseKapsoWebhook(value, installation, now);
 
 test("private device requests and native confirmation buttons stay out of agent input", async () => {
   const token = "a".repeat(43);
@@ -291,7 +292,7 @@ test.each(["cloud_api", "business_app"])(
 test.each(["history_sync", "unknown_future_origin", undefined])(
   "ignores %s origin before text or login normalization",
   async (origin) => {
-    const kapso: Schema.MutableJsonObject = {
+    const kapso: Record<string, z.core.util.JSONType> = {
       direction: "inbound",
       status: "received",
     };
@@ -317,12 +318,10 @@ test.each(["history_sync", "unknown_future_origin", undefined])(
 // Actual delivery 08279d9d-1918-4560-bc64-a4e3d635458e, retrieved from
 // Kapso log_search; identifiers and user text redacted, shape/status preserved.
 test("accepts the live inbound delivery with null context and delivered status", async () => {
-  const events = await Effect.runPromise(
-    parseKapsoWebhook(
-      receivedDelivery,
-      installation,
-      Number(receivedDelivery.message.timestamp) * 1000
-    )
+  const events = await parseKapsoWebhook(
+    receivedDelivery,
+    installation,
+    Number(receivedDelivery.message.timestamp) * 1000
   );
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({

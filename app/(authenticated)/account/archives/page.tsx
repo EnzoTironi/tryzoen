@@ -1,9 +1,9 @@
-import { Result, Schema } from "effect";
+import { z } from "zod";
+
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { DownloadIcon, ArchiveIcon } from "lucide-react";
 import { getI18n } from "@web/i18n/server";
-import { serverRuntime } from "../../../../server/runtime";
 import {
   readAccountArchive,
   readAccountArchives,
@@ -11,33 +11,28 @@ import {
 import { PanelLink } from "../../_components/panel-link";
 import styles from "../../_components/panel.module.css";
 
-const archiveQuery = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  after: Schema.optional(Schema.String),
-  filesAfter: Schema.optional(Schema.String),
+const archiveQuery = z.object({
+  id: z.optional(z.string()),
+  after: z.optional(z.string()),
+  filesAfter: z.optional(z.string()),
 });
 
 export default async function AccountArchivesPage({
   searchParams,
 }: PageProps<"/account/archives">) {
   const { t, locale } = await getI18n();
-  const params = Result.getOrElse(
-    Schema.decodeUnknownResult(archiveQuery)(await searchParams),
-    notFound
+  const params = ((parsed) => (parsed.success ? parsed.data : notFound()))(
+    archiveQuery.safeParse(await searchParams)
   );
   const requestHeaders = await headers();
-  const archives = await serverRuntime.runPromise(
-    readAccountArchives(requestHeaders)
-  );
+  const archives = await readAccountArchives(requestHeaders);
   const selected = archives.find((archive) => archive.id === params.id);
   const archive = selected
-    ? await serverRuntime.runPromise(
-        readAccountArchive(
-          requestHeaders,
-          selected.id,
-          params.after,
-          params.filesAfter
-        )
+    ? await readAccountArchive(
+        requestHeaders,
+        selected.id,
+        params.after,
+        params.filesAfter
       )
     : undefined;
   return (

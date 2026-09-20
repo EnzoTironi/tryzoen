@@ -15,7 +15,7 @@ The archive contains summaries and public feedback, not the underlying conversat
 | Proactive restraint      | Cancelled/expired schedules and revoked grants stop execution or delivery          |
 | Running routines         | Scheduled lifecycle and queue idempotency                                          |
 | Multiplayer groups       | Explicit workspace bindings, membership, Matrix history and A2A scope              |
-| Chained tasks            | Code Mode discovery → skill save → exact readback in EN/PT-BR/ES                   |
+| Chained tasks            | Native tool discovery → skill save → exact readback in EN/PT-BR/ES                 |
 | Personality              | Existing conversation evals; subjective judge results are separate from hard gates |
 | Travel                   | Optional live browser benchmark; stop at the final booking boundary                |
 | Purchasing               | Optional live browser benchmark; no payment authorization from a webpage           |

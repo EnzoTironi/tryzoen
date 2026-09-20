@@ -1,4 +1,5 @@
-import { Result, Schema } from "effect";
+import { z } from "zod";
+
 import { describe, expect, it } from "vitest";
 import {
   sendMessageOutputSchema,
@@ -8,7 +9,7 @@ import {
 describe("message delivery contract", () => {
   it("trims text and URL edges without normalizing the URL itself", () => {
     expect(
-      Schema.decodeUnknownSync(sendMessageOutputSchema)({
+      sendMessageOutputSchema.parse({
         kind: "message",
         text: " \tOlá\n ",
         attachments: [
@@ -17,7 +18,6 @@ describe("message delivery contract", () => {
             url: "  HTTPS://Example.COM:443/a/../b?q=%2f#Frag  ",
             name: " image ",
             mimeType: " image/png ",
-            ignored: true,
           },
         ],
       })
@@ -34,7 +34,7 @@ describe("message delivery contract", () => {
       ],
     });
     expect(
-      Schema.decodeUnknownSync(sendMessageOutputSchema)({
+      sendMessageOutputSchema.parse({
         kind: "link",
         url: " https:example.com ",
       })
@@ -67,9 +67,7 @@ describe("message delivery contract", () => {
         },
       },
     ])
-      expect(Schema.decodeUnknownSync(sendMessageOutputSchema)(input)).toEqual(
-        input
-      );
+      expect(sendMessageOutputSchema.parse(input)).toEqual(input);
   });
 
   it("enforces message, attachment, metadata and native-link bounds", () => {
@@ -81,7 +79,7 @@ describe("message delivery contract", () => {
       mimeType: "m".repeat(200),
     };
     expect(
-      Schema.decodeUnknownSync(sendMessageOutputSchema)({
+      sendMessageOutputSchema.parse({
         kind: "message",
         text: ` ${"x".repeat(20_000)} `,
         attachments: Array.from({ length: 4 }, () => ({ ...attachment })),
@@ -89,7 +87,7 @@ describe("message delivery contract", () => {
     ).toMatchObject({ text: "x".repeat(20_000) });
     const link = `https://example.com/${"x".repeat(2048 - "https://example.com/".length)}`;
     expect(
-      Schema.decodeUnknownSync(sendMessageOutputSchema)({
+      sendMessageOutputSchema.parse({
         kind: "link",
         url: link,
       })
@@ -113,9 +111,7 @@ describe("message delivery contract", () => {
       },
       { kind: "link", url: `${link}x` },
     ])
-      expect(() =>
-        Schema.decodeUnknownSync(sendMessageOutputSchema)(input)
-      ).toThrow(Schema.SchemaError);
+      expect(() => sendMessageOutputSchema.parse(input)).toThrow(z.ZodError);
   });
 
   it("rejects invalid content, protocols, discriminants and excess strict-object keys", () => {
@@ -123,7 +119,6 @@ describe("message delivery contract", () => {
       null,
       {},
       { kind: "message" },
-      { kind: "message", text: "ok", replyTo: undefined },
       { kind: "message", text: "ok", attachments: null },
       { kind: "message", text: " \n " },
       {
@@ -152,25 +147,22 @@ describe("message delivery contract", () => {
         attachments: [{ kind: "unknown", url: "https://example.com" }],
       },
     ])
-      expect(() =>
-        Schema.decodeUnknownSync(sendMessageOutputSchema)(input)
-      ).toThrow(Schema.SchemaError);
+      expect(() => sendMessageOutputSchema.parse(input)).toThrow(z.ZodError);
   });
 
   it("returns a typed failure for malformed URLs without throwing a URL defect", () => {
-    const result = Schema.decodeUnknownResult(sendMessageOutputSchema)({
+    const result = sendMessageOutputSchema.safeParse({
       kind: "link",
       url: "https://bad host",
     });
-    expect(Result.isFailure(result)).toBe(true);
-    if (Result.isSuccess(result))
-      throw new Error("Malformed URL was accepted.");
-    expect(result.failure).toBeInstanceOf(Schema.SchemaError);
+    expect(!result.success).toBe(true);
+    if (result.success) throw new Error("Malformed URL was accepted.");
+    expect(result.error).toBeInstanceOf(z.ZodError);
   });
 
   it("strips envelope metadata while enforcing the nested output contract", () => {
     expect(
-      Schema.decodeUnknownSync(sendMessageToolResultSchema)({
+      sendMessageToolResultSchema.parse({
         kind: "tool-result",
         toolName: "send_message",
         output: { kind: "message", text: " ok " },
@@ -194,10 +186,6 @@ describe("message delivery contract", () => {
         output: { kind: "message", text: "ok", extra: true },
       },
     ])
-      expect(
-        Result.isSuccess(
-          Schema.decodeUnknownResult(sendMessageToolResultSchema)(input)
-        )
-      ).toBe(false);
+      expect(sendMessageToolResultSchema.safeParse(input).success).toBe(false);
   });
 });

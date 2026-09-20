@@ -7,8 +7,6 @@ import {
 import { defineState } from "eve/context";
 import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
 
-/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- Browser Loop's materialized vendor tool accepts arbitrary JSON input by contract. */
-
 const resourcesBySession = new Map<string, LoopExecutionResources>();
 const lockTailsBySession = new Map<string, Promise<void>>();
 const refStates = defineState<Record<string, BrowserRefState>>(
@@ -73,7 +71,7 @@ async function resourcesFor(sessionId: string, signal?: AbortSignal) {
   const resources = new LoopExecutionResources({
     browser,
     // SAFETY: Browser Loop pins an older nominal Kernel SDK type, while the shared client is API-compatible with that exact runtime contract.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- the assertion bridges duplicate nominal SDK installations at the vendor boundary
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema or pinned SDK contract establishes this boundary.
     client: getKernel() as unknown as Options["client"],
   });
   const refState = refStates.get()[sessionId];
@@ -93,7 +91,7 @@ async function withBrowserLoopSessionLock<T>(
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const tail = previous.then(() => current);
+  const tail = previous.then(async () => current);
   lockTailsBySession.set(sessionId, tail);
   await previous;
 

@@ -1,25 +1,26 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { applicationOrigin } from "@shared/environment/origin";
 import { authenticateAgentGrant } from "../workspaces/bots";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
-export const readAgentCard = Effect.fn("readAgentCard")(function* (
+export const readAgentCard = async function (
   username: string,
   authorization: string | null
 ) {
-  const sql = yield* PgClient.PgClient;
-  const rows =
-    yield* sql`SELECT name, description, discoverable FROM workspace_bots WHERE username = ${username}`;
-  if (!rows[0]) return yield* new WorkspaceAccessDenied();
-  const bot = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({
-      name: Schema.String,
-      description: Schema.String,
-      discoverable: Schema.Boolean,
+  const rows = await query(
+    sql`SELECT name, description, discoverable FROM workspace_bots WHERE username = ${username}`
+  );
+  if (!rows[0]) throw new WorkspaceAccessDenied();
+  const bot = await z
+    .object({
+      name: z.string(),
+      description: z.string(),
+      discoverable: z.boolean(),
     })
-  )(rows[0]);
-  if (!bot.discoverable) yield* authenticateAgentGrant(authorization, username);
+    .parseAsync(rows[0]);
+  if (!bot.discoverable) await authenticateAgentGrant(authorization, username);
   return {
     name: bot.name,
     description: bot.description || "Zoen workspace knowledge assistant",
@@ -48,4 +49,4 @@ export const readAgentCard = Effect.fn("readAgentCard")(function* (
       },
     ],
   };
-});
+};

@@ -40,20 +40,20 @@
  * synchronous infinite loop — which the host process cannot do to itself.
  */
 
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import {
-  getQuickJS,
-  type QuickJSContext,
-  type QuickJSWASMModule,
-} from "quickjs-emscripten";
+import type { QuickJSContext, QuickJSWASMModule } from "quickjs-emscripten";
 
 /** Raised when the sandbox could not produce an answer — never when the code
  *  the sandbox ran merely failed. The caller decides what to do with it; every
  *  current caller fails open. */
-export class SealedBundleError extends Data.TaggedError("SealedBundleError")<{
-  readonly message: string;
-}> {}
+class SealedBundleError extends Error {
+  readonly _tag = "SealedBundleError";
+
+  constructor(input: { readonly message: string }) {
+    super(input.message);
+    this.name = "SealedBundleError";
+    Object.assign(this, input);
+  }
+}
 
 export type SealedBundleOptions = {
   /** The program. Must be self-contained: no imports, no host globals. */
@@ -200,24 +200,13 @@ const runSealedBundle = async (
  * throws while loading, a call that rejects, a deadline, a memory cap. Callers
  * that treat validation as advisory should fail open on it.
  */
-export const executeSealedBundle = (
+export async function executeSealedBundle(
   options: SealedBundleOptions,
   resolveModule: ModuleResolver
-): Effect.Effect<string, SealedBundleError> =>
-  Effect.tryPromise({
-    try: () => runSealedBundle(options, resolveModule),
-    catch: (cause) => new SealedBundleError({ message: errorMessage(cause) }),
-  }).pipe(
-    Effect.withSpan("executor.sealed_bundle.exec", {
-      attributes: { "executor.runtime": "quickjs" },
-    })
-  );
-
-/** The default module resolver: the preloaded WASM module when a host set one
- *  (Workers must), otherwise the package's own. */
-export const defaultQuickJsModuleResolver =
-  (preloaded: () => QuickJSWASMModule | null): ModuleResolver =>
-  () => {
-    const module = preloaded();
-    return module ? Promise.resolve(module) : getQuickJS();
-  };
+): Promise<string> {
+  try {
+    return await runSealedBundle(options, resolveModule);
+  } catch (cause) {
+    throw new SealedBundleError({ message: errorMessage(cause) });
+  }
+}

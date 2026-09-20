@@ -6,11 +6,8 @@ import {
   type ExecuteResult,
   type SandboxToolInvoker,
 } from "../core";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 import {
   executeSealedBundle as runSealedBundleWith,
-  type SealedBundleError,
   type SealedBundleOptions,
 } from "./sealed-bundle";
 import {
@@ -50,14 +47,17 @@ const resolveQuickJS = (): Promise<QuickJSWASMModule> =>
  */
 export const executeSealedBundle = (
   options: SealedBundleOptions
-): Effect.Effect<string, SealedBundleError> =>
-  runSealedBundleWith(options, resolveQuickJS);
+): Promise<string> => runSealedBundleWith(options, resolveQuickJS);
 
-export { SealedBundleError, type SealedBundleOptions } from "./sealed-bundle";
+class QuickJsExecutionError extends Error {
+  readonly _tag = "QuickJsExecutionError";
 
-class QuickJsExecutionError extends Data.TaggedError("QuickJsExecutionError")<{
-  readonly message: string;
-}> {}
+  constructor(input: { readonly message: string }) {
+    super(input.message);
+    this.name = "QuickJsExecutionError";
+    Object.assign(this, input);
+  }
+}
 
 // Large OpenAPI specs can take longer to parse inside QuickJS, so keep the
 // default execution budget at five minutes unless a caller opts into less.
@@ -349,13 +349,11 @@ const createLogBridge = (
     return context.undefined;
   });
 
-type RunPromise = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
-
 const createToolBridge = (
   context: QuickJSContext,
   toolInvoker: SandboxToolInvoker,
   pendingDeferreds: Set<QuickJSDeferredPromise>,
-  runPromise: RunPromise,
+  signal: AbortSignal,
   deadline: DeadlineTracker
 ): QuickJSHandle =>
   context.newFunction("__executor_invokeTool", (pathHandle, argsHandle) => {
@@ -371,45 +369,47 @@ const createToolBridge = (
     });
 
     deadline.dispatchStarted();
-    void runPromise(toolInvoker.invoke({ path, args })).then(
-      (value) => {
-        deadline.dispatchReturned();
-        if (!deferred.alive) {
-          return;
-        }
+    void Promise.resolve()
+      .then(() => toolInvoker.invoke({ path, args }, signal))
+      .then(
+        (value) => {
+          deadline.dispatchReturned();
+          if (!deferred.alive) {
+            return;
+          }
 
-        const serialized = serializeJson(value, `Tool result for ${path}`);
-        if (typeof serialized === "undefined") {
-          deferred.resolve();
-          return;
-        }
+          const serialized = serializeJson(value, `Tool result for ${path}`);
+          if (typeof serialized === "undefined") {
+            deferred.resolve();
+            return;
+          }
 
-        const valueHandle = context.newString(serialized);
-        deferred.resolve(valueHandle);
-        valueHandle.dispose();
-      },
-      (cause) => {
-        deadline.dispatchReturned();
-        if (!deferred.alive) {
-          return;
-        }
+          const valueHandle = context.newString(serialized);
+          deferred.resolve(valueHandle);
+          valueHandle.dispose();
+        },
+        (cause) => {
+          deadline.dispatchReturned();
+          if (!deferred.alive) {
+            return;
+          }
 
-        // The reject path is reserved for true infra defects. The
-        // upstream tool-invoker has already replaced the message with
-        // an opaque generic plus a correlation id, but defensively log
-        // the cause here and emit a stable generic if upstream changes.
-        const message = sandboxDefectMessage(cause);
-        try {
-          // Zoen: host exceptions may carry document content or credentials.
-          console.error("[executor:quickjs] tool dispatch failed");
-        } catch {
-          /* ignore logger failures */
+          // The reject path is reserved for true infra defects. The
+          // upstream tool-invoker has already replaced the message with
+          // an opaque generic plus a correlation id, but defensively log
+          // the cause here and emit a stable generic if upstream changes.
+          const message = sandboxDefectMessage(cause);
+          try {
+            // Zoen: host exceptions may carry document content or credentials.
+            console.error("[executor:quickjs] tool dispatch failed");
+          } catch {
+            /* ignore logger failures */
+          }
+          const errorHandle = context.newError(message);
+          deferred.reject(errorHandle);
+          errorHandle.dispose();
         }
-        const errorHandle = context.newError(message);
-        deferred.reject(errorHandle);
-        errorHandle.dispose();
-      }
-    );
+      );
 
     return deferred.handle;
   });
@@ -493,7 +493,6 @@ const evaluateInQuickJs = async (
   options: QuickJsExecutorOptions,
   code: string,
   toolInvoker: SandboxToolInvoker,
-  runPromise: RunPromise,
   signal: AbortSignal
 ): Promise<ExecuteResult> => {
   const timeoutMs = Math.max(100, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
@@ -527,7 +526,7 @@ const evaluateInQuickJs = async (
         context,
         toolInvoker,
         pendingDeferreds,
-        runPromise,
+        signal,
         deadline
       );
       context.setProp(context.global, "__executor_invokeTool", toolBridge);
@@ -620,41 +619,31 @@ const evaluateInQuickJs = async (
   }
 };
 
-const runInQuickJs = (
+async function runInQuickJs(
   options: QuickJsExecutorOptions,
   code: string,
-  toolInvoker: SandboxToolInvoker
-): Effect.Effect<ExecuteResult, QuickJsExecutionError> =>
-  Effect.gen(function* () {
-    const context = yield* Effect.context<never>();
-    const runPromise = Effect.runPromiseWith(context);
-    return yield* Effect.tryPromise({
-      try: async (signal) => {
-        const lifetime = new AbortController();
-        const combined = AbortSignal.any([signal, lifetime.signal]);
-        try {
-          return await evaluateInQuickJs(
-            options,
-            code,
-            toolInvoker,
-            (effect) => runPromise(effect, { signal: combined }),
-            combined
-          );
-        } finally {
-          lifetime.abort();
-        }
-      },
-      catch: (cause) => new QuickJsExecutionError({ message: String(cause) }),
-    });
-  }).pipe(
-    Effect.withSpan("executor.code.exec.quickjs", {
-      attributes: { "executor.runtime": "quickjs" },
-    })
-  );
+  toolInvoker: SandboxToolInvoker,
+  signal?: AbortSignal
+): Promise<ExecuteResult> {
+  const lifetime = new AbortController();
+  const combined = signal
+    ? AbortSignal.any([signal, lifetime.signal])
+    : lifetime.signal;
+  try {
+    return await evaluateInQuickJs(options, code, toolInvoker, combined);
+  } catch (cause) {
+    throw new QuickJsExecutionError({ message: String(cause) });
+  } finally {
+    lifetime.abort();
+  }
+}
 
 export const makeQuickJsExecutor = (
   options: QuickJsExecutorOptions = {}
-): CodeExecutor<QuickJsExecutionError> => ({
-  execute: (code: string, toolInvoker: SandboxToolInvoker) =>
-    runInQuickJs(options, code, toolInvoker),
+): CodeExecutor => ({
+  execute: (
+    code: string,
+    toolInvoker: SandboxToolInvoker,
+    signal?: AbortSignal
+  ) => runInQuickJs(options, code, toolInvoker, signal),
 });

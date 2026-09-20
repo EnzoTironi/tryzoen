@@ -1,16 +1,14 @@
-import { Effect } from "effect";
-import { authentication, AuthUnavailable } from "@db/services/auth";
+import { getAuth, AuthUnavailable } from "@db/services/auth";
 
-export const readAuthSession = Effect.fn("readAuthSession")(function* (
-  headers: Headers
-) {
-  const auth = yield* authentication;
-  return yield* Effect.tryPromise({
-    try: () => auth.api.getSession({ headers }),
-    catch: () => new AuthUnavailable(),
-  });
-});
+export const readAuthSession = async function (headers: Headers) {
+  const auth = await getAuth();
+  try {
+    return await auth.api.getSession({ headers });
+  } catch {
+    throw new AuthUnavailable();
+  }
+};
 
 export function getAuthSession(headers: Headers) {
-  return Effect.runPromise(readAuthSession(headers));
+  return readAuthSession(headers);
 }

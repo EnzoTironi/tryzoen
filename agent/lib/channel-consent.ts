@@ -1,62 +1,45 @@
+import { z } from "zod";
 import { createHash } from "node:crypto";
-import { Predicate, Result, Schema } from "effect";
 import { parseInputResponse, type InputRequest } from "eve/client";
-
-const identifier = Schema.NonEmptyString.check(
-  Schema.isTrimmed(),
-  Schema.isMaxLength(256)
-);
-const revision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
-const reference = Schema.Struct({ requestId: identifier, revision });
-const candidateSchema = Schema.Struct({
-  intent: Schema.Literals([
-    "approve",
-    "cancel",
-    "correct",
-    "clarify",
-    "conversation",
-  ]),
-  references: Schema.Array(reference).check(Schema.isMaxLength(16)),
+const identifier = z
+  .string()
+  .min(1)
+  .refine((value) => value === value.trim(), "Expected trimmed text")
+  .max(256);
+const revision = z.string().regex(/^[a-f0-9]{64}$/u);
+const reference = z.strictObject({
+  requestId: identifier,
+  revision,
 });
-const decodeCandidate = Schema.decodeUnknownResult(candidateSchema, {
-  onExcessProperty: "error",
+const candidateSchema = z.object({
+  intent: z.enum(["approve", "cancel", "correct", "clarify", "conversation"]),
+  references: z.array(reference).max(16),
 });
-
+const decodeCandidate = candidateSchema.strict();
 type ConsentJsonValue = InputRequest["action"]["input"][string] | undefined;
-
 type ActionIntent = "approve" | "cancel" | "correct";
-
-const sourceSchema = Schema.Struct({
+const sourceSchema = z.object({
   sourceMessageId: identifier,
   identityId: identifier,
   sessionId: identifier,
-  text: Schema.NonEmptyString.check(Schema.isMaxLength(16_384)),
-  sourceOccurredAtMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  text: z.string().min(1).max(16_384),
+  sourceOccurredAtMs: z.number().min(0),
 });
-const decodeSource = Schema.decodeUnknownResult(sourceSchema, {
-  onExcessProperty: "error",
-});
+const decodeSource = sourceSchema.strict();
 
 /** Supplied by verified intake, never by the interpreting model. Times are epoch milliseconds. */
-export type ChannelConsentSource = typeof sourceSchema.Type;
-
-const deliverySchema = Schema.Struct({
+export type ChannelConsentSource = z.output<typeof sourceSchema>;
+const deliverySchema = z.object({
   receiptId: identifier,
-  ...reference.fields,
+  ...reference.shape,
   identityId: identifier,
   sessionId: identifier,
-  deliveredAtMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-  text: Schema.NonEmptyString.check(Schema.isMaxLength(16_384)),
-  providerMessageIds: Schema.Array(identifier).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(16)
-  ),
+  deliveredAtMs: z.number().min(0),
+  text: z.string().min(1).max(16_384),
+  providerMessageIds: z.array(identifier).min(1).max(16),
 });
-const decodeDelivery = Schema.decodeUnknownResult(deliverySchema);
-
 /** Confirmed delivery of ALL proposal chunks; deliveredAtMs is their latest send receipt. */
-export type ChannelConsentDelivery = typeof deliverySchema.Type;
-
+export type ChannelConsentDelivery = z.output<typeof deliverySchema>;
 export interface ChannelConsentSnapshot {
   readonly identityId: string;
   readonly sessionId: string;
@@ -65,14 +48,12 @@ export interface ChannelConsentSnapshot {
   /** Source messages already consumed as decisions, not merely accepted into the inbox. */
   readonly consumedSourceMessageIds: readonly string[];
 }
-
 export interface ChannelConsentInterpretation {
   /** The orchestration envelope binds the model invocation to its complete source text. */
   readonly sourceMessageId: string;
   readonly sourceText: string;
   readonly candidate: unknown;
 }
-
 type Rejection =
   | "invalid_candidate"
   | "invalid_source"
@@ -86,9 +67,11 @@ type Rejection =
   | "missing_delivery"
   | "ambiguous_delivery"
   | "delivery_not_before_source";
-
 export type ChannelConsentDecision =
-  | { readonly status: "rejected"; readonly reason: Rejection }
+  | {
+      readonly status: "rejected";
+      readonly reason: Rejection;
+    }
   | {
       readonly status: "non_action";
       readonly intent: "clarify" | "conversation";
@@ -111,11 +94,11 @@ export function channelConsentRevision(request: InputRequest): string {
   const serialized = JSON.stringify(request, (_key, value: ConsentJsonValue) =>
     Array.isArray(value)
       ? value
-      : Predicate.isObject(value)
+      : typeof value === "object" && value !== null
         ? Object.fromEntries(
-            Object.keys(value)
-              .toSorted()
-              .map((key) => [key, value[key]])
+            Object.entries(value).toSorted(([left], [right]) =>
+              left.localeCompare(right)
+            )
           )
         : value
   );
@@ -137,45 +120,77 @@ export function validateChannelConsent(
     interpretation,
     snapshot
   );
-  if (sourceRejection) return { status: "rejected", reason: sourceRejection };
-  const decoded = decodeCandidate(interpretation.candidate);
-  if (Result.isFailure(decoded))
-    return { status: "rejected", reason: "invalid_candidate" };
-  const candidate = decoded.success;
+  if (sourceRejection)
+    return {
+      status: "rejected",
+      reason: sourceRejection,
+    };
+  const decoded = decodeCandidate.safeParse(interpretation.candidate);
+  if (!decoded.success)
+    return {
+      status: "rejected",
+      reason: "invalid_candidate",
+    };
+  const candidate = decoded.data;
   if (candidate.intent === "clarify" || candidate.intent === "conversation") {
     return candidate.references.length === 0
-      ? { status: "non_action", intent: candidate.intent }
-      : { status: "rejected", reason: "invalid_candidate" };
+      ? {
+          status: "non_action",
+          intent: candidate.intent,
+        }
+      : {
+          status: "rejected",
+          reason: "invalid_candidate",
+        };
   }
   const [target] = candidate.references;
   if (candidate.references.length !== 1 || !target) {
-    return { status: "rejected", reason: "ambiguous_reference" };
+    return {
+      status: "rejected",
+      reason: "ambiguous_reference",
+    };
   }
   const matches = snapshot.pending.filter(
     (request) => request.requestId === target.requestId
   );
   const [request] = matches;
-  if (!request) return { status: "rejected", reason: "stale_request" };
+  if (!request)
+    return {
+      status: "rejected",
+      reason: "stale_request",
+    };
   if (matches.length !== 1)
-    return { status: "rejected", reason: "ambiguous_reference" };
+    return {
+      status: "rejected",
+      reason: "ambiguous_reference",
+    };
   if (channelConsentRevision(request) !== target.revision) {
-    return { status: "rejected", reason: "stale_revision" };
+    return {
+      status: "rejected",
+      reason: "stale_revision",
+    };
   }
   const optionId = candidate.intent === "approve" ? "approve" : "cancel";
   if (
     request.kind !== "tool-approval" ||
     request.options?.filter((option) => option.id === optionId).length !== 1
   ) {
-    return { status: "rejected", reason: "unsupported_request" };
+    return {
+      status: "rejected",
+      reason: "unsupported_request",
+    };
   }
   const deliveryResult = resolveConsentDelivery(
     source,
     target,
     snapshot.deliveries
   );
-  if (Result.isFailure(deliveryResult))
-    return { status: "rejected", reason: deliveryResult.failure };
-  const delivery = deliveryResult.success;
+  if (!deliveryResult.ok)
+    return {
+      status: "rejected",
+      reason: deliveryResult.error,
+    };
+  const delivery = deliveryResult.value;
   return {
     status: "validated",
     intent: candidate.intent,
@@ -186,16 +201,18 @@ export function validateChannelConsent(
       deliveryReceiptId: delivery.receiptId,
       deliveryProviderMessageIds: [...delivery.providerMessageIds],
     },
-    response: parseInputResponse({ requestId: request.requestId, optionId }),
+    response: parseInputResponse({
+      requestId: request.requestId,
+      optionId,
+    }),
   };
 }
-
 function validateConsentSource(
   source: ChannelConsentSource,
   interpretation: ChannelConsentInterpretation,
   snapshot: ChannelConsentSnapshot
 ): Rejection | undefined {
-  if (Result.isFailure(decodeSource(source)) || !source.text.trim()) {
+  if (!decodeSource.safeParse(source).success || !source.text.trim()) {
     return "invalid_source";
   }
   if (
@@ -215,12 +232,19 @@ function validateConsentSource(
   }
   return undefined;
 }
-
 function resolveConsentDelivery(
   source: ChannelConsentSource,
-  target: typeof reference.Type,
+  target: z.output<typeof reference>,
   receipts: readonly ChannelConsentDelivery[]
-): Result.Result<ChannelConsentDelivery, Rejection> {
+):
+  | {
+      ok: true;
+      value: ChannelConsentDelivery;
+    }
+  | {
+      ok: false;
+      error: Rejection;
+    } {
   const deliveries = receipts.filter(
     (delivery) =>
       delivery.requestId === target.requestId &&
@@ -229,22 +253,39 @@ function resolveConsentDelivery(
       delivery.sessionId === source.sessionId
   );
   const [delivery] = deliveries;
-  if (!delivery) return Result.fail("missing_delivery");
-  if (deliveries.length !== 1) return Result.fail("ambiguous_delivery");
+  if (!delivery)
+    return {
+      ok: false as const,
+      error: "missing_delivery",
+    };
+  if (deliveries.length !== 1)
+    return {
+      ok: false as const,
+      error: "ambiguous_delivery",
+    };
   if (
     !Number.isFinite(delivery.deliveredAtMs) ||
     delivery.deliveredAtMs >= source.sourceOccurredAtMs
   ) {
-    return Result.fail("delivery_not_before_source");
+    return {
+      ok: false as const,
+      error: "delivery_not_before_source",
+    };
   }
   if (
-    Result.isFailure(decodeDelivery(delivery)) ||
+    !deliverySchema.safeParse(delivery).success ||
     !delivery.text.trim() ||
     new Set(delivery.providerMessageIds).size !==
       delivery.providerMessageIds.length ||
     !delivery.providerMessageIds.includes(delivery.receiptId)
   ) {
-    return Result.fail("missing_delivery");
+    return {
+      ok: false as const,
+      error: "missing_delivery",
+    };
   }
-  return Result.succeed(delivery);
+  return {
+    ok: true as const,
+    value: delivery,
+  };
 }

@@ -1,7 +1,8 @@
+import { z } from "zod";
+import { env } from "@shared/environment/env";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
-import { Config, Effect, Schema } from "effect";
 import { expect, test } from "vitest";
 import type { MemoryTurnStartedContext } from "eve/memory";
 import type { ToolContext } from "eve/tools";
@@ -11,54 +12,61 @@ import { accessScopeForUser } from "../../shared/identity/access-scope";
 import { linkedIdentity } from "./identity-fixture";
 import { channelChallengeSchema } from "../../shared/identity/channel-auth";
 import { ChannelAccounts } from "../../server/accounts";
-import { serverRuntime } from "../../server/runtime";
 import { channelPrincipal } from "../../server/channels/principal";
-import { personalMemoryProvider } from "../../server/executor/memory/personal-memory-provider";
-
+import { personalMemoryProvider } from "../../server/tools/memory/personal-memory-provider";
 const cookieHeader = (response: Response) =>
   response.headers
     .getSetCookie()
     .map((cookie) => cookie.split(";")[0])
     .join("; ");
-
 for (const authority of ["channel", "web"] as const) {
   test(`${authority} revocation linearizes with native memory writes waiting on a real row lock`, async () => {
-    const url = await Effect.runPromise(Config.string("DATABASE_URL"));
-    const database = new Client({ connectionString: url });
-    const blocker = new Client({ connectionString: url });
+    const url = env.DATABASE_URL;
+    const database = new Client({
+      connectionString: url,
+    });
+    const blocker = new Client({
+      connectionString: url,
+    });
     await database.connect();
     await blocker.connect();
     const key = `memory-revocation-race:${randomUUID()}`;
     let userId: string | undefined;
     let workspaceId: string | undefined;
-    let write: Promise<{ ok: boolean }> | undefined;
+    let write:
+      | Promise<{
+          ok: boolean;
+        }>
+      | undefined;
     let revoke: Promise<void> | undefined;
     try {
       assert.equal(
         (
-          await database.query<{ name: string }>(
-            "SELECT current_database() AS name"
-          )
+          await database.query<{
+            name: string;
+          }>("SELECT current_database() AS name")
         ).rows[0]?.name,
         "companion_runtime_test"
       );
       const auth = await getAuth();
-      const accounts = await serverRuntime.runPromise(ChannelAccounts);
+      const accounts = ChannelAccounts;
       const origin = applicationOrigin();
-      const installationId = await Effect.runPromise(
-        Config.string("TELEGRAM_BOT_ID")
-      );
+      const installationId = z.string().min(1).parse(env.TELEGRAM_BOT_ID);
       const started = await auth.handler(
         new Request(`${origin}/api/auth/channel-auth/start`, {
           method: "POST",
-          headers: { origin, "content-type": "application/json" },
-          body: JSON.stringify({ channel: "telegram", purpose: "login" }),
+          headers: {
+            origin,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            channel: "telegram",
+            purpose: "login",
+          }),
         })
       );
       assert.equal(started.status, 200);
-      const challenge = Schema.decodeUnknownSync(channelChallengeSchema)(
-        await started.json()
-      );
+      const challenge = channelChallengeSchema.parse(await started.json());
       const token = new URL(challenge.deepLink).searchParams.get("start");
       assert.ok(token);
       const sender = {
@@ -66,10 +74,11 @@ for (const authority of ["channel", "web"] as const) {
         installationId,
         senderId: randomUUID(),
       };
-      await serverRuntime.runPromise(linkedIdentity(sender));
-      await serverRuntime.runPromise(
-        accounts.confirmChallenge({ token, sender })
-      );
+      await linkedIdentity(sender);
+      await accounts.confirmChallenge({
+        token,
+        sender,
+      });
       const completed = await auth.handler(
         new Request(`${origin}/api/auth/channel-auth/complete`, {
           method: "POST",
@@ -78,14 +87,14 @@ for (const authority of ["channel", "web"] as const) {
             "content-type": "application/json",
             cookie: cookieHeader(started),
           },
-          body: JSON.stringify({ id: challenge.id }),
+          body: JSON.stringify({
+            id: challenge.id,
+          }),
         })
       );
       assert.equal(completed.status, 200);
       const cookie = cookieHeader(completed);
-      const identity = await serverRuntime.runPromise(
-        accounts.getActiveIdentity(sender)
-      );
+      const identity = await accounts.getActiveIdentity(sender);
       userId = identity.userId;
       const scope = accessScopeForUser(`better-auth:${userId}`);
       workspaceId = scope.workspaceId;
@@ -96,7 +105,9 @@ for (const authority of ["channel", "web"] as const) {
         [secondId, installationId, secondId, userId]
       );
       const session = await auth.api.getSession({
-        headers: new Headers({ cookie }),
+        headers: new Headers({
+          cookie,
+        }),
       });
       assert.ok(session);
       const principal =
@@ -127,10 +138,20 @@ for (const authority of ["channel", "web"] as const) {
         operationId: randomUUID(),
         session: {
           id: randomUUID(),
-          auth: { current: principal, initiator: principal },
-          turn: { id: turnId, sequence: 1 },
+          auth: {
+            current: principal,
+            initiator: principal,
+          },
+          turn: {
+            id: turnId,
+            sequence: 1,
+          },
         },
-        turn: { id: turnId, input: [], sequence: 1 },
+        turn: {
+          id: turnId,
+          input: [],
+          sequence: 1,
+        },
         getSandbox() {
           throw new Error("No sandbox belongs in this memory proof");
         },
@@ -153,20 +174,28 @@ for (const authority of ["channel", "web"] as const) {
       };
       const tools = await personalMemoryProvider.tools?.({
         ...context,
-        channel: { kind: "http" },
+        model: null,
+        channel: {
+          kind: "http",
+        },
       });
       const save = tools?.save_memory;
       assert.ok(save);
       const invoke = async (text: string) => {
-        // @ts-expect-error The heterogeneous public map erases the native tool input type.
-        await save.execute({ text }, execution);
+        await save.execute(
+          // @ts-expect-error The heterogeneous public map erases the native tool input type.
+          {
+            text,
+          },
+          execution
+        );
       };
       await invoke("Before revocation");
       const before = (
-        await database.query<{ content: string; version: string }>(
-          "SELECT content,version FROM memory_document WHERE key=$1",
-          [key]
-        )
+        await database.query<{
+          content: string;
+          version: string;
+        }>("SELECT content,version FROM memory_document WHERE key=$1", [key])
       ).rows[0];
       assert.ok(before);
       await blocker.query("BEGIN");
@@ -175,41 +204,56 @@ for (const authority of ["channel", "web"] as const) {
         [key]
       );
       const blockerPid = (
-        await blocker.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+        await blocker.query<{
+          pid: number;
+        }>("SELECT pg_backend_pid() AS pid")
       ).rows[0]?.pid;
       assert.ok(blockerPid);
       write = invoke("Racing write").then(
-        () => ({ ok: true }),
-        () => ({ ok: false })
+        () => ({
+          ok: true,
+        }),
+        () => ({
+          ok: false,
+        })
       );
       let writerPid: number | undefined;
       await expect
         .poll(
           async () => {
-            const rows = await database.query<{ pid: number }>(
+            const rows = await database.query<{
+              pid: number;
+            }>(
               "SELECT pid FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)) AND query ILIKE '%UPDATE%memory_document%'",
               [blockerPid]
             );
             writerPid = rows.rows[0]?.pid;
             return writerPid !== undefined;
           },
-          { timeout: 5000, interval: 20 }
+          {
+            timeout: 5000,
+            interval: 20,
+          }
         )
         .toBe(true);
-      const revocation = { completed: false };
+      const revocation = {
+        completed: false,
+      };
       revoke = (async () => {
         if (authority === "channel") {
-          await serverRuntime.runPromise(
-            accounts.revokeIdentity({
-              identityId: identity.id,
-              userId: identity.userId,
-            })
-          );
+          await accounts.revokeIdentity({
+            identityId: identity.id,
+            userId: identity.userId,
+          });
         } else {
           const response = await auth.handler(
             new Request(`${origin}/api/auth/sign-out`, {
               method: "POST",
-              headers: { origin, cookie, "content-type": "application/json" },
+              headers: {
+                origin,
+                cookie,
+                "content-type": "application/json",
+              },
               body: "{}",
             })
           );
@@ -222,13 +266,18 @@ for (const authority of ["channel", "web"] as const) {
         .poll(
           async () => {
             if (revocation.completed) return true;
-            const rows = await database.query<{ pid: number }>(
+            const rows = await database.query<{
+              pid: number;
+            }>(
               "SELECT pid FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))",
               [writerPid]
             );
             return rows.rowCount !== 0;
           },
-          { timeout: 5000, interval: 20 }
+          {
+            timeout: 5000,
+            interval: 20,
+          }
         )
         .toBe(true);
       const revocationWon = revocation.completed;
@@ -236,10 +285,10 @@ for (const authority of ["channel", "web"] as const) {
       const outcome = await write;
       await revoke;
       const after = (
-        await database.query<{ content: string; version: string }>(
-          "SELECT content,version FROM memory_document WHERE key=$1",
-          [key]
-        )
+        await database.query<{
+          content: string;
+          version: string;
+        }>("SELECT content,version FROM memory_document WHERE key=$1", [key])
       ).rows[0];
       assert.ok(after);
       if (revocationWon) {
@@ -257,16 +306,18 @@ for (const authority of ["channel", "web"] as const) {
       await assert.rejects(invoke("Must not persist after revocation"));
       assert.deepEqual(
         (
-          await database.query<{ content: string; version: string }>(
-            "SELECT content,version FROM memory_document WHERE key=$1",
-            [key]
-          )
+          await database.query<{
+            content: string;
+            version: string;
+          }>("SELECT content,version FROM memory_document WHERE key=$1", [key])
         ).rows[0],
         frozen
       );
       assert.equal(
         (
-          await database.query<{ n: number }>(
+          await database.query<{
+            n: number;
+          }>(
             "SELECT count(*)::int AS n FROM workspace_memberships WHERE workspace_id=$1",
             [workspaceId]
           )

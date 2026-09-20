@@ -132,7 +132,7 @@ export function Insights() {
                       captureContent: event.target.checked,
                       retentionDays: 14,
                     })
-                    .then(() => state.refetch())
+                    .then(async () => state.refetch())
                     .catch(() => {
                       setFailed(true);
                     });

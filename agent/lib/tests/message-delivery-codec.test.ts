@@ -1,5 +1,6 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { asSchema } from "ai";
-import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import messaging from "../../tools/messaging";
 import { sendMessageOutputSchema } from "../../../shared/chat/message-delivery";
@@ -15,22 +16,28 @@ if (!onTurnStarted) throw new Error("Messaging turn handler is required.");
 const tools = await onTurnStarted(
   {},
   {
-    channel: { kind: "http" },
+    model: null,
+    channel: {
+      kind: "http",
+    },
     messages: [],
-    session: { id: "codec-proof", auth: { current: null, initiator: null } },
+    session: {
+      id: "codec-proof",
+      auth: {
+        current: null,
+        initiator: null,
+      },
+    },
   }
 );
 if (!tools || !("send_message" in tools))
   throw new Error("Interactive messaging tools are required.");
 const original = tools.send_message.inputSchema;
-const decodeJsonObject = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
-);
-
+const decodeJsonObject = jsonString(z.record(z.string(), z.json()));
 describe("message delivery native Eve codec", () => {
   it("recognizes the actual tool and serializes both discriminated variants", async () => {
     expect(isToolSchema(original)).toBe(true);
-    const encoded = decodeJsonObject(
+    const encoded = decodeJsonObject.parse(
       JSON.stringify(serializeInputSchema(original))
     );
     expect(encoded).toHaveProperty("anyOf");
@@ -38,24 +45,35 @@ describe("message delivery native Eve codec", () => {
     expect(isToolSchema(restored)).toBe(true);
     expect(await asSchema(restored).jsonSchema).toHaveProperty("anyOf");
   });
-
   it("accepts message content and reply handles before and after persistence", async () => {
     const restored = toInputSchema(
-      decodeJsonObject(JSON.stringify(serializeInputSchema(original)))
+      decodeJsonObject.parse(JSON.stringify(serializeInputSchema(original)))
     );
     const validations: Promise<void>[] = [];
     for (const schema of [toInputSchema(original), restored]) {
       for (const input of [
-        { kind: "message", text: "Hello", replyTo: { kind: "current" } },
+        {
+          kind: "message",
+          text: "Hello",
+          replyTo: {
+            kind: "current",
+          },
+        },
         {
           kind: "message",
           text: "x".repeat(20_000),
-          replyTo: { kind: "task", id: "task-1" },
+          replyTo: {
+            kind: "task",
+            id: "task-1",
+          },
         },
         {
           kind: "message",
           attachments: [
-            { kind: "image", url: "https://example.com/image.png" },
+            {
+              kind: "image",
+              url: "https://example.com/image.png",
+            },
           ],
         },
         {
@@ -71,7 +89,7 @@ describe("message delivery native Eve codec", () => {
           (async () => {
             const validation = await schema["~standard"].validate(input);
             expect(validation).toEqual({
-              value: Schema.decodeUnknownSync(sendMessageOutputSchema)(input),
+              value: sendMessageOutputSchema.parse(input),
             });
           })()
         );
@@ -79,54 +97,85 @@ describe("message delivery native Eve codec", () => {
     }
     await Promise.all(validations);
   });
-
-  it("accepts attachment metadata for canonical stripping after rehydration", async () => {
-    const restored = toInputSchema(
-      decodeJsonObject(JSON.stringify(serializeInputSchema(original)))
-    );
-    const input = {
-      kind: "message",
-      attachments: [{ kind: "file", url: "https://example.com", extra: true }],
-    };
-    const validation = await restored["~standard"].validate(input);
-    expect(validation.issues).toBeUndefined();
-    if (validation.issues) throw new Error("Attachment metadata was rejected.");
-    expect(
-      Schema.decodeUnknownSync(sendMessageOutputSchema)(validation.value)
-    ).toEqual({
-      kind: "message",
-      attachments: [{ kind: "file", url: "https://example.com" }],
-    });
-  });
-
   it("rejects malformed, oversized and excess inputs after actual rehydration", async () => {
     const restored = toInputSchema(
-      decodeJsonObject(JSON.stringify(serializeInputSchema(original)))
+      decodeJsonObject.parse(JSON.stringify(serializeInputSchema(original)))
     );
     const validations: Promise<void>[] = [];
     for (const schema of [toInputSchema(original), restored]) {
       for (const input of [
         null,
         {},
-        { kind: "message" },
-        { kind: "message", text: "" },
-        { kind: "message", text: "hi", replyTo: null },
-        { kind: "message", text: "hi", attachments: null },
-        { kind: "link", url: "https://example.com/" + "x".repeat(2048) },
-        { kind: "message", text: "x".repeat(20_001) },
-        { kind: "message", text: "hi", extra: true },
+        {
+          kind: "message",
+        },
+        {
+          kind: "message",
+          text: "",
+        },
         {
           kind: "message",
           text: "hi",
-          replyTo: { kind: "current", id: "wrong" },
+          replyTo: null,
         },
-        { kind: "message", attachments: [] },
         {
           kind: "message",
-          attachments: [{ kind: "image", url: "http://example.com" }],
+          text: "hi",
+          attachments: null,
         },
-        { kind: "link", url: "http://example.com" },
-        { kind: "link", url: "https://example.com", text: "wrong" },
+        {
+          kind: "link",
+          url: "https://example.com/" + "x".repeat(2048),
+        },
+        {
+          kind: "message",
+          text: "x".repeat(20_001),
+        },
+        {
+          kind: "message",
+          text: "hi",
+          extra: true,
+        },
+        {
+          kind: "message",
+          text: "hi",
+          replyTo: {
+            kind: "current",
+            id: "wrong",
+          },
+        },
+        {
+          kind: "message",
+          attachments: [],
+        },
+        {
+          kind: "message",
+          attachments: [
+            {
+              kind: "file",
+              url: "https://example.com",
+              extra: true,
+            },
+          ],
+        },
+        {
+          kind: "message",
+          attachments: [
+            {
+              kind: "image",
+              url: "http://example.com",
+            },
+          ],
+        },
+        {
+          kind: "link",
+          url: "http://example.com",
+        },
+        {
+          kind: "link",
+          url: "https://example.com",
+          text: "wrong",
+        },
       ]) {
         validations.push(
           (async () => {

@@ -1,9 +1,9 @@
-import { Effect, Redacted } from "effect";
+import { Secret } from "@shared/environment/secret";
 import { describe, expect, it } from "vitest";
 import { parseTelegramUpdate } from "./telegram";
 import { readVerifiedWebhook } from "./webhook";
 
-const testSecret = Redacted.make("unit-test-webhook-secret");
+const testSecret = new Secret("unit-test-webhook-secret");
 const now = 1_800_000_000_000;
 const installation = { botId: "123456", botUsername: "CompanionBot" };
 
@@ -23,15 +23,11 @@ describe("Telegram private delivery qualification (fixture)", () => {
       method: "POST",
       body,
       headers: {
-        "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
+        "x-telegram-bot-api-secret-token": testSecret.reveal(),
       },
     });
-    const verified = await Effect.runPromise(
-      readVerifiedWebhook(request, "telegram", testSecret)
-    );
-    const events = await Effect.runPromise(
-      parseTelegramUpdate(verified, installation, now)
-    );
+    const verified = await readVerifiedWebhook(request, "telegram", testSecret);
+    const events = await parseTelegramUpdate(verified, installation, now);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       channel: "telegram",
@@ -55,21 +51,17 @@ describe("Telegram private delivery qualification (fixture)", () => {
         text: "group noise",
       },
     });
-    const verified = await Effect.runPromise(
-      readVerifiedWebhook(
-        new Request("https://test.invalid/channels/telegram", {
-          method: "POST",
-          body,
-          headers: {
-            "x-telegram-bot-api-secret-token": Redacted.value(testSecret),
-          },
-        }),
-        "telegram",
-        testSecret
-      )
+    const verified = await readVerifiedWebhook(
+      new Request("https://test.invalid/channels/telegram", {
+        method: "POST",
+        body,
+        headers: {
+          "x-telegram-bot-api-secret-token": testSecret.reveal(),
+        },
+      }),
+      "telegram",
+      testSecret
     );
-    expect(
-      await Effect.runPromise(parseTelegramUpdate(verified, installation, now))
-    ).toEqual([]);
+    expect(await parseTelegramUpdate(verified, installation, now)).toEqual([]);
   });
 });

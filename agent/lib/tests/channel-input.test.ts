@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import { ZodError } from "zod";
-import { ASK_QUESTION_INPUT_SCHEMA } from "eve/tools/ask_question";
 import { askQuestion } from "../../tools/ask_question";
 import {
   defaultMessageReducer,
@@ -40,7 +39,6 @@ describe("native input responses", () => {
   test("rejects an oversized question in the authored tool input schema", () => {
     expect(askQuestion.inputSchema).toBe(channelQuestionSchema);
     const input = { prompt: "x".repeat(16385) };
-    expect(ASK_QUESTION_INPUT_SCHEMA.safeParse(input).success).toBe(true);
     expect(channelQuestionSchema.safeParse(input).success).toBe(false);
     expect(
       channelQuestionSchema.safeParse({ prompt: "x".repeat(16384) }).success
@@ -57,45 +55,29 @@ describe("native input responses", () => {
       request.action.input.approvalMessage
     );
   });
-  test("renders the exact proposal nested inside an Executor action", () => {
-    expect(
-      renderChannelInput({
-        ...request,
-        action: {
-          ...request.action,
-          toolName: "execute",
-          input: {
-            call: {
-              path: request.action.toolName,
-              input: request.action.input,
-            },
-          },
-        },
-      })
-    ).toBe(request.action.input.approvalMessage);
-    expect(() =>
-      renderChannelInput({
-        ...request,
-        action: {
-          ...request.action,
-          toolName: "execute",
-          input: {
-            code: "return 'pretend approval';",
-            approvalMessage: "unbound proposal",
-          },
-        },
-      })
-    ).toThrow(ZodError);
+  test("native connection approvals bind their displayed prompt to the exact arguments", () => {
+    const native = {
+      ...request,
+      action: {
+        ...request.action,
+        toolName: "treg__call",
+        input: { endpoint: "notes.create", text: "hello" },
+      },
+    };
+    const text = renderChannelInput(native);
+    expect(text).toContain(native.prompt);
+    expect(text).toContain('"endpoint": "notes.create"');
+    expect(text).toContain('"text": "hello"');
   });
-  test.each([undefined, "", "  ", "x".repeat(16385)])(
-    "refuses an absent or invalid authored proposal",
+  test.each(["", "  ", "x".repeat(16385)])(
+    "refuses an invalid authored proposal",
     (approvalMessage) => {
       expect(() =>
         renderChannelInput({
           ...request,
           action: {
             ...request.action,
-            input: approvalMessage === undefined ? {} : { approvalMessage },
+            input: { approvalMessage },
           },
         })
       ).toThrow(ZodError);

@@ -30,7 +30,7 @@ export default function DirectoryProfilePage() {
           event.preventDefault();
           void save
             .mutateAsync({ username: selectedName, discoverable: visible })
-            .then(() => profile.refetch())
+            .then(async () => profile.refetch())
             .catch(() => undefined);
         }}
       >

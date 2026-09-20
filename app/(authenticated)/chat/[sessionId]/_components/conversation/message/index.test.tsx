@@ -90,55 +90,73 @@ describe("agent messages", () => {
     expect(markup).not.toContain("web_search");
   });
 
-  it("shows pending approval details and actions in the default projection", () => {
-    const message = {
-      id: "turn-2:assistant",
-      metadata: { status: "streaming", turnId: "turn-2" },
-      parts: [
-        {
-          approval: { id: "approval-1" },
-          input: { amount: 50, recipient: "Exact recipient" },
-          state: "approval-requested",
-          stepIndex: 0,
-          toolCallId: "call-2",
-          toolMetadata: {
-            eve: {
-              inputRequest: {
-                kind: "tool-approval",
-                options: [
-                  { id: "approve", label: "Approve", style: "primary" },
-                  { id: "cancel", label: "Cancel", style: "danger" },
-                ],
-                prompt: "Approve this action?",
-                requestId: "approval-1",
-              },
-              kind: "tool-call",
-              name: "send_payment",
+  it.each([
+    { approvalMessage: undefined, prompt: "Approve this action?" },
+    { approvalMessage: "  \n", prompt: "Approve this action?" },
+    { approvalMessage: 42, prompt: "Approve this action?" },
+    {
+      approvalMessage: "Posso atualizar este projeto para ativo?",
+      prompt: "Posso atualizar este projeto para ativo?",
+    },
+  ])(
+    "shows the approval proposal and exact parameters ($approvalMessage)",
+    ({ approvalMessage, prompt }) => {
+      const message = {
+        id: "turn-2:assistant",
+        metadata: { status: "streaming", turnId: "turn-2" },
+        parts: [
+          {
+            approval: { id: "approval-1" },
+            input: {
+              amount: 50,
+              approvalMessage,
+              recipient: "Exact recipient",
             },
+            state: "approval-requested",
+            stepIndex: 0,
+            toolCallId: "call-2",
+            toolMetadata: {
+              eve: {
+                inputRequest: {
+                  kind: "tool-approval",
+                  options: [
+                    { id: "approve", label: "Approve", style: "primary" },
+                    { id: "cancel", label: "Cancel", style: "danger" },
+                  ],
+                  prompt: "Approve this action?",
+                  requestId: "approval-1",
+                },
+                kind: "tool-call",
+                name: "send_payment",
+              },
+            },
+            toolName: "send_payment",
+            type: "dynamic-tool",
           },
-          toolName: "send_payment",
-          type: "dynamic-tool",
-        },
-      ],
-      role: "assistant",
-    } satisfies EveMessage;
+        ],
+        role: "assistant",
+      } satisfies EveMessage;
 
-    const markup = renderToStaticMarkup(
-      <AgentMessage
-        canRespond
-        isStreaming={false}
-        message={message}
-        onInputResponses={() => undefined}
-        userVisibleOnly
-      />
-    );
+      const markup = renderToStaticMarkup(
+        <AgentMessage
+          canRespond
+          isStreaming={false}
+          message={message}
+          onInputResponses={() => undefined}
+          userVisibleOnly
+        />
+      );
 
-    expect(markup).toContain("Approve this action?");
-    expect(markup).toContain("Approve");
-    expect(markup).toContain("Cancel");
-    expect(markup).not.toContain("send_payment");
-    expect(markup).toContain("Exact recipient");
-  });
+      expect(markup).toContain(`${prompt}</div>`);
+      expect(markup.includes("Approve this action?")).toBe(
+        prompt === "Approve this action?"
+      );
+      expect(markup).toContain("Approve");
+      expect(markup).toContain("Cancel");
+      expect(markup).not.toContain("send_payment");
+      expect(markup).toContain("Exact recipient");
+    }
+  );
   it("shows authorization in the default view and removes the completed challenge", () => {
     const challenge = {
       type: "authorization",

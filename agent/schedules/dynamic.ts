@@ -1,4 +1,3 @@
-import { serverRuntime } from "../../server/runtime";
 import { requireScheduledChannelOwner } from "../../server/schedules/channel-owner";
 import { defineSchedule, type ScheduleToFn } from "eve/schedules";
 import scheduledRunChannel from "@agent/channels/scheduled-run";
@@ -61,12 +60,10 @@ async function executeScheduledRun(
   try {
     const channel = claim.job.conversationChannel;
     if (channel === "telegram" || channel === "kapso") {
-      await serverRuntime.runPromise(
-        requireScheduledChannelOwner({
-          ...claim.job,
-          conversationChannel: channel,
-        })
-      );
+      await requireScheduledChannelOwner({
+        ...claim.job,
+        conversationChannel: channel,
+      });
     }
     const session = await to(scheduledRunChannel, {
       restart: claim.run.workerSessionId !== null,

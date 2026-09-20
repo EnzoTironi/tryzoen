@@ -1,7 +1,6 @@
 import { approvalMessageSchema } from "./approval-message";
 import { z } from "zod";
 import type { Session } from "eve/channels";
-import { ASK_QUESTION_INPUT_SCHEMA } from "eve/tools/ask_question";
 import {
   defaultMessageReducer,
   inputRequestSchema,
@@ -9,30 +8,36 @@ import {
   type InputRequest,
   type MessageStreamEvent,
 } from "eve/client";
-
-export const channelQuestionSchema = ASK_QUESTION_INPUT_SCHEMA.refine(
-  (input) =>
-    approvalMessageSchema.safeParse(channelQuestionText(input)).success,
-  "The complete question and option labels must be non-empty, well-formed text within 16384 characters. Ask a shorter question."
-);
-
+export const channelQuestionSchema = z
+  .strictObject({
+    prompt: z.string().min(1),
+    allowFreeform: z.boolean().optional(),
+    options: z
+      .array(
+        z.strictObject({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          description: z.string().optional(),
+          style: z.enum(["default", "primary", "danger"]).optional(),
+        })
+      )
+      .optional(),
+  })
+  .refine(
+    (input) =>
+      approvalMessageSchema.safeParse(channelQuestionText(input)).success,
+    "The complete question and option labels must be non-empty, well-formed text within 16384 characters. Ask a shorter question."
+  );
 export function renderChannelInput(request: InputRequest) {
   if (request.kind === "tool-approval") {
-    if (request.action.toolName === "execute") {
-      const action = z
-        .object({
-          call: z.object({
-            input: z.object({ approvalMessage: approvalMessageSchema }),
-          }),
-        })
-        .parse(request.action.input);
-      return action.call.input.approvalMessage;
-    }
-    return approvalMessageSchema.parse(request.action.input.approvalMessage);
+    if (request.action.input.approvalMessage !== undefined)
+      return approvalMessageSchema.parse(request.action.input.approvalMessage);
+    return approvalMessageSchema.parse(
+      `${request.prompt}\n\n${JSON.stringify(request.action.input, null, 2)}`
+    );
   }
   return approvalMessageSchema.parse(channelQuestionText(request));
 }
-
 function channelQuestionText(
   request: Pick<InputRequest, "prompt" | "options">
 ) {
@@ -44,7 +49,6 @@ function channelQuestionText(
     ),
   ].join("\n\n");
 }
-
 export function pendingChannelInputs(data: EveMessageData): InputRequest[] {
   return data.messages.flatMap((message) =>
     message.parts.flatMap((part) => {
@@ -70,18 +74,18 @@ export function pendingChannelInputs(data: EveMessageData): InputRequest[] {
     })
   );
 }
-
 export async function readChannelInputs(session: Session, signal: AbortSignal) {
   signal.throwIfAborted();
   const tail = await session.getStreamTailIndex();
   if (tail < 0) return [];
   return readChannelInputStream(
-    await session.getEventStream({ startIndex: 0 }),
+    await session.getEventStream({
+      startIndex: 0,
+    }),
     tail,
     signal
   );
 }
-
 export async function readChannelInputStream(
   stream: ReadableStream<MessageStreamEvent>,
   tail: number,
@@ -91,14 +95,16 @@ export async function readChannelInputStream(
   const cancel = () => {
     void reader.cancel();
   };
-  signal.addEventListener("abort", cancel, { once: true });
+  signal.addEventListener("abort", cancel, {
+    once: true,
+  });
   const reducer = defaultMessageReducer();
   let data = reducer.initial();
   try {
     for (let index = 0; index <= tail; index++) {
       signal.throwIfAborted();
       // The durable stream must be reduced in event order.
-      // oxlint-disable-next-line eslint/no-await-in-loop
+
       const item = await reader.read();
       if (item.done)
         throw new Error("The session stream ended before its captured tail.");

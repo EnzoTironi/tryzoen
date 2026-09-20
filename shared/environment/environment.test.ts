@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Redacted } from "effect";
 
 const requiredEnvironment = {
   BETTER_AUTH_SECRET: "test-auth-secret-0123456789abcdefghijklmnop",
@@ -55,7 +54,7 @@ describe("environment", () => {
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "synthetic-client-secret");
     const { env } = await import("@shared/environment");
     expect(env.GOOGLE_CLIENT_ID).toBe("synthetic-client-id");
-    expect(Redacted.isRedacted(env.GOOGLE_CLIENT_SECRET)).toBe(true);
+    expect(env.GOOGLE_CLIENT_SECRET?.reveal()).toBe("synthetic-client-secret");
     expect(JSON.stringify(env.GOOGLE_CLIENT_SECRET)).not.toContain(
       "synthetic-client-secret"
     );

@@ -3,12 +3,13 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { EveEvalResult } from "eve/evals";
-import { launchReporter } from "../evals/launch/reporter";
+let launchReporter: typeof import("../evals/launch/reporter").launchReporter;
 
 let directory: string;
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "zoen-eval-receipt-"));
   vi.stubEnv("ZOEN_EVAL_REPORT", join(directory, "receipt.json"));
+  ({ launchReporter } = await import("../evals/launch/reporter"));
 });
 afterAll(async () => {
   vi.unstubAllEnvs();

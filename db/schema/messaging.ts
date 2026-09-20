@@ -6,12 +6,33 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { channelIdentities } from "./channels";
+import { workspaces } from "./workspaces";
+
+export const nativeDeliveryReceipts = pgTable(
+  "native_delivery_receipts",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    inputId: text("input_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    digest: text("digest").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.inputId] }),
+    check(
+      "native_delivery_receipt_digest_check",
+      sql`${table.digest} ~ '^[a-f0-9]{64}$'`
+    ),
+  ]
+);
 
 export const channelInputResponses = pgTable(
   "channel_input_response",

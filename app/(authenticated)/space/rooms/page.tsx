@@ -6,6 +6,8 @@ import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
+import { Badge } from "@web/components/ui/badge";
+import { reactionTextFor } from "@shared/chat/reaction";
 import { PanelIntro } from "../../_components/panel-intro";
 import panel from "../../_components/panel.module.css";
 import shared from "../space.module.css";
@@ -178,6 +180,15 @@ function RoomConversation({
           >
             <small>{message.sender}</small>
             <p>{message.text}</p>
+            {message.reactions.length > 0 && (
+              <div className={styles.reactions}>
+                {message.reactions.map((reaction) => (
+                  <Badge key={reaction.type} variant="outline">
+                    {reactionTextFor(reaction.type)} {reaction.count}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </article>
         ))}
         <div ref={end} />
@@ -233,7 +244,7 @@ function RoomConversation({
             onClick={() => {
               void close
                 .mutateAsync({ id })
-                .then(() => {
+                .then(async () => {
                   onClose();
                   return undefined;
                 })

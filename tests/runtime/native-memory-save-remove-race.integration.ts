@@ -1,55 +1,52 @@
+import { env } from "@shared/environment/env";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomInt, randomUUID } from "node:crypto";
 import { waitForBlocked } from "./pg-locks";
 import { Client } from "pg";
-import { PgClient } from "@effect/sql-pg";
-import { Config, Effect } from "effect";
 import { test } from "vitest";
 import type { MemoryTurnStartedContext } from "eve/memory";
 import { fileMemory } from "eve/memory/file";
 import type { ToolContext } from "eve/tools";
 import { createMemoryDocumentBackend } from "../../agent/lib/memory-document-backend";
 import { authorizePersonalMemoryContext } from "../../agent/lib/personal-memory-access";
-import { personalMemoryProvider } from "../../server/executor/memory/personal-memory-provider";
+import { personalMemoryProvider } from "../../server/tools/memory/personal-memory-provider";
 import { PersonalMemoryError } from "../../server/personal-memory/access";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
-import { runtimeDatabase } from "./database";
-
 const forgottenText = "My favorite color is orange.";
 const incomingText = "My favorite drink is tea.";
-
 async function fixture() {
-  await Effect.runPromise(Effect.void.pipe(Effect.provide(runtimeDatabase)));
-  const sql = new Client({
-    connectionString: await Effect.runPromise(Config.string("DATABASE_URL")),
+  const database = new Client({
+    connectionString: env.DATABASE_URL,
   });
-  await sql.connect();
+  await database.connect();
   const userId = randomUUID();
   const sessionId = randomUUID();
   const scope = accessScopeForUser(`better-auth:${userId}`);
   const key = `native-save-remove-race:${randomUUID()}`;
   const close = async () => {
-    await sql.query("SELECT pg_advisory_unlock_all()");
-    await sql.query("DELETE FROM memory_document WHERE key = $1", [key]);
-    await sql.query("DELETE FROM workspaces WHERE id = $1", [
+    await database.query("SELECT pg_advisory_unlock_all()");
+    await database.query("DELETE FROM memory_document WHERE key = $1", [key]);
+    await database.query("DELETE FROM workspaces WHERE id = $1", [
       scope.workspaceId,
     ]);
-    await sql.query('DELETE FROM "user" WHERE id = $1', [userId]);
-    await sql.end();
+    await database.query('DELETE FROM "user" WHERE id = $1', [userId]);
+    await database.end();
   };
   try {
-    await sql.query(
+    await database.query(
       'INSERT INTO "user" (id, name, email) VALUES ($1, $2, $3)',
       [userId, "Native race proof", `${userId}@example.invalid`]
     );
-    await sql.query("INSERT INTO workspaces (id) VALUES ($1)", [
+    await database.query("INSERT INTO workspaces (id) VALUES ($1)", [
       scope.workspaceId,
     ]);
-    await sql.query(
+    await database.query(
       "INSERT INTO workspace_memberships (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
       [scope.workspaceId, scope.userId]
     );
-    await sql.query(
+    await database.query(
       `INSERT INTO public.session (id, token, "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, clock_timestamp() + interval '10 minutes', clock_timestamp())`,
       [sessionId, randomUUID(), userId]
     );
@@ -74,10 +71,20 @@ async function fixture() {
       },
       session: {
         id: sessionId,
-        auth: { current: principal, initiator: principal },
-        turn: { id: randomUUID(), sequence: 1 },
+        auth: {
+          current: principal,
+          initiator: principal,
+        },
+        turn: {
+          id: randomUUID(),
+          sequence: 1,
+        },
       },
-      turn: { id: randomUUID(), sequence: 1, input: [] },
+      turn: {
+        id: randomUUID(),
+        sequence: 1,
+        input: [],
+      },
       operationId: randomUUID(),
       messages: [],
       abortSignal: new AbortController().signal,
@@ -103,12 +110,17 @@ async function fixture() {
     };
     const tools = await personalMemoryProvider.tools?.({
       ...context,
-      channel: { kind: "eve" },
+      model: null,
+      channel: {
+        kind: "eve",
+      },
     });
     assert.ok(tools?.save_memory && tools.remove_memory);
     await tools.save_memory.execute(
       // @ts-expect-error The public heterogeneous tool map erases the individual input schema.
-      { text: forgottenText },
+      {
+        text: forgottenText,
+      },
       execution
     );
     const recall = await personalMemoryProvider.recall["turn.started"](context);
@@ -117,7 +129,7 @@ async function fixture() {
     )?.[1];
     assert.ok(index);
     return {
-      sql,
+      sql: database,
       context,
       execution,
       remove: tools.remove_memory,
@@ -129,17 +141,15 @@ async function fixture() {
     throw error;
   }
 }
-
-const readDocument = async (sql: Client, key: string) => {
-  const result = await sql.query<{ content: string; version: string }>(
-    "SELECT content, version FROM memory_document WHERE key = $1",
-    [key]
-  );
+const readDocument = async (database: Client, key: string) => {
+  const result = await database.query<{
+    content: string;
+    version: string;
+  }>("SELECT content, version FROM memory_document WHERE key = $1", [key]);
   const document = result.rows[0];
   assert.ok(document);
   return document;
 };
-
 async function runRace(blockedOperation: 1 | 2, text: string) {
   const owner = await fixture();
   const gateKey = randomInt(1, 2_147_483_647);
@@ -152,36 +162,47 @@ async function runRace(blockedOperation: 1 | 2, text: string) {
     );
     await owner.sql.query("SELECT pg_advisory_lock($1::bigint)", [gateKey]);
     const pid = (
-      await owner.sql.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+      await owner.sql.query<{
+        pid: number;
+      }>("SELECT pg_backend_pid() AS pid")
     ).rows[0]?.pid;
     assert.ok(pid);
     // The real guard and backend execute unchanged. Only this save's selected authorization
     // transaction waits on an actual PG operation, before document I/O acquires its row lock.
-    const authorize = Effect.gen(function* () {
-      yield* authorizePersonalMemoryContext(owner.context);
+    const authorize = async () => {
+      await authorizePersonalMemoryContext(owner.context);
       operations += 1;
       if (operations === blockedOperation) {
-        const sql = yield* PgClient.PgClient;
-        yield* sql`SELECT pg_advisory_xact_lock(${gateKey}::bigint)`.pipe(
-          Effect.mapError(
-            () => new PersonalMemoryError({ reason: "unavailable" })
-          )
-        );
+        await Promise.try(async () =>
+          query(sql`SELECT pg_advisory_xact_lock(${gateKey}::bigint)`)
+        ).catch(() => {
+          throw new PersonalMemoryError({
+            reason: "unavailable",
+          });
+        });
       }
-    });
+    };
     const native = fileMemory({
       backend: createMemoryDocumentBackend(authorize),
     });
     const tools = await native.tools?.({
       ...owner.context,
-      channel: { kind: "eve" },
+      model: null,
+      channel: {
+        kind: "eve",
+      },
     });
     assert.ok(tools?.save_memory);
     pending = Promise.resolve(
       tools.save_memory.execute(
         // @ts-expect-error The public heterogeneous tool map erases the individual input schema.
-        { text },
-        { ...owner.execution, callId: randomUUID() }
+        {
+          text,
+        },
+        {
+          ...owner.execution,
+          callId: randomUUID(),
+        }
       )
     );
     const blockedPid = await waitForBlocked(
@@ -192,7 +213,9 @@ async function runRace(blockedOperation: 1 | 2, text: string) {
     assert.equal(operations, blockedOperation);
     await owner.remove.execute(
       // @ts-expect-error The public heterogeneous tool map erases the individual input schema.
-      { index: owner.originalIndex },
+      {
+        index: owner.originalIndex,
+      },
       {
         ...owner.execution,
         callId: randomUUID(),
@@ -230,7 +253,6 @@ async function runRace(blockedOperation: 1 | 2, text: string) {
     await owner.close();
   }
 }
-
 test("stale native snapshot retries after removal without restoring the forgotten entry", async () => {
   const result = await runRace(2, incomingText);
   assert.doesNotMatch(result.after.content, /orange/);
@@ -244,7 +266,6 @@ test("stale native snapshot retries after removal without restoring the forgotte
   );
   assert.notEqual(result.after.version, result.removed.version);
 });
-
 test("a delayed native save of the same incoming text creates a new entry after removal", async () => {
   const result = await runRace(1, forgottenText);
   assert.match(result.after.content, /orange/);

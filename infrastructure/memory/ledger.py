@@ -15,9 +15,7 @@ class MemoryLedger:
                 namespace UUID NOT NULL, operation_id TEXT NOT NULL,
                 request_hash TEXT NOT NULL, result JSONB,
                 PRIMARY KEY(namespace, operation_id))""")
-            db.execute("""CREATE TABLE IF NOT EXISTS memory_migrations (
-                name TEXT PRIMARY KEY, vector_count BIGINT NOT NULL,
-                completed_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
+
 
     @contextmanager
     def namespace(self, namespace):

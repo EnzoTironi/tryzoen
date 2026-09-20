@@ -63,8 +63,8 @@ Run the validation the task requests. When it does not establish the behavior yo
 ## Repository contract
 
 - The repository root owns the single Next.js application, Eve agent, and shared UI contract.
-- The workspace manager lives on `/` and the agent chat on `/chat`. Executor owns product tool and skill discovery; Eve mounts the coordinator and browser Code Mode entrypoints under their existing `tools/` directories.
-- Browser execution belongs only to the declared browser-agent's Executor surface. Keep each browser tool's schema and implementation together under `server/executor/browser`; share the Kernel SDK client through `agent/subagents/browser-agent/lib/kernel.ts`. The model must never choose the surface, and the coordinator cannot call browser tools directly.
+- The workspace manager lives on `/` and the agent chat on `/chat`. Eve owns tools, connections, skill discovery, approvals and durable execution. Keep product functions direct and colocated with their concrete owner.
+- Browser execution belongs only to the declared browser-agent's native tools. Keep each browser tool's schema and implementation together; share the Kernel SDK client through `agent/subagents/browser-agent/lib/kernel.ts`. The coordinator delegates browser work to that agent.
 - `agent/subagents/browser-agent/lib` is for code genuinely shared by worker tools. Group a shared worker domain in a lower-case folder, such as `trace/domains.ts` or `autofill/provider.ts`; do not use it as a holding area for a tool's one-off logic.
 - Validate runtime environment variables through `shared/environment/env.ts`. `KERNEL_API_KEY` is optional for application startup and required when browser execution is invoked.
 - Run `pnpm check` and `pnpm build` before handing off changes.
@@ -109,23 +109,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## Effect application architecture
+## Application architecture
 
-This repository uses the Effect Typescript library EVERYWHERE.
+The user authorized a full Eve-native rebuild on 2026-09-19. Preserve the existing landing page and application design, routes, languages and user-facing capabilities. The active implementation worktree includes the user's uncommitted interface changes from the original checkout.
 
-Use Effect 4 (`effect@rc`, exact resolution in the lockfile) for application
-logic: services, I/O, configuration, validation, typed errors,
-resource lifetimes, concurrency, retries and observability. Migrate existing
-features as complete slices, including callers and tests. Do not keep duplicate
-Promise and Effect implementations of the same application behavior.
+Use the latest published Eve release, currently 0.63.0, and its public APIs. Use plain TypeScript, async/await and Zod for application behavior. Migrate complete slices and their callers; remove Effect, the application ManagedRuntime and redundant Executor routing as their replacements become operational. Do not create an Effect-compatible shim or a second agent framework.
 
-Eve remains the owner of agent turns, sessions and durable workflow execution.
-Bridge Effect into Eve/Next/Better Auth/SDK callbacks at their public boundaries;
-keep runtime execution out of inner services. Propagate cancellation and map typed
-errors deliberately. Do not introduce a second scheduler or agent loop. React
-components remain idiomatic React; shared application logic follows Effect.
-Use framework-required schemas at integration edges only; avoid maintaining two
-independent domain schemas. Retain third-party libraries through narrow adapters
-where needed rather than rewriting their internals.
+Keep identity, memberships, session ownership, persistent product records and provider idempotency explicit. Eve owns sessions, turns, tool invocation, approval and workflow orchestration. Integrations belong in native channels, connections, tools, memory slots and extensions. Prefer the existing Drizzle/PostgreSQL owner for application data.
 
-Before writing any Effect code, first read `node_modules/effect/AGENTS.md` completely, and follow its links when required. Search `node_modules/effect/src` for APIs the guide does not cover.
+Preserve tests of behavior and authorization. Adapt tests of implementation details to the new owner; do not disable a failing behavior to make the migration pass. Run pnpm check and pnpm build, relevant isolated database tests, and browser verification before delivery. Automated runtime suites and model evaluations must use isolated databases. Explicitly authorized production verification uses ordinary product flows and clearly named synthetic workspaces, without resetting databases or changing unrelated records.
+
+## Deployment and data policy
+
+The prelaunch policy was reviewed on 2026-09-19 when the user authorized the Eve rebuild's production deployment and functional verification. Treat the hosted installation and its records as persistent from this rollout onward. Production deployment is not permission to reset its database, rewrite applied migrations, or delete existing accounts. Production checks may create clearly identified synthetic records through normal product flows; cleanup must be limited to records created for those checks.
+
+Optimize for the smallest coherent design representing the product today. Remove obsolete code, schemas, APIs, configuration aliases and transitional paths directly. Do not add compatibility shims, legacy aliases, dual reads or writes, or data-preserving backfills unless explicitly requested. Internal interfaces are not public compatibility contracts: update callers and tests together.
+
+Development and test data are disposable. Prefer recreating those databases over preserving local data through product complexity. Migration history is a replaceable development baseline, but the checked-in chain and setup workflow must remain coherent. Rewriting an applied migration requires resetting affected development and test databases. Consolidate the baseline only as an explicit coordinated change. Preserve database invariants, transactional safety, migration idempotence and deterministic setup.

@@ -166,7 +166,7 @@ describe("getSubagentStatus", () => {
       const delivery = {
         type: "message.received",
         data: {
-          source: "task",
+          kind: "execution.background_task",
           message: `Background task task_1 (researcher) ${state}.\n\nResult: synthetic`,
           sequence: 1,
           turnId: "turn_2",
@@ -177,7 +177,7 @@ describe("getSubagentStatus", () => {
       if (!session) throw new Error("Expected a collected subagent session");
       expect(getSubagentStatus([], session)).toBe(expected);
 
-      const { source: _source, ...untrusted } = delivery.data;
+      const { kind: _kind, ...untrusted } = delivery.data;
       const [spoofed] = collectSubagentSessions([
         called,
         receipt,

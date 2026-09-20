@@ -1,5 +1,7 @@
 "use client";
 
+import type { z } from "zod";
+
 import { useI18n } from "@web/i18n/context";
 import type { ChannelAuthorizationStatus } from "@web/auth/channel/client";
 import type {
@@ -20,9 +22,9 @@ export function ChannelStatus({
   onRestart,
 }: {
   readonly challenge:
-    | typeof channelChallengeSchema.Type
-    | typeof deviceBoundSchema.Type;
-  readonly purpose: typeof channelChallengeRequestSchema.Type.purpose;
+    | z.output<typeof channelChallengeSchema>
+    | z.output<typeof deviceBoundSchema>;
+  readonly purpose: z.output<typeof channelChallengeRequestSchema>["purpose"];
   readonly status: ChannelAuthorizationStatus;
   readonly busy: boolean;
   readonly error: string | undefined;
@@ -144,7 +146,7 @@ export function ChannelStatus({
 function ChannelLaunch({
   challenge,
 }: {
-  readonly challenge: typeof channelChallengeSchema.Type;
+  readonly challenge: z.output<typeof channelChallengeSchema>;
 }) {
   const { t } = useI18n();
   const telegram = challenge.channel === "telegram";

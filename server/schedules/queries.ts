@@ -1,20 +1,22 @@
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { ZodError as SchemaError } from "zod";
+import { SqlError } from "../../db/queries";
+import { z } from "zod";
 import { scheduledConversationChannelSchema } from "../../shared/schedules/conversation";
 import { scheduledReportStatusSchema } from "../../shared/schedules/report-status";
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
 import type { AccessScope } from "../../shared/identity/access-scope";
-
-const reminderSchema = Schema.Struct({
-  id: Schema.String,
-  revision: Schema.Int,
-  mayManage: Schema.Boolean,
-  prompt: Schema.String,
-  status: Schema.Literals(["active", "paused", "completed"]),
-  nextRunAt: Schema.NullOr(Schema.Date),
+const reminderSchema = z.object({
+  id: z.string(),
+  revision: z.number().int(),
+  mayManage: z.boolean(),
+  prompt: z.string(),
+  status: z.enum(["active", "paused", "completed"]),
+  nextRunAt: z.nullable(z.coerce.date()),
   conversationChannel: scheduledConversationChannelSchema,
-  originalSessionId: Schema.NullOr(Schema.String),
-  latestRunStatus: Schema.NullOr(
-    Schema.Literals([
+  originalSessionId: z.nullable(z.string()),
+  latestRunStatus: z.nullable(
+    z.enum([
       "queued",
       "running",
       "waiting_for_input",
@@ -22,22 +24,20 @@ const reminderSchema = Schema.Struct({
       "dead_letter",
     ])
   ),
-  latestReportStatus: Schema.NullOr(scheduledReportStatusSchema),
-  latestScheduledFor: Schema.NullOr(Schema.Date),
+  latestReportStatus: z.nullable(scheduledReportStatusSchema),
+  latestScheduledFor: z.nullable(z.coerce.date()),
 });
-const decodeReminders = Schema.decodeUnknownEffect(
-  Schema.Array(reminderSchema)
-);
-
-class RemindersUnavailable extends Schema.TaggedError<RemindersUnavailable>()(
-  "RemindersUnavailable",
-  {}
-) {}
-
-export const listReminders = Effect.fn("listReminders")(
-  function* (scope: AccessScope) {
-    const sql = yield* PgClient.PgClient;
-    const rows = yield* sql`
+const decodeReminders = z.array(reminderSchema);
+class RemindersUnavailable extends Error {
+  readonly _tag = "RemindersUnavailable";
+  constructor() {
+    super("RemindersUnavailable");
+    this.name = "RemindersUnavailable";
+  }
+}
+export const listReminders = async function (scope: AccessScope) {
+  try {
+    const rows = await query(sql`
       SELECT j.id, j.revision, (viewer.role IN ('owner', 'admin') OR j.created_by_user_id = ${scope.userId}) AS "mayManage",
         j.prompt, j.status, j.next_run_at AS "nextRunAt",
         j.conversation_channel AS "conversationChannel",
@@ -68,12 +68,16 @@ export const listReminders = Effect.fn("listReminders")(
         AND j.status IN ('active', 'paused', 'completed')
       ORDER BY CASE j.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
         j.next_run_at ASC NULLS LAST, j.updated_at DESC, j.id ASC
-      LIMIT 51`;
-    const reminders = yield* decodeReminders(rows);
+      LIMIT 51`);
+    const reminders = await decodeReminders.parseAsync(rows);
     return {
       reminders: reminders.slice(0, 50),
       hasMore: reminders.length > 50,
     };
-  },
-  Effect.catchTag(["SqlError", "SchemaError"], () => new RemindersUnavailable())
-);
+  } catch (error) {
+    if (error instanceof SqlError || error instanceof SchemaError) {
+      throw new RemindersUnavailable();
+    }
+    throw error;
+  }
+};

@@ -1,10 +1,10 @@
+import { Secret } from "@shared/environment/secret";
 import { createHmac } from "node:crypto";
-import { Effect, Redacted } from "effect";
 import { describe, expect, it } from "vitest";
 import { parseKapsoWebhook } from "./kapso";
 import { readVerifiedWebhook } from "./webhook";
 
-const testSecret = Redacted.make("unit-test-webhook-secret");
+const testSecret = new Secret("unit-test-webhook-secret");
 const now = 1_800_000_000_000;
 const installation = {
   phoneNumberId: "123456789",
@@ -12,7 +12,7 @@ const installation = {
 };
 
 const signedRequest = (body: string) => {
-  const signature = createHmac("sha256", Redacted.value(testSecret))
+  const signature = createHmac("sha256", testSecret.reveal())
     .update(body)
     .digest("hex");
   return new Request("https://test.invalid/channels/kapso", {
@@ -43,12 +43,12 @@ describe("Kapso private delivery qualification (fixture)", () => {
         phone_number: "+15550002222",
       },
     });
-    const verified = await Effect.runPromise(
-      readVerifiedWebhook(signedRequest(body), "kapso", testSecret)
+    const verified = await readVerifiedWebhook(
+      signedRequest(body),
+      "kapso",
+      testSecret
     );
-    const events = await Effect.runPromise(
-      parseKapsoWebhook(verified, installation, now)
-    );
+    const events = await parseKapsoWebhook(verified, installation, now);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       channel: "kapso",
@@ -83,11 +83,11 @@ describe("Kapso private delivery qualification (fixture)", () => {
         type: "group",
       },
     });
-    const verified = await Effect.runPromise(
-      readVerifiedWebhook(signedRequest(body), "kapso", testSecret)
+    const verified = await readVerifiedWebhook(
+      signedRequest(body),
+      "kapso",
+      testSecret
     );
-    expect(
-      await Effect.runPromise(parseKapsoWebhook(verified, installation, now))
-    ).toEqual([]);
+    expect(await parseKapsoWebhook(verified, installation, now)).toEqual([]);
   });
 });

@@ -23,7 +23,7 @@ there is no plaintext-token compatibility path.
 Eve uses its public three-method interactive authorization adapter. Its challenge
 links to `/api/google-workspace/connect?flow=...`. A ten-minute encrypted envelope,
 created with Better Auth's public JWT crypto and the unified
-`ResolvedInstallationSecrets` Effect layer, binds the native principal's Better
+installation secret resolver, binds the native principal's Better
 Auth user ID to Eve's same-origin callback.
 The browser route requires that exact signed-in user before asking Better Auth to
 link Google. Challenge issuance requires **live delegated authority** through the
@@ -48,8 +48,8 @@ status, never Gaxios request configuration, response bodies, or bearer tokens.
 
 The focused tests are **fixture** qualification: real encryption/tamper rejection,
 principal binding, callback restrictions, business scope checks, pure provider-error
-redaction, and live-authority deny paths (revoke/pause/unavailable) against Effect
-Layer fixtures for `BrowserWorkerAccess` and `ResolvedInstallationSecrets`. They do
+redaction, and live-authority deny paths (revoke/pause/unavailable) against fixtures at the
+browser-authority and installation-secret module boundaries. They do
 **not** claim live Google provider consent. Live Google consent, renewal, revocation,
 concurrent provider races, and end-to-end Eve suspension/resumption require configured
 Google credentials and a real IdP redirect — left unqualified here.

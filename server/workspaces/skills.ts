@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { isValid } from "@shared/validation";
+import { z } from "zod";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -16,84 +17,88 @@ import {
   WorkspaceRepositoryError,
   WorkspaceWriteSchema,
 } from "./repository";
-
-export const PublishSkillProposalSchema = Schema.Struct({
-  operationId: WorkspaceWriteSchema.fields.operationId,
-  expectedRevision: WorkspaceWriteSchema.fields.expectedRevision,
+export const PublishSkillProposalSchema = z.object({
+  operationId: WorkspaceWriteSchema.shape.operationId,
+  expectedRevision: WorkspaceWriteSchema.shape.expectedRevision,
   proposal: SkillProposalPath,
 });
-export const RollbackSkillSchema = Schema.Struct({
-  operationId: WorkspaceWriteSchema.fields.operationId,
-  expectedRevision: WorkspaceWriteSchema.fields.expectedRevision,
+export const RollbackSkillSchema = z.object({
+  operationId: WorkspaceWriteSchema.shape.operationId,
+  expectedRevision: WorkspaceWriteSchema.shape.expectedRevision,
   path: PublishedSkillPath,
   revision: GitRevisionSchema,
 });
-
-const invalid = () => new WorkspaceRepositoryError({ reason: "invalid_input" });
-
-export const listSkillProposals = Effect.fn("WorkspaceSkills.list")(function* (
-  actor: typeof WorkspaceActorSchema.Type
+function invalid(): never {
+  throw new WorkspaceRepositoryError({
+    reason: "invalid_input",
+  });
+}
+export const listSkillProposals = async function (
+  actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  if (actor.agentGrantId) return yield* new WorkspaceAccessDenied();
-  yield* requireWorkspaceAccess(actor);
-  const repository = yield* WorkspaceRepository;
-  const listing = yield* repository.read(actor);
-  const stored = yield* repository.selection(
+  if (actor.agentGrantId) throw new WorkspaceAccessDenied();
+  await requireWorkspaceAccess(actor);
+  const repository = WorkspaceRepository;
+  const listing = await repository.read(actor);
+  const stored = await repository.selection(
     actor,
-    listing.files.filter(Schema.is(SkillProposalPath))
+    listing.files.filter((value: unknown) => isValid(SkillProposalPath, value))
   );
   return stored.documents.map((document) => ({
     path: document.path,
     title: parseSkillDocument(document.content)?.title ?? document.path,
     revision: stored.revision,
   }));
-});
-
-export const publishSkillProposal = Effect.fn("WorkspaceSkills.publish")(
-  function* (
-    actor: typeof WorkspaceActorSchema.Type,
-    raw: typeof PublishSkillProposalSchema.Type
-  ) {
-    yield* requireWorkspaceAccess(actor, true);
-    const input = yield* Schema.decodeUnknownEffect(PublishSkillProposalSchema)(
-      raw
-    ).pipe(Effect.mapError(invalid));
-    const path = skillPathFromProposal(input.proposal);
-    if (!Schema.is(PublishedSkillPath)(path)) return yield* invalid();
-    const repository = yield* WorkspaceRepository;
-    const proposal = yield* repository.read(
-      actor,
-      input.proposal,
-      input.expectedRevision ?? undefined
-    );
-    if (proposal.content === null || !parseSkillDocument(proposal.content))
-      return yield* invalid();
-    return yield* repository.write(
-      actor,
-      {
-        path,
-        content: proposal.content,
-        expectedRevision: input.expectedRevision,
-        operationId: input.operationId,
-      },
-      { kind: "publication", proposal: input.proposal }
-    );
-  }
-);
-
-export const rollbackSkill = Effect.fn("WorkspaceSkills.rollback")(function* (
-  actor: typeof WorkspaceActorSchema.Type,
-  raw: typeof RollbackSkillSchema.Type
+};
+export const publishSkillProposal = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof PublishSkillProposalSchema>
 ) {
-  yield* requireWorkspaceAccess(actor, true);
-  const input = yield* Schema.decodeUnknownEffect(RollbackSkillSchema)(
-    raw
-  ).pipe(Effect.mapError(invalid));
-  const repository = yield* WorkspaceRepository;
-  const previous = yield* repository.read(actor, input.path, input.revision);
+  await requireWorkspaceAccess(actor, true);
+  const input = await Promise.try(async () =>
+    PublishSkillProposalSchema.parseAsync(raw)
+  ).catch(() => {
+    return invalid();
+  });
+  const path = skillPathFromProposal(input.proposal);
+  if (!isValid(PublishedSkillPath, path)) return invalid();
+  const repository = WorkspaceRepository;
+  const proposal = await repository.read(
+    actor,
+    input.proposal,
+    input.expectedRevision ?? undefined
+  );
+  if (proposal.content === null || !parseSkillDocument(proposal.content))
+    return invalid();
+  return await repository.write(
+    actor,
+    {
+      path,
+      content: proposal.content,
+      expectedRevision: input.expectedRevision,
+      operationId: input.operationId,
+    },
+    {
+      kind: "publication",
+      proposal: input.proposal,
+    }
+  );
+};
+export const rollbackSkill = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof RollbackSkillSchema>
+) {
+  await requireWorkspaceAccess(actor, true);
+  const input = await Promise.try(async () =>
+    RollbackSkillSchema.parseAsync(raw)
+  ).catch(() => {
+    return invalid();
+  });
+  const repository = WorkspaceRepository;
+  const previous = await repository.read(actor, input.path, input.revision);
   if (previous.content === null || !parseSkillDocument(previous.content))
-    return yield* invalid();
-  return yield* repository.write(
+    return invalid();
+  return await repository.write(
     actor,
     {
       path: input.path,
@@ -101,6 +106,9 @@ export const rollbackSkill = Effect.fn("WorkspaceSkills.rollback")(function* (
       expectedRevision: input.expectedRevision,
       operationId: input.operationId,
     },
-    { kind: "rollback", revision: input.revision }
+    {
+      kind: "rollback",
+      revision: input.revision,
+    }
   );
-});
+};

@@ -1,99 +1,105 @@
+import { z } from "zod";
 import { symmetricDecodeJWT, symmetricEncodeJWT } from "better-auth/crypto";
-import { Effect, Redacted, Schema } from "effect";
+
 import type { SessionAuthContext } from "eve/context";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
+import { resolvedInstallationSecrets } from "@db/services/installation-secrets";
 import { applicationOrigin } from "@shared/environment/origin";
 import { BrowserWorkerAccess } from "../browser-worker";
-import type { BrowserWorkerAccessError } from "../browser-worker/access";
+import { BrowserWorkerAccessError } from "../browser-worker/access";
 import { GoogleWorkspaceError, googleWorkspaceUserId } from "./index";
 
 const purpose = "companion-google-workspace-link";
-const flowSchema = Schema.Struct({
-  userId: Schema.NonEmptyString,
-  callbackURL: Schema.String,
+const flowSchema = z.object({
+  userId: z.string().min(1),
+  callbackURL: z.string(),
 });
 
-function denyWithoutLiveAuthority(error: BrowserWorkerAccessError) {
+function denyWithoutLiveAuthority(error: unknown) {
   return new GoogleWorkspaceError({
-    reason: error.reason === "unavailable" ? "unavailable" : "unauthenticated",
+    reason:
+      !(error instanceof BrowserWorkerAccessError) ||
+      error.reason === "unavailable"
+        ? "unavailable"
+        : "unauthenticated",
   });
 }
 
-export const validateGoogleCallback = Effect.fn("validateGoogleCallback")(
-  function* (callbackURL: string, origin: string) {
-    const url = yield* Effect.try({
-      try: () => new URL(callbackURL),
-      catch: () => new GoogleWorkspaceError({ reason: "invalid_callback" }),
-    });
-    if (
-      url.origin !== origin ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(
-        url.pathname
-      )
-    ) {
-      return yield* new GoogleWorkspaceError({ reason: "invalid_callback" });
-    }
-    return url.href;
+export const validateGoogleCallback = async function (
+  callbackURL: string,
+  origin: string
+) {
+  const url = await Promise.try(async () => new URL(callbackURL)).catch(() => {
+    throw new GoogleWorkspaceError({ reason: "invalid_callback" });
+  });
+  if (
+    url.origin !== origin ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(
+      url.pathname
+    )
+  ) {
+    throw new GoogleWorkspaceError({ reason: "invalid_callback" });
   }
-);
+  return url.href;
+};
 
 /**
  * Issues a native Google consent handoff only when the caller still has live
  * delegated authority (channel/web/schedule), not workspace ownership alone.
  */
-export const createGoogleWorkspaceChallenge = Effect.fn(
-  "createGoogleWorkspaceChallenge"
-)(function* (principal: SessionAuthContext, callbackUrl: string) {
-  const access = yield* BrowserWorkerAccess;
-  const scope = yield* access
-    .authorize(principal)
-    .pipe(Effect.mapError(denyWithoutLiveAuthority));
-  const userId = yield* googleWorkspaceUserId(scope);
-  const callbackURL = yield* validateGoogleCallback(
+export const createGoogleWorkspaceChallenge = async function (
+  principal: SessionAuthContext,
+  callbackUrl: string
+) {
+  const access = BrowserWorkerAccess;
+  const scope = await Promise.try(async () =>
+    access.authorize(principal)
+  ).catch((error: unknown) => {
+    throw denyWithoutLiveAuthority(error);
+  });
+  const userId = await googleWorkspaceUserId(scope);
+  const callbackURL = await validateGoogleCallback(
     callbackUrl,
     applicationOrigin()
   );
-  const secrets = yield* ResolvedInstallationSecrets;
-  const flow = yield* Effect.tryPromise({
-    try: () =>
-      symmetricEncodeJWT(
-        { userId, callbackURL },
-        Redacted.value(secrets.betterAuthSecret),
-        purpose,
-        600
-      ),
-    catch: () => new GoogleWorkspaceError({ reason: "unavailable" }),
+  const secrets = await resolvedInstallationSecrets();
+  const flow = await Promise.try(async () =>
+    symmetricEncodeJWT(
+      { userId, callbackURL },
+      secrets.betterAuthSecret.reveal(),
+      purpose,
+      600
+    )
+  ).catch(() => {
+    throw new GoogleWorkspaceError({ reason: "unavailable" });
   });
   const url = new URL("/api/google-workspace/connect", applicationOrigin());
   url.searchParams.set("flow", flow);
   return url.href;
-});
+};
 
-export const readGoogleWorkspaceChallenge = Effect.fn(
-  "readGoogleWorkspaceChallenge"
-)(function* (flow: string, userId: string) {
-  const secrets = yield* ResolvedInstallationSecrets;
-  const payload = yield* Effect.tryPromise({
-    try: () =>
-      symmetricDecodeJWT<unknown>(
-        flow,
-        Redacted.value(secrets.betterAuthSecret),
-        purpose
-      ),
-    catch: () => new GoogleWorkspaceError({ reason: "invalid_callback" }),
-  });
-  const decoded = yield* Schema.decodeUnknownEffect(flowSchema)(payload).pipe(
-    Effect.mapError(
-      () => new GoogleWorkspaceError({ reason: "invalid_callback" })
+export const readGoogleWorkspaceChallenge = async function (
+  flow: string,
+  userId: string
+) {
+  const secrets = await resolvedInstallationSecrets();
+  const payload = await Promise.try(async () =>
+    symmetricDecodeJWT<unknown>(
+      flow,
+      secrets.betterAuthSecret.reveal(),
+      purpose
     )
-  );
+  ).catch(() => {
+    throw new GoogleWorkspaceError({ reason: "invalid_callback" });
+  });
+  const decoded = await Promise.try(async () =>
+    flowSchema.parseAsync(payload)
+  ).catch(() => {
+    throw new GoogleWorkspaceError({ reason: "invalid_callback" });
+  });
   if (decoded.userId !== userId)
-    return yield* new GoogleWorkspaceError({ reason: "unauthenticated" });
-  return yield* validateGoogleCallback(
-    decoded.callbackURL,
-    applicationOrigin()
-  );
-});
+    throw new GoogleWorkspaceError({ reason: "unauthenticated" });
+  return await validateGoogleCallback(decoded.callbackURL, applicationOrigin());
+};

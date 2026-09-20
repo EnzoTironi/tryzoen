@@ -1,0 +1,57 @@
+name: zoen-runtime-tests
+services:
+  postgres:
+    image: postgres:18@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
+    environment:
+      POSTGRES_DB: companion_runtime_test
+      POSTGRES_PASSWORD: synthetic-admin
+      ZOEN_APPLICATION_DATABASE_PASSWORD: synthetic-runtime
+      ZOEN_MIGRATION_DATABASE_PASSWORD: synthetic-migrator
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ../../infrastructure/postgres/bootstrap-application.sh:/docker-entrypoint-initdb.d/application.sh:ro
+      - ./matrix/database.sql:/docker-entrypoint-initdb.d/matrix.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U postgres -d companion_runtime_test",
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+  matrix:
+    image: matrixdotorg/synapse:v1.160.0@sha256:78de1d10bef02e375f861d1cc99f8bedd9381d4f9083ea8b2c22a053477b205f
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      [
+        "python",
+        "-m",
+        "synapse.app.homeserver",
+        "--config-path",
+        "/config/homeserver.yaml",
+      ]
+    ports:
+      - "127.0.0.1:18008:8008"
+    volumes:
+      - matrix:/data
+      - ./matrix:/config:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/_matrix/client/versions')",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+volumes:
+  postgres:
+  matrix:

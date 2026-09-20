@@ -1,11 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { Schema } from "effect";
 import responseTool, { inputSchema } from "../../tools/respond-to-approval";
 
 describe("natural approval tool input boundary", () => {
-  const decode = Schema.toStandardSchemaV1(inputSchema, {
-    parseOptions: { onExcessProperty: "error" },
-  })["~standard"].validate;
+  const decode = inputSchema["~standard"].validate;
 
   test.each(["approve", "cancel"])(
     "accepts the %s decision",
@@ -62,6 +59,7 @@ describe("approval responder availability", () => {
       const tool = await resolve(
         {},
         {
+          model: null,
           channel: { kind: conversationChannel, metadata: {} },
           messages: [],
           session: {

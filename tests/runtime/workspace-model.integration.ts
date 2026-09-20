@@ -1,7 +1,8 @@
+import { jsonString } from "@shared/validation";
+import { z } from "zod";
 import { afterEach, expect, test, vi } from "vitest";
 import { APICallError, streamText } from "ai";
-import { Effect, Predicate, Schema, Stream } from "effect";
-import { runtimeDatabase } from "./database";
+
 import type { modelCredentials } from "../../server/models/connections";
 import { ModelConnectionError } from "../../shared/models/catalog";
 import { workspaceModel } from "../../agent/lib/workspace-model";
@@ -12,10 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../server/models/connections", () => ({
   modelCredentials: mocks.credentials,
 }));
-vi.mock("../../server/runtime", async () => {
-  const { Effect: Fx } = await import("effect");
-  return { serverRuntime: { runPromise: Fx.runPromise } };
-});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetAllMocks();
@@ -71,7 +69,7 @@ test.each(["chatgpt", "grok"] as const)(
   async (provider) => {
     const model = provider === "chatgpt" ? "gpt-5.6-luna" : "grok-4.6";
     mocks.credentials.mockImplementation(() =>
-      Effect.succeed({ provider, model, revision: "revision-one", tokens })
+      Promise.resolve({ provider, model, revision: "revision-one", tokens })
     );
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(answer, {
@@ -79,14 +77,8 @@ test.each(["chatgpt", "grok"] as const)(
       })
     );
     vi.stubGlobal("fetch", fetcher);
-    const selected = await Effect.runPromise(
-      workspaceModel(actor).pipe(Effect.provide(runtimeDatabase))
-    );
-    if (
-      !selected ||
-      Predicate.isString(selected.model) ||
-      selected.model.specificationVersion !== "v4"
-    )
+    const selected = await workspaceModel(actor);
+    if (!selected || typeof selected.model === "string")
       throw new Error("Expected a workspace model");
     const response = await selected.model.doStream({
       prompt: [
@@ -96,12 +88,7 @@ test.each(["chatgpt", "grok"] as const)(
       maxOutputTokens: 100,
       providerOptions: { openai: { safetyIdentifier: "synthetic-user" } },
     });
-    const chunks = await Effect.runPromise(
-      Stream.fromReadableStream({
-        evaluate: () => response.stream,
-        onError: (error) => error,
-      }).pipe(Stream.runCollect)
-    );
+    const chunks = await Array.fromAsync(response.stream);
     expect(chunks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "text-delta", delta: "42" }),
@@ -116,9 +103,9 @@ test.each(["chatgpt", "grok"] as const)(
     );
     const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
     expect(headers.get("authorization")).toBe("Bearer synthetic-access");
-    const body = Schema.decodeUnknownSync(
-      Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
-    )(fetcher.mock.calls[0]?.[1]?.body);
+    const body = jsonString(z.record(z.string(), z.json())).parse(
+      fetcher.mock.calls[0]?.[1]?.body
+    );
     expect(body.model).toBe(model);
     expect(body.stream).toBe(true);
     expect(JSON.stringify(body)).not.toContain("synthetic-access");
@@ -138,7 +125,7 @@ test.each(["chatgpt", "grok"] as const)(
 test("revocation between selecting a model and sending its request fails without contacting a provider", async () => {
   mocks.credentials
     .mockReturnValueOnce(
-      Effect.succeed({
+      Promise.resolve({
         provider: "chatgpt",
         model: "gpt-5.3-codex-spark",
         revision: "before-revocation",
@@ -146,27 +133,25 @@ test("revocation between selecting a model and sending its request fails without
       })
     )
     .mockReturnValue(
-      Effect.fail(new ModelConnectionError({ reason: "changed" }))
+      Promise.reject(new ModelConnectionError({ reason: "changed" }))
     );
   const fetcher = vi.fn<typeof fetch>();
   vi.stubGlobal("fetch", fetcher);
-  const selected = await Effect.runPromise(
-    workspaceModel(actor, true).pipe(Effect.provide(runtimeDatabase))
-  );
-  if (!selected || Predicate.isString(selected.model))
+  const selected = await workspaceModel(actor, true);
+  if (!selected || typeof selected.model === "string")
     throw new Error("Expected a workspace model");
   expect(selected.model.modelId).toBe("gpt-5.6-luna");
   await expect(
     selected.model.doStream({
       prompt: [{ role: "user", content: [{ type: "text", text: "inspect" }] }],
     })
-  ).rejects.toThrow("The model connection changed");
+  ).rejects.toBeInstanceOf(ModelConnectionError);
   expect(fetcher).not.toHaveBeenCalled();
 });
 
 test("transient provider errors preserve bounded SDK retries and never expose request content", async () => {
   mocks.credentials.mockReturnValue(
-    Effect.succeed({
+    Promise.resolve({
       provider: "chatgpt",
       model: "gpt-5.6-luna",
       revision: "retry-proof",
@@ -184,9 +169,7 @@ test("transient provider errors preserve bounded SDK retries and never expose re
       new Response(answer, { headers: { "content-type": "text/event-stream" } })
     );
   vi.stubGlobal("fetch", fetcher);
-  const selected = await Effect.runPromise(
-    workspaceModel(actor).pipe(Effect.provide(runtimeDatabase))
-  );
+  const selected = await workspaceModel(actor);
   if (!selected) throw new Error("Expected workspace model");
   const result = streamText({
     model: selected.model,
@@ -196,7 +179,7 @@ test("transient provider errors preserve bounded SDK retries and never expose re
   expect(await result.text).toBe("42");
   expect(fetcher).toHaveBeenCalledTimes(2);
   fetcher.mockResolvedValue(new Response("synthetic-secret", { status: 400 }));
-  if (Predicate.isString(selected.model))
+  if (typeof selected.model === "string")
     throw new Error("Expected resolved model");
   const error = await Promise.resolve(
     selected.model.doStream({
@@ -215,7 +198,7 @@ test("transient provider errors preserve bounded SDK retries and never expose re
   expect(error.statusCode).toBe(400);
   expect(JSON.stringify(error)).not.toContain("synthetic-secret");
   expect(JSON.stringify(error)).not.toContain("Private synthetic prompt");
-  expect(error.requestBodyValues).toEqual({ model: "gpt-5.6-luna" });
+  expect(error.requestBodyValues).toEqual({});
 });
 
 test("an unauthorized response refreshes once, then rechecks workspace authorization before retrying", async () => {
@@ -226,10 +209,10 @@ test("an unauthorized response refreshes once, then rechecks workspace authoriza
     tokens,
   } as const;
   mocks.credentials
-    .mockReturnValueOnce(Effect.succeed(connection))
-    .mockReturnValueOnce(Effect.succeed(connection))
+    .mockReturnValueOnce(Promise.resolve(connection))
+    .mockReturnValueOnce(Promise.resolve(connection))
     .mockReturnValue(
-      Effect.succeed({
+      Promise.resolve({
         ...connection,
         tokens: { ...tokens, accessToken: "renewed-access" },
       })
@@ -246,9 +229,7 @@ test("an unauthorized response refreshes once, then rechecks workspace authoriza
           });
     });
   vi.stubGlobal("fetch", fetcher);
-  const selected = await Effect.runPromise(
-    workspaceModel(actor).pipe(Effect.provide(runtimeDatabase))
-  );
+  const selected = await workspaceModel(actor);
   if (!selected) throw new Error("Expected model");
   expect(
     await streamText({

@@ -1,6 +1,6 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-export const scheduledConversationChannelSchema = Schema.Literals([
+export const scheduledConversationChannelSchema = z.enum([
   "eve",
   "linq",
   "telegram",

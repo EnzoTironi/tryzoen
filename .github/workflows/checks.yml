@@ -59,28 +59,6 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: companion_runtime_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql://zoen_app:ci-runtime-password@127.0.0.1:5432/companion_runtime_test
-      DATABASE_URL_UNPOOLED: postgresql://zoen_app:ci-runtime-password@127.0.0.1:5432/companion_runtime_test
-      BETTER_AUTH_URL: http://127.0.0.1:3000
-      ZOEN_MATRIX_URL: http://127.0.0.1:8008
-      ZOEN_MATRIX_SERVER_NAME: matrix.zoen.test
-      ZOEN_MATRIX_AS_TOKEN: synthetic-matrix-application-service-token-2026
-      ZOEN_MATRIX_HS_TOKEN: synthetic-matrix-homeserver-token-2026
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -93,103 +71,29 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Generate ephemeral installation keys
-        run: |
-          node --input-type=module <<'JS'
-          import { randomBytes, randomUUID } from 'node:crypto';
-          import { appendFileSync } from 'node:fs';
-          appendFileSync(
-            process.env.GITHUB_ENV,
-            [
-              `BETTER_AUTH_SECRET=${randomBytes(32).toString('hex')}`,
-              `SECRET_ENCRYPTION_KEY=${randomBytes(32).toString('base64')}`,
-              // Runtime proofs that exercise channel identity need a stable
-              // installation id for the job; product Telegram credentials are unused.
-              `TELEGRAM_BOT_ID=ci-runtime-${randomUUID()}`,
-              `TELEGRAM_BOT_USERNAME=ci_runtime_bot`,
-              '',
-            ].join('\n'),
-          );
-          JS
       - name: Install ffprobe for native audio preflight
         run: |
-          # Isolate apt from broken third-party indexes on GitHub runners
-          # (google-chrome Packages.gz hash-sum mismatch).
           sudo apt-get update \
             -o Dir::Etc::sourcelist="sources.list" \
             -o Dir::Etc::sourceparts="-" \
             -o APT::Get::List-Cleanup="0"
           sudo apt-get install -y ffmpeg
-      - name: Migrate application and workflow databases
-        env:
-          DATABASE_URL_UNPOOLED: postgresql://zoen_migrator:ci-migration-password@127.0.0.1:5432/companion_runtime_test
+      - name: Create isolated services and verify migration idempotence
         run: |
-          bootstrap() {
-            docker exec -i \
-              -e ZOEN_APPLICATION_DATABASE_PASSWORD=ci-runtime-password \
-              -e ZOEN_MIGRATION_DATABASE_PASSWORD=ci-migration-password \
-              '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-application.sh
-          }
-          bootstrap
-          node scripts/migrate-hosted.ts
-          node scripts/migrate-hosted.ts
-          bootstrap
-          docker exec -i -e ZOEN_VAULTWARDEN_DATABASE_PASSWORD=ci-vault-password \
-            '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-vaultwarden.sh
-          docker exec -i -e ZOEN_WHATSAPP_DATABASE_PASSWORD=ci-whatsapp-password \
-            '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-whatsapp.sh
-      - name: Start private Matrix homeserver
-        run: |
-          docker exec -i -e ZOEN_MATRIX_DATABASE_PASSWORD=ci-matrix-password \
-            '${{ job.services.postgres.id }}' bash < infrastructure/postgres/bootstrap-matrix.sh
-          docker build -t zoen-matrix-proof infrastructure/matrix
-          docker run -d --name matrix-proof --network host \
-            -e ZOEN_MATRIX_SERVER_NAME -e ZOEN_MATRIX_AS_TOKEN -e ZOEN_MATRIX_HS_TOKEN \
-            -e ZOEN_MATRIX_SIGNING_SECRET=synthetic-matrix-signing-secret-2026 \
-            -e ZOEN_MATRIX_DATABASE_PASSWORD=ci-matrix-password \
-            -e ZOEN_DATABASE_HOST=127.0.0.1 \
-            -e ZOEN_MATRIX_CALLBACK_URL=http://127.0.0.1:4350 zoen-matrix-proof
-          for attempt in {1..60}; do
-            curl --fail --silent http://127.0.0.1:8008/health && break
-            sleep 1
-          done
-          curl --fail --silent http://127.0.0.1:8008/health
-      - name: Verify real Postgres storage
-        env:
-          ZOEN_RESTORE_TEST_CONTAINER: ${{ job.services.postgres.id }}
-          ZOEN_ERASURE_JOURNAL_BUCKET: zoen-erasure-test
-          ZOEN_ERASURE_JOURNAL_ENDPOINT: http://127.0.0.1:9000
-          ZOEN_ERASURE_JOURNAL_ACCESS_KEY: synthetic-erasure
-          ZOEN_ERASURE_JOURNAL_SECRET_KEY: synthetic-erasure-secret
-        run: |
-          docker run -d --name erasure-proof -p 127.0.0.1:9000:9000 \
-            -e MINIO_ROOT_USER=synthetic-erasure -e MINIO_ROOT_PASSWORD=synthetic-erasure-secret \
-            quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e server /data
-          for attempt in {1..30}; do
-            curl --fail --silent http://127.0.0.1:9000/minio/health/live && break
-            sleep 1
-          done
-          curl --fail --silent http://127.0.0.1:9000/minio/health/live
-          node --input-type=module <<'JS'
-          import { S3Client, CreateBucketCommand } from '@aws-sdk/client-s3';
-          const s3 = new S3Client({ endpoint: process.env.ZOEN_ERASURE_JOURNAL_ENDPOINT,
-            region: 'auto', forcePathStyle: true,
-            credentials: { accessKeyId: process.env.ZOEN_ERASURE_JOURNAL_ACCESS_KEY,
-              secretAccessKey: process.env.ZOEN_ERASURE_JOURNAL_SECRET_KEY } });
-          await s3.send(new CreateBucketCommand({ Bucket: process.env.ZOEN_ERASURE_JOURNAL_BUCKET }));
-          s3.destroy();
-          JS
-          pnpm test:runtime
+          pnpm test:runtime:setup
+          pnpm test:runtime:setup
+      - name: Verify PostgreSQL, Matrix and compiled Eve restart behavior
+        run: pnpm test:runtime
       - name: Build web app and agent
-        run: pnpm build --force
+        run: |
+          set -a
+          source tests/runtime/.env.example
+          set +a
+          NODE_ENV=production pnpm build --force
       - name: Start the built web app and native Eve runtime
-        env:
-          COMPANION_MODEL_PROVIDER: codex-local
-          COMPANION_BROWSER_MODEL_PROVIDER: openrouter
-          OPENROUTER_API_KEY: synthetic-startup-key-no-external-requests
         run: |
           set -euo pipefail
-          node scripts/start.ts --port 3000 --eve-port 4274 > .eve/runtime-start.log 2>&1 &
+          node --env-file=tests/runtime/.env.example --import tsx scripts/start.ts --port 3000 > .eve/runtime-start.log 2>&1 &
           app_pid=$!
           trap 'kill -TERM "$app_pid" 2>/dev/null || true; wait "$app_pid" || true' EXIT
           for attempt in {1..60}; do
@@ -201,11 +105,14 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:3000/eve/v1/health
-          # This signed service callback must reach Eve, not redirect to browser login.
+          # Service callbacks reach Eve and reject unsigned browser requests.
           callback_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --request POST --header 'content-type: application/json' --data '{}' \
             http://127.0.0.1:3000/internal/channel-input/respond)
           test "$callback_status" = 401
+      - name: Stop isolated services
+        if: always()
+        run: docker compose -p zoen-runtime-tests -f tests/runtime/compose.yaml down --volumes
 
   memory:
     name: Private Mem0 service

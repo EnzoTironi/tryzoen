@@ -1,5 +1,4 @@
-import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
+import { describe, expect, it } from "vitest";
 
 import { executeSealedBundle } from "./index";
 
@@ -8,14 +7,15 @@ import { executeSealedBundle } from "./index";
 // caller, but nothing here knows that — these are the primitive's own promises.
 
 const run = (options: Parameters<typeof executeSealedBundle>[0]) =>
-  Effect.runPromise(
-    executeSealedBundle(options).pipe(
-      Effect.map((value) => ({ ok: true as const, value })),
-      Effect.catch((error) =>
-        Effect.succeed({ ok: false as const, message: error.message })
-      )
+  Promise.resolve()
+    .then(async () =>
+      Promise.resolve()
+        .then(async () => executeSealedBundle(options))
+        .then((value) => ({ ok: true as const, value }))
     )
-  );
+    .catch((error) =>
+      Promise.resolve({ ok: false as const, message: error.message })
+    );
 
 describe("executeSealedBundle", () => {
   it("returns what the call resolves", async () => {

@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   assertCanAcceptOrgInvite,
@@ -25,15 +24,21 @@ describe("C02 org Google SSO invite gates", () => {
 
   it("allows any domain when allowlist is empty", async () => {
     await expect(
-      Effect.runPromise(assertEmailDomainAllowed("bob@acme.example", []))
+      assertEmailDomainAllowed("bob@acme.example", [])
     ).resolves.toBeUndefined();
   });
 
   it("fails closed on domain allowlist miss", async () => {
-    const denied = await Effect.runPromise(
-      assertEmailDomainAllowed("bob@other.example", ["acme.example"]).pipe(
-        Effect.flip
-      )
+    const denied = await Promise.try(async () =>
+      assertEmailDomainAllowed("bob@other.example", ["acme.example"])
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof OrgSsoDenied) return error;
+        throw error;
+      }
     );
     expect(denied).toEqual(
       new OrgSsoDenied({
@@ -46,23 +51,21 @@ describe("C02 org Google SSO invite gates", () => {
 
   it("accepts matching verified Google-linked identity", async () => {
     await expect(
-      Effect.runPromise(
-        assertCanAcceptOrgInvite({
-          invite: pendingInvite,
-          identity: {
-            userId: "user-bob",
-            email: "bob@acme.example",
-            emailVerified: true,
-            hasGoogleAccount: true,
-          },
-          allowedDomains: ["acme.example"],
-        })
-      )
+      assertCanAcceptOrgInvite({
+        invite: pendingInvite,
+        identity: {
+          userId: "user-bob",
+          email: "bob@acme.example",
+          emailVerified: true,
+          hasGoogleAccount: true,
+        },
+        allowedDomains: ["acme.example"],
+      })
     ).resolves.toBeUndefined();
   });
 
   it("rejects email mismatch, unverified, missing Google, expired", async () => {
-    const mismatch = await Effect.runPromise(
+    const mismatch = await Promise.try(async () =>
       assertCanAcceptOrgInvite({
         invite: pendingInvite,
         identity: {
@@ -71,11 +74,19 @@ describe("C02 org Google SSO invite gates", () => {
           emailVerified: true,
           hasGoogleAccount: true,
         },
-      }).pipe(Effect.flip)
+      })
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof OrgSsoDenied) return error;
+        throw error;
+      }
     );
     expect(mismatch.reason).toBe("email_mismatch");
 
-    const unverified = await Effect.runPromise(
+    const unverified = await Promise.try(async () =>
       assertCanAcceptOrgInvite({
         invite: pendingInvite,
         identity: {
@@ -84,11 +95,19 @@ describe("C02 org Google SSO invite gates", () => {
           emailVerified: false,
           hasGoogleAccount: true,
         },
-      }).pipe(Effect.flip)
+      })
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof OrgSsoDenied) return error;
+        throw error;
+      }
     );
     expect(unverified.reason).toBe("email_unverified");
 
-    const noGoogle = await Effect.runPromise(
+    const noGoogle = await Promise.try(async () =>
       assertCanAcceptOrgInvite({
         invite: pendingInvite,
         identity: {
@@ -97,12 +116,20 @@ describe("C02 org Google SSO invite gates", () => {
           emailVerified: true,
           hasGoogleAccount: false,
         },
-      }).pipe(Effect.flip)
+      })
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof OrgSsoDenied) return error;
+        throw error;
+      }
     );
     expect(noGoogle.reason).toBe("google_account_missing");
     expect(orgSsoFailureMessage(noGoogle)).toContain("Google");
 
-    const expired = await Effect.runPromise(
+    const expired = await Promise.try(async () =>
       assertCanAcceptOrgInvite({
         invite: {
           ...pendingInvite,
@@ -115,7 +142,15 @@ describe("C02 org Google SSO invite gates", () => {
           hasGoogleAccount: true,
         },
         now: new Date("2026-09-10T00:00:00.000Z"),
-      }).pipe(Effect.flip)
+      })
+    ).then(
+      () => {
+        throw new Error("Expected rejection");
+      },
+      (error: unknown) => {
+        if (error instanceof OrgSsoDenied) return error;
+        throw error;
+      }
     );
     expect(expired.reason).toBe("invite_expired");
   });

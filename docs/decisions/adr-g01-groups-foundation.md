@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (foundation only)
 - **Date:** 2026-09-10 (America/Sao_Paulo)
-- **Decision:** **proceed** Effect-safe group/supergroup detection, private
+- **Decision:** **proceed** authorized group/supergroup detection, private
   `channel_identity` binding skeleton, and mention/policy gate (no spam).
 - **Worker:** G01 — inventory + foundation PR (skip live group e2e G03 / deep
   shared-memory G02 unless hooks required)
@@ -17,12 +17,12 @@
 | `server/channels/kapso.ts` parse    | Ignores `is_group` / `type === "group"`                            | Hard-drop groups                                     | No shared detect helper; WA mention/participant signals not normalized                    |
 | Kapso send                          | `recipient_type: "individual"`                                     | No group JID send                                    | Deferred with G03                                                                         |
 | `channel_identity`                  | Unique `(channel, installation_id, sender_id)`                     | No chat/thread column                                | Group conversation must not invent a second sender row; bind actor identity + group scope |
-| Blueprint                           | Private workspaces first                                           | Group-chat disabled until membership/approval proved | `docs/companion-blueprint.md`                                                             |
+| Blueprint                           | Private workspaces first                                           | Group-chat disabled until membership/approval proved | `docs/eve/architecture.md`                                                                |
 
 ## Decision
 
 1. **Detect** Telegram `group`/`supergroup` and Kapso group flags through
-   `server/channels/group-policy.ts` (Effect-safe pure helpers + binding Effect).
+   `server/channels/group-policy.ts` (authorized pure helpers + binding operation).
 2. **Ingress policy (no spam):** Telegram group messages are accepted **only**
    when the bot is `@mentioned` or the message replies to the bot. Bare group
    chatter stays `[]`. Kapso/WA groups remain closed until provider mention

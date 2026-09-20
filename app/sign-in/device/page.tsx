@@ -1,10 +1,12 @@
+import { isValid } from "@shared/validation";
+
 import Image from "next/image";
 import { OnboardingShell } from "@web/auth/onboarding/shell";
 import { cn } from "@web/components/class-names";
 import styles from "@web/auth/onboarding/onboarding.module.css";
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
-import { Schema } from "effect";
+
 import { deviceRequestSchema } from "@shared/identity/channel-auth";
 import { NativeDeviceForm } from "@web/auth/channel/device";
 import { DeviceSignInUnavailable } from "./_components/unavailable";
@@ -22,11 +24,9 @@ export default async function DeviceSignInPage({
 }: PageProps<"/sign-in/device">) {
   const { t } = await getI18n();
   const params = await searchParams;
-  if (
-    !Schema.is(deviceRequestSchema)({ id: params.id, purpose: params.purpose })
-  )
+  if (!isValid(deviceRequestSchema, { id: params.id, purpose: params.purpose }))
     return <DeviceSignInUnavailable />;
-  const { id, purpose } = Schema.decodeUnknownSync(deviceRequestSchema)({
+  const { id, purpose } = deviceRequestSchema.parse({
     id: params.id,
     purpose: params.purpose,
   });

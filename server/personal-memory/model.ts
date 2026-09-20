@@ -1,10 +1,10 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import type { UserProfile } from "@shared/user-profile/schema";
 
-export const storedNoteSchema = Schema.Struct({
-  content: Schema.String,
-  version: Schema.String.check(Schema.isUUID()),
-  updatedAt: Schema.String,
+export const storedNoteSchema = z.object({
+  content: z.string(),
+  version: z.uuid(),
+  updatedAt: z.string(),
 });
 
 export interface PersonalMemorySnapshot {
@@ -13,7 +13,7 @@ export interface PersonalMemorySnapshot {
   readonly profile: UserProfile;
   readonly notes: {
     readonly status: "located" | "unresolved";
-    readonly documents: readonly (typeof storedNoteSchema.Type)[];
+    readonly documents: readonly z.output<typeof storedNoteSchema>[];
   };
   readonly coverage: {
     readonly included: readonly ["structured-profile", "bound-profile-notes"];

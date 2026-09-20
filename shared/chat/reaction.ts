@@ -1,6 +1,6 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 
-const reactionTypeSchema = Schema.Literals([
+const reactionTypeSchema = z.enum([
   "thumbs_up",
   "thumbs_down",
   "heart",
@@ -9,26 +9,13 @@ const reactionTypeSchema = Schema.Literals([
   "question",
 ]);
 
-// JSON-shaped contract: only omission defaults to add. Explicit JS undefined
-// is intentionally rejected; value-level defaults would admit null on the wire.
-export const reactToMessageOutputSchema = Schema.Struct({
-  operation: Schema.Literals(["add", "remove"])
-    .annotate({ default: "add" })
-    .pipe(Schema.withDecodingDefaultKey(Effect.succeed("add"))),
+export const reactToMessageOutputSchema = z.strictObject({
+  operation: z.enum(["add", "remove"]).default("add"),
   type: reactionTypeSchema,
-}).annotate({
-  additionalProperties: true,
-  parseOptions: { onExcessProperty: "ignore" },
 });
-
-export const addReactionToMessageOutputSchema = Schema.Struct({
-  ...reactToMessageOutputSchema.fields,
-  operation: Schema.Literal("add")
-    .annotate({ default: "add" })
-    .pipe(Schema.withDecodingDefaultKey(Effect.succeed("add"))),
-}).annotate({
-  additionalProperties: true,
-  parseOptions: { onExcessProperty: "ignore" },
+export const addReactionToMessageOutputSchema = z.strictObject({
+  operation: z.literal("add").default("add"),
+  type: reactionTypeSchema,
 });
 
 const reactionText = {
@@ -38,14 +25,12 @@ const reactionText = {
   question: "❓",
   thumbs_down: "👎",
   thumbs_up: "👍",
-} as const satisfies Record<typeof reactionTypeSchema.Type, string>;
-
-export function reactionTextFor(type: typeof reactionTypeSchema.Type) {
+} as const satisfies Record<z.output<typeof reactionTypeSchema>, string>;
+export function reactionTextFor(type: z.output<typeof reactionTypeSchema>) {
   return reactionText[type];
 }
-
-export const reactToMessageToolResultSchema = Schema.Struct({
-  kind: Schema.Literal("tool-result"),
+export const reactToMessageToolResultSchema = z.object({
+  kind: z.literal("tool-result"),
   output: reactToMessageOutputSchema,
-  toolName: Schema.Literal("react_to_message"),
-}).annotate({ parseOptions: { onExcessProperty: "ignore" } });
+  toolName: z.literal("react_to_message"),
+});

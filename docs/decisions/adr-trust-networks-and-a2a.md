@@ -58,7 +58,7 @@ profile identifies the destination without loading private instructions or memor
 `network-bots` and `network-result` are read operations in Executor. The
 `network-contact` action requires native approval for the exact destination and
 text, uses the source workspace's bot identity, and reuses the native call ID as
-a Synapse transaction ID. Code Mode defers this action instead of sending it.
+a Synapse transaction ID. Eve pauses the native tool until its approval is resolved.
 It waits at most 45 seconds for a response, then returns an honest pending receipt.
 No implicit promise of an asynchronous follow-up is made.
 

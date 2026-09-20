@@ -27,8 +27,8 @@ necessary behavior at Companion's boundary. Do not import the entire registry.
 
 Before a port, inspect transitive imports, auth scopes and token refresh, paging,
 rate limits, file handling, response validation, retries and ambiguous writes.
-Use Effect's installed APIs rather than keeping a second application execution
-model. Qualify one read capability before a scoped write with real evidence.
+Use native Eve definitions with plain async TypeScript and Zod; do not add a
+second application execution model. Qualify one read capability before a scoped write with real evidence.
 
 ## License evidence, pinned to this snapshot
 

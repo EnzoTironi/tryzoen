@@ -1,28 +1,13 @@
 import Kernel from "@onkernel/sdk";
-import { Config, Effect, Redacted, Schema } from "effect";
-
-class BrowserUnavailable extends Schema.TaggedError<BrowserUnavailable>()(
-  "BrowserUnavailable",
-  { message: Schema.String }
-) {}
-
-const configuredKernel = Config.schema(
-  Schema.Redacted(Schema.NonEmptyString.check(Schema.isTrimmed())),
-  "KERNEL_API_KEY"
-).pipe(
-  Effect.map((apiKey) => new Kernel({ apiKey: Redacted.value(apiKey) })),
-  Effect.mapError(
-    () =>
-      new BrowserUnavailable({
-        message:
-          "Browser execution is not configured. Set KERNEL_API_KEY to enable it.",
-      })
-  )
-);
+import { env } from "@shared/environment/env";
 
 let client: Kernel | undefined;
 
-export function getKernel() {
-  client ??= Effect.runSync(configuredKernel);
-  return client;
+export function getKernel(): Kernel {
+  if (!env.KERNEL_API_KEY || env.KERNEL_API_KEY !== env.KERNEL_API_KEY.trim()) {
+    throw new Error(
+      "Browser execution is not configured. Set KERNEL_API_KEY to enable it."
+    );
+  }
+  return (client ??= new Kernel({ apiKey: env.KERNEL_API_KEY }));
 }

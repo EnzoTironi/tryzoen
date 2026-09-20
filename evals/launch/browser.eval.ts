@@ -1,12 +1,11 @@
 import { defineEval } from "eve/evals";
 import { equals, includes } from "eve/evals/expect";
-import { Schema } from "effect";
 import { requireWorkerSessionId } from "@evals/browser/session";
 import { readTaskCompletion } from "@evals/browser/worker-events";
 
 export default defineEval({
   description:
-    "Delegate a real browser task through Executor and close its browser",
+    "Delegate a real browser task with native Eve tools and close its browser",
   tags: ["launch", "browser", "live-model", "live-provider", "synthetic-data"],
   timeoutMs: 240_000,
   async test(t) {
@@ -20,46 +19,30 @@ export default defineEval({
       .noFailedActions()
       .soft()
       .label("browser native actions without failure");
-    child.calledTool("execute", {
+    child.calledTool("manage_browsers", {
       status: "completed",
-      input: { call: { path: "manage_browsers", input: { action: "create" } } },
       count: 1,
+      input: { action: "create" },
     });
-    child.calledTool("execute", {
+    child.calledTool("manage_browsers", {
       status: "completed",
-      input: { call: { path: "manage_browsers", input: { action: "delete" } } },
       count: 1,
+      input: { action: "delete" },
     });
-    child
-      .calledTool("execute", {
-        status: "completed",
-        input: (input) =>
-          Schema.is(
-            Schema.Struct({
-              call: Schema.Struct({
-                path: Schema.Literals([
-                  "playwright_execute",
-                  "browser_snapshot",
-                ]),
-              }),
-            })
-          )(input) ||
-          (Schema.is(
-            Schema.Struct({
-              call: Schema.Struct({
-                path: Schema.Literal("computer_action"),
-                input: Schema.Struct({
-                  actions: Schema.Array(Schema.Struct({ type: Schema.String })),
-                }),
-              }),
-            })
-          )(input) &&
-            input.call.input.actions.some(
-              (action) => action.type === "screenshot"
-            )),
-        count: (count) => count >= 1,
-      })
-      .label("real browser page inspection through DOM or screenshot");
+    t.check(
+      child.events.some(
+        (event) =>
+          event.type === "action.result" &&
+          event.data.result.kind === "tool-result" &&
+          !event.data.result.isError &&
+          [
+            "playwright_execute",
+            "browser_snapshot",
+            "computer_action",
+          ].includes(event.data.result.toolName)
+      ),
+      equals(true)
+    ).label("real browser page inspection through DOM or screenshot");
     const completion = readTaskCompletion(child.events);
     t.check(completion?.status, equals("success"));
     t.check(completion?.message, includes("Example Domain"));

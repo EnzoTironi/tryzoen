@@ -1,3 +1,6 @@
+import { sleep } from "../../server/operations/async";
+import { withSignal } from "../../server/operations/async";
+
 import { defineChannel } from "eve/channels";
 import { eveChannel } from "eve/channels/eve";
 import {
@@ -6,7 +9,7 @@ import {
   routeAuth,
   UnauthenticatedError,
 } from "eve/channels/auth";
-import { Effect, Result, Schedule, Schema } from "effect";
+
 import { AuthUnavailable } from "@db/services/auth";
 import { isSessionOwned } from "@db/services/sessions";
 import {
@@ -14,7 +17,6 @@ import {
   type AccessScope,
 } from "@shared/identity/access-scope";
 import { getAuthSession } from "@db/services/auth/session";
-import { serverRuntime } from "../../server/runtime";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
 import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
 import {
@@ -78,9 +80,7 @@ const channel = eveChannel({
     async "action.result"(event, _channel, session) {
       if (
         event.status === "completed" &&
-        Result.isSuccess(
-          Schema.decodeUnknownResult(sendMessageToolResultSchema)(event.result)
-        )
+        sendMessageToolResultSchema.safeParse(event.result).success
       ) {
         await finalizeScheduledReportDelivery(session);
       }
@@ -148,9 +148,9 @@ async function requireOwnedRouteSubject(scope: AccessScope, request: Request) {
   const sessionId = sessionIdFromPath(pathname);
   if (
     !sessionId ||
-    !(await Effect.runPromise(waitForSessionOwnership(scope, sessionId), {
-      signal: request.signal,
-    }))
+    !(await withSignal(request.signal, async () =>
+      waitForSessionOwnership(scope, sessionId)
+    ))
   ) {
     throw new ForbiddenError({ message: "Session not found." });
   }
@@ -188,9 +188,8 @@ function decodePathSegment(segment: string) {
 async function requestIdentityFromRequest(request: Request) {
   const session = await getAuthSession(request.headers);
   if (!session) return undefined;
-  const actor = await serverRuntime.runPromise(
-    resolveWorkspaceActor(request.headers),
-    { signal: request.signal }
+  const actor = await withSignal(request.signal, async () =>
+    resolveWorkspaceActor(request.headers)
   );
   return {
     scope: { userId: actor.userId, workspaceId: actor.workspaceId },
@@ -199,18 +198,14 @@ async function requestIdentityFromRequest(request: Request) {
   };
 }
 
-const waitForSessionOwnership = Effect.fn("waitForSessionOwnership")(function* (
-  scope: AccessScope,
-  sessionId: string
-) {
-  return yield* Effect.tryPromise({
-    try: () => isSessionOwned(scope, sessionId),
-    catch: () => new AuthUnavailable(),
-  }).pipe(
-    Effect.repeat({
-      while: (owned) => !owned,
-      times: 49,
-      schedule: Schedule.spaced("100 millis"),
-    })
-  );
-});
+async function waitForSessionOwnership(scope: AccessScope, sessionId: string) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      if (await isSessionOwned(scope, sessionId)) return true;
+    } catch {
+      throw new AuthUnavailable();
+    }
+    if (attempt < 49) await sleep(100);
+  }
+  return false;
+}

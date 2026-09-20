@@ -5,7 +5,6 @@ import os
 import secrets
 import threading
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -16,7 +15,6 @@ from mem0.memory.storage import SQLiteManager
 from pydantic import BaseModel, ConfigDict, Field
 from psycopg.types.json import Jsonb
 from ledger import MemoryLedger
-from migrate_legacy import migrate_legacy
 
 REVISION = "c7ee362aff94a369af70f13f2b4f853f6793ff4c"
 lock = threading.RLock()
@@ -27,8 +25,6 @@ async def lifespan(app: FastAPI):
     key = os.environ["ZOEN_MEM0_API_KEY"]
     if len(key) < 32:
         raise RuntimeError("A strong service key is required")
-    data = Path(os.environ.get("ZOEN_MEMORY_DATA", "/data"))
-    data.mkdir(parents=True, exist_ok=True, mode=0o700)
     config = {
         "version": "v1.1",
         "vector_store": {"provider": "pgvector", "config": {
@@ -58,7 +54,6 @@ async def lifespan(app: FastAPI):
     app.state.key = key
     app.state.ledger = MemoryLedger(os.environ["ZOEN_MEMORY_DATABASE_URL"])
     try:
-        migrate_legacy(data, app.state.ledger)
         yield
     finally:
         app.state.memory.close()

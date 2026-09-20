@@ -1,7 +1,6 @@
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Schema } from "effect";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { requireRequestScope } from "@web/auth/request-scope";
 import { TRPCProvider } from "@web/trpc/client";
@@ -20,7 +19,7 @@ export default async function AuthenticatedLayout({
   children,
 }: LayoutProps<"/">) {
   await requireRequestScope().catch((cause: unknown) => {
-    if (Schema.is(WorkspaceAccessDenied)(cause)) notFound();
+    if (cause instanceof WorkspaceAccessDenied) notFound();
     throw cause;
   });
 

@@ -1,29 +1,15 @@
-# Customer platform: implementation handoff
+# Product research and acceptance scenarios
 
-Status: implementation and validation plan, reviewed on 2026-09-14. The scenarios
-in this package are planned work, not evidence of completed integrations.
+The active implementation is described in [architecture](../../eve/architecture.md)
+and [rewrite validation](../../eve/rebuild.md). Superseded implementation handoffs
+were removed with the Eve rebuild.
 
-Start with [the handoff](handoff.md), then use:
+- [Beeper and Pally](beeper-pally.md): prior research about hosted messaging,
+  user journeys and data boundaries; no accounts were activated by this research.
+- [Acceptance scenarios](acceptance.csv): the original research checklist,
+  not a claim of completed or provider-qualified integrations.
+- [Customer tools](../../decisions/adr-customer-tools.md): publication and
+  bounded customer-code execution.
 
-- [Implementation plan](plan.md): identity, personal/company spaces, trusted
-  networks, Executor tools and skills, Matrix/A2A, Vaultwarden, messaging,
-  deletion, evals and release gates.
-- [Beeper and the Pally experience](beeper-pally.md): the hosted messaging
-  approach, user journeys, data boundaries and primary-source findings.
-- [Implemented customer code slice](../../decisions/adr-customer-tools.md):
-  current behavior, isolation evidence and remaining remote-connector work.
-- [Acceptance matrix](acceptance.csv): scenarios with required evidence levels;
-  populate results only after running them.
-- [Existing launch evidence](../../decisions/zoen-launch-validation.md): previous
-  results and their limits. Do not count these as proof of new capabilities.
-
-The product decisions include a Google-first identity with verified messenger
-links, companies as trusted networks, accepted personal trust connections, and
-scope-aware tool and skill publication. Membership permits contact with bots
-published to the network; access to their data and tools still requires the
-appropriate grants. A connected address book does not create trusted contacts.
-
-The first hosted messaging target is a user's WhatsApp account, including an
-existing test group, through a self-hosted bridge. Beeper Desktop is optional.
-Vaultwarden requires a separate proof of credential delegation and safe TOTP
-use. Neither integration is declared available by this documentation change.
+Identity, workspace membership and explicit grants remain separate. A connected
+address book does not create trusted contacts or disclose private tools and data.

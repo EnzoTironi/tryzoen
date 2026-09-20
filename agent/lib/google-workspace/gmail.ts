@@ -3,10 +3,8 @@ import { gmail, type gmail_v1 } from "@googleapis/gmail";
 import type { ToolContext } from "eve/tools";
 import { z } from "zod";
 import { googleApiErrorStatus, withGoogleAuth } from "./client";
-
 type GmailMessage = gmail_v1.Schema$Message;
 type GmailPart = gmail_v1.Schema$MessagePart;
-
 export const GMAIL_UPDATE_ACTIONS = [
   "archive",
   "move_to_inbox",
@@ -15,9 +13,7 @@ export const GMAIL_UPDATE_ACTIONS = [
   "star",
   "unstar",
 ] as const;
-
 export type GmailUpdateAction = (typeof GMAIL_UPDATE_ACTIONS)[number];
-
 export const gmailSendSchema = z.object({
   bcc: z.array(z.email()).max(20).default([]),
   body: z.string().min(1).max(100_000),
@@ -27,7 +23,6 @@ export const gmailSendSchema = z.object({
   threadId: z.string().max(200).optional(),
   to: z.array(z.email()).min(1).max(20),
 });
-
 export async function searchGmail(
   ctx: ToolContext,
   query: string,
@@ -35,8 +30,14 @@ export async function searchGmail(
 ) {
   return withGmail(ctx, async (client) => {
     const listed = await client.users.messages.list(
-      { maxResults, q: query, userId: "me" },
-      { signal: ctx.abortSignal }
+      {
+        maxResults,
+        q: query,
+        userId: "me",
+      },
+      {
+        signal: ctx.abortSignal,
+      }
     );
     const messages = await Promise.all(
       (listed.data.messages ?? []).flatMap(({ id }) =>
@@ -55,7 +56,9 @@ export async function searchGmail(
                   ],
                   userId: "me",
                 },
-                { signal: ctx.abortSignal }
+                {
+                  signal: ctx.abortSignal,
+                }
               ),
             ]
           : []
@@ -69,16 +72,26 @@ export async function searchGmail(
 export async function readGmailMailbox(ctx: ToolContext) {
   return withGmail(ctx, async (client) => {
     const profile = await client.users.getProfile(
-      { userId: "me" },
-      { signal: ctx.abortSignal }
+      {
+        userId: "me",
+      },
+      {
+        signal: ctx.abortSignal,
+      }
     );
     const blocks: string[] = [];
     let pageToken: string | undefined;
-    /* oxlint-disable eslint/no-await-in-loop -- Gmail pagination requires the token returned by the preceding page. */
     do {
       const page = await client.users.messages.list(
-        { userId: "me", q: "newer_than:30d", maxResults: 100, pageToken },
-        { signal: ctx.abortSignal }
+        {
+          userId: "me",
+          q: "newer_than:30d",
+          maxResults: 100,
+          pageToken,
+        },
+        {
+          signal: ctx.abortSignal,
+        }
       );
       const messages = await Promise.all(
         (page.data.messages ?? []).flatMap(({ id }) =>
@@ -99,7 +112,9 @@ export async function readGmailMailbox(ctx: ToolContext) {
                       "In-Reply-To",
                     ],
                   },
-                  { signal: ctx.abortSignal }
+                  {
+                    signal: ctx.abortSignal,
+                  }
                 ),
               ]
             : []
@@ -114,7 +129,6 @@ export async function readGmailMailbox(ctx: ToolContext) {
       }
       pageToken = page.data.nextPageToken ?? undefined;
     } while (pageToken && blocks.length < 1000);
-    /* oxlint-enable eslint/no-await-in-loop */
     return {
       text: blocks.join("\n"),
       format: "mbox" as const,
@@ -123,12 +137,17 @@ export async function readGmailMailbox(ctx: ToolContext) {
     };
   });
 }
-
 export async function readGmailThread(ctx: ToolContext, threadId: string) {
   return withGmail(ctx, async (client) => {
     const { data: thread } = await client.users.threads.get(
-      { format: "full", id: threadId, userId: "me" },
-      { signal: ctx.abortSignal }
+      {
+        format: "full",
+        id: threadId,
+        userId: "me",
+      },
+      {
+        signal: ctx.abortSignal,
+      }
     );
     return {
       id: thread.id ?? threadId,
@@ -141,7 +160,6 @@ export async function readGmailThread(ctx: ToolContext, threadId: string) {
     };
   });
 }
-
 export async function updateGmail(
   ctx: ToolContext,
   messageIds: string[],
@@ -151,13 +169,21 @@ export async function updateGmail(
   await withGmail(ctx, async (client) =>
     client.users.messages.batchModify(
       {
-        requestBody: { ids, ...gmailUpdateLabels(action) },
+        requestBody: {
+          ids,
+          ...gmailUpdateLabels(action),
+        },
         userId: "me",
       },
-      { signal: ctx.abortSignal }
+      {
+        signal: ctx.abortSignal,
+      }
     )
   );
-  return { action, updatedCount: ids.length };
+  return {
+    action,
+    updatedCount: ids.length,
+  };
 }
 
 /**
@@ -167,7 +193,9 @@ export async function updateGmail(
  */
 export function gmailSendIdempotencyKey(ctx: {
   callId: string;
-  session: { id: string };
+  session: {
+    id: string;
+  };
 }) {
   const stableId = createHash("sha256")
     .update(`${ctx.session.id}:${ctx.callId}`)
@@ -184,7 +212,9 @@ export function gmailSendIdempotencyQuery(key: string) {
 /** Correlation Message-ID (Gmail rewrites on send; not used for reconcile). */
 export function gmailSendMessageId(ctx: {
   callId: string;
-  session: { id: string };
+  session: {
+    id: string;
+  };
 }) {
   return `<${gmailSendIdempotencyKey(ctx)}@local>`;
 }
@@ -238,17 +268,23 @@ export async function sendGmail(
       ctx.abortSignal
     );
     if (existing) return existing;
-
     const requestBody = payload.threadId
-      ? { raw, threadId: payload.threadId }
-      : { raw };
+      ? {
+          raw,
+          threadId: payload.threadId,
+        }
+      : {
+          raw,
+        };
     try {
       const { data } = await client.users.messages.send(
         {
           requestBody,
           userId: "me",
         },
-        { signal: ctx.abortSignal }
+        {
+          signal: ctx.abortSignal,
+        }
       );
       return data;
     } catch (error) {
@@ -268,7 +304,6 @@ export async function sendGmail(
     }
   });
 }
-
 async function findSentGmailByIdempotencyKey(
   client: ReturnType<typeof gmail>,
   idempotencyKey: string,
@@ -280,7 +315,9 @@ async function findSentGmailByIdempotencyKey(
       q: gmailSendIdempotencyQuery(idempotencyKey),
       userId: "me",
     },
-    { signal }
+    {
+      signal,
+    }
   );
   const id = listed.data.messages?.[0]?.id;
   if (!id) return null;
@@ -290,29 +327,47 @@ async function findSentGmailByIdempotencyKey(
       id,
       userId: "me",
     },
-    { signal }
+    {
+      signal,
+    }
   );
   return data;
 }
-
 export function gmailUpdateLabels(action: GmailUpdateAction) {
   switch (action) {
     case "archive":
-      return { addLabelIds: [], removeLabelIds: ["INBOX"] };
+      return {
+        addLabelIds: [],
+        removeLabelIds: ["INBOX"],
+      };
     case "move_to_inbox":
-      return { addLabelIds: ["INBOX"], removeLabelIds: [] };
+      return {
+        addLabelIds: ["INBOX"],
+        removeLabelIds: [],
+      };
     case "mark_read":
-      return { addLabelIds: [], removeLabelIds: ["UNREAD"] };
+      return {
+        addLabelIds: [],
+        removeLabelIds: ["UNREAD"],
+      };
     case "mark_unread":
-      return { addLabelIds: ["UNREAD"], removeLabelIds: [] };
+      return {
+        addLabelIds: ["UNREAD"],
+        removeLabelIds: [],
+      };
     case "star":
-      return { addLabelIds: ["STARRED"], removeLabelIds: [] };
+      return {
+        addLabelIds: ["STARRED"],
+        removeLabelIds: [],
+      };
     case "unstar":
-      return { addLabelIds: [], removeLabelIds: ["STARRED"] };
+      return {
+        addLabelIds: [],
+        removeLabelIds: ["STARRED"],
+      };
   }
   throw new Error("Unsupported Gmail update action.");
 }
-
 function header(part: GmailPart | undefined, name: string) {
   return (
     part?.headers?.find(
@@ -320,7 +375,6 @@ function header(part: GmailPart | undefined, name: string) {
     )?.value ?? null
   );
 }
-
 function plainText(part: GmailPart | undefined): string {
   if (!part) return "";
   if (part.mimeType === "text/plain" && part.body?.data) {
@@ -337,7 +391,6 @@ function plainText(part: GmailPart | undefined): string {
   }
   return "";
 }
-
 function minimizeMessage(message: GmailMessage) {
   return {
     date: header(message.payload, "Date"),
@@ -351,7 +404,6 @@ function minimizeMessage(message: GmailMessage) {
     to: header(message.payload, "To"),
   };
 }
-
 function collectAttachments(part: GmailPart | undefined): {
   attachmentId: string;
   filename: string;
@@ -373,22 +425,25 @@ function collectAttachments(part: GmailPart | undefined): {
   });
   return [...own, ...nested];
 }
-
 function safeHeader(value: string) {
   return value.replace(/[\r\n]+/gu, " ").trim();
 }
-
 function withGmail<T>(
   ctx: ToolContext,
   execute: (client: ReturnType<typeof gmail>) => Promise<T>
 ) {
-  return withGoogleAuth(ctx, (auth) => execute(gmail({ auth, version: "v1" })));
+  return withGoogleAuth(ctx, (auth) =>
+    execute(
+      gmail({
+        auth,
+        version: "v1",
+      })
+    )
+  );
 }
-
 function decodeBase64Url(value: string) {
   return Buffer.from(value, "base64url").toString("utf8");
 }
-
 const secretPatterns: readonly (readonly [RegExp, string])[] = [
   [/\b\d{6}\b/gu, "[six-digit code redacted]"],
   [/\bsk-(?:proj-)?[A-Za-z0-9_-]{12,}\b/gu, "[api key redacted]"],
@@ -402,7 +457,6 @@ const secretPatterns: readonly (readonly [RegExp, string])[] = [
   ],
   [/\b(?:\d[ -]*?){13,19}\b/gu, "[payment number redacted]"],
 ];
-
 function redactGoogleText(value: string, maxLength = 12_000) {
   let redacted = value.slice(0, maxLength);
   for (const [pattern, replacement] of secretPatterns) {

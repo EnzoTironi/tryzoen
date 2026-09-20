@@ -19,38 +19,46 @@ import {
   updateBrowserBenchmarkLiveStatus,
   writeBrowserBenchmarkLiveStatus,
 } from "../evals/browser/live-status.ts";
-
 const { loadEnvConfig } = nextEnvironment;
-const nodeErrorSchema = z.object({ code: z.string() });
+const nodeErrorSchema = z.object({
+  code: z.string(),
+});
 const errorMessageSchema = z.preprocess(
   (value) => (value instanceof Error ? value.message : String(value)),
   z.string()
 );
-
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
-// oxlint-disable-next-line eslint/no-restricted-properties -- the benchmark supervisor must forward credentials and provider configuration to isolated child revisions
-let inheritedEnvironment = { ...process.env };
+let inheritedEnvironment = {
+  // oxlint-disable-next-line eslint/no-restricted-properties -- Forward the parent environment to the owned CLI subprocess.
+  ...process.env,
+};
 const options = parseArguments(process.argv.slice(2));
 const timestamp = new Date().toISOString().replaceAll(":", "-");
 const outputDirectory = join(repositoryRoot, ".eve", "browser-ab", timestamp);
 const liveStatusPath = join(repositoryRoot, ".eve", "browser-ab", "live.json");
 const temporaryRoot = await mkdtemp(join(tmpdir(), "eve-browser-ab-"));
 const processes: ChildProcess[] = [];
-const composeProjects: { cwd: string; name: string }[] = [];
-const localDatabases: { maintenanceUrl: string; name: string }[] = [];
+const composeProjects: {
+  cwd: string;
+  name: string;
+}[] = [];
+const localDatabases: {
+  maintenanceUrl: string;
+  name: string;
+}[] = [];
 let keepResources = options.keep;
 let liveStatusInitialized = false;
-
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     keepResources = false;
     void cleanup().finally(() => process.exit(130));
   });
 }
-
 try {
   inheritedEnvironment = await refreshGatewayEnvironment();
-  await mkdir(outputDirectory, { recursive: true });
+  await mkdir(outputDirectory, {
+    recursive: true,
+  });
   const [baselineSha, candidateSha] = await Promise.all([
     resolveCommit(options.baselineRef),
     resolveCommit(options.candidateRef),
@@ -65,17 +73,14 @@ try {
     initialLiveStatus(variants)
   );
   liveStatusInitialized = true;
-
   console.log(
     `Preparing browser A/B: ${shortSha(baselineSha)} → ${shortSha(candidateSha)}`
   );
   for (const current of variants) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- each worktree is prepared sequentially to keep setup output and status transitions deterministic
     await updateVariant(current.kind, (status) => ({
       ...status,
       status: "preparing",
     }));
-    // oxlint-disable-next-line eslint/no-await-in-loop -- git worktree mutations share repository metadata and must be serialized
     await run(
       "git",
       ["worktree", "add", "--detach", current.path, current.sha],
@@ -83,16 +88,15 @@ try {
         cwd: repositoryRoot,
       }
     );
-    // oxlint-disable-next-line eslint/no-await-in-loop -- benchmark context must be installed only after its worktree exists
     await installBenchmarkContext(current.path);
   }
-
   await Promise.all(
     variants.map((current) =>
-      run("pnpm", ["install", "--frozen-lockfile"], { cwd: current.path })
+      run("pnpm", ["install", "--frozen-lockfile"], {
+        cwd: current.path,
+      })
     )
   );
-
   await Promise.all(
     variants.map(async (current) => {
       current.databaseUrl = await startDatabase(current);
@@ -110,11 +114,11 @@ try {
       );
     })
   );
-
   await Promise.all(variants.map(startAgent));
-
-  await updateLiveStatus((status) => ({ ...status, status: "running" }));
-
+  await updateLiveStatus((status) => ({
+    ...status,
+    status: "running",
+  }));
   const artifacts: Record<"baseline" | "candidate", string> = {
     baseline: "",
     candidate: "",
@@ -145,10 +149,15 @@ try {
       `One or more benchmark variants failed: ${failureMessages.join("; ")}`
     );
   }
-
   const manifest = {
-    baseline: { artifact: artifacts.baseline, gitSha: baselineSha },
-    candidate: { artifact: artifacts.candidate, gitSha: candidateSha },
+    baseline: {
+      artifact: artifacts.baseline,
+      gitSha: baselineSha,
+    },
+    candidate: {
+      artifact: artifacts.candidate,
+      gitSha: candidateSha,
+    },
     completedAt: new Date().toISOString(),
     label: options.label,
     repetitions: options.repetitions,
@@ -161,7 +170,6 @@ try {
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf8"
   );
-
   await run(
     "node",
     [
@@ -170,16 +178,16 @@ try {
       artifacts.baseline,
       artifacts.candidate,
     ],
-    { cwd: repositoryRoot }
+    {
+      cwd: repositoryRoot,
+    }
   );
-
   await updateLiveStatus((status) => ({
     ...status,
     completedAt: new Date().toISOString(),
     status: "completed",
   }));
   await copyFile(liveStatusPath, join(outputDirectory, "status.json"));
-
   console.log(`A/B artifacts: ${outputDirectory}`);
   if (options.keep) {
     console.log(`Baseline: ${variants[0].url}`);
@@ -201,7 +209,6 @@ try {
 } finally {
   await cleanup();
 }
-
 function variant(kind: "baseline" | "candidate", sha: string) {
   const suffix = `${shortSha(sha)}-${String(process.pid)}`;
   const name = `eve-browser-${kind}-${suffix}`;
@@ -214,7 +221,6 @@ function variant(kind: "baseline" | "candidate", sha: string) {
     url: `https://${name}.localhost`,
   };
 }
-
 async function installBenchmarkContext(worktree: string) {
   const sourcePath = join(repositoryRoot, "agent", "channels", "eve.ts");
   const targetPath = join(worktree, "agent", "channels", "eve.ts");
@@ -228,13 +234,14 @@ async function installBenchmarkContext(worktree: string) {
     join(worktree, ".env.local")
   );
 }
-
 async function refreshGatewayEnvironment() {
   const commonGitDirectory = (
     await output(
       "git",
       ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-      { cwd: repositoryRoot }
+      {
+        cwd: repositoryRoot,
+      }
     )
   ).trim();
   const projectFile = join(
@@ -243,9 +250,11 @@ async function refreshGatewayEnvironment() {
     "project.json"
   );
   const project = z
-    .object({ orgId: z.string().min(1), projectId: z.string().min(1) })
+    .object({
+      orgId: z.string().min(1),
+      projectId: z.string().min(1),
+    })
     .parse(JSON.parse(await readFile(projectFile, "utf8")));
-
   await run(
     "node_modules/eve/bin/eve.js",
     [
@@ -256,15 +265,15 @@ async function refreshGatewayEnvironment() {
       "--team",
       project.orgId,
     ],
-    { cwd: repositoryRoot }
+    {
+      cwd: repositoryRoot,
+    }
   );
-
   return {
     ...loadEnvConfig(repositoryRoot, true, console, true).combinedEnv,
     NODE_ENV: "development" as const,
   };
 }
-
 async function startDatabase(current: ReturnType<typeof variant>) {
   const maintenanceUrl = inheritedEnvironment.BROWSER_AB_DATABASE_BASE_URL;
   if (maintenanceUrl) {
@@ -272,35 +281,45 @@ async function startDatabase(current: ReturnType<typeof variant>) {
     await run(
       "dropdb",
       ["--if-exists", `--maintenance-db=${maintenanceUrl}`, name],
-      { cwd: current.path }
+      {
+        cwd: current.path,
+      }
     );
     await run("createdb", [`--maintenance-db=${maintenanceUrl}`, name], {
       cwd: current.path,
     });
-    localDatabases.push({ maintenanceUrl, name });
+    localDatabases.push({
+      maintenanceUrl,
+      name,
+    });
     const databaseUrl = new URL(maintenanceUrl);
     databaseUrl.pathname = `/${name}`;
     return databaseUrl.toString();
   }
-
   const name = `browser-ab-${current.kind}-${hash(current.path).slice(0, 10)}`;
-  composeProjects.push({ cwd: current.path, name });
+  composeProjects.push({
+    cwd: current.path,
+    name,
+  });
   await run(
     "docker",
     ["compose", "--project-name", name, "up", "--detach", "--wait", "postgres"],
-    { cwd: current.path }
+    {
+      cwd: current.path,
+    }
   );
   const address = await output(
     "docker",
     ["compose", "--project-name", name, "port", "postgres", "5432"],
-    { cwd: current.path }
+    {
+      cwd: current.path,
+    }
   );
   const port = /:(\d+)\s*$/u.exec(address)?.[1];
   if (!port)
     throw new Error(`Could not resolve PostgreSQL port for ${current.kind}.`);
   return `postgresql://postgres:postgres@127.0.0.1:${port}/open_instinct`;
 }
-
 async function startAgent(current: ReturnType<typeof variant>) {
   const child = start(
     "portless",
@@ -318,7 +337,6 @@ async function startAgent(current: ReturnType<typeof variant>) {
   processes.push(child);
   await waitForUrl(`${current.url}/eve/v1/health`, child);
 }
-
 async function runBenchmark(current: ReturnType<typeof variant>) {
   const label = [
     options.label,
@@ -362,7 +380,6 @@ async function runBenchmark(current: ReturnType<typeof variant>) {
   );
   return artifact;
 }
-
 async function archivePreviousLiveStatus() {
   const previous = await readBrowserBenchmarkLiveStatus(liveStatusPath);
   if (!previous) return;
@@ -381,7 +398,6 @@ async function archivePreviousLiveStatus() {
       : previous
   );
 }
-
 function initialLiveStatus(
   variants: readonly ReturnType<typeof variant>[]
 ): BrowserBenchmarkLiveStatus {
@@ -389,7 +405,6 @@ function initialLiveStatus(
   const baseline = variants.find((current) => current.kind === "baseline");
   const candidate = variants.find((current) => current.kind === "candidate");
   if (!baseline || !candidate) throw new Error("A/B variants are incomplete.");
-
   const liveVariant = (current: ReturnType<typeof variant>) => ({
     completedAt: null,
     error: null,
@@ -402,7 +417,6 @@ function initialLiveStatus(
     tasks: [],
     url: current.url,
   });
-
   const status: BrowserBenchmarkLiveStatus = {
     completedAt: null,
     error: null,
@@ -424,13 +438,11 @@ function initialLiveStatus(
   if (options.label) status.label = options.label;
   return status;
 }
-
 async function updateLiveStatus(
   update: (status: BrowserBenchmarkLiveStatus) => BrowserBenchmarkLiveStatus
 ) {
   await updateBrowserBenchmarkLiveStatus(liveStatusPath, timestamp, update);
 }
-
 async function updateVariant(
   kind: "baseline" | "candidate",
   update: (
@@ -445,7 +457,6 @@ async function updateVariant(
     },
   }));
 }
-
 async function waitForUrl(url: string, child: ChildProcess) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (child.exitCode !== null) {
@@ -454,19 +465,16 @@ async function waitForUrl(url: string, child: ChildProcess) {
       );
     }
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- readiness retries must wait for the current probe to finish before backoff
       await run("curl", ["--fail", "--silent", "--show-error", url], {
         cwd: repositoryRoot,
       });
       return;
     } catch {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- bounded backoff intentionally serializes readiness probes
       await delay(1_000);
     }
   }
   throw new Error(`Timed out waiting for ${url}.`);
 }
-
 function databaseEnvironment(databaseUrl: string) {
   return {
     DATABASE_URL: databaseUrl,
@@ -474,22 +482,26 @@ function databaseEnvironment(databaseUrl: string) {
     NODE_ENV: "development" as const,
   };
 }
-
 function start(
   command: string,
   args: string[],
-  execution: { cwd: string; env?: NodeJS.ProcessEnv }
+  execution: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  }
 ) {
   const child = spawn(command, args, {
     cwd: execution.cwd,
     detached: true,
-    env: { ...inheritedEnvironment, ...execution.env },
+    env: {
+      ...inheritedEnvironment,
+      ...execution.env,
+    },
     stdio: "inherit",
   });
   child.unref();
   return child;
 }
-
 async function run(
   command: string,
   args: string[],
@@ -501,7 +513,10 @@ async function run(
 ) {
   const child = spawn(command, args, {
     cwd: execution.cwd,
-    env: { ...inheritedEnvironment, ...execution.env },
+    env: {
+      ...inheritedEnvironment,
+      ...execution.env,
+    },
     stdio: "inherit",
   });
   const code = await new Promise<number | null>((resolveExit, reject) => {
@@ -514,11 +529,12 @@ async function run(
     );
   }
 }
-
 async function output(
   command: string,
   args: string[],
-  execution: { cwd: string }
+  execution: {
+    cwd: string;
+  }
 ) {
   const child = spawn(command, args, {
     cwd: execution.cwd,
@@ -537,7 +553,6 @@ async function output(
   if (code !== 0) throw new Error(`${command} exited with ${String(code)}.`);
   return value;
 }
-
 async function resolveCommit(reference: string) {
   return (
     await output("git", ["rev-parse", "--verify", `${reference}^{commit}`], {
@@ -545,7 +560,6 @@ async function resolveCommit(reference: string) {
     })
   ).trim();
 }
-
 async function cleanup() {
   if (keepResources) return;
   for (const child of processes.toReversed()) {
@@ -559,15 +573,15 @@ async function cleanup() {
     }
   }
   for (const project of composeProjects.toReversed()) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- teardown is deliberately ordered to avoid interleaved Docker cleanup
     await run(
       "docker",
       ["compose", "--project-name", project.name, "down", "--volumes"],
-      { cwd: project.cwd }
+      {
+        cwd: project.cwd,
+      }
     ).catch(() => undefined);
   }
   for (const database of localDatabases.toReversed()) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- teardown is deliberately ordered to avoid interleaved database cleanup
     await run(
       "dropdb",
       [
@@ -576,19 +590,22 @@ async function cleanup() {
         `--maintenance-db=${database.maintenanceUrl}`,
         database.name,
       ],
-      { cwd: repositoryRoot }
+      {
+        cwd: repositoryRoot,
+      }
     ).catch(() => undefined);
   }
   for (const name of ["candidate", "baseline"]) {
     const path = join(temporaryRoot, name);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- git worktree removals share repository metadata and must be serialized
     await run("git", ["worktree", "remove", "--force", path], {
       cwd: repositoryRoot,
     }).catch(() => undefined);
   }
-  await rm(temporaryRoot, { force: true, recursive: true });
+  await rm(temporaryRoot, {
+    force: true,
+    recursive: true,
+  });
 }
-
 function parseArguments(args: string[]) {
   const positional: string[] = [];
   let suite: "all" | "live" | "smoke" = "smoke";
@@ -597,7 +614,6 @@ function parseArguments(args: string[]) {
   let taskTimeoutMs = 15 * 60_000;
   let keep = false;
   let label: string | undefined;
-
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--keep") {
@@ -642,7 +658,6 @@ function parseArguments(args: string[]) {
     }
     if (argument) positional.push(argument);
   }
-
   const [baselineRef, candidateRef] = positional;
   if (positional.length !== 2 || !baselineRef || !candidateRef) {
     throw new Error(
@@ -660,15 +675,12 @@ function parseArguments(args: string[]) {
     taskTimeoutMs,
   };
 }
-
 function shortSha(sha: string) {
   return sha.slice(0, 12);
 }
-
 function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
-
 function delay(milliseconds: number) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }

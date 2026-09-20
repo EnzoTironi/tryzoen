@@ -1,7 +1,9 @@
 "use client";
 
+import type { z } from "zod";
+
 import { useState } from "react";
-import type { Effect } from "effect";
+
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -27,11 +29,9 @@ export function OnboardingSetup({
   available,
   callbackUrl,
 }: {
-  readonly workspaces: Effect.Success<ReturnType<typeof listUserWorkspaces>>;
-  readonly identities: Effect.Success<
-    ReturnType<typeof readLinkedChannelIdentities>
-  >;
-  readonly available: readonly (typeof channelProviderSchema.Type)[];
+  readonly workspaces: Awaited<ReturnType<typeof listUserWorkspaces>>;
+  readonly identities: Awaited<ReturnType<typeof readLinkedChannelIdentities>>;
+  readonly available: readonly z.output<typeof channelProviderSchema>[];
   readonly callbackUrl: string;
 }) {
   const { t } = useI18n();

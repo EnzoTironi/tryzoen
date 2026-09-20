@@ -1,4 +1,3 @@
-import { Effect, Result } from "effect";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -8,10 +7,12 @@ import { requireRequestScope } from "@web/auth/request-scope";
 import { cn } from "@web/components/class-names";
 import { getI18n } from "@web/i18n/server";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
-import { serverRuntime } from "../../../server/runtime";
 import { readPersonalGoogleSettings } from "../../../server/google-workspace/settings";
 import { resolveWorkspaceActor } from "../../../server/workspaces/session";
-import { readLinkedChannelIdentities } from "../../../server/accounts/controls";
+import {
+  AccountControlError,
+  readLinkedChannelIdentities,
+} from "../../../server/accounts/controls";
 import { Alert, AlertTitle, AlertDescription } from "@web/components/ui/alert";
 import { ConnectionList } from "./_components/connection-list";
 import styles from "../_components/panel.module.css";
@@ -43,19 +44,23 @@ export default async function ConnectionsPage({
     );
   const requestHeaders = await headers();
   const [google, messengers] = await Promise.all([
-    serverRuntime.runPromise(
-      resolveWorkspaceActor(requestHeaders).pipe(
-        Effect.flatMap(readPersonalGoogleSettings),
-        Effect.result
-      )
+    Promise.try(async () => {
+      return await Promise.try(async () =>
+        resolveWorkspaceActor(requestHeaders)
+      ).then(readPersonalGoogleSettings);
+    }).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error })
     ),
-    serverRuntime.runPromise(
-      readLinkedChannelIdentities(requestHeaders).pipe(Effect.result)
+    Promise.try(async () => readLinkedChannelIdentities(requestHeaders)).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error })
     ),
   ]);
   if (
-    Result.isFailure(messengers) &&
-    messengers.failure.reason === "unauthenticated"
+    !messengers.ok &&
+    messengers.error instanceof AccountControlError &&
+    messengers.error.reason === "unauthenticated"
   )
     redirect("/sign-in?callbackUrl=%2Fconnections");
   return (
@@ -67,7 +72,7 @@ export default async function ConnectionsPage({
         <UsersRoundIcon />
         {t("Minha rede")}
       </PanelLink>
-      {Result.isFailure(google) || Result.isFailure(messengers) ? (
+      {!google.ok || !messengers.ok ? (
         <Alert variant="destructive">
           <AlertTitle>
             {t("Não foi possível carregar suas conexões")}
@@ -78,8 +83,8 @@ export default async function ConnectionsPage({
         </Alert>
       ) : (
         <ConnectionList
-          googleState={google.success.state}
-          identities={messengers.success}
+          googleState={google.value.state}
+          identities={messengers.value}
           returnTo={returnTo}
         />
       )}

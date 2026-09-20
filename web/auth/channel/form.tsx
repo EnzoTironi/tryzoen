@@ -1,12 +1,9 @@
 "use client";
 
+import type { z } from "zod";
 import { useI18n } from "@web/i18n/context";
-
-import type {
-  ChannelAuthorizationError,
-  ChannelAuthorizationStatus,
-} from "@web/auth/channel/client";
-import { Effect, Result } from "effect";
+import type { ChannelAuthorizationStatus } from "@web/auth/channel/client";
+import { ChannelAuthorizationError } from "@web/auth/channel/client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type {
@@ -30,7 +27,6 @@ import { Alert, AlertDescription } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";
 import { ChannelStatus } from "./status";
 import { authClient } from "@web/auth/client";
-
 export function ChannelAuthForm({
   callbackUrl,
   purpose,
@@ -38,25 +34,29 @@ export function ChannelAuthForm({
   onComplete,
 }: {
   readonly callbackUrl: string;
-  readonly purpose: typeof channelChallengeRequestSchema.Type.purpose;
-  readonly onComplete?: (channel: typeof channelProviderSchema.Type) => void;
+  readonly purpose: z.output<typeof channelChallengeRequestSchema>["purpose"];
+  readonly onComplete?: (
+    channel: z.output<typeof channelProviderSchema>
+  ) => void;
   readonly children?: (request: {
-    start: (channel: typeof channelProviderSchema.Type) => void;
+    start: (channel: z.output<typeof channelProviderSchema>) => void;
     busy: boolean;
   }) => ReactNode;
 }) {
   const { t } = useI18n();
   const [challenge, setChallenge] =
-    useState<typeof channelChallengeSchema.Type>();
+    useState<z.output<typeof channelChallengeSchema>>();
   const action = useAuthorizationRequest();
-  function start(channel: typeof channelProviderSchema.Type) {
-    action.run(startChannelAuthorization(channel, purpose), (result) => {
-      if ("conversationUrl" in result)
-        window.location.assign(result.conversationUrl);
-      else setChallenge(result);
-    });
+  function start(channel: z.output<typeof channelProviderSchema>) {
+    action.run(
+      (signal) => startChannelAuthorization(channel, purpose, signal),
+      (result) => {
+        if ("conversationUrl" in result)
+          window.location.assign(result.conversationUrl);
+        else setChallenge(result);
+      }
+    );
   }
-
   if (challenge)
     return (
       <PendingAuthorization
@@ -73,7 +73,10 @@ export function ChannelAuthForm({
   return (
     <div className="space-y-3">
       {children ? (
-        children({ start, busy: action.busy })
+        children({
+          start,
+          busy: action.busy,
+        })
       ) : (
         <ChannelChoices purpose={purpose} start={start} busy={action.busy} />
       )}
@@ -90,14 +93,13 @@ export function ChannelAuthForm({
     </div>
   );
 }
-
 function ChannelChoices({
   purpose,
   start,
   busy,
 }: {
-  readonly purpose: typeof channelChallengeRequestSchema.Type.purpose;
-  readonly start: (channel: typeof channelProviderSchema.Type) => void;
+  readonly purpose: z.output<typeof channelChallengeRequestSchema>["purpose"];
+  readonly start: (channel: z.output<typeof channelProviderSchema>) => void;
   readonly busy: boolean;
 }) {
   const { t } = useI18n();
@@ -144,7 +146,6 @@ function ChannelChoices({
     </>
   );
 }
-
 export function PendingAuthorization({
   challenge,
   callbackUrl,
@@ -153,19 +154,20 @@ export function PendingAuthorization({
   onComplete,
 }: {
   readonly challenge:
-    | typeof channelChallengeSchema.Type
-    | typeof deviceBoundSchema.Type;
+    | z.output<typeof channelChallengeSchema>
+    | z.output<typeof deviceBoundSchema>;
   readonly callbackUrl: string;
-  readonly purpose: typeof channelChallengeRequestSchema.Type.purpose;
+  readonly purpose: z.output<typeof channelChallengeRequestSchema>["purpose"];
   readonly onRestart: () => void;
-  readonly onComplete?: (channel: typeof channelProviderSchema.Type) => void;
+  readonly onComplete?: (
+    channel: z.output<typeof channelProviderSchema>
+  ) => void;
 }) {
   const { t } = useI18n();
   const router = useRouter();
   const [status, setStatus] = useState<ChannelAuthorizationStatus>("pending");
   const [error, setError] = useState<string>();
   const action = useAuthorizationRequest();
-
   useEffect(() => {
     if (status !== "pending" && status !== "confirmed") return undefined;
     const controller = new AbortController();
@@ -178,44 +180,55 @@ export function PendingAuthorization({
       Math.min(remaining, 2_147_483_647)
     );
     if (status === "pending") {
-      const poll = Effect.gen(function* pollConfirmation() {
+      const poll = async () => {
         let failures = 0;
-        while (Date.now() < Date.parse(challenge.expiresAt)) {
-          const result = yield* checkChannelAuthorization(challenge.id).pipe(
-            Effect.result
-          );
+        while (
+          !controller.signal.aborted &&
+          Date.now() < Date.parse(challenge.expiresAt)
+        ) {
           let delay = channelAuthorizationPollIntervalMs;
-          if (Result.isSuccess(result)) {
+          try {
+            const result = await checkChannelAuthorization(
+              challenge.id,
+              controller.signal
+            );
+            controller.signal.throwIfAborted();
             failures = 0;
             setError(undefined);
-            if (result.success.status !== "pending") {
-              setStatus(result.success.status);
+            if (result.status !== "pending") {
+              setStatus(result.status);
               return;
             }
-          } else {
+          } catch (cause) {
+            controller.signal.throwIfAborted();
+            const failure =
+              cause instanceof ChannelAuthorizationError
+                ? cause
+                : channelHttpError(0);
             const next = channelPollFailure(
-              result.failure,
+              failure,
               failures,
               Date.now(),
               Date.parse(challenge.expiresAt)
             );
             setError(
               next.status === "invalid"
-                ? `${t(channelFailureMessage(result.failure, purpose))} ${t("Comece um novo pedido para continuar.")}`
-                : t(channelFailureMessage(result.failure, purpose))
+                ? `${t(channelFailureMessage(failure, purpose))} ${t("Comece um novo pedido para continuar.")}`
+                : t(channelFailureMessage(failure, purpose))
             );
             if (next.status !== "pending") {
               setStatus(next.status);
               return;
             }
+            // oxlint-disable-next-line eslint/no-useless-assignment -- A later failed poll reads this counter; successful polls reset it.
             failures = next.failures;
             delay = next.delay;
           }
-          yield* Effect.sleep(delay);
+          await waitForPoll(delay, controller.signal);
         }
-        setStatus("expired");
-      });
-      void Effect.runPromise(poll, { signal: controller.signal }).catch(() => {
+        if (!controller.signal.aborted) setStatus("expired");
+      };
+      void poll().catch(() => {
         if (!controller.signal.aborted)
           setError(t(channelHttpError(0).message));
       });
@@ -225,24 +238,25 @@ export function PendingAuthorization({
       controller.abort();
     };
   }, [challenge, status, purpose, t]);
-
   function complete() {
     if (status !== "confirmed") return;
     if (Date.now() >= Date.parse(challenge.expiresAt)) {
       setStatus("expired");
       return;
     }
-    action.run(completeChannelAuthorization(challenge.id), () => {
-      if (purpose === "link") onRestart();
-      if (onComplete) {
-        onComplete(challenge.channel);
-        return;
+    action.run(
+      (signal) => completeChannelAuthorization(challenge.id, signal),
+      () => {
+        if (purpose === "link") onRestart();
+        if (onComplete) {
+          onComplete(challenge.channel);
+          return;
+        }
+        router.replace(safeCallbackUrl(callbackUrl));
+        router.refresh();
       }
-      router.replace(safeCallbackUrl(callbackUrl));
-      router.refresh();
-    });
+    );
   }
-
   return (
     <div className="space-y-3">
       <ChannelStatus
@@ -262,15 +276,13 @@ export function PendingAuthorization({
     </div>
   );
 }
-
 export function useAuthorizationRequest() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ChannelAuthorizationError>();
   const active = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => active.current?.abort(), []);
-
   function run<A>(
-    operation: Effect.Effect<A, ChannelAuthorizationError>,
+    operation: (signal: AbortSignal) => Promise<A>,
     onSuccess: (value: A) => void
   ) {
     if (active.current) return;
@@ -278,19 +290,17 @@ export function useAuthorizationRequest() {
     active.current = controller;
     setBusy(true);
     setError(undefined);
-    void Effect.runPromise(
-      operation.pipe(
-        Effect.match({
-          onFailure: (failure) => {
-            setError(failure);
-          },
-          onSuccess,
-        })
-      ),
-      { signal: controller.signal }
-    )
-      .catch(() => {
-        if (!controller.signal.aborted) setError(channelHttpError(0));
+    void operation(controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) onSuccess(value);
+      })
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            failure instanceof ChannelAuthorizationError
+              ? failure
+              : channelHttpError(0)
+          );
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -299,9 +309,12 @@ export function useAuthorizationRequest() {
         }
       });
   }
-  return { busy, error, run };
+  return {
+    busy,
+    error,
+    run,
+  };
 }
-
 export function SignInAgain({ callbackUrl }: { readonly callbackUrl: string }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -341,4 +354,25 @@ export function SignInAgain({ callbackUrl }: { readonly callbackUrl: string }) {
       ) : null}
     </div>
   );
+}
+function waitForPoll(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    function abort() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new DOMException("Polling cancelled", "AbortError")
+      );
+    }
+    signal.addEventListener("abort", abort, {
+      once: true,
+    });
+    if (signal.aborted) abort();
+  });
 }

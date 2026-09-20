@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { expect, test } from "vitest";
 import {
   bindGroupChannelIdentity,
@@ -60,15 +59,13 @@ test("telegram mention helper matches @username and text_mention entities", () =
 });
 
 test("bindGroupChannelIdentity scopes conversation to group chat", async () => {
-  const binding = await Effect.runPromise(
-    bindGroupChannelIdentity({
-      identityId: "11111111-1111-4111-8111-111111111111",
-      channel: "telegram",
-      installationId: "123456",
-      senderId: "789012",
-      chatId: "-100123",
-    })
-  );
+  const binding = await bindGroupChannelIdentity({
+    identityId: "11111111-1111-4111-8111-111111111111",
+    channel: "telegram",
+    installationId: "123456",
+    senderId: "789012",
+    chatId: "-100123",
+  });
   expect(binding).toEqual({
     identityId: "11111111-1111-4111-8111-111111111111",
     channel: "telegram",

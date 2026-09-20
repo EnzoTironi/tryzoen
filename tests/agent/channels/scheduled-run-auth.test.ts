@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { ResolvedInstallationSecrets } from "@db/services/installation-secrets";
-import { ConfigProvider, Effect } from "effect";
+
 import { routeAuth, vercelOidc } from "eve/channels/auth";
 import { internalCallbackHeaders } from "../../../server/internal/callback-auth";
 import type {
@@ -11,6 +10,23 @@ import type {
 } from "eve/channels";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import scheduledRunChannel from "@agent/channels/scheduled-run";
+
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: new Proxy(actual.env, {
+      get(target, name): unknown {
+        if (
+          typeof name === "string" &&
+          ["VERCEL_ENV", "BETTER_AUTH_URL"].includes(name)
+        )
+          return process.env[name];
+        return Reflect.get(target, name);
+      },
+    }),
+  };
+});
 
 const scheduledRunPaths = [
   "/internal/scheduled-run/report",
@@ -67,15 +83,7 @@ describe("scheduled run channel authentication", () => {
     "authenticates a signed request before rejecting invalid JSON on %s",
     async (path) => {
       const body = "not valid JSON";
-      const headers = await Effect.runPromise(
-        internalCallbackHeaders(path, body).pipe(
-          Effect.provide(ResolvedInstallationSecrets.layer),
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromEnv()
-          )
-        )
-      );
+      const headers = await internalCallbackHeaders(path, body);
       const response = await scheduledRoute(path).handler(
         new Request(`https://assistant.example${path}`, {
           body,
@@ -108,8 +116,6 @@ describe("scheduled run channel handoff", () => {
       .mockResolvedValue(workerSession());
     const reset = vi.fn<ChannelSource["reset"]>();
     const source: ChannelSource = {
-      getInputAcceptance: unexpectedRouteRequest,
-      recoverInputAcceptance: unexpectedRouteRequest,
       cancel: vi.fn<ChannelSource["cancel"]>(),
       clear: vi.fn<ChannelSource["clear"]>(),
       compact: vi.fn<ChannelSource["compact"]>(),
@@ -137,7 +143,6 @@ describe("scheduled run channel handoff", () => {
         },
       },
       {
-        attachSession: unexpectedRouteRequest,
         from,
         resolveSession: vi
           .fn<ChannelResolveSession>()
@@ -180,8 +185,6 @@ function unexpectedRouteRequest(): never {
 
 function workerSession(): Session {
   return {
-    getInputAcceptance: unexpectedRouteRequest,
-    recoverInputAcceptance: unexpectedRouteRequest,
     cancel: vi.fn<Session["cancel"]>(),
     clear: vi.fn<Session["clear"]>(),
     compact: vi.fn<Session["compact"]>(),

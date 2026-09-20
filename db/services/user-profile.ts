@@ -1,5 +1,5 @@
-import { PgClient } from "@effect/sql-pg";
-import { Effect, Schema } from "effect";
+import { query, transaction } from "@db/queries";
+import { sql } from "drizzle-orm";
 import type { AccessScope } from "@shared/identity/access-scope";
 import {
   emptyUserProfile,
@@ -10,10 +10,15 @@ import {
   type UserProfilePatch,
 } from "@shared/user-profile/schema";
 
-export class UserProfileError extends Schema.TaggedError<UserProfileError>()(
-  "UserProfileError",
-  { reason: Schema.Literals(["invalid_input", "invalid_stored_profile"]) }
-) {}
+export class UserProfileError extends Error {
+  readonly _tag = "UserProfileError";
+  readonly reason: "invalid_input" | "invalid_stored_profile";
+  constructor(input: { reason: UserProfileError["reason"] }) {
+    super("UserProfileError");
+    this.name = "UserProfileError";
+    this.reason = input.reason;
+  }
+}
 
 const columns = [
   ["addressLine1", "address_line_1"],
@@ -29,75 +34,82 @@ const columns = [
   ["region", "region"],
 ] as const;
 
-const profileSelection = Effect.gen(function* () {
-  const sql = yield* PgClient.PgClient;
-  return sql`address_line_1 AS "addressLine1", address_line_2 AS "addressLine2",
-    city, country_code AS "countryCode", date_of_birth::text AS "dateOfBirth",
-    email, first_name AS "firstName", last_name AS "lastName", phone,
-    postal_code AS "postalCode", region`;
-});
+const selection = sql`address_line_1 AS "addressLine1", address_line_2 AS "addressLine2",
+  city, country_code AS "countryCode", date_of_birth::text AS "dateOfBirth",
+  email, first_name AS "firstName", last_name AS "lastName", phone,
+  postal_code AS "postalCode", region`;
 
-// Every operation owns the transaction retaining authority locks through storage I/O.
-export const readUserProfile = Effect.fn("readUserProfile")(function* <E, R>(
-  authorize: Effect.Effect<AccessScope, E, R>
-) {
-  const sql = yield* PgClient.PgClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      const scope = yield* authorize;
-      const selection = yield* profileSelection;
-      const rows =
-        yield* sql<UserProfile>`SELECT ${selection} FROM user_profiles
-      WHERE workspace_id = ${scope.workspaceId}`;
-      return yield* Effect.try({
-        try: () => parseUserProfile(rows[0] ?? emptyUserProfile),
-        catch: () => new UserProfileError({ reason: "invalid_stored_profile" }),
-      });
-    })
-  );
-});
-
-export const replaceUserProfile = Effect.fn("replaceUserProfile")(function* <
-  E,
-  R,
->(authorize: Effect.Effect<AccessScope, E, R>, input: UserProfile) {
-  const profile = yield* Effect.try({
-    try: () => parseUserProfile(input),
-    catch: () => new UserProfileError({ reason: "invalid_input" }),
+// Authorization runs within the transaction so its authority locks cover storage I/O.
+export function readUserProfile(authorize: () => Promise<AccessScope>) {
+  return transaction(async () => {
+    const scope = await authorize();
+    const rows =
+      await query<UserProfile>(sql`SELECT ${selection} FROM user_profiles
+      WHERE workspace_id = ${scope.workspaceId}`);
+    try {
+      return parseUserProfile(rows[0] ?? emptyUserProfile);
+    } catch {
+      throw new UserProfileError({ reason: "invalid_stored_profile" });
+    }
   });
-  return yield* patchUserProfile(authorize, profile);
-});
+}
 
-export const patchUserProfile = Effect.fn("patchUserProfile")(function* <E, R>(
-  authorize: Effect.Effect<AccessScope, E, R>,
+export async function replaceUserProfile(
+  authorize: () => Promise<AccessScope>,
+  input: UserProfile
+) {
+  let profile: UserProfile;
+  try {
+    profile = parseUserProfile(input);
+  } catch {
+    throw new UserProfileError({ reason: "invalid_input" });
+  }
+  return patchUserProfile(authorize, profile);
+}
+
+export function patchUserProfile(
+  authorize: () => Promise<AccessScope>,
   input: UserProfilePatch
 ) {
-  const sql = yield* PgClient.PgClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      const scope = yield* authorize;
-      const patch = yield* Effect.try({
-        try: () => userProfilePatchSchema.parse(input),
-        catch: () => new UserProfileError({ reason: "invalid_input" }),
-      });
-      const normalized = yield* Effect.try({
-        try: () => parseUserProfile({ ...emptyUserProfile, ...patch }),
-        catch: () => new UserProfileError({ reason: "invalid_input" }),
-      });
-      const values = Object.fromEntries(
-        columns
-          .filter(([key]) => patch[key] !== undefined)
-          .map(([key, column]) => [column, normalized[key]])
-      );
-      const selection = yield* profileSelection;
-      const rows = yield* sql<UserProfile>`INSERT INTO user_profiles
-      ${sql.insert({ workspace_id: scope.workspaceId, ...values })}
-      ON CONFLICT (workspace_id) DO UPDATE SET ${sql.update(values)}, updated_at = clock_timestamp()
-      RETURNING ${selection}`;
-      return yield* Effect.try({
-        try: () => parseUserProfile(userProfileSchema.parse(rows[0])),
-        catch: () => new UserProfileError({ reason: "invalid_stored_profile" }),
-      });
-    })
-  );
-});
+  return transaction(async () => {
+    const scope = await authorize();
+    let patch: UserProfilePatch;
+    let normalized: UserProfile;
+    try {
+      patch = userProfilePatchSchema.parse(input);
+      normalized = parseUserProfile({ ...emptyUserProfile, ...patch });
+    } catch {
+      throw new UserProfileError({ reason: "invalid_input" });
+    }
+    const changes = columns
+      .filter(([key]) => patch[key] !== undefined)
+      .map(([key, column]) => [column, normalized[key]] as const);
+    const values = [["workspace_id", scope.workspaceId], ...changes] as const;
+    const names = sql.join(
+      values.map(([name]) => sql.identifier(name)),
+      sql`, `
+    );
+    const parameters = sql.join(
+      values.map(([, value]) => sql`${value}`),
+      sql`, `
+    );
+    const updates = sql.join(
+      [
+        ...changes.map(
+          ([name, value]) => sql`${sql.identifier(name)} = ${value}`
+        ),
+        sql`updated_at = clock_timestamp()`,
+      ],
+      sql`, `
+    );
+    const rows =
+      await query<UserProfile>(sql`INSERT INTO user_profiles (${names})
+      VALUES (${parameters}) ON CONFLICT (workspace_id) DO UPDATE SET ${updates}
+      RETURNING ${selection}`);
+    try {
+      return parseUserProfile(userProfileSchema.parse(rows[0]));
+    } catch {
+      throw new UserProfileError({ reason: "invalid_stored_profile" });
+    }
+  });
+}
