@@ -130,6 +130,51 @@ describe("auth proxy matcher", () => {
     expect(getAuthSession).not.toHaveBeenCalled();
   });
 
+  it("serves /welcome to Twitterbot so the large-image card is not lost in a redirect loop", async () => {
+    const response = await proxy(
+      new NextRequest("https://tryzoen.com/welcome", {
+        headers: { "user-agent": "Twitterbot/1.0" },
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.has("location")).toBe(false);
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("serves /welcome to iMessage/Facebook scrapers on a combined host", async () => {
+    const response = await proxy(
+      new NextRequest("https://example.com/welcome", {
+        headers: { "user-agent": "facebookexternalhit/1.1" },
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("sends Twitterbot on the app host to the apex /welcome card", async () => {
+    const response = await proxy(
+      new NextRequest("https://app.tryzoen.com/welcome?ref=1", {
+        headers: { "user-agent": "Twitterbot/1.0" },
+      })
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe(
+      "https://tryzoen.com/welcome?ref=1"
+    );
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("still folds a browser /welcome on the apex into /", async () => {
+    const response = await proxy(
+      new NextRequest("https://tryzoen.com/welcome?ref=1")
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://tryzoen.com/?ref=1");
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
   it("sends legacy marketing home to tryzoen.com and app paths to the app host", async () => {
     const welcome = await proxy(
       new NextRequest("https://zoen.tironi.xyz/welcome?x=1")
