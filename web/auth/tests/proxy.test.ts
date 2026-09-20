@@ -179,6 +179,17 @@ describe("auth proxy matcher", () => {
     expect(docs.headers.get("location")).toBe("https://tryzoen.com/docs");
   });
 
+  it("honors Host when the request URL is a loopback or Fly address", async () => {
+    const response = await proxy(
+      new NextRequest("http://127.0.0.1:3010/welcome?x=1", {
+        headers: { host: "zoen.tironi.xyz" },
+      })
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://tryzoen.com/?x=1");
+    expect(getAuthSession).not.toHaveBeenCalled();
+  });
+
   it("does not relocate Eve health on the legacy host", async () => {
     const response = await proxy(
       new NextRequest("https://zoen.tironi.xyz/eve/v1/health")

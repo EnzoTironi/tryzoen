@@ -38,6 +38,15 @@ function isPublicPath(pathname: string) {
   return false;
 }
 
+function requestHostname(request: NextRequest) {
+  const forwarded = request.headers.get("x-forwarded-host");
+  const header =
+    forwarded ?? request.headers.get("host") ?? request.nextUrl.host;
+  const [first] = header.split(",");
+  const [host] = (first ?? "").trim().split(":");
+  return (host ?? "").toLowerCase();
+}
+
 function rewriteLanding(request: NextRequest) {
   const url = new URL("/welcome", request.url);
   url.search = request.nextUrl.search;
@@ -45,7 +54,8 @@ function rewriteLanding(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
-  const { pathname, hostname, search } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
+  const hostname = requestHostname(request);
 
   const relocated = publicHostRedirect(hostname, pathname, search);
   if (relocated) return NextResponse.redirect(relocated, 308);
