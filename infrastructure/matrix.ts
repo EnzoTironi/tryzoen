@@ -73,7 +73,7 @@ export const provisionMatrix = Effect.fn("provisionMatrix")(function* (input: {
 
 export const deployMatrix = Effect.fn("deployMatrix")(function* (input: {
   provision: Effect.Success<ReturnType<typeof provisionMatrix>>;
-  postgresApp: string;
+  databaseHost: Output.Output<string>;
   databaseRelease: Output.Output<string>;
   webApp: string;
   serverName: string;
@@ -90,7 +90,7 @@ export const deployMatrix = Effect.fn("deployMatrix")(function* (input: {
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 1024 },
     env: {
       ZOEN_MATRIX_SERVER_NAME: input.serverName,
-      ZOEN_DATABASE_HOST: `${input.postgresApp}.internal`,
+      ZOEN_DATABASE_HOST: input.databaseHost,
       ZOEN_MATRIX_CALLBACK_URL: `http://${input.webApp}.internal:3000`,
       ZOEN_WHATSAPP_CALLBACK_URL: input.whatsappCallback,
     },

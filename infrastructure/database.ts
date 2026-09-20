@@ -49,6 +49,7 @@ export const prepareServiceDatabases = Effect.fn("prepareServiceDatabases")(
         );
     }
     return {
+      host: `${input.machine}.vm.${input.app}.internal`,
       release: input.release,
       credentialVersion: input.credentialVersion,
     };

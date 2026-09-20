@@ -184,7 +184,7 @@ export const hosted = Effect.gen(function* () {
   });
   const matrix = yield* deployMatrix({
     provision: matrixSecrets,
-    postgresApp: pgName,
+    databaseHost: databases.host,
     databaseRelease: databases.release,
     webApp: webName,
     serverName: matrixServerName,
@@ -193,7 +193,7 @@ export const hosted = Effect.gen(function* () {
   });
   const whatsapp = yield* deployWhatsAppBridge({
     provision: whatsappSecrets,
-    postgresApp: pgName,
+    databaseHost: databases.host,
     databaseRelease: databases.release,
     matrixApp: matrixSecrets.name,
     serverName: matrixServerName,
@@ -202,7 +202,7 @@ export const hosted = Effect.gen(function* () {
   const vaultwarden = yield* deployVaultwarden({
     stage: policy.stage,
     provision: vaultSecrets,
-    postgresApp: pgName,
+    databaseHost: databases.host,
     issuer: `https://${hostname}/api/auth`,
     databaseRelease: databases.release,
   });
@@ -210,10 +210,10 @@ export const hosted = Effect.gen(function* () {
   const memoryDatabaseSecret = yield* Fly.Secret("MemoryDatabaseUrl", {
     app: memoryApp,
     name: "ZOEN_MEMORY_DATABASE_URL",
-    value: memoryPassword.text.pipe(
-      Output.map((value) =>
+    value: Output.all(memoryPassword.text, databases.host).pipe(
+      Output.map(([value, host]) =>
         Redacted.make(
-          `postgresql://zoen_memory:${encodeURIComponent(Redacted.value(value))}@${pgName}.internal:5432/zoen_memory`
+          `postgresql://zoen_memory:${encodeURIComponent(Redacted.value(value))}@${host}:5432/zoen_memory`
         )
       )
     ),
@@ -263,10 +263,10 @@ export const hosted = Effect.gen(function* () {
       Fly.Secret(`Web${name}`, {
         app: webApp,
         name,
-        value: applicationPassword.text.pipe(
-          Output.map((value) =>
+        value: Output.all(applicationPassword.text, databases.host).pipe(
+          Output.map(([value, host]) =>
             Redacted.make(
-              `postgresql://zoen_app:${encodeURIComponent(Redacted.value(value))}@${pgName}.internal:5432/${policy.database}`
+              `postgresql://zoen_app:${encodeURIComponent(Redacted.value(value))}@${host}:5432/${policy.database}`
             )
           )
         ),

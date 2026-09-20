@@ -91,7 +91,7 @@ export const deployVaultwarden = Effect.fn("deployVaultwarden")(
   function* (input: {
     stage: string;
     provision: Effect.Success<ReturnType<typeof provisionVaultwarden>>;
-    postgresApp: string;
+    databaseHost: Output.Output<string>;
     issuer: string;
     databaseRelease: Output.Output<string>;
   }) {
@@ -106,7 +106,7 @@ export const deployVaultwarden = Effect.fn("deployVaultwarden")(
       guest: { cpuKind: "shared", cpus: 1, memoryMb: 512 },
       env: {
         DOMAIN: `https://${hostname}`,
-        PGHOST: `${input.postgresApp}.internal`,
+        PGHOST: input.databaseHost,
         ROCKET_PORT: "8080",
         ZOEN_VAULT_BACKUPS_ENABLED: "true",
         SIGNUPS_ALLOWED: "false",

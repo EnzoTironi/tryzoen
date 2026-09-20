@@ -13,7 +13,7 @@ export const MigrateApplication = Action(
     region: string;
     database: string;
     image: string;
-    prepared: { release: string; credentialVersion: string };
+    prepared: { host: string; release: string; credentialVersion: string };
   }) =>
     Effect.gen(function* () {
       const backup = yield* Machines.execMachine({
@@ -47,7 +47,7 @@ export const MigrateApplication = Action(
             },
             env: {
               POSTGRES_DB: input.database,
-              ZOEN_DATABASE_HOST: `${input.app}.internal`,
+              ZOEN_DATABASE_HOST: input.prepared.host,
             },
             metadata: { "zoen.role": "isolated-migration" },
           },
