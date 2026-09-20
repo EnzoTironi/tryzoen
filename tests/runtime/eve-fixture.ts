@@ -61,6 +61,7 @@ export async function runtime(port: number, host = "127.0.0.1") {
       HOST: host,
       PORT: String(port),
       WORKFLOW_LOCAL_BASE_URL: origin,
+      WORKFLOW_MAX_INLINE_STEPS: "0",
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(
         env.WORKFLOW_POSTGRES_WORKER_CONCURRENCY
       ),

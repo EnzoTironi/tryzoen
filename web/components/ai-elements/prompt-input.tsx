@@ -930,12 +930,6 @@ export const PromptInput = ({
             return z.string().catch("").parse(formData.get("message"));
           })();
 
-      // Reset form immediately after capturing text to avoid race condition
-      // where user input during async blob conversion would be lost
-      if (!usingProvider) {
-        form.reset();
-      }
-
       try {
         // Convert blob URLs to data URLs asynchronously
         const convertedFiles: FileUIPart[] = await Promise.all(
@@ -952,25 +946,12 @@ export const PromptInput = ({
           })
         );
 
-        const result = onSubmit({ files: convertedFiles, text }, event);
-
-        // Handle both sync and async onSubmit
-        if (result instanceof Promise) {
-          try {
-            await result;
-            clear();
-            if (usingProvider) {
-              controller.textInput.clear();
-            }
-          } catch {
-            // Don't clear on error - user may want to retry
-          }
-        } else {
-          // Sync function completed without throwing, clear inputs
-          clear();
-          if (usingProvider) {
-            controller.textInput.clear();
-          }
+        await onSubmit({ files: convertedFiles, text }, event);
+        clear();
+        // Read the live form, including controlled inputs, to preserve edits.
+        if (new FormData(form).get("message") === text) {
+          if (usingProvider) controller.textInput.clear();
+          else form.reset();
         }
       } catch {
         // Don't clear on error - user may want to retry

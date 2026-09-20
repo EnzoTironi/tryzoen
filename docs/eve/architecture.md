@@ -19,7 +19,10 @@ Eve 0.63.0 owns turn execution, durable sessions, tool discovery, approvals,
 connections and workflow scheduling. Tools are native definitions with their
 schemas and behavior. Dynamic definitions resolve the authenticated workspace.
 There is no application Effect runtime, compatibility facade, Code Mode router,
-Operon process or private Eve/Workflow patch.
+Operon process or private Eve/Workflow extension. Narrow fixes to the published
+Eve and PostgreSQL adapter packages preserve responsive cancellation, atomic
+workflow checkpoints and tool authority after restart; their regressions and removal conditions are documented in
+[dependency patches](../../patches/README.md).
 
 Product operations are plain async functions with Zod validation. Drizzle's
 transaction context follows async calls; nested transactions use savepoints.

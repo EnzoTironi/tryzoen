@@ -111,6 +111,8 @@ Run database migrations and pnpm build before starting.`);
       NITRO_PORT: String(evePort),
       PORT: String(evePort),
       WORKFLOW_LOCAL_BASE_URL: origin,
+      // Keep the session inbox available while native steps run model calls.
+      WORKFLOW_MAX_INLINE_STEPS: "0",
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(
         env.WORKFLOW_POSTGRES_WORKER_CONCURRENCY
       ),

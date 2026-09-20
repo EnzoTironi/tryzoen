@@ -32,3 +32,5 @@ overrides:
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:
   "@linqapp/chat-sdk-adapter@0.5.1": patches/@linqapp__chat-sdk-adapter@0.5.1.patch
+  "@workflow/world-postgres@5.0.0-beta.44": patches/@workflow__world-postgres@5.0.0-beta.44.patch
+  eve@0.63.0: patches/eve@0.63.0.patch

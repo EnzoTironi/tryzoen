@@ -6,6 +6,13 @@ import {
 } from "@shared/chat/reaction";
 import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
 
+export function isTerminalSession(events: readonly MessageStreamEvent[]) {
+  return events.some(
+    (event) =>
+      event.type === "session.failed" || event.type === "session.completed"
+  );
+}
+
 export function conversationStreamEvents(
   events: readonly MessageStreamEvent[]
 ): readonly MessageStreamEvent[] {
