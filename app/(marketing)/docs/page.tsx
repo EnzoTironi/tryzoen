@@ -1,6 +1,7 @@
 import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
 import { companionCanonicalPath, companionPublicHost } from "../public-origin";
+import { zoenSocialMetadata } from "../social";
 import { DocsPanel } from "./_components/docs-panel";
 
 const canonical = companionCanonicalPath("/docs");
@@ -16,11 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: { canonical },
-    openGraph: {
-      title,
-      description,
-      url: canonical,
-    },
+    ...zoenSocialMetadata({ title, description, path: "/docs" }),
   };
 }
 
