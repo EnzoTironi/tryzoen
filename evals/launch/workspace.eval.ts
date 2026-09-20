@@ -81,9 +81,22 @@ export default prompts.map((prompt, index) =>
       t.check(file.content, includes(variant.canary));
       t.check(delivered, includes(variant.canary));
       t.check(delivered, includes(file.revision));
-      turn.calledTool("load_skill", {
+      turn.calledTool("workspace_skills_load", {
         count: (count) => count >= 1,
         status: "completed",
+        output: (output) =>
+          isValid(
+            z.object({
+              execution: z.literal("instructions"),
+              path: z.literal(variant.skill),
+              revision: z.string().regex(/^[a-f0-9]{40}$/),
+              instructions: z
+                .string()
+                .includes(variant.source)
+                .includes(variant.destination),
+            }),
+            output
+          ),
       });
       t.check(
         turn.toolCalls.filter(

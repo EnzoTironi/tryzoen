@@ -23,10 +23,10 @@ export default defineEval({
     const inspect = async () =>
       graphSchema.parse(await (await t.target.fetch("/_eval/ontology")).json());
     const before = await inspect();
-    const session = await t.session();
-    const proposed = await session.send(
+    const proposed = await t.send(
       "Set the Beta release project's status to active in this workspace."
     );
+    const session = proposed.session;
     proposed.parked();
     t.check((await inspect()).revision, equals(before.revision)).label(
       "no mutation before approval"

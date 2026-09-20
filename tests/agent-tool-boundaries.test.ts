@@ -27,6 +27,7 @@ describe("root and worker capability boundaries", () => {
       "read_file.ts",
       "respond-to-approval.ts",
       "web_search.ts",
+      "workspace-skills.ts",
       "write_file.ts",
     ]);
     expect(readFileSync(`${rootTools}/capabilities.ts`, "utf8")).toContain(

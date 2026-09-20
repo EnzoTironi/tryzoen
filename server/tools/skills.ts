@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { isValid } from "@shared/validation";
 import type { z } from "zod";
 import { WorkspaceRepository } from "../workspaces/repository";
@@ -25,7 +24,6 @@ export const readPublishedSkills = async function (
   return stored.documents.map((document) => {
     const parsed = parseSkillDocument(document.content);
     return {
-      id: `workspace-${createHash("sha256").update(document.path).digest("hex").slice(0, 24)}`,
       parsed,
       kind: "skill" as const,
       path: document.path,
