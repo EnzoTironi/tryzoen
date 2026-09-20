@@ -4,10 +4,10 @@ import { companionCanonicalPath, companionPublicOrigin } from "./public-origin";
 /** Product voice for X/Twitter, iMessage, and other link previews. */
 export const zoenSocialTitle = "Life happens. Text Zoen.";
 export const zoenSocialDescription =
-  "iMessage + SMS. One little monster who builds software. 100 bucks free credits — no credit card. Just start texting.";
+  "iMessage + SMS. One little monster who builds software. Free. No credit card. Just text.";
 
-/** Existing landscape mascot JPEG, already served on the public origin. */
-export const zoenSocialImageUrl = `${companionPublicOrigin}/marketing/zoen-running.jpg`;
+/** Query busts stale X/iMessage image caches without renaming the file. */
+export const zoenSocialImageUrl = `${companionPublicOrigin}/marketing/zoen-running.jpg?v=20260920`;
 
 const zoenSocialImage = {
   url: zoenSocialImageUrl,

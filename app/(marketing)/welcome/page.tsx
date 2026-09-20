@@ -1,26 +1,22 @@
-import { getI18n } from "@web/i18n/server";
 import type { Metadata } from "next";
 import {
   companionCanonicalPath,
-  companionPublicHost,
   companionPublicOrigin,
 } from "../public-origin";
-import { zoenSocialMetadata } from "../social";
+import {
+  zoenSocialDescription,
+  zoenSocialMetadata,
+  zoenSocialTitle,
+} from "../social";
 import { MarketingLanding } from "./_components/marketing-landing";
 
 const canonical = companionCanonicalPath("/");
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { t } = await getI18n();
-  const title = t("Zoen — sua vida tem companhia");
-  const description = t(
-    "Um Zoen que lembra, organiza, resolve e coordena com suas pessoas de confiança. Converse no WhatsApp, Telegram ou em {host}.",
-    { host: companionPublicHost }
-  );
   return {
     metadataBase: new URL(companionPublicOrigin),
-    title,
-    description,
+    title: zoenSocialTitle,
+    description: zoenSocialDescription,
     alternates: { canonical },
     ...zoenSocialMetadata({ path: "/" }),
   };
