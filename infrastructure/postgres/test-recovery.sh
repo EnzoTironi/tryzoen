@@ -65,7 +65,46 @@ INSERT INTO recovery_vectors VALUES (1, '[1,2,3]');
 SQL
 docker exec "$source_name" /usr/local/bin/bootstrap-application.sh
 docker exec "$source_name" /usr/local/bin/bootstrap-application.sh
-docker exec "$source_name" /usr/local/bin/backup.sh full
+# Queue two real backups behind the same lock, then prove both reach the repo.
+docker exec -i "$source_name" gosu postgres bash -s <<'SH'
+set -euo pipefail
+before=$(pgbackrest --stanza=zoen --output=json info | jq '.[0].backup | length')
+exec 9>/data/backup-status/backup.lock
+flock 9
+/usr/local/bin/backup.sh full 9>&- >/tmp/backup-full.log 2>&1 &
+full_pid=$!
+/usr/local/bin/backup.sh incr 9>&- >/tmp/backup-incr.log 2>&1 &
+incr_pid=$!
+sleep 1
+kill -0 "$full_pid" "$incr_pid"
+[[ ! -s /tmp/backup-full.log && ! -s /tmp/backup-incr.log ]] || {
+  cat /tmp/backup-full.log /tmp/backup-incr.log
+  echo 'A backup bypassed the held sequence lock.' >&2
+  exit 1
+}
+flock -u 9
+if ! wait "$full_pid"; then cat /tmp/backup-full.log; exit 1; fi
+if ! wait "$incr_pid"; then cat /tmp/backup-incr.log; exit 1; fi
+after=$(pgbackrest --stanza=zoen --output=json info | jq '.[0].backup | length')
+[[ $after -eq $((before + 2)) ]] || {
+  echo "Expected two new backups, but repository count changed from $before to $after." >&2
+  exit 1
+}
+
+# A real repository error must fail, preserve the success marker and unlock.
+success_before=$(cat /data/backup-status/success)
+sleep 1
+if PGBACKREST_REPO1_CIPHER_PASS=incorrect-test-key /usr/local/bin/backup.sh incr >/tmp/backup-failed.log 2>&1; then
+  echo 'A backup with an invalid encryption key unexpectedly passed.' >&2
+  exit 1
+fi
+[[ $(cat /data/backup-status/success) == "$success_before" ]] || {
+  echo 'A failed backup updated the success marker.' >&2
+  exit 1
+}
+flock -n /data/backup-status/backup.lock true
+echo 'Concurrent real backups serialized; repository failure propagated and released the lock.'
+SH
 # This row exists only in archived WAL, after the full backup completed.
 docker exec "$source_name" psql -X -U postgres -d open_instinct_prod -v ON_ERROR_STOP=1 \
   -c "INSERT INTO recovery_vectors VALUES (2, '[4,5,6]'); SELECT pg_switch_wal();"
