@@ -1,6 +1,9 @@
 import { defineEval } from "eve/evals";
 import { equals, includes } from "eve/evals/expect";
-import { requireWorkerSessionId } from "@evals/browser/session";
+import {
+  requireStreamIndex,
+  requireWorkerSessionId,
+} from "@evals/browser/session";
 import { readTaskCompletion } from "@evals/browser/worker-events";
 
 export default defineEval({
@@ -12,6 +15,7 @@ export default defineEval({
     const started = await t.send(
       "Use the browser to visually inspect https://example.com and report its exact primary heading. This requires a browser, not web_fetch. Close the browser after reading it. Do not log in, submit forms or send external messages."
     );
+    const replyIndex = requireStreamIndex(started.session);
     const childId = await requireWorkerSessionId(t, started);
     const child = await t.target.attachSession(childId);
     child.succeeded();
@@ -47,5 +51,13 @@ export default defineEval({
     t.check(completion?.status, equals("success"));
     t.check(completion?.message, includes("Example Domain"));
     child.event("result.completed", { count: 1 });
+    const reply = await t.target.attachSession(started.sessionId, {
+      startIndex: replyIndex,
+    });
+    reply.succeeded();
+    reply.calledTool("send_message", {
+      status: "completed",
+      output: { text: /Example Domain/u },
+    });
   },
 });

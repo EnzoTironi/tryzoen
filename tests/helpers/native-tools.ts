@@ -1,11 +1,7 @@
 import { z } from "zod";
 import type { DynamicResolveContext, ToolContext } from "eve/tools";
 import { resolveCapabilities } from "../../server/tools/catalog";
-import {
-  readPublishedSkills,
-  resolvePublishedSkill,
-} from "../../server/tools/skills";
-import { workspaceActorFromPrincipal } from "../../server/workspaces/access";
+import workspaceSkills from "@agent/tools/workspace-skills";
 export function nativeContext(
   execution: Pick<ToolContext, "session">
 ): DynamicResolveContext {
@@ -38,17 +34,23 @@ export async function callNativeTool(
   });
 }
 export async function readNativeSkill(execution: ToolContext, path: string) {
-  const actor = await workspaceActorFromPrincipal(
-    execution.session.auth.current ??
-      execution.session.auth.initiator ??
-      undefined
+  const tools = await workspaceSkills.events["turn.started"]?.(
+    {},
+    nativeContext(execution)
   );
-  const skill = (await readPublishedSkills(actor)).find(
-    (localSkill) => localSkill.path === path
+  const load = tools?.workspace_skills_load;
+  if (!load) throw new Error("Workspace procedures unavailable.");
+  if (!(load.inputSchema instanceof z.ZodType))
+    throw new Error("Expected an authored Zod schema");
+  await load.inputSchema.parseAsync({ path });
+  const loaded = await load.execute(
+    { path },
+    {
+      ...execution,
+      toolName: "workspace_skills_load",
+    }
   );
-  if (!skill) throw new Error("Skill unavailable");
-  return resolvePublishedSkill(
-    skill,
-    Object.keys(await resolveCapabilities(nativeContext(execution)))
-  );
+  if (Symbol.asyncIterator in loaded)
+    throw new Error("Expected a complete workspace procedure result.");
+  return loaded;
 }

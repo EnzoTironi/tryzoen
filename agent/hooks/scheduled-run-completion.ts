@@ -2,6 +2,7 @@ import { defineHook } from "eve/hooks";
 import { dispatchItem } from "../../server/channels/dispatch";
 import { deliverNativeScheduledReport } from "../../server/schedules/native-report";
 import { scheduledRunIdentity } from "@agent/lib/schedules/identity";
+import { readAgentTaskReceipt } from "@agent/lib/task-receipt";
 import { scheduledRunOutcomeSchema } from "@shared/schedules/outcome";
 import {
   completeScheduledAgentRun,
@@ -63,22 +64,23 @@ export default defineHook({
         sessionId: ctx.session.id,
       });
     },
-    async "subagent.completed"(event, ctx) {
-      if (!event.data.backgroundTask) return;
+    async "action.result"(event, ctx) {
+      const task = readAgentTaskReceipt(event);
+      if (!task) return;
       const identity = scheduledRunIdentity(ctx.session.auth);
       if (!identity) return;
       const deferred = await deferScheduledAgentRunCompletion(
         identity.runId,
         identity.leaseToken,
-        ctx.session.turn.id,
+        event.data.turnId,
         new Date(event.meta.at)
       );
       console.info("[scheduled-run] worker delegated background work", {
         deferred,
         runId: identity.runId,
         sessionId: ctx.session.id,
-        taskId: event.data.backgroundTask.taskId,
-        turnId: ctx.session.turn.id,
+        taskId: task.taskId,
+        turnId: event.data.turnId,
       });
     },
     async "message.completed"(event, ctx) {

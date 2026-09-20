@@ -17,6 +17,8 @@ import {
   readOntology,
 } from "../../server/workspaces/ontology";
 import { ontologyActionInputSchema } from "../../server/tools/tools/ontology";
+import workspaceSkills from "@agent/tools/workspace-skills";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 
 test("native tools and skills expose only the selected workspace", async () => {
   await using workspace = await workspaceFixture();
@@ -63,6 +65,49 @@ test("native tools and skills expose only the selected workspace", async () => {
   expect(
     Object.keys(catalog).every((name) => /^[a-zA-Z0-9_-]{1,64}$/.test(name))
   ).toBe(true);
+});
+
+test("cached procedure tools reread files capability and current workspace membership", async () => {
+  await using workspace = await workspaceFixture();
+  const { actor, guest, repository } = workspace;
+  const saved = await repository.write(actor, {
+    path: "skills/cached.md",
+    content: "# Cached procedure\nRead the shared notes.",
+    expectedRevision: null,
+    operationId: randomUUID(),
+  });
+  const execution = workspaceExecutionFor(guest);
+  const tools = await workspaceSkills.events["turn.started"]?.(
+    {},
+    nativeContext(execution)
+  );
+  if (!tools) throw new Error("Expected scoped procedure tools.");
+  expect(
+    await tools.workspace_skills_load.execute(
+      { path: "skills/cached.md" },
+      execution
+    )
+  ).toMatchObject({ execution: "instructions", revision: saved.revision });
+
+  await repository.write(actor, {
+    path: "plugins/workspace.json",
+    content: '{"version":1,"enabled":[]}',
+    expectedRevision: saved.revision,
+    operationId: randomUUID(),
+  });
+  expect(await tools.workspace_skills_list.execute({}, execution)).toEqual([]);
+  await expect(
+    tools.workspace_skills_load.execute({ path: "skills/cached.md" }, execution)
+  ).rejects.toThrow("Published procedure unavailable");
+
+  await query(sql`DELETE FROM workspace_memberships
+    WHERE user_id = ${guest.userId} AND workspace_id = ${guest.workspaceId}`);
+  await expect(
+    tools.workspace_skills_list.execute({}, execution)
+  ).rejects.toThrow(WorkspaceAccessDenied);
+  await expect(
+    tools.workspace_skills_load.execute({ path: "skills/cached.md" }, execution)
+  ).rejects.toThrow(WorkspaceAccessDenied);
 });
 
 test("native writes retain the durable call ID on replay and reject forbidden paths", async () => {

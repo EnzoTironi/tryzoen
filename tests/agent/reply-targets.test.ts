@@ -1,5 +1,5 @@
 import type { SessionAuth } from "eve/context";
-import type { HookContext } from "eve/hooks";
+import type { HookContext, HookEvent } from "eve/hooks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const stateControls = vi.hoisted(() => ({
@@ -27,6 +27,27 @@ import {
   registerBackgroundReplyTarget,
   resolveLinqReplyTarget,
 } from "@agent/lib/reply-targets";
+
+const taskReceipt = {
+  data: {
+    result: {
+      callId: "call-1",
+      kind: "tool-result",
+      toolName: "browser-agent",
+      output: {
+        agentId: "browser-agent",
+        status: "working",
+        taskId: "task-from-hook",
+      },
+    },
+    sequence: 0,
+    stepIndex: 0,
+    status: "completed",
+    turnId: "turn-1",
+  },
+  meta: { at: "2026-09-03T12:00:00.000Z", id: "event-1" },
+  type: "action.result",
+} satisfies HookEvent<"action.result">;
 
 beforeEach(() => {
   for (const reset of stateControls.reset) reset();
@@ -67,29 +88,100 @@ describe("reply targets", () => {
     ).toBeUndefined();
   });
 
-  it("registers background subagent receipts through the public hook", async () => {
-    const handler = backgroundReplyTargetHook.events?.["subagent.completed"];
-    await handler?.(
-      {
-        data: {
-          backgroundTask: { status: "working", taskId: "task-from-hook" },
-          callId: "call-1",
-          output: "Delegated",
-          subagentName: "browser-agent",
+  it.each(["agent", "browser-agent"])(
+    "registers %s task receipts through the public action result hook",
+    async (toolName) => {
+      const handler = backgroundReplyTargetHook.events?.["action.result"];
+      await handler?.(
+        {
+          ...taskReceipt,
+          data: {
+            ...taskReceipt.data,
+            result: { ...taskReceipt.data.result, toolName },
+          },
         },
-        meta: { at: "2026-09-03T12:00:00.000Z", id: "event-1" },
-        type: "subagent.completed",
-      },
-      hookContext(linqAuth("hook-origin"))
-    );
+        hookContext(linqAuth("hook-origin"))
+      );
 
-    expect(
-      resolveLinqReplyTarget(
-        { id: "task-from-hook", kind: "task" },
-        linqAuth("later-message")
-      )
-    ).toMatchObject({ messageId: "hook-origin" });
-  });
+      expect(
+        resolveLinqReplyTarget(
+          { id: "task-from-hook", kind: "task" },
+          linqAuth("later-message")
+        )
+      ).toMatchObject({ messageId: "hook-origin" });
+    }
+  );
+
+  it.each([
+    [
+      "an ordinary tool result",
+      {
+        ...taskReceipt.data,
+        result: { ...taskReceipt.data.result, toolName: "read_file" },
+      },
+    ],
+    ["a failed action", { ...taskReceipt.data, status: "failed" }],
+    ["a rejected action", { ...taskReceipt.data, status: "rejected" }],
+    [
+      "an error result",
+      {
+        ...taskReceipt.data,
+        result: { ...taskReceipt.data.result, isError: true },
+      },
+    ],
+    [
+      "an unstructured output",
+      {
+        ...taskReceipt.data,
+        result: { ...taskReceipt.data.result, output: "Delegated" },
+      },
+    ],
+    [
+      "a terminal receipt",
+      {
+        ...taskReceipt.data,
+        result: {
+          ...taskReceipt.data.result,
+          output: { ...taskReceipt.data.result.output, status: "completed" },
+        },
+      },
+    ],
+    [
+      "an empty task ID",
+      {
+        ...taskReceipt.data,
+        result: {
+          ...taskReceipt.data.result,
+          output: { ...taskReceipt.data.result.output, taskId: "" },
+        },
+      },
+    ],
+    [
+      "an empty agent ID",
+      {
+        ...taskReceipt.data,
+        result: {
+          ...taskReceipt.data.result,
+          output: { ...taskReceipt.data.result.output, agentId: "" },
+        },
+      },
+    ],
+  ] as const)(
+    "does not register %s as background work",
+    async (_label, data) => {
+      await backgroundReplyTargetHook.events?.["action.result"]?.(
+        { ...taskReceipt, data },
+        hookContext(linqAuth("hook-origin"))
+      );
+
+      expect(
+        resolveLinqReplyTarget(
+          { id: "task-from-hook", kind: "task" },
+          linqAuth("later-message")
+        )
+      ).toBeUndefined();
+    }
+  );
 
   it("resolves only the automation handle supplied by the reporting turn", () => {
     const auth = scheduledReportAuth("original-message");

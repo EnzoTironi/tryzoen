@@ -19,7 +19,7 @@ import { linkedIdentity } from "./identity-fixture";
 import { workspaceFixture, workspaceExecutionFor } from "./workspace-fixture";
 const procedure = (title: string, requires: readonly string[], body: string) =>
   `---\nrequires: [${requires.join(", ")}]\n---\n# ${title}\n\n${body}\n`;
-test("TL02: owner publishes a skill, loads it as a native Eve skill, and Git records authorship", async () => {
+test("TL02: owner publishes a skill, loads it through the native workspace tool, and Git records authorship", async () => {
   await using workspace = await workspaceFixture();
   const { personal, repository } = workspace;
   const operationId = randomUUID();

@@ -203,19 +203,35 @@ describe("scheduled run completion hook", () => {
   });
 
   it("defers an interim outcome until background work wakes a later turn", async () => {
-    const delegated = completionHook.events?.["subagent.completed"];
+    const delegated = completionHook.events?.["action.result"];
     await delegated?.(
       {
         data: {
-          backgroundTask: { status: "working", taskId: "task-1" },
-          callId: "call-1",
-          output: '{"status":"working"}',
-          subagentName: "browser-agent",
+          result: {
+            callId: "call-1",
+            kind: "tool-result",
+            toolName: "browser-agent",
+            output: {
+              agentId: "browser-agent",
+              status: "working",
+              taskId: "task-1",
+            },
+          },
+          sequence: 0,
+          stepIndex: 0,
+          status: "completed",
+          turnId: "turn-1",
         },
         meta: { at: "2026-09-01T13:01:00.000Z", id: "event-task" },
-        type: "subagent.completed",
+        type: "action.result",
       },
-      context
+      {
+        ...context,
+        session: {
+          ...context.session,
+          turn: { id: "later-context-turn", sequence: 1 },
+        },
+      }
     );
     services.complete.mockResolvedValue({ status: "deferred" });
 
@@ -248,6 +264,34 @@ describe("scheduled run completion hook", () => {
       expect.anything(),
       new Date("2026-09-01T13:01:01.000Z")
     );
+  });
+
+  it("does not defer completion for an ordinary tool that returns a task-shaped object", async () => {
+    await completionHook.events?.["action.result"]?.(
+      {
+        data: {
+          result: {
+            callId: "file-call",
+            kind: "tool-result",
+            toolName: "read_file",
+            output: {
+              agentId: "browser-agent",
+              status: "working",
+              taskId: "forged-task",
+            },
+          },
+          sequence: 0,
+          stepIndex: 0,
+          status: "completed",
+          turnId: "turn-1",
+        },
+        meta: { at: "2026-09-01T13:01:00.000Z", id: "event-file" },
+        type: "action.result",
+      },
+      context
+    );
+
+    expect(services.deferCompletion).not.toHaveBeenCalled();
   });
 
   it("ignores messages emitted before a tool call completes", async () => {
