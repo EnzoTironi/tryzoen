@@ -14,13 +14,16 @@ const input = {
   credentialVersion: "all-service-credential-versions",
 };
 
-function databaseApi(execute: (command: string) => Promise<Response>) {
+function databaseApi(
+  execute: (command: string) => Promise<Response>,
+  target = input
+) {
   const calls: string[] = [];
   const fetch: typeof globalThis.fetch = async (url, init) => {
     const request = new Request(url, init);
     assert.equal(
       request.url,
-      "https://fly.invalid/v1/apps/test-app/machines/machine-1/exec"
+      `https://fly.invalid/v1/apps/${target.app}/machines/${target.machine}/exec`
     );
     const body = Schema.decodeUnknownSync(commandSchema)(await request.json());
     const command = body.command[0];
@@ -32,7 +35,7 @@ function databaseApi(execute: (command: string) => Promise<Response>) {
     calls,
     run: () =>
       Effect.runPromise(
-        prepareServiceDatabases(input).pipe(
+        prepareServiceDatabases(target).pipe(
           Retry.none,
           Effect.provide(
             credentials({
@@ -68,6 +71,7 @@ void test("waits for each bootstrap before starting the next shared-catalog muta
     await Effect.runPromise(Deferred.succeed(release, undefined));
   }
   assert.deepEqual(await running, {
+    host: "machine-1.vm.test-app.internal",
     release: input.release,
     credentialVersion: input.credentialVersion,
   });
@@ -79,6 +83,17 @@ void test("waits for each bootstrap before starting the next shared-catalog muta
     "/usr/local/bin/bootstrap-whatsapp.sh",
     "/usr/local/bin/bootstrap-vaultwarden.sh",
   ]);
+});
+
+void test("pins the database endpoint to the prepared primary in each deployment", async () => {
+  const api = databaseApi(
+    async () => Response.json({ exit_code: 0, stdout: "", stderr: "" }),
+    { ...input, app: "another-database-app", machine: "another-primary" }
+  );
+  assert.equal(
+    (await api.run()).host,
+    "another-primary.vm.another-database-app.internal"
+  );
 });
 
 for (const database of [

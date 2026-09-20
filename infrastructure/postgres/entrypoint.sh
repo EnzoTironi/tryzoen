@@ -15,7 +15,7 @@ if [[ ${ZOEN_RESTORE_PROOF:-0} == 1 ]]; then
     fi
     gosu postgres pgbackrest "${restore_args[@]}" restore
   fi
-  /usr/local/bin/docker-entrypoint.sh postgres -c archive_mode=off &
+  /usr/local/bin/docker-entrypoint.sh postgres -c archive_mode=off -c listen_addresses=127.0.0.1 &
   database_pid=$!
   trap 'kill -TERM "$database_pid" 2>/dev/null || true; wait "$database_pid" || true' EXIT INT TERM
   recovery_complete=false

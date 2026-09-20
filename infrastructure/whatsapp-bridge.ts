@@ -98,7 +98,7 @@ export const provisionWhatsAppBridge = Effect.fn("provisionWhatsAppBridge")(
 export const deployWhatsAppBridge = Effect.fn("deployWhatsAppBridge")(
   function* (input: {
     provision: Effect.Success<ReturnType<typeof provisionWhatsAppBridge>>;
-    postgresApp: string;
+    databaseHost: Output.Output<string>;
     databaseRelease: Output.Output<string>;
     matrixApp: string;
     serverName: string;
@@ -120,7 +120,7 @@ export const deployWhatsAppBridge = Effect.fn("deployWhatsAppBridge")(
         ZOEN_WHATSAPP_HOMESERVER_ADDRESS: `http://${input.matrixApp}.internal:8008`,
         ZOEN_WHATSAPP_HOMESERVER_DOMAIN: input.serverName,
         ZOEN_WHATSAPP_APPSERVICE_ADDRESS: `http://${input.provision.name}.internal:29318`,
-        ZOEN_DATABASE_HOST: `${input.postgresApp}.internal`,
+        ZOEN_DATABASE_HOST: input.databaseHost,
       },
       services: [],
       restart: { policy: "always" },

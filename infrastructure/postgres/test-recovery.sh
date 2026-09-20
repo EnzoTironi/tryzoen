@@ -121,6 +121,17 @@ for _ in {1..120}; do
   sleep 1
 done
 if [[ $ready != true ]]; then docker logs "$restore_name"; exit 1; fi
+# The proof uses local connections; no service can connect to the restore copy.
+docker exec "$restore_name" pg_isready -h 127.0.0.1 -U postgres
+restore_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$restore_name")
+[[ -n $restore_ip ]] || { echo 'Restore container has no network address to probe.' >&2; exit 1; }
+if docker exec "$restore_name" pg_isready -h "$restore_ip" -U postgres -t 2; then
+  echo 'An isolated restore accepts database connections on its network interface.' >&2
+  exit 1
+else
+  [[ $? == 2 ]] || { echo 'Could not verify the isolated network listener.' >&2; exit 1; }
+fi
+echo 'Isolated restore accepts loopback connections and refuses its network interface.'
 actual=$(docker exec "$restore_name" psql -X -U postgres -d open_instinct_prod -At -v ON_ERROR_STOP=1 \
   -c "SELECT count(*) = 2 AND max(value <-> '[4,5,6]'::vector) > 0 FROM recovery_vectors;")
 [[ $actual == t ]] || { echo 'WAL recovery lost a committed vector.' >&2; exit 1; }
