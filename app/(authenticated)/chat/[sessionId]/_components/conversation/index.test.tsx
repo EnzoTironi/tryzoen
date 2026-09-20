@@ -183,29 +183,44 @@ describe("chat conversation", () => {
     expect(markup).not.toContain("is cancelled");
   });
 
-  it("shows a safe failure in the default conversation without runtime details", () => {
-    const agent = {
-      data: { messages: [message("turn-1:user", "Try this")] },
-      error: new Error("Internal runtime failure"),
-      events: [],
-      respond: async () => undefined,
-      resume: async () => undefined,
-      status: "error",
-    } satisfies Pick<
-      ChatAgent,
-      "data" | "error" | "events" | "respond" | "resume" | "status"
-    >;
+  it.each([false, true])(
+    "shows a safe failure and only offers retry for a resumable session (terminal: %s)",
+    (terminal) => {
+      const agent = {
+        data: { messages: [message("turn-1:user", "Try this")] },
+        error: new Error("Internal runtime failure"),
+        events: terminal
+          ? [
+              {
+                type: "session.failed",
+                data: {
+                  code: "MODEL_CALL_FAILED",
+                  message: "Internal runtime failure",
+                  sessionId: "terminal-session",
+                },
+                meta: { id: "session-failed", at: "2026-09-20T00:00:00.000Z" },
+              },
+            ]
+          : [],
+        respond: async () => undefined,
+        resume: async () => undefined,
+        status: "error",
+      } satisfies Pick<
+        ChatAgent,
+        "data" | "error" | "events" | "respond" | "resume" | "status"
+      >;
 
-    const markup = renderToStaticMarkup(
-      <ChatConversation agent={agent} traceView="imessage" />
-    );
+      const markup = renderToStaticMarkup(
+        <ChatConversation agent={agent} traceView="imessage" />
+      );
 
-    expect(markup).toContain("Try this");
-    expect(markup).toContain("O pedido falhou");
-    expect(markup).toContain("Não foi possível concluir o pedido.");
-    expect(markup).not.toContain("Internal runtime failure");
-    expect(markup).toContain("Tentar novamente");
-  });
+      expect(markup).toContain("Try this");
+      expect(markup).toContain("O pedido falhou");
+      expect(markup).toContain("Não foi possível concluir o pedido.");
+      expect(markup).not.toContain("Internal runtime failure");
+      expect(markup.includes("Tentar novamente")).toBe(!terminal);
+    }
+  );
 
   it.each([
     ["complete", "A finished answer", true],

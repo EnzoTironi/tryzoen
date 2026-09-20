@@ -7,6 +7,7 @@ import {
   defaultMessageReducer,
   isCurrentTurnBoundaryEvent,
   type InputResponse,
+  type MessageResponse,
   type MessageStreamEvent,
   type RespondTurnOptions,
   type SendTurnOptions,
@@ -29,7 +30,10 @@ import {
   type SessionHistoryPage,
 } from "../_lib/session-history";
 import type { ChatAgent } from "./chat-agent";
-import { conversationStreamEvents } from "../_lib/message-events";
+import {
+  conversationStreamEvents,
+  isTerminalSession,
+} from "../_lib/message-events";
 
 const client = new Client({
   host: "",
@@ -45,6 +49,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const historyRef = useRef(history);
   const operationRef = useRef<Promise<void> | undefined>(undefined);
+  const responseRef = useRef<Promise<MessageResponse> | undefined>(undefined);
 
   const streamController = useRef<AbortController | undefined>(undefined);
 
@@ -124,27 +129,54 @@ export function useSessionAgent(sessionId: string): ChatAgent {
     };
   }, [resume]);
 
-  const runOperation = useCallback((operation: () => Promise<void>) => {
-    const activeOperation = operationRef.current;
-    if (activeOperation)
-      return Promise.reject(
-        new Error("The conversation is already processing a turn.")
-      );
-    const promise = operation().finally(() => {
-      if (operationRef.current !== promise) return;
-      operationRef.current = undefined;
-      const events = historyRef.current?.events ?? [];
-      const tail = events.at(-1);
-      if (
-        tail &&
-        isCurrentTurnBoundaryEvent(tail) &&
-        !hasPendingAuthorization(events)
-      )
-        setStatus((current) => (current === "error" ? current : "ready"));
-    });
-    operationRef.current = promise;
-    return promise;
-  }, []);
+  const runOperation = useCallback(
+    (operation: (current: SessionHistoryPage) => Promise<MessageResponse>) => {
+      const current = historyRef.current;
+      if (!current)
+        return Promise.reject(new Error("The conversation is still loading."));
+      if (isTerminalSession(current.events))
+        return Promise.reject(
+          new Error("This conversation has ended. Start a new chat.")
+        );
+      const activeOperation = operationRef.current;
+      if (activeOperation)
+        return Promise.reject(
+          new Error("The conversation is already processing a turn.")
+        );
+      setError(undefined);
+      setStatus("submitted");
+      const pendingResponse = operation(current);
+      responseRef.current = pendingResponse;
+      const promise = pendingResponse
+        .then(async (response) => {
+          await response.result();
+          return undefined;
+        })
+        .catch((cause: unknown) => {
+          setError(toError(cause));
+          setStatus("error");
+          throw cause;
+        })
+        .finally(() => {
+          if (operationRef.current !== promise) return;
+          operationRef.current = undefined;
+          responseRef.current = undefined;
+          const events = historyRef.current?.events ?? [];
+          const tail = events.at(-1);
+          if (
+            tail &&
+            isCurrentTurnBoundaryEvent(tail) &&
+            !hasPendingAuthorization(events)
+          )
+            setStatus((previous) =>
+              previous === "error" ? previous : "ready"
+            );
+        });
+      operationRef.current = promise;
+      return promise;
+    },
+    []
+  );
 
   const send = useCallback(
     async <TOutput>(
@@ -153,6 +185,8 @@ export function useSessionAgent(sessionId: string): ChatAgent {
     ) => {
       const activeOperation = operationRef.current;
       if (activeOperation && options?.turnPolicy === "steer") {
+        if (isTerminalSession(historyRef.current?.events ?? []))
+          throw new Error("This conversation has ended. Start a new chat.");
         const current = historyRef.current;
         if (!current) throw new Error("The conversation is still loading.");
         const session = client.sessions.attach(sessionId, {
@@ -164,22 +198,11 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         return;
       }
 
-      await runOperation(async () => {
-        const current = historyRef.current;
-        if (!current) throw new Error("The conversation is still loading.");
-        setError(undefined);
-        setStatus("submitted");
+      await runOperation(async (current) => {
         const session = client.sessions.attach(sessionId, {
           streamIndex: current.endIndex,
         });
-        try {
-          const response = await session.send(message, options);
-          await response.result();
-        } catch (cause) {
-          setError(toError(cause));
-          setStatus("error");
-          throw cause;
-        }
+        return await session.send(message, options);
       });
     },
     [runOperation, sessionId]
@@ -190,22 +213,11 @@ export function useSessionAgent(sessionId: string): ChatAgent {
       inputResponses: readonly InputResponse[],
       options?: RespondTurnOptions<TOutput>
     ) => {
-      await runOperation(async () => {
-        const current = historyRef.current;
-        if (!current) throw new Error("The conversation is still loading.");
-        setError(undefined);
-        setStatus("submitted");
+      await runOperation(async (current) => {
         const session = client.sessions.attach(sessionId, {
           streamIndex: current.endIndex,
         });
-        try {
-          const response = await session.respond(inputResponses, options);
-          await response.result();
-        } catch (cause) {
-          setError(toError(cause));
-          setStatus("error");
-          throw cause;
-        }
+        return await session.respond(inputResponses, options);
       });
     },
     [runOperation, sessionId]
@@ -251,7 +263,17 @@ export function useSessionAgent(sessionId: string): ChatAgent {
   );
 
   return {
-    cancel: async () => await client.sessions.attach(sessionId).cancel(),
+    cancel: async () => {
+      const pendingResponse = responseRef.current;
+      try {
+        return pendingResponse
+          ? await (await pendingResponse).cancel()
+          : await client.sessions.attach(sessionId).cancel();
+      } catch (cause) {
+        setError(toError(cause));
+        throw cause;
+      }
+    },
     data,
     error,
     events,

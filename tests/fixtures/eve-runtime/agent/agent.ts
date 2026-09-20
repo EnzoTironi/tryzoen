@@ -1,6 +1,6 @@
 import { messagingReply } from "./lib/messaging-model";
 import { defineAgent, defineDynamic } from "eve";
-import { mockModel } from "eve/evals";
+import { cancellationModel as mockModel } from "./lib/cancellation-model";
 import { z } from "zod";
 
 export default defineAgent({
@@ -19,6 +19,14 @@ export default defineAgent({
           } = request;
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
+          if (lastUserMessage === "rebind-report-catalog")
+            return JSON.stringify(tools.map((tool) => tool.name));
+          if (lastUserMessage === "rebind-approval" && !toolResults.length)
+            return {
+              toolCalls: [
+                { name: "rebind-approval", input: { text: "Approved write" } },
+              ],
+            };
           // Native empty-response retries append a framework nudge. Keep the
           // authored scenario stable across that retry as a real provider would.
           const command = request.userMessages

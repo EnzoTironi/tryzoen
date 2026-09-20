@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => ({
   history: vi.fn<() => Promise<SessionHistoryPage>>(),
   attach: vi.fn<(id: string, options?: { streamIndex: number }) => void>(),
   cancel: vi.fn<() => Promise<void>>(),
+  cancelResponse: vi.fn<() => Promise<void>>(),
   send: vi.fn<
     (
       message: unknown,
       options: unknown
-    ) => Promise<{ result: () => Promise<void> }>
+    ) => Promise<{
+      result: () => Promise<void>;
+      cancel: () => Promise<void>;
+    }>
   >(),
   stream:
     vi.fn<(options: StreamOptions) => AsyncIterable<MessageStreamEvent>>(),
@@ -51,7 +55,11 @@ beforeEach(() => {
   mocks.history.mockReset();
   mocks.attach.mockReset();
   mocks.cancel.mockReset();
-  mocks.send.mockReset().mockResolvedValue({ result: async () => undefined });
+  mocks.cancelResponse.mockReset();
+  mocks.send.mockReset().mockResolvedValue({
+    result: async () => undefined,
+    cancel: mocks.cancelResponse,
+  });
   mocks.stream
     .mockReset()
     .mockImplementation(({ signal }) => idleStream([], signal));
@@ -152,7 +160,10 @@ it("rejects a second ordinary submission instead of dropping its message", async
     endIndex: 1,
   });
   const completion = Promise.withResolvers<void>();
-  mocks.send.mockResolvedValue({ result: () => completion.promise });
+  mocks.send.mockResolvedValue({
+    result: () => completion.promise,
+    cancel: mocks.cancelResponse,
+  });
   renderToStaticMarkup(<Probe />);
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
@@ -179,9 +190,9 @@ it("releases a stopped turn at its native boundary and accepts the next message"
   const completion = Promise.withResolvers<void>();
   mocks.send.mockImplementationOnce(async () => {
     started.resolve();
-    return { result: () => completion.promise };
+    return { result: () => completion.promise, cancel: mocks.cancelResponse };
   });
-  mocks.cancel.mockImplementation(async () => {
+  mocks.cancelResponse.mockImplementation(async () => {
     stopped.resolve();
   });
   mocks.stream.mockImplementation(async function* ({ signal }) {
@@ -211,7 +222,8 @@ it("releases a stopped turn at its native boundary and accepts the next message"
   await started.promise;
   await mocks.agent?.cancel();
   await running;
-  expect(mocks.cancel).toHaveBeenCalledTimes(1);
+  expect(mocks.cancelResponse).toHaveBeenCalledTimes(1);
+  expect(mocks.cancel).not.toHaveBeenCalled();
   expect(mocks.stream.mock.calls[0]?.[0].signal?.aborted).toBe(false);
 
   await mocks.agent?.send("Continue with a different request");
@@ -225,3 +237,98 @@ it("releases a stopped turn at its native boundary and accepts the next message"
   expect(mocks.stream).toHaveBeenCalledTimes(1);
   for (const cleanup of cleanups) cleanup?.();
 });
+
+it("waits for an early submission response and cancels only its exact turn", async () => {
+  mocks.history.mockResolvedValue({
+    events: [waiting],
+    startIndex: 0,
+    endIndex: 1,
+  });
+  const accepted =
+    Promise.withResolvers<Awaited<ReturnType<typeof mocks.send>>>();
+  const completion = Promise.withResolvers<void>();
+  mocks.send.mockReturnValueOnce(accepted.promise);
+  renderToStaticMarkup(<Probe />);
+  const cleanups = mocks.effects.map((effect) => effect());
+  await vi.waitFor(() => {
+    expect(mocks.stream).toHaveBeenCalledTimes(1);
+  });
+
+  const running = mocks.agent?.send("Cancel this submission");
+  const cancellation = mocks.agent?.cancel();
+  expect(mocks.cancel).not.toHaveBeenCalled();
+  expect(mocks.cancelResponse).not.toHaveBeenCalled();
+  accepted.resolve({
+    result: () => completion.promise,
+    cancel: mocks.cancelResponse,
+  });
+  await cancellation;
+  expect(mocks.cancelResponse).toHaveBeenCalledTimes(1);
+  expect(mocks.cancel).not.toHaveBeenCalled();
+  completion.resolve();
+  await running;
+  for (const cleanup of cleanups) cleanup?.();
+});
+
+it("does not cancel a different turn when the pending send is rejected", async () => {
+  mocks.history.mockResolvedValue({
+    events: [waiting],
+    startIndex: 0,
+    endIndex: 1,
+  });
+  const accepted =
+    Promise.withResolvers<Awaited<ReturnType<typeof mocks.send>>>();
+  mocks.send.mockReturnValueOnce(accepted.promise);
+  renderToStaticMarkup(<Probe />);
+  const cleanups = mocks.effects.map((effect) => effect());
+  await vi.waitFor(() => {
+    expect(mocks.stream).toHaveBeenCalledTimes(1);
+  });
+
+  const running = mocks.agent?.send("Keep this draft");
+  const cancellation = mocks.agent?.cancel();
+  const results = Promise.allSettled([running, cancellation]);
+  accepted.reject(new Error("session_not_ready"));
+  expect(await results).toEqual([
+    { status: "rejected", reason: new Error("session_not_ready") },
+    { status: "rejected", reason: new Error("session_not_ready") },
+  ]);
+  expect(mocks.cancelResponse).not.toHaveBeenCalled();
+  expect(mocks.cancel).not.toHaveBeenCalled();
+  for (const cleanup of cleanups) cleanup?.();
+});
+
+it.each([
+  { type: "session.completed", meta: waiting.meta },
+  {
+    type: "session.failed",
+    meta: waiting.meta,
+    data: {
+      sessionId: "conversation",
+      code: "MODEL_CALL_FAILED",
+      message: "Model unavailable",
+    },
+  },
+] satisfies MessageStreamEvent[])(
+  "refuses sends and responses to a terminal $type session before HTTP",
+  async (terminal) => {
+    mocks.history.mockResolvedValue({
+      events: [terminal],
+      startIndex: 0,
+      endIndex: 1,
+    });
+    renderToStaticMarkup(<Probe />);
+    const cleanups = mocks.effects.map((effect) => effect());
+    await vi.waitFor(() => {
+      expect(mocks.stream).toHaveBeenCalledTimes(1);
+    });
+    await expect(mocks.agent?.send("Keep this draft")).rejects.toThrow(
+      "conversation has ended"
+    );
+    await expect(mocks.agent?.respond([])).rejects.toThrow(
+      "conversation has ended"
+    );
+    expect(mocks.send).not.toHaveBeenCalled();
+    for (const cleanup of cleanups) cleanup?.();
+  }
+);

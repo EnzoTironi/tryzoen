@@ -9,8 +9,8 @@ one year. Portuguese, English and Spanish were checked through the UI and
 Accept-Language requests, including explicit selection overriding detection. A
 Spanish headline overflow found at 390px was corrected only in the mobile layout;
 the original design and messenger CTA destination remain intact.
-The original checkout remains untouched. Work is in `../tryzoen-eve` on
-`codex/eve-rebuild`.
+The original checkout remains untouched. The rebuild was developed in
+`../tryzoen-eve`; subsequent production fixes use that same worktree.
 
 ## Final design
 
@@ -18,7 +18,9 @@ The original checkout remains untouched. Work is in `../tryzoen-eve` on
   Workspace capabilities and optional Treg MCP connections use native discovery.
 - Product operations use async TypeScript, Zod and Drizzle. Application Effect,
   ManagedRuntime, Operon, the extra Executor router and private Eve/Workflow
-  patches were removed. QuickJS remains only for published customer code.
+  patches were removed. Subsequent fixes to the published packages are documented
+  in [dependency patches](../../patches/README.md). QuickJS remains only for
+  published customer code.
 - Identity, current membership, credential scope, transactional writes and
   uncertain provider outcomes remain explicit product invariants.
 - Alchemy remains independently installed under `infrastructure/`. Its Effect
@@ -149,14 +151,32 @@ call-graph dead-code false positives. No baseline acknowledgment was added to hi
 these findings. The framework boundaries, affected callers, lint, types, dependency
 usage and executable behavior were checked directly.
 
-No production deployment, real Treg call or external messenger/provider write
-was performed. The browser sign-in flow exercised challenge creation, polling
+This original local qualification did not deploy to production, invoke real Treg
+tools or send external messenger/provider writes. The browser sign-in flow exercised challenge creation, polling
 and explicit browser continuation, with provider confirmation simulated locally.
 The model itself was live; external channel delivery was exercised against local
 Synapse and deterministic provider fixtures. The restore proof uses a real PostgreSQL
 dump/restore and an isolated in-memory erasure journal, not a live S3 qualification.
 Local tests do not establish every provider integration or production disaster
-recovery. Run the credentialed qualification inventory before production launch.
-Revisit the prelaunch data policy at that point.
+recovery.
+
+## Production follow-up — 2026-09-20
+
+The user authorized deployment and production verification. The prelaunch data
+policy was reviewed before the first cutover; hosted records are now persistent,
+and production checks use a dedicated synthetic workspace through normal product
+flows. No production reset or applied-migration rewrite is authorized.
+
+The [83ce90 deployment](https://github.com/EnzoTironi/tryzoen/actions/runs/35489901147)
+passed its exact-commit checks and native evaluations, encrypted backup recovery,
+and service probes. A live conversation wrote and reread a QA file while the
+temporary recovery database was running. Service database URLs select the fixed
+primary machine; the recovery database accepts loopback connections only.
+
+Production user testing also covered Google sign-in, landing languages, files and
+history, document import/export, browser tools, questions, approvals, skills and
+group conversations. It exposed Google tool-schema, cancellation, restart and
+scheduled-report defects; their focused regressions belong to the corrective
+release. These checks do not certify unconfigured external provider integrations.
 
 See [architecture](architecture.md) and [reproducible local setup](../local-runtime-setup.md).

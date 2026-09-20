@@ -14,14 +14,20 @@ export const GMAIL_UPDATE_ACTIONS = [
   "unstar",
 ] as const;
 export type GmailUpdateAction = (typeof GMAIL_UPDATE_ACTIONS)[number];
+// Keep Zod's strict email check at execution without publishing its lookahead regex.
+const emailAddress = z
+  .string()
+  .refine((value) => z.email().safeParse(value).success, {
+    message: "Invalid email address",
+  });
 export const gmailSendSchema = z.object({
-  bcc: z.array(z.email()).max(20).default([]),
+  bcc: z.array(emailAddress).max(20).default([]),
   body: z.string().min(1).max(100_000),
-  cc: z.array(z.email()).max(20).default([]),
+  cc: z.array(emailAddress).max(20).default([]),
   inReplyTo: z.string().max(998).optional(),
   subject: z.string().min(1).max(998),
   threadId: z.string().max(200).optional(),
-  to: z.array(z.email()).min(1).max(20),
+  to: z.array(emailAddress).min(1).max(20),
 });
 export async function searchGmail(
   ctx: ToolContext,
@@ -68,75 +74,6 @@ export async function searchGmail(
   });
 }
 
-/** Read metadata through the same owner-bound OAuth connection used by Gmail tools. */
-export async function readGmailMailbox(ctx: ToolContext) {
-  return withGmail(ctx, async (client) => {
-    const profile = await client.users.getProfile(
-      {
-        userId: "me",
-      },
-      {
-        signal: ctx.abortSignal,
-      }
-    );
-    const blocks: string[] = [];
-    let pageToken: string | undefined;
-    do {
-      const page = await client.users.messages.list(
-        {
-          userId: "me",
-          q: "newer_than:30d",
-          maxResults: 100,
-          pageToken,
-        },
-        {
-          signal: ctx.abortSignal,
-        }
-      );
-      const messages = await Promise.all(
-        (page.data.messages ?? []).flatMap(({ id }) =>
-          id
-            ? [
-                client.users.messages.get(
-                  {
-                    userId: "me",
-                    id,
-                    format: "metadata",
-                    metadataHeaders: [
-                      "From",
-                      "To",
-                      "Cc",
-                      "Date",
-                      "Message-ID",
-                      "References",
-                      "In-Reply-To",
-                    ],
-                  },
-                  {
-                    signal: ctx.abortSignal,
-                  }
-                ),
-              ]
-            : []
-        )
-      );
-      for (const { data } of messages) {
-        const headers = (data.payload?.headers ?? []).flatMap(
-          ({ name, value }) =>
-            name && value ? [`${safeHeader(name)}: ${safeHeader(value)}`] : []
-        );
-        blocks.push(`From zoen-import\n${headers.join("\n")}\n\n`);
-      }
-      pageToken = page.data.nextPageToken ?? undefined;
-    } while (pageToken && blocks.length < 1000);
-    return {
-      text: blocks.join("\n"),
-      format: "mbox" as const,
-      ownerEmail: profile.data.emailAddress ?? undefined,
-      partial: Boolean(pageToken),
-    };
-  });
-}
 export async function readGmailThread(ctx: ToolContext, threadId: string) {
   return withGmail(ctx, async (client) => {
     const { data: thread } = await client.users.threads.get(
@@ -217,12 +154,6 @@ export function gmailSendMessageId(ctx: {
   };
 }) {
   return `<${gmailSendIdempotencyKey(ctx)}@local>`;
-}
-
-/** rfc822msgid query helper (insufficient alone on live Gmail send). */
-export function gmailSendMessageIdQuery(messageId: string) {
-  const bare = messageId.replace(/^<|>$/gu, "");
-  return `rfc822msgid:${bare}`;
 }
 
 /**

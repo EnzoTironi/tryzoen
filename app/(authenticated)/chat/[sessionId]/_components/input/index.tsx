@@ -13,16 +13,23 @@ import {
 import { messageContent } from "../../../_lib/message-input";
 import { api } from "@web/trpc/client";
 import type { ChatAgent } from "../chat-agent";
+import { isTerminalSession } from "../../_lib/message-events";
+import { Button } from "@web/components/ui/button";
+import { PanelLink } from "../../../../_components/panel-link";
 
 export function ChatInput({
   agent,
   sessionId,
 }: {
-  readonly agent: Pick<ChatAgent, "cancel" | "data" | "send" | "status">;
+  readonly agent: Pick<
+    ChatAgent,
+    "cancel" | "data" | "events" | "send" | "status"
+  >;
   readonly sessionId?: string;
 }) {
   const { t } = useI18n();
   const { mutate: saveChat } = api.chats.save.useMutation();
+  const isTerminal = isTerminalSession(agent.events);
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
   const isRestoring =
     agent.status === "resuming" && agent.data.messages.length === 0;
@@ -32,6 +39,8 @@ export function ChatInput({
     )
   );
   const handleSubmit = async (message: PromptInputMessage) => {
+    if (isTerminal)
+      throw new Error("This conversation has ended. Start a new chat.");
     const text = message.text.trim();
     if (
       (text.length === 0 && message.files.length === 0) ||
@@ -55,17 +64,30 @@ export function ChatInput({
         <PromptInputBody>
           <PromptInputTextarea
             className="min-h-0"
-            disabled={agent.status === "submitted" || isAuthorizing}
+            disabled={
+              !isTerminal && (agent.status === "submitted" || isAuthorizing)
+            }
             placeholder={t("Send a message…")}
           />
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools />
-          <PromptInputSubmit
-            disabled={isRestoring}
-            onStop={() => void agent.cancel()}
-            status={isBusy ? agent.status : undefined}
-          />
+          {isTerminal ? (
+            <Button
+              nativeButton={false}
+              render={<PanelLink href="/chat" />}
+              size="sm"
+              variant="outline"
+            >
+              {t("New chat")}
+            </Button>
+          ) : (
+            <PromptInputSubmit
+              disabled={isRestoring}
+              onStop={() => void agent.cancel()}
+              status={isBusy ? agent.status : undefined}
+            />
+          )}
         </PromptInputFooter>
       </PromptInput>
     </div>

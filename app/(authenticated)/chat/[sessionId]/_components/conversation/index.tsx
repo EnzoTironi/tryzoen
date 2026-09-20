@@ -6,6 +6,7 @@ import { Fragment, useMemo } from "react";
 import type { EveMessage } from "eve/react";
 import {
   imessageTimestamps,
+  isTerminalSession,
   messageTimestamps,
   sentMessages,
 } from "../../_lib/message-events";
@@ -44,7 +45,9 @@ export function ChatConversation({
   readonly traceView: TraceView;
 }) {
   const { t } = useI18n();
+  const isTerminal = isTerminalSession(agent.events);
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
+  const canRespond = !isTerminal && !isBusy && agent.status !== "resuming";
   const isRestoring =
     agent.status === "resuming" && agent.data.messages.length === 0;
   const lastMessage = agent.data.messages.at(-1);
@@ -125,7 +128,7 @@ export function ChatConversation({
               <Fragment key={message.id}>
                 {deliveries.map((delivery) => (
                   <AgentMessage
-                    canRespond={!isBusy && agent.status !== "resuming"}
+                    canRespond={canRespond}
                     isStreaming={false}
                     key={delivery.id}
                     message={{ ...message, id: delivery.id, parts: [] }}
@@ -136,7 +139,7 @@ export function ChatConversation({
                   />
                 ))}
                 <AgentMessage
-                  canRespond={!isBusy && agent.status !== "resuming"}
+                  canRespond={canRespond}
                   isStreaming={false}
                   message={message}
                   onInputResponses={(responses) => agent.respond(responses)}
@@ -148,7 +151,7 @@ export function ChatConversation({
 
           return (
             <AgentMessage
-              canRespond={!isBusy && agent.status !== "resuming"}
+              canRespond={canRespond}
               isStreaming={
                 agent.status === "streaming" && index === messages.length - 1
               }
@@ -166,7 +169,7 @@ export function ChatConversation({
         {showPendingThinking ? <PendingThinking /> : null}
         {errorMessage ? (
           <ErrorMessage
-            onRetry={agent.error ? agent.resume : undefined}
+            onRetry={!isTerminal && agent.error ? agent.resume : undefined}
             message={
               traceView === "trace"
                 ? errorMessage

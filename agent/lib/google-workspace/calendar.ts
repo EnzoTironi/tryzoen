@@ -6,7 +6,15 @@ import { googleApiErrorStatus, withGoogleAuth } from "./client";
 import { calendarEventTime } from "./calendar-time";
 
 export const calendarEventSchema = z.object({
-  attendees: z.array(z.email()).max(50).default([]),
+  // Keep Zod's strict email check at execution without publishing its lookahead regex.
+  attendees: z
+    .array(
+      z.string().refine((value) => z.email().safeParse(value).success, {
+        message: "Invalid email address",
+      })
+    )
+    .max(50)
+    .default([]),
   calendarId: z.string().default("primary"),
   description: z.string().max(8_000).optional(),
   end: z.iso.datetime({ offset: true }),
