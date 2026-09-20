@@ -5,6 +5,8 @@ import {
   requireWorkerSessionId,
 } from "@evals/browser/session";
 import { readTaskCompletion } from "@evals/browser/worker-events";
+import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
+import { reactToMessageToolResultSchema } from "@shared/chat/reaction";
 
 export default defineEval({
   description:
@@ -55,9 +57,35 @@ export default defineEval({
       startIndex: replyIndex,
     });
     reply.succeeded();
-    reply.calledTool("send_message", {
-      status: "completed",
-      output: { text: /Example Domain/u },
+    // Only the resumed parent slice can prove delivery. Child results and the
+    // original acknowledgment are not replies to the user.
+    const deliveries = reply.events.flatMap((event) => {
+      if (event.type !== "action.result" || event.data.status !== "completed")
+        return [];
+      const sent = sendMessageToolResultSchema.safeParse(event.data.result);
+      if (sent.success)
+        return [
+          sent.data.output.kind === "message"
+            ? (sent.data.output.text ?? "")
+            : sent.data.output.url,
+        ];
+      const reaction = reactToMessageToolResultSchema.safeParse(
+        event.data.result
+      );
+      // A delivered reaction also suppresses the assistant-text fallback in web chat.
+      return reaction.success && reaction.data.output.operation === "add"
+        ? [""]
+        : [];
     });
+    const committedReply = reply.events
+      .filter((event) => event.type === "message.completed")
+      .findLast((event) => event.data.finishReason !== "tool-calls")
+      ?.data.message;
+    const answer = deliveries.length
+      ? deliveries.join("\n")
+      : (committedReply ?? "");
+    t.check(answer, includes("Example Domain")).label(
+      "parent delivers the verified browser heading in web chat"
+    );
   },
 });
