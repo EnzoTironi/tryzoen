@@ -22,7 +22,7 @@ export function LanguagePicker({
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
   return (
-    <div className="space-y-2">
+    <div className={compact ? "relative flex items-center" : "space-y-2"}>
       <Select
         value={locale}
         disabled={pending}
@@ -40,9 +40,13 @@ export function LanguagePicker({
       >
         <SelectTrigger
           aria-label={t("Idioma")}
-          className="h-11 w-full rounded-2xl px-4"
+          className={
+            compact
+              ? "h-8 items-center gap-1.5 border-transparent px-2"
+              : "h-11 w-full rounded-2xl px-4"
+          }
         >
-          <LanguagesIcon aria-hidden="true" />
+          <LanguagesIcon aria-hidden="true" className="size-4" />
           <SelectValue>
             {compact ? locale.toUpperCase() : localeNames[locale]}
           </SelectValue>
@@ -56,7 +60,14 @@ export function LanguagePicker({
         </SelectContent>
       </Select>
       {failed && (
-        <p role="alert" className="type-caption">
+        <p
+          role="alert"
+          className={
+            compact
+              ? "absolute top-full left-0 mt-1 type-caption"
+              : "type-caption"
+          }
+        >
           {t("Não foi possível salvar o idioma. Tente novamente.")}
         </p>
       )}

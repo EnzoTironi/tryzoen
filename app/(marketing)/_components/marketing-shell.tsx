@@ -68,15 +68,17 @@ export function MarketingShell({
             <div className={styles.headerLanguage}>
               <LanguagePicker compact />
             </div>
-            <Button
-              className="hidden sm:inline-flex"
-              nativeButton={false}
-              render={<Link href="/sign-in" />}
-              size="sm"
-              variant="quiet"
-            >
-              {t("Entrar")}
-            </Button>
+            {active !== "product" && (
+              <Button
+                className="hidden sm:inline-flex"
+                nativeButton={false}
+                render={<Link href="/sign-in" />}
+                size="sm"
+                variant="quiet"
+              >
+                {t("Entrar")}
+              </Button>
+            )}
             <OnboardingTrigger size="sm">{t("Começar")}</OnboardingTrigger>
           </div>
         </MarketingFrame>
@@ -88,14 +90,16 @@ export function MarketingShell({
             {nav.map((item) => (
               <NavItem active={active} item={item} key={item.href} />
             ))}
-            <Button
-              nativeButton={false}
-              render={<Link href="/sign-in" />}
-              size="sm"
-              variant="quiet"
-            >
-              {t("Entrar")}
-            </Button>
+            {active !== "product" && (
+              <Button
+                nativeButton={false}
+                render={<Link href="/sign-in" />}
+                size="sm"
+                variant="quiet"
+              >
+                {t("Entrar")}
+              </Button>
+            )}
           </nav>
         </MarketingFrame>
       </header>
@@ -133,9 +137,11 @@ export function MarketingShell({
             >
               {t("Começar")}
             </OnboardingTrigger>
-            <Link className="hover:text-foreground" href="/sign-in">
-              {t("Entrar")}
-            </Link>
+            {active !== "product" && (
+              <Link className="hover:text-foreground" href="/sign-in">
+                {t("Entrar")}
+              </Link>
+            )}
           </div>
           <div className="w-full max-w-xs sm:max-w-48">
             <LanguagePicker />

@@ -19,6 +19,7 @@ allowBuilds:
   "@google/genai": false
   "@mongodb-js/zstd": false
   cbor-extract: false
+  core-js: false
   esbuild: true
   msgpackr-extract: false
   node-liblzma: false

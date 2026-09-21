@@ -73,11 +73,17 @@
   color: #fff;
   font-size: 0.875rem;
 }
+.headerLanguage {
+  display: flex;
+  align-items: center;
+}
 .headerLanguage [data-slot="select-trigger"] {
   height: 38px;
+  min-height: 38px;
+  align-items: center;
   border-color: transparent;
   border-radius: 50px;
-  padding: 8px;
+  padding: 8px 10px;
 }
 .landingShell > footer {
   background: #081627;

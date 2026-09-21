@@ -307,7 +307,15 @@ export const env = createEnv({
     VERCEL_PROJECT_PRODUCTION_URL: requiredValue.optional(),
     VERCEL_URL: requiredValue.optional(),
   },
-  experimental__runtimeEnv: {},
+  client: {
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: requiredValue.optional(),
+    NEXT_PUBLIC_POSTHOG_HOST: z.url().optional(),
+  },
+  experimental__runtimeEnv: {
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:
+      process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
+    NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+  },
   emptyStringAsUndefined: true,
 });
 

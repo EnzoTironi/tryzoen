@@ -111,14 +111,18 @@ export function MarketingLanding() {
               <br />
               <RotatingHeadline />
             </h1>
-            <div className={styles.integrations}>
-              <span>{t("Converse no")}</span>
-              <ConversationIcons />
-            </div>
+            <p className={cn("type-signal", styles.heroReply)}>
+              {t("Deixa com a Zoen")}
+            </p>
             <div className={styles.actions}>
               <OnboardingTrigger className={styles.primaryButton} size="lg">
-                {t("Começar agora")} <ArrowUpRightIcon aria-hidden="true" />
+                {t("Comece a conversar agora")}{" "}
+                <ArrowUpRightIcon aria-hidden="true" />
               </OnboardingTrigger>
+            </div>
+            <div className={styles.integrations}>
+              <span>{t("Converse no")}</span>
+              <ConversationIcons channels={["imessage"]} />
             </div>
           </MarketingFrame>
           <a
@@ -397,7 +401,8 @@ export function MarketingLanding() {
             <p>{t("Seu Zoen entra no ritmo com você.")}</p>
             <div className={styles.actions}>
               <OnboardingTrigger className={styles.primaryButton} size="lg">
-                {t("Começar agora")} <ArrowUpRightIcon aria-hidden="true" />
+                {t("Comece a conversar agora")}{" "}
+                <ArrowUpRightIcon aria-hidden="true" />
               </OnboardingTrigger>
             </div>
           </MarketingFrame>
