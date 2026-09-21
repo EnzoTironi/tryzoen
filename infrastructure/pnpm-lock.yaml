@@ -21,8 +21,8 @@ importers:
         specifier: 2.0.0-beta.76
         version: 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@distilled.cloud/fly-io':
-        specifier: 1.0.0-rc.8
-        version: 1.0.0-rc.8(effect@4.0.0-rc.112)
+        specifier: 1.0.0-rc.12
+        version: 1.0.0-rc.12(effect@4.0.0-rc.112)
       '@effect/platform-node':
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
@@ -267,10 +267,20 @@ packages:
     peerDependencies:
       effect: '>=4.0.0-rc.112 || >=4.0.0'
 
+  '@distilled.cloud/core@1.0.0-rc.12':
+    resolution: {integrity: sha512-YeH/uPohGXp2qIctbqVzBtQV+bUs+K5Zdac8qIid7/t6VlwY964SALme5znRdFu/rQgrloXnaej8iTSK9RIQdA==}
+    peerDependencies:
+      effect: '>=4.0.0-rc.115 || >=4.0.0'
+
   '@distilled.cloud/core@1.0.0-rc.8':
     resolution: {integrity: sha512-baZMSaBh9kEyAqdhO+UbkvVDK+wqyI8d0UW0paSp5CqVResOl7ydHU4tCbBUOLoxOrqLRWfmImKrhW9SY1R8qw==}
     peerDependencies:
       effect: '>=4.0.0-rc.112 || >=4.0.0'
+
+  '@distilled.cloud/fly-io@1.0.0-rc.12':
+    resolution: {integrity: sha512-ACgR8Kcx/OP8gAF+PnXYneGGZNUqyiQHrcTB3/lRcv5gQdacXhTAvreV/d0t7jclRo5BBdNxnd5TuuHpr9vDLA==}
+    peerDependencies:
+      effect: '>=4.0.0-rc.115 || >=4.0.0'
 
   '@distilled.cloud/fly-io@1.0.0-rc.8':
     resolution: {integrity: sha512-0HqVLIpBxmuvrIrnmziz8iK39F5cBxkHlz43WR2s+tFidbPlCzmnci6gxixxiwMBCzcmiRmv57xQxuQzgfDQMw==}
@@ -1475,6 +1485,10 @@ packages:
   graphmatch@1.1.1:
     resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
 
+  graphql@16.11.0:
+    resolution: {integrity: sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw==}
+    engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
+
   hono@4.13.5:
     resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
@@ -2380,8 +2394,18 @@ snapshots:
       '@distilled.cloud/core': 1.0.0-rc.8(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
 
+  '@distilled.cloud/core@1.0.0-rc.12(effect@4.0.0-rc.112)':
+    dependencies:
+      effect: 4.0.0-rc.112
+      graphql: 16.11.0
+
   '@distilled.cloud/core@1.0.0-rc.8(effect@4.0.0-rc.112)':
     dependencies:
+      effect: 4.0.0-rc.112
+
+  '@distilled.cloud/fly-io@1.0.0-rc.12(effect@4.0.0-rc.112)':
+    dependencies:
+      '@distilled.cloud/core': 1.0.0-rc.12(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
 
   '@distilled.cloud/fly-io@1.0.0-rc.8(effect@4.0.0-rc.112)':
@@ -3362,6 +3386,8 @@ snapshots:
   grammex@3.1.13: {}
 
   graphmatch@1.1.1: {}
+
+  graphql@16.11.0: {}
 
   hono@4.13.5: {}
 
