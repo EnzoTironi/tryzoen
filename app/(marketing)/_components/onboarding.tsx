@@ -38,17 +38,15 @@ function ChannelIcon({
 function conversationStartHref(
   destinations: ReturnType<typeof conversationDestinations> | null
 ) {
-  if (
-    destinations?.imessage &&
-    destinations.whatsapp === null &&
-    destinations.telegram === null
-  ) {
-    return destinations.imessage;
-  }
+  if (destinations?.imessage) return destinations.imessage;
   return "/get-started";
 }
 
-export function ConversationIcons() {
+export function ConversationIcons({
+  channels: allowed,
+}: {
+  readonly channels?: readonly (typeof channels)[number]["id"][];
+} = {}) {
   const { t } = useI18n();
   const destinations = useContext(OnboardingContext);
   return (
@@ -56,6 +54,7 @@ export function ConversationIcons() {
       {channels.map((channel) => {
         const destination = destinations?.[channel.id];
         if (!destination) return null;
+        if (allowed && !allowed.includes(channel.id)) return null;
         return (
           <Button
             aria-label={t(channel.label)}
