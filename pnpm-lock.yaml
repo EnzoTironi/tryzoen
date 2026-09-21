@@ -209,8 +209,8 @@ importers:
         specifier: ^0.5.8
         version: 0.5.8
       '@next/env':
-        specifier: 16.3.3
-        version: 16.3.3
+        specifier: 16.3.5
+        version: 16.3.5
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -1490,6 +1490,9 @@ packages:
 
   '@next/env@16.3.3':
     resolution: {integrity: sha512-U2eYQRwXj+dsqxV79zFqExDdatnNY/ZWc2nsJU1p/OgT7fd3dXwlF6OjYaFQCfMoeTA19PWq+wVmYgimVA+V+g==}
+
+  '@next/env@16.3.5':
+    resolution: {integrity: sha512-NWEXVDMqoEo0ktmU6u0sE2Vg0LOcsD7NnOTJNo3/fEaTfsg+F1bMIxuDmQbda4e3yTIQwVdUREF2yIuMOusKtg==}
 
   '@next/swc-darwin-arm64@16.3.3':
     resolution: {integrity: sha512-8Hiv32QJPwdV6KYJ8meR9SBA061tQqnIKTJDocvOXlEQqib0xMFpzArosuffFUUc0sslbh7QQ8a3Yey1QV8EIw==}
@@ -8070,6 +8073,8 @@ snapshots:
     optional: true
 
   '@next/env@16.3.3': {}
+
+  '@next/env@16.3.5': {}
 
   '@next/swc-darwin-arm64@16.3.3':
     optional: true
