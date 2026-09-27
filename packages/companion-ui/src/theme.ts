@@ -1,10 +1,10 @@
 export const colors = {
-  canvas: "#fcfbf8",
+  canvas: "#fcfcfc",
   surface: "#ffffff",
-  ink: "#242421",
-  muted: "#7c7b75",
-  line: "#e8e7e1",
-  wash: "#f1f0ea",
-  accent: "#556b4e",
+  ink: "#111112",
+  muted: "rgba(0,4,9,0.59)",
+  line: "#e2e2e2",
+  wash: "#ededee",
+  accent: "#0866c9",
   danger: "#a34437",
 };

@@ -29,7 +29,7 @@ const mocks = vi.hoisted<Mocks>(() => ({
   sessionId: undefined,
 }));
 
-vi.mock("./use-session-agent", () => ({
+vi.mock("@zoen/companion-ui/session", () => ({
   useSessionAgent: (sessionId: string) => {
     mocks.sessionId = sessionId;
     return mocks.agent;

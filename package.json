@@ -6,7 +6,8 @@
     "@aws-sdk/client-s3": "3.1131.0",
     "@babel/parser": "7.29.2",
     "@base-ui/react": "^1.7.0",
-    "@better-auth/oauth-provider": "1.7.2",
+    "@better-auth/expo": "1.7.6",
+    "@better-auth/oauth-provider": "1.7.6",
     "@firecrawl/anydoc": "0.2.4",
     "@googleapis/calendar": "^16.0.0",
     "@googleapis/gmail": "^18.0.0",
@@ -35,8 +36,9 @@
     "@vercel/connect": "^2.0.0",
     "@vercel/oidc": "3.8.5",
     "@workflow/world-postgres": "5.0.0-beta.44",
+    "@zoen/companion-ui": "workspace:*",
     "ai": "7.0.107",
-    "better-auth": "1.7.2",
+    "better-auth": "1.7.6",
     "chat": "4.34.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -56,6 +58,8 @@
     "quickjs-emscripten": "0.31.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "0.21.3",
     "streamdown": "2.6.0",
     "stripe": "^18.5.0",
     "sucrase": "3.35.1",
@@ -63,10 +67,7 @@
     "tailwindcss": "4.3.3",
     "tsx": "4.21.0",
     "use-stick-to-bottom": "1.1.6",
-    "zod": "4.5.4",
-    "@zoen/companion-ui": "workspace:*",
-    "react-native-web": "0.21.3",
-    "react-native-svg": "15.15.4"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -84,12 +85,12 @@
     "oxlint-tailwindcss": "1.10.0",
     "oxlint-tsgolint": "7.0.2001",
     "portless": "0.15.1",
+    "react-native": "0.86.3",
     "shadcn": "4.19.0",
     "taze": "21.1.0",
     "turbo": "2.10.12",
     "typescript": "7.0.2",
-    "vitest": "4.1.11",
-    "react-native": "0.86.3"
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": "24.x"
@@ -155,7 +156,7 @@
     "dev:desktop": "pnpm --filter @zoen/desktop dev",
     "package:desktop": "pnpm --filter @zoen/desktop package",
     "dev:mobile": "pnpm --filter @zoen/mobile start",
-    "preview:companion": "pnpm --filter @zoen/mobile web"
+    "preview:companion": "next dev"
   },
   "version": "0.0.0",
   "type": "module"

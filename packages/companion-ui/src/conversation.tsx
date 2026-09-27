@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -42,8 +42,20 @@ export function Conversation({
 }) {
   const scroll = useRef<FlatList<EveMessage>>(null);
   const nearBottom = useRef(true);
+  const positioned = useRef(false);
   const busy = status === "streaming" || status === "submitted";
   const canRespond = status === "ready" || status === "error";
+  useEffect(() => {
+    if (messages.length === 0 || positioned.current) return undefined;
+    const frame = requestAnimationFrame(() => {
+      scroll.current?.scrollToEnd({ animated: false });
+      positioned.current = true;
+      nearBottom.current = true;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [messages.length]);
   return (
     <View style={styles.root}>
       <FlatList
@@ -56,12 +68,23 @@ export function Conversation({
         windowSize={7}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         scrollEventThrottle={100}
+        onLayout={() => {
+          if (nearBottom.current && messages.length > 0)
+            scroll.current?.scrollToEnd({ animated: false });
+        }}
+        onScrollBeginDrag={() => {
+          positioned.current = true;
+        }}
         onScroll={({ nativeEvent }) => {
-          nearBottom.current =
+          const atBottom =
             nativeEvent.contentSize.height -
               nativeEvent.contentOffset.y -
               nativeEvent.layoutMeasurement.height <
             100;
+          // Initial list measurements can report the top before history is positioned.
+          if (atBottom && nativeEvent.contentOffset.y > 0)
+            positioned.current = true;
+          if (positioned.current) nearBottom.current = atBottom;
         }}
         onContentSizeChange={() => {
           if (nearBottom.current)
@@ -83,11 +106,11 @@ export function Conversation({
         }
         renderItem={({ item: message }) => (
           <View
-            style={[styles.message, message.role === "user" && styles.user]}
+            style={[
+              styles.message,
+              message.role === "user" ? styles.user : styles.assistant,
+            ]}
           >
-            {message.role === "assistant" && (
-              <Text style={styles.author}>Zoen</Text>
-            )}
             {message.parts.map((part, index) => (
               <MessagePart
                 // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
@@ -328,13 +351,30 @@ function InputRequest({
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
-  messages: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 30 },
-  column: { width: "100%", maxWidth: 740, alignSelf: "center" },
-  message: { gap: 12, paddingVertical: 20 },
+  messages: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 30,
+  },
+  column: { width: "100%", maxWidth: 900, alignSelf: "center" },
+  message: {
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 3,
+    borderRadius: 24,
+  },
+  assistant: {
+    alignSelf: "flex-start",
+    maxWidth: "90%",
+    backgroundColor: "#e9e9eb",
+  },
   user: {
     alignSelf: "flex-end",
     maxWidth: "88%",
-    backgroundColor: colors.wash,
+    backgroundColor: "#dceaff",
     borderRadius: 22,
     paddingHorizontal: 20,
     marginVertical: 10,
@@ -359,5 +399,5 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   error: { color: colors.danger, fontSize: 13, lineHeight: 21 },
-  composer: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
+  composer: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
 });

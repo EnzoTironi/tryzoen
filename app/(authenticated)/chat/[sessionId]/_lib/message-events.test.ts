@@ -1,7 +1,7 @@
+import { conversationStreamEvents } from "@zoen/companion-ui/session";
 import { defaultMessageReducer, type MessageStreamEvent } from "eve/client";
 import { describe, expect, it } from "vitest";
 import {
-  conversationStreamEvents,
   imessageTimestamps,
   messageTimestamps,
   sentMessages,

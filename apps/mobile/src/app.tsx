@@ -1,106 +1,156 @@
 import { useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionShell,
-  Welcome,
   type CompanionSection,
 } from "@zoen/companion-ui";
-
-const paths: Record<CompanionSection, string> = {
-  chat: "/companion",
-  search: "/chat/history",
-  feed: "/insights",
-  ideas: "/recipes",
-  goals: "/tasks",
-  library: "/space/knowledge",
-  settings: "/account",
-};
+import { auth } from "./auth";
+import { MobileConversation } from "./conversation";
+import { MobileSections } from "./sections";
+import { apiOrigin } from "./environment";
 
 export function App() {
-  const [section, setSection] = useState<CompanionSection>("chat");
-  const [notice, setNotice] = useState(false);
+  const session = auth.useSession();
+  const [error, setError] = useState<string>();
+  const [signingIn, setSigningIn] = useState(false);
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea}>
-        {/* oxlint-disable-next-line react/style-prop-object -- Expo StatusBar uses a named style, not a React Native style object. */}
+        {/* oxlint-disable-next-line react/style-prop-object -- Expo accepts a named status-bar style. */}
         <StatusBar style="dark" />
-        <Text style={styles.preview}>
-          Interface preview · Mobile sign-in is not connected
-        </Text>
-        <CompanionShell
-          section={section}
-          onNavigate={setSection}
-          onNewConversation={() => {
-            setSection("chat");
-            setNotice(false);
-          }}
-        >
-          {section === "chat" && !notice ? (
-            <Welcome
-              onSend={() => {
-                setNotice(true);
-                return Promise.resolve();
-              }}
-            />
-          ) : (
-            <ScrollView contentContainerStyle={styles.page}>
-              <View style={styles.card}>
-                <Text accessibilityRole="header" style={styles.title}>
-                  {notice
-                    ? "Your companion, coming with you."
-                    : section.charAt(0).toUpperCase() + section.slice(1)}
-                </Text>
-                <Text style={styles.copy}>
-                  This is the shared interface preview. Mobile sign-in and
-                  account data are not connected yet. Your existing Zoen
-                  workspace is available on the web.
-                </Text>
-                <ActionButton
-                  onPress={() => {
-                    void Linking.openURL(
-                      `https://app.tryzoen.com${paths[section]}`
+        {session.isPending ? (
+          <View style={styles.center}>
+            <ActivityIndicator accessibilityLabel="Signing in" />
+          </View>
+        ) : session.data ? (
+          <AccountCompanion key={session.data.user.id} />
+        ) : (
+          <View style={styles.center}>
+            <Text style={styles.brand}>Zoen</Text>
+            <Text style={styles.copy}>
+              Your conversations, ideas, and goals. Together.
+            </Text>
+            <ActionButton
+              disabled={signingIn}
+              onPress={() => {
+                setSigningIn(true);
+                setError(undefined);
+                void auth.signIn
+                  .social({ provider: "google", callbackURL: "/" })
+                  .then((result) => {
+                    if (result.error)
+                      setError(
+                        result.error.message ??
+                          "Sign-in failed. Please try again."
+                      );
+                  })
+                  .catch(() => {
+                    setError(
+                      "Unable to connect. Check your connection and try again."
                     );
-                  }}
-                >
-                  Open Zoen on the web
-                </ActionButton>
-                <ActionButton
-                  quiet
-                  onPress={() => {
-                    setSection("chat");
-                    setNotice(false);
-                  }}
-                >
-                  Back to conversation
-                </ActionButton>
-              </View>
-            </ScrollView>
-          )}
-        </CompanionShell>
+                  })
+                  .finally(() => {
+                    setSigningIn(false);
+                  });
+              }}
+            >
+              {signingIn ? "Signing in…" : "Continue with Google"}
+            </ActionButton>
+            {(error !== undefined || session.error !== null) && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error ?? "Couldn’t connect to your account. Please try again."}
+              </Text>
+            )}
+          </View>
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
+function AccountCompanion() {
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+      })
+  );
+  return (
+    <QueryClientProvider client={client}>
+      <MobileCompanion
+        onSignOut={async () => {
+          const result = await auth.signOut();
+          if (result.error)
+            throw new Error(result.error.message ?? "Could not sign out.");
+          client.clear();
+        }}
+      />
+    </QueryClientProvider>
+  );
+}
+
+function MobileCompanion({
+  onSignOut,
+}: {
+  readonly onSignOut: () => Promise<void>;
+}) {
+  const [section, setSection] = useState<CompanionSection>("chat");
+  const [conversation, setConversation] = useState<{
+    id?: string;
+    draft?: string;
+    key: number;
+  }>({ key: 0 });
+  const openConversation = (id?: string, draft?: string) => {
+    setConversation((current) => ({ id, draft, key: current.key + 1 }));
+    setSection("chat");
+  };
+  return (
+    <CompanionShell
+      section={section}
+      avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
+      onNavigate={setSection}
+      onNewConversation={() => {
+        openConversation();
+      }}
+    >
+      {section === "chat" ? (
+        <MobileConversation
+          key={conversation.key}
+          sessionId={conversation.id}
+          initialDraft={conversation.draft}
+          onCreated={(id) => {
+            setConversation((current) => ({ ...current, id }));
+          }}
+        />
+      ) : (
+        <MobileSections
+          section={section}
+          onConversation={(id) => {
+            openConversation(id);
+          }}
+          onPrompt={(draft) => {
+            openConversation(undefined, draft);
+          }}
+          onSignOut={onSignOut}
+        />
+      )}
+    </CompanionShell>
+  );
+}
 const styles = StyleSheet.create({
-  preview: {
-    padding: 8,
-    backgroundColor: "#eef0e7",
-    color: "#556b4e",
-    textAlign: "center",
-    fontSize: 12,
-  },
-  safeArea: { flex: 1, backgroundColor: "#fcfbf8" },
-  page: {
-    flexGrow: 1,
-    padding: 28,
+  safeArea: { flex: 1, backgroundColor: "#fcfcfc" },
+  center: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    padding: 32,
+    gap: 24,
   },
-  card: { maxWidth: 480, gap: 20 },
-  title: { fontSize: 28, fontWeight: "500", color: "#242421" },
-  copy: { fontSize: 16, lineHeight: 25, color: "#7c7b75" },
+  brand: { fontSize: 44, fontWeight: "600", color: "#111112" },
+  copy: { fontSize: 17, color: "#737373", textAlign: "center", lineHeight: 25 },
+  error: { color: "#a34437", fontSize: 15, lineHeight: 22 },
 });

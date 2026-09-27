@@ -42,14 +42,19 @@ const suggestions = [
 
 export function Welcome({
   name,
+  initialDraft = "",
   avatarUri,
   onSend,
   disabled = false,
 }: Pick<ComponentProps<typeof Composer>, "onSend" | "disabled"> & {
   readonly name?: string;
+  readonly initialDraft?: string;
   readonly avatarUri?: string;
 }) {
-  const [suggestion, setSuggestion] = useState({ draft: "", revision: 0 });
+  const [suggestion, setSuggestion] = useState({
+    draft: initialDraft,
+    revision: 0,
+  });
   return (
     <ScrollView
       contentContainerStyle={styles.scroll}

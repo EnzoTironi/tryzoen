@@ -7,17 +7,23 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "default": "./dist/session/index.js"
     }
   },
   "dependencies": {
     "lucide-react-native": "1.48.0",
     "react-native-svg": "15.15.4",
-    "react-native-marked": "8.3.2"
+    "react-native-marked": "8.3.2",
+    "zod": "4.5.4"
   },
   "peerDependencies": {
     "react": "^19.2.3",
     "react-native": ">=0.86.3",
-    "eve": "^0.63.0"
+    "eve": "^0.63.0",
+    "ai": "^7.0.107"
   },
   "scripts": {
     "build:ui": "tsc -p tsconfig.json",

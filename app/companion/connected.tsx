@@ -1,31 +1,28 @@
 "use client";
+import { browserSessionClient } from "@web/eve/client";
 
-import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEveAgent } from "eve/react";
 import {
   CompanionShell,
-  Conversation,
-  Welcome,
+  SessionConversation,
+  NewConversation,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
-import {
-  browserWorkspaceHeaders,
-  workspaceHref,
-} from "@web/workspaces/navigation";
-import { useSessionAgent } from "@app/(authenticated)/chat/[sessionId]/_components/use-session-agent";
+import { workspaceHref } from "@web/workspaces/navigation";
 import styles from "./companion.module.css";
 
-const sectionPaths: Record<CompanionSection, string> = {
-  chat: "/companion",
-  search: "/chat/history",
-  feed: "/insights",
-  ideas: "/recipes",
-  goals: "/tasks",
-  library: "/space/knowledge",
-  settings: "/account",
-};
+import { ConnectedSections } from "./sections";
+
+const sections: readonly CompanionSection[] = [
+  "chat",
+  "search",
+  "feed",
+  "ideas",
+  "goals",
+  "library",
+  "settings",
+];
 
 export function ConnectedCompanion({
   sessionId,
@@ -35,26 +32,54 @@ export function ConnectedCompanion({
   readonly title?: string;
 }) {
   const router = useRouter();
-  const workspaceId = useSearchParams().get("space");
+  const { mutateAsync: saveChat } = api.chats.save.useMutation();
+  const params = useSearchParams();
+  const workspaceId = params.get("space");
+  const view = params.get("view");
+  const section = sections.find((candidate) => candidate === view) ?? "chat";
+  const draft = (params.get("draft") ?? "").slice(0, 10000);
   const navigate = (path: string) => {
     router.push(workspaceHref(path, workspaceId));
   };
   return (
     <div className={styles.viewport}>
       <CompanionShell
+        section={section}
         title={title ?? "Zoen"}
         avatarUri="/marketing/zoen-avatar.webp"
-        onNavigate={(section) => {
-          navigate(sectionPaths[section]);
+        onNavigate={(nextSection) => {
+          navigate(
+            `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
+          );
         }}
         onNewConversation={() => {
           navigate("/companion");
         }}
       >
-        {sessionId ? (
-          <ExistingConversation sessionId={sessionId} />
+        {section !== "chat" ? (
+          <ConnectedSections
+            section={section}
+            onPrompt={(prompt) => {
+              navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+            }}
+            onConversation={(id) => {
+              navigate(
+                id ? `/companion/${encodeURIComponent(id)}` : "/companion"
+              );
+            }}
+          />
+        ) : sessionId ? (
+          <SessionConversation
+            sessionId={sessionId}
+            client={browserSessionClient}
+          />
         ) : (
           <NewConversation
+            key={draft}
+            client={browserSessionClient}
+            avatarUri="/marketing/zoen-avatar.webp"
+            save={(id, name) => saveChat({ sessionId: id, title: name })}
+            initialDraft={draft}
             onCreated={(id) => {
               router.replace(
                 workspaceHref(
@@ -67,113 +92,5 @@ export function ConnectedCompanion({
         )}
       </CompanionShell>
     </div>
-  );
-}
-
-function ExistingConversation({ sessionId }: { readonly sessionId: string }) {
-  const agent = useSessionAgent(sessionId);
-  const [actionError, setActionError] = useState<string>();
-  const busy = agent.status === "streaming" || agent.status === "submitted";
-  return (
-    <Conversation
-      messages={agent.data.messages}
-      status={agent.status}
-      error={actionError ?? agent.error?.message}
-      onSend={(text) =>
-        agent.send(text, busy ? { turnPolicy: "steer" } : undefined)
-      }
-      onRespond={agent.respond}
-      onCancel={() => {
-        setActionError(undefined);
-        void agent.cancel().catch(() => {
-          setActionError("The stop request failed. Please try again.");
-        });
-      }}
-      onLoadOlder={
-        agent.hasOlder
-          ? () => {
-              setActionError(undefined);
-              void agent.loadOlder().catch(() => {
-                setActionError(
-                  "Earlier messages couldn’t be loaded. Please try again."
-                );
-              });
-            }
-          : undefined
-      }
-      loadingOlder={agent.isLoadingOlder}
-    />
-  );
-}
-
-function NewConversation({
-  onCreated,
-}: {
-  readonly onCreated: (id: string) => void;
-}) {
-  const { mutateAsync: saveChat } = api.chats.save.useMutation();
-  const title = useRef<string | undefined>(undefined);
-  const sendError = useRef<Error | undefined>(undefined);
-  const saved = useRef(false);
-  const [saveError, setSaveError] = useState(false);
-  const agent = useEveAgent({
-    headers: browserWorkspaceHeaders,
-    onError(error) {
-      sendError.current = error;
-    },
-    onSessionChange(session) {
-      if (!session || saved.current) return;
-      saved.current = true;
-      void saveChat({
-        sessionId: session.sessionId,
-        title: title.current,
-      }).then(
-        () => {
-          onCreated(session.sessionId);
-        },
-        () => {
-          setSaveError(true);
-        }
-      );
-    },
-  });
-  const [actionError, setActionError] = useState<string>();
-  const busy = agent.status === "streaming" || agent.status === "submitted";
-  const send = async (text: string) => {
-    sendError.current = undefined;
-    title.current ??= text.slice(0, 240);
-    await agent.send(text, busy ? { turnPolicy: "steer" } : undefined);
-    // oxlint-disable-next-line typescript/no-unnecessary-condition -- Eve's onError callback updates the ref while send awaits.
-    if (sendError.current)
-      throw new Error("Unable to send your message.", {
-        cause: sendError.current,
-      });
-  };
-  if (agent.session || saveError) {
-    return (
-      <Conversation
-        messages={agent.data.messages}
-        status={agent.status}
-        error={
-          saveError
-            ? "Your conversation is running, but it couldn’t be added to history. Keep this window open."
-            : (actionError ?? agent.error?.message)
-        }
-        onSend={send}
-        onRespond={agent.respond}
-        onCancel={() => {
-          void agent.cancel().catch(() => {
-            setActionError("The stop request failed. Please try again.");
-          });
-        }}
-      />
-    );
-  }
-  return (
-    <Welcome
-      avatarUri="/marketing/zoen-avatar.webp"
-      onSend={send}
-      disabled={agent.status === "resuming"}
-    />
   );
 }

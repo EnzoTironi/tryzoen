@@ -1,6 +1,6 @@
-import type { MessageStreamEvent } from "eve/client";
+import { Client, type MessageStreamEvent } from "eve/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readLatestSessionHistory } from "./session-history";
+import { readLatestSessionHistory } from "../../packages/companion-ui/src/session/history";
 
 describe("session history", () => {
   afterEach(() => {
@@ -20,7 +20,10 @@ describe("session history", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const history = await readLatestSessionHistory("session/one");
+    const history = await readLatestSessionHistory(
+      new Client({ host: "", redirect: "error" }),
+      "session/one"
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/eve/v1/session/session%2Fone/stream?startIndex=-128&includeTailIndex=1",
@@ -39,9 +42,12 @@ describe("session history", () => {
       vi.fn<() => Promise<Response>>(() => Promise.resolve(new Response("\n")))
     );
 
-    await expect(readLatestSessionHistory("missing-tail")).rejects.toThrow(
-      "valid tail index"
-    );
+    await expect(
+      readLatestSessionHistory(
+        new Client({ host: "", redirect: "error" }),
+        "missing-tail"
+      )
+    ).rejects.toThrow("valid tail index");
   });
 });
 

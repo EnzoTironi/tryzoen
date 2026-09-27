@@ -1,9 +1,7 @@
 "use client";
 
-import { browserWorkspaceHeaders } from "@web/workspaces/navigation";
-
+import type { Client } from "eve/client";
 import {
-  Client,
   defaultMessageReducer,
   isCurrentTurnBoundaryEvent,
   type InputResponse,
@@ -28,21 +26,13 @@ import {
   readLatestSessionHistory,
   readOlderSessionHistory,
   type SessionHistoryPage,
-} from "../_lib/session-history";
-import type { ChatAgent } from "./chat-agent";
-import {
-  conversationStreamEvents,
-  isTerminalSession,
-} from "../_lib/message-events";
+} from "./history";
+import type { ChatAgent } from "./types";
+import { conversationStreamEvents, isTerminalSession } from "./events";
 
-const client = new Client({
-  host: "",
-  headers: browserWorkspaceHeaders,
-  redirect: "error",
-});
 const messageReducer = defaultMessageReducer();
 
-export function useSessionAgent(sessionId: string): ChatAgent {
+export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
   const [history, setHistory] = useState<SessionHistoryPage>();
   const [status, setStatus] = useState<UseEveAgentStatus>("resuming");
   const [error, setError] = useState<Error>();
@@ -90,7 +80,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         setStatus("error");
       }
     },
-    [sessionId]
+    [client, sessionId]
   );
 
   const resume = useCallback(async () => {
@@ -102,7 +92,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
     try {
       const current =
         historyRef.current ??
-        (await readLatestSessionHistory(sessionId, controller.signal));
+        (await readLatestSessionHistory(client, sessionId, controller.signal));
       if (controller.signal.aborted) return;
       historyRef.current = current;
       setHistory(current);
@@ -119,7 +109,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
       setError(toError(cause));
       setStatus("error");
     }
-  }, [followSession, sessionId]);
+  }, [client, followSession, sessionId]);
 
   useEffect(() => {
     const startup = setTimeout(() => void resume(), 0);
@@ -205,7 +195,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         return await session.send(message, options);
       });
     },
-    [runOperation, sessionId]
+    [client, runOperation, sessionId]
   );
 
   const respond = useCallback(
@@ -220,7 +210,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
         return await session.respond(inputResponses, options);
       });
     },
-    [runOperation, sessionId]
+    [client, runOperation, sessionId]
   );
 
   const loadOlder = async () => {
@@ -229,6 +219,7 @@ export function useSessionAgent(sessionId: string): ChatAgent {
     setIsLoadingOlder(true);
     try {
       const older = await readOlderSessionHistory(
+        client,
         sessionId,
         current.startIndex
       );

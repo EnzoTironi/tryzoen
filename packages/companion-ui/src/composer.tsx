@@ -52,7 +52,7 @@ export function Composer({
       <View style={styles.composer}>
         <TextInput
           accessibilityLabel="Message Zoen"
-          placeholder="What’s on your mind?"
+          placeholder="Message"
           placeholderTextColor={colors.muted}
           value={draft}
           onChangeText={setDraft}
@@ -73,11 +73,6 @@ export function Composer({
           }}
         />
         <View style={styles.footer}>
-          <Text style={styles.hint}>
-            {busy
-              ? "You can add a follow-up"
-              : "A little less to do. A little more room for you."}
-          </Text>
           {busy && onCancel && (
             <Pressable
               accessibilityRole="button"
@@ -119,37 +114,35 @@ const styles = StyleSheet.create({
   wrapper: { width: "100%", gap: 10 },
   composer: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 0,
     borderColor: colors.line,
-    borderRadius: 25,
-    padding: 16,
-    boxShadow: "0 4px 28px rgba(40, 40, 25, 0.035)",
+    borderRadius: 32,
+    padding: 12,
+    boxShadow: "0 4px 28px rgba(0, 0, 0, 0.10)",
   },
   input: {
-    minHeight: 68,
+    flex: 1,
+    minHeight: 32,
     maxHeight: 220,
     fontSize: 17,
     lineHeight: 25,
     color: colors.ink,
     textAlignVertical: "top",
     outlineWidth: 0,
-    padding: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   footer: { flexDirection: "row", alignItems: "center", gap: 10 },
-  hint: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
-    color: colors.muted,
-    paddingLeft: 4,
-  },
   send: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.accent,
   },
   stop: {
     width: 36,

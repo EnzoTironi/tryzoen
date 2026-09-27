@@ -1,9 +1,13 @@
-import type { MessageStreamEvent, StreamOptions } from "eve/client";
+import {
+  Client,
+  type MessageStreamEvent,
+  type StreamOptions,
+} from "eve/client";
 import { useEffect, type EffectCallback } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { SessionHistoryPage } from "../_lib/session-history";
-import type { ChatAgent } from "./chat-agent";
+import type { SessionHistoryPage } from "../../packages/companion-ui/src/session/history";
+import type { ChatAgent } from "../../packages/companion-ui/src/session/types";
 
 const mocks = vi.hoisted(() => ({
   agent: undefined as ChatAgent | undefined,
@@ -31,7 +35,7 @@ vi.mock("react", async (importOriginal) => ({
     mocks.effects.push(effect);
   },
 }));
-vi.mock("../_lib/session-history", () => ({
+vi.mock("../../packages/companion-ui/src/session/history", () => ({
   readLatestSessionHistory: mocks.history,
   readOlderSessionHistory: vi.fn<() => Promise<SessionHistoryPage>>(),
 }));
@@ -47,7 +51,7 @@ vi.mock("eve/client", async (importOriginal) => ({
   },
 }));
 
-import { useSessionAgent } from "./use-session-agent";
+import { useSessionAgent } from "../../packages/companion-ui/src/session/use-session-agent";
 
 beforeEach(() => {
   mocks.agent = undefined;
@@ -82,7 +86,7 @@ async function* idleStream(
 }
 
 function Probe() {
-  const agent = useSessionAgent("conversation");
+  const agent = useSessionAgent("conversation", new Client({ host: "" }));
   useEffect(() => {
     mocks.agent = agent;
   }, [agent]);

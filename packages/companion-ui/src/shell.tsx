@@ -8,14 +8,15 @@ import {
   View,
 } from "react-native";
 import {
-  CircleCheck,
-  Library,
+  SquareCheck,
+  Shapes,
   Lightbulb,
   MessageCircle,
   Search,
-  Settings2,
+  Menu,
   SquarePen,
-  Waves,
+  PanelsTopLeft,
+  ChevronDown,
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
@@ -23,10 +24,10 @@ import { colors } from "./theme";
 const sections = [
   { id: "chat", label: "Conversation", icon: MessageCircle },
   { id: "search", label: "Search", icon: Search },
-  { id: "feed", label: "Feed", icon: Waves },
+  { id: "feed", label: "Feed", icon: PanelsTopLeft },
   { id: "ideas", label: "Ideas", icon: Lightbulb },
-  { id: "goals", label: "Goals", icon: CircleCheck },
-  { id: "library", label: "Library", icon: Library },
+  { id: "goals", label: "Goals", icon: SquareCheck },
+  { id: "library", label: "Library", icon: Shapes },
 ] as const;
 
 export type CompanionSection =
@@ -85,7 +86,7 @@ export function CompanionShell({
           </View>
           <IconButton
             label="Settings"
-            icon={Settings2}
+            icon={Menu}
             selected={section === "settings"}
             onPress={() => {
               onNavigate("settings");
@@ -94,22 +95,58 @@ export function CompanionShell({
         </View>
       )}
       <View style={styles.body}>
-        <View style={[styles.header, compact && styles.mobileHeader]}>
-          <Text numberOfLines={1} style={styles.title}>
-            {title}
-          </Text>
-          <IconButton
-            label="New conversation"
-            icon={SquarePen}
-            onPress={onNewConversation}
-          />
-        </View>
+        {section === "chat" && (
+          <View
+            accessibilityLabel={title}
+            style={[styles.header, compact && styles.mobileHeader]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Conversations"
+              onPress={() => {
+                onNavigate("search");
+              }}
+              style={styles.chatMenu}
+            >
+              <Menu size={20} color={colors.muted} />
+              {!compact && (
+                <Text style={styles.chatMenuLabel}>Conversations</Text>
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zoen profile and settings"
+              onPress={() => {
+                onNavigate("settings");
+              }}
+              style={styles.identity}
+            >
+              {avatarUri && (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={styles.identityAvatar}
+                />
+              )}
+              <Text numberOfLines={1} style={styles.title}>
+                Zoen
+              </Text>
+              <ChevronDown size={16} color={colors.muted} />
+            </Pressable>
+            <View style={[styles.headerEnd, compact && styles.mobileHeaderEnd]}>
+              <IconButton
+                label="New conversation"
+                icon={SquarePen}
+                onPress={onNewConversation}
+              />
+            </View>
+          </View>
+        )}
         <View style={styles.content}>{children}</View>
       </View>
       {compact && (
         <View style={styles.bottomBar}>
           {sections
-            .filter(({ id }) => id !== "feed" && id !== "search")
+            .filter(({ id }) => id !== "search")
             .map(({ id, label, icon }) => (
               <IconButton
                 key={id}
@@ -123,7 +160,7 @@ export function CompanionShell({
             ))}
           <IconButton
             label="Settings"
-            icon={Settings2}
+            icon={Menu}
             selected={section === "settings"}
             onPress={() => {
               onNavigate("settings");
@@ -143,7 +180,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: colors.line,
     alignItems: "center",
-    paddingTop: 48,
+    paddingTop: 40,
     paddingBottom: 22,
     justifyContent: "space-between",
   },
@@ -161,25 +198,52 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -3,
   },
-  navigation: { gap: 12 },
+  navigation: { gap: 12, marginTop: 64, marginBottom: "auto", paddingTop: 8 },
   body: { flex: 1, minWidth: 0 },
   header: {
-    minHeight: 78,
+    minHeight: 82,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 32,
-    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
   mobileHeader: { minHeight: 60, paddingHorizontal: 20, paddingTop: 0 },
-  title: { flex: 1, fontSize: 15, fontWeight: "500", color: colors.ink },
+  chatMenu: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    borderRadius: 24,
+    padding: 12,
+    backgroundColor: colors.surface,
+    boxShadow: "0 3px 12px rgba(0,0,0,0.07)",
+  },
+  chatMenuLabel: { fontSize: 16, color: colors.ink },
+  headerEnd: { width: 156, alignItems: "flex-end" },
+  mobileHeaderEnd: { width: 44 },
+  identity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    boxShadow: "0 3px 12px rgba(0,0,0,0.07)",
+  },
+  identityAvatar: { width: 28, height: 28, borderRadius: 14 },
+  title: {
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "500",
+    color: colors.ink,
+  },
   content: { flex: 1, minHeight: 0 },
   bottomBar: {
     flexDirection: "row",
     justifyContent: "space-around",
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    paddingVertical: 8,
+    paddingVertical: 4,
     backgroundColor: colors.canvas,
   },
 });

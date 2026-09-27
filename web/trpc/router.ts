@@ -23,7 +23,9 @@ import { createTRPCRouter, protectedProcedure } from "./init";
 import { workspacesRouter } from "./workspaces";
 import { modelsRouter } from "./models";
 import { insightsRouter } from "./insights";
+import { companionRouter } from "./companion";
 export const appRouter = createTRPCRouter({
+  companion: companionRouter,
   modelConnections: modelsRouter,
   insights: insightsRouter,
   workspaces: workspacesRouter,

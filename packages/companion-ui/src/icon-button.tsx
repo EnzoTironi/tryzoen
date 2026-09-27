@@ -30,11 +30,7 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Icon
-        size={21}
-        strokeWidth={1.6}
-        color={selected ? colors.ink : colors.muted}
-      />
+      <Icon size={24} strokeWidth={1.8} color={colors.ink} />
     </Pressable>
   );
 }
@@ -43,11 +39,14 @@ const styles = StyleSheet.create({
   icon: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
-  selected: { backgroundColor: colors.wash },
+  selected: {
+    backgroundColor: colors.wash,
+    boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+  },
   pressed: { opacity: 0.65 },
   disabled: { opacity: 0.35 },
 });

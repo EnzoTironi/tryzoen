@@ -60,8 +60,8 @@ test("reading a paused Google connection cannot reactivate it; explicit activati
   await using workspace = await workspaceFixture();
   const { personal, repository } = workspace;
   const id = randomUUID();
-  await query(sql`INSERT INTO account (id, issuer, "accountId", "providerId", "userId", "refreshToken", scope, "updatedAt")
-        VALUES (${id}, 'https://accounts.google.com', ${id}, 'google', ${personal.userId.slice(12)}, 'synthetic-token-preserved', ${googleWorkspaceScopes.join(" ")}, now())`);
+  await query(sql`INSERT INTO account (id, "accountId", "providerId", "userId", "refreshToken", scope, "updatedAt")
+        VALUES (${id}, ${id}, 'google', ${personal.userId.slice(12)}, 'synthetic-token-preserved', ${googleWorkspaceScopes.join(" ")}, now())`);
   expect(await readPersonalGoogleSettings(personal)).toEqual({
     state: "paused",
   });

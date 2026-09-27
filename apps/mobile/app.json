@@ -24,6 +24,7 @@
       "enabled": false
     },
     "platforms": ["ios", "android", "web"],
-    "icon": "../../packages/companion-ui/assets/icon.png"
+    "icon": "../../packages/companion-ui/assets/icon.png",
+    "plugins": ["expo-secure-store", "expo-web-browser"]
   }
 }

@@ -1,14 +1,8 @@
-import { browserWorkspaceHeaders } from "@web/workspaces/navigation";
-import { Client, type MessageStreamEvent } from "eve/client";
+import type { Client, MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 const eventsPerRead = 128;
 const messagesPerPage = 4;
 const tailIndexHeader = "x-eve-stream-tail-index";
-const client = new Client({
-  host: "",
-  headers: browserWorkspaceHeaders,
-  redirect: "error",
-});
 const messageStreamEventSchema = z.custom<MessageStreamEvent>(
   (value) =>
     z
@@ -31,10 +25,11 @@ export interface SessionHistoryPage {
   readonly startIndex: number;
 }
 export async function readLatestSessionHistory(
+  client: Client,
   sessionId: string,
   signal?: AbortSignal
 ): Promise<SessionHistoryPage> {
-  const response = await fetch(
+  const response = await client.fetch(
     sessionStreamUrl(sessionId, {
       includeTailIndex: true,
       startIndex: -eventsPerRead,
@@ -42,7 +37,7 @@ export async function readLatestSessionHistory(
     {
       cache: "no-store",
       signal,
-      headers: browserWorkspaceHeaders(),
+      redirect: "error",
     }
   );
   if (!response.ok) throw await streamResponseError(response);
@@ -56,11 +51,13 @@ export async function readLatestSessionHistory(
       events: latestEvents,
       startIndex,
     },
+    client,
     sessionId,
     signal
   );
 }
 export async function readOlderSessionHistory(
+  client: Client,
   sessionId: string,
   before: number,
   signal?: AbortSignal
@@ -71,12 +68,14 @@ export async function readOlderSessionHistory(
       events: [],
       startIndex: before,
     },
+    client,
     sessionId,
     signal
   );
 }
 async function extendToMessageBoundary(
   initial: SessionHistoryPage,
+  client: Client,
   sessionId: string,
   signal?: AbortSignal
 ) {
@@ -85,7 +84,12 @@ async function extendToMessageBoundary(
     page.startIndex > 0 &&
     receivedMessageCount(page.events) < messagesPerPage
   ) {
-    const older = await readEventChunk(sessionId, page.startIndex, signal);
+    const older = await readEventChunk(
+      client,
+      sessionId,
+      page.startIndex,
+      signal
+    );
     page = {
       endIndex: page.endIndex,
       events: [...older.events, ...page.events],
@@ -104,6 +108,7 @@ async function extendToMessageBoundary(
   };
 }
 async function readEventChunk(
+  client: Client,
   sessionId: string,
   before: number,
   signal?: AbortSignal

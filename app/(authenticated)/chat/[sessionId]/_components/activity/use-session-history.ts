@@ -12,7 +12,7 @@ import {
   readLatestSessionHistory,
   readOlderSessionHistory,
   type SessionHistoryPage,
-} from "../../_lib/session-history";
+} from "@zoen/companion-ui/session";
 
 const client = new Client({
   host: "",
@@ -33,7 +33,7 @@ export function useSessionHistory(sessionId: string) {
   useEffect(() => {
     const controller = new AbortController();
 
-    void readLatestSessionHistory(sessionId, controller.signal)
+    void readLatestSessionHistory(client, sessionId, controller.signal)
       .then(async (latest) => {
         if (controller.signal.aborted) return undefined;
         historyRef.current = latest;
@@ -78,6 +78,7 @@ export function useSessionHistory(sessionId: string) {
     setIsLoadingOlder(true);
     try {
       const older = await readOlderSessionHistory(
+        client,
         sessionId,
         current.startIndex
       );

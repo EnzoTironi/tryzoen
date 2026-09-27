@@ -12,8 +12,8 @@ import {
 } from "@web/components/ai-elements/prompt-input";
 import { messageContent } from "../../../_lib/message-input";
 import { api } from "@web/trpc/client";
-import type { ChatAgent } from "../chat-agent";
-import { isTerminalSession } from "../../_lib/message-events";
+import type { ChatAgent } from "@zoen/companion-ui/session";
+import { isTerminalSession } from "@zoen/companion-ui/session";
 import { Button } from "@web/components/ui/button";
 import { PanelLink } from "../../../../_components/panel-link";
 

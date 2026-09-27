@@ -59,8 +59,8 @@ const googleFixture = async function (
     key: fixtureKey,
     data: "synthetic-refresh-token",
   });
-  await query(sql`INSERT INTO account (id, issuer, "accountId", "providerId", "userId", "refreshToken", scope, "updatedAt")
-    VALUES (${subject}, 'https://accounts.google.com', ${subject}, 'google', ${fixture.actor.userId.slice(12)}, ${refresh}, ${googleWorkspaceScopes.join(" ")}, now())`);
+  await query(sql`INSERT INTO account (id, "accountId", "providerId", "userId", "refreshToken", scope, "updatedAt")
+    VALUES (${subject}, ${subject}, 'google', ${fixture.actor.userId.slice(12)}, ${refresh}, ${googleWorkspaceScopes.join(" ")}, now())`);
   const identity = {
     sub: subject,
     email: "team@example.invalid",

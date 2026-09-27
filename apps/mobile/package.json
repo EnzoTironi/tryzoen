@@ -14,19 +14,34 @@
     "android": "expo run:android"
   },
   "dependencies": {
+    "@better-auth/expo": "1.7.6",
     "@expo/metro-runtime": "57.0.16",
+    "@tanstack/react-query": "5.102.6",
+    "@trpc/client": "11.18.0",
     "@zoen/companion-ui": "workspace:*",
+    "better-auth": "1.7.6",
+    "core-js": "3.50.0",
+    "eve": "0.63.0",
     "expo": "57.0.25",
+    "expo-constants": "57.0.19",
+    "expo-crypto": "57.0.3",
+    "expo-linking": "57.0.11",
+    "expo-network": "57.0.2",
+    "expo-secure-store": "57.0.4",
     "expo-status-bar": "57.0.1",
+    "expo-system-ui": "57.0.4",
+    "expo-web-browser": "57.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "5.7.0",
     "react-native-web": "0.21.3",
-    "expo-system-ui": "57.0.4"
+    "zod": "4.5.4"
   },
   "devDependencies": {
+    "@babel/plugin-transform-explicit-resource-management": "7.29.7",
     "@types/react": "19.2.18",
+    "babel-preset-expo": "57.0.13",
     "typescript": "6.0.3"
   }
 }

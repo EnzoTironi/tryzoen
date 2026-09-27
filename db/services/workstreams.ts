@@ -9,6 +9,15 @@ import {
 } from "@shared/workstreams/schema";
 import { ensureScope } from "./scope";
 
+export class WorkstreamConflict extends Error {
+  constructor() {
+    super(
+      "Workstream changed or was forgotten. Read it again and reconcile your update; use a new ID for a forgotten workstream."
+    );
+    this.name = "WorkstreamConflict";
+  }
+}
+
 export async function findWorkstreams(
   scope: AccessScope,
   scopeKey: string,
@@ -86,7 +95,7 @@ export async function saveWorkstream(
   scopeKey: string,
   input: z.infer<typeof saveWorkstreamSchema>,
   operationId: string,
-  sessionId: string
+  sessionId: string | null
 ) {
   const { id, expectedRevision, content } = saveWorkstreamSchema.parse(input);
   await ensureScope(scope);
@@ -113,9 +122,7 @@ export async function saveWorkstream(
       (current?.revision ?? 0) !== expectedRevision ||
       current?.content === null
     ) {
-      throw new Error(
-        "Workstream changed or was forgotten. Read it again and reconcile your update; use a new ID for a forgotten workstream."
-      );
+      throw new WorkstreamConflict();
     }
     if (!current) {
       const [total] = await transaction

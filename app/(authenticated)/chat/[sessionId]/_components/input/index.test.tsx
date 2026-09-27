@@ -3,7 +3,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { PromptInputMessage } from "@web/components/ai-elements/prompt-input";
 import { renderToEnglishMarkup } from "@tests/helpers/i18n";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { ChatAgent } from "../chat-agent";
+import type { ChatAgent } from "@zoen/companion-ui/session";
 
 const mocks = vi.hoisted(() => ({
   submit:
