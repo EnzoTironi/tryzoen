@@ -3,7 +3,7 @@ import { z } from "zod";
 import { defineEval } from "eve/evals";
 import { equals, includes } from "eve/evals/expect";
 
-import { sendMessageOutputSchema } from "../../shared/chat/message-delivery";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 
 const fixtureSchema = z.object({
   variants: z.array(

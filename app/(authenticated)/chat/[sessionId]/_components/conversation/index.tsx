@@ -1,4 +1,6 @@
 "use client";
+
+import { sentMessages } from "@zoen/companion-ui/messages";
 import { isTerminalSession } from "@zoen/companion-ui/session";
 
 import { useI18n } from "@web/i18n/context";
@@ -8,7 +10,6 @@ import type { EveMessage } from "eve/react";
 import {
   imessageTimestamps,
   messageTimestamps,
-  sentMessages,
 } from "../../_lib/message-events";
 import { messagesForTraceView, type TraceView } from "../../_lib/trace-view";
 import { getLatestTurnFailure } from "../../_lib/turn-failure";

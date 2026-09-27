@@ -9,13 +9,13 @@ import {
   DocumentEditor,
   Feed,
   GoalCollection,
-  Ideas,
+  IdeaCollection,
   Library,
   type CompanionSection,
 } from "@zoen/companion-ui";
-import { chatStarters } from "../../../app/(authenticated)/_lib/chat-starters";
+import { companionIdeasData } from "../../../shared/companion/ideas";
+import { client } from "./conversation";
 import { queries, rpc } from "./api";
-import { apiOrigin } from "./environment";
 import { auth } from "./auth";
 import { MobileMemory } from "./agent-panel";
 import { companionGoalsData } from "../../../shared/companion/goals";
@@ -33,19 +33,7 @@ export function MobileSections({
   readonly onSignOut: () => Promise<void>;
 }) {
   if (section === "ideas")
-    return (
-      <Ideas
-        items={chatStarters.map((item) => ({
-          id: item.id,
-          title: item.label,
-          description: item.description,
-          category: item.category,
-          prompt: item.text,
-          imageUri: `${apiOrigin}/marketing/panel/zoen-${item.id === "preference" ? "memory" : item.id === "email-draft" ? "email" : item.id}.png`,
-        }))}
-        onChoose={onPrompt}
-      />
-    );
+    return <IdeasSection onPrompt={onPrompt} onConversation={onConversation} />;
   if (section === "search")
     return <SearchSection onConversation={onConversation} />;
   if (section === "goals") return <GoalsSection onPrompt={onPrompt} />;
@@ -54,6 +42,25 @@ export function MobileSections({
   if (section === "library") return <LibrarySection onPrompt={onPrompt} />;
   return <SettingsSection onSignOut={onSignOut} onPrompt={onPrompt} />;
 }
+function IdeasSection({
+  onPrompt,
+  onConversation,
+}: {
+  readonly onPrompt: (text: string) => void;
+  readonly onConversation: (id: string) => void;
+}) {
+  const session = auth.useSession();
+  return (
+    <IdeaCollection
+      data={mobileIdeas}
+      cacheScope={session.data?.user.id ?? "anonymous"}
+      onPrompt={onPrompt}
+      onConversation={onConversation}
+    />
+  );
+}
+const mobileIdeas = companionIdeasData(rpc, client);
+
 function GoalsSection({
   onPrompt,
 }: {

@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, Switch, Text, View } from "react-native";
-import { GoalSheet } from "./sheet";
+import { CompanionSheet } from "../sheet";
 import { pageStyles } from "../page";
 import { colors } from "../theme";
 import type {
@@ -27,7 +27,7 @@ export function GoalOptions({
   readonly onClose: () => void;
 }) {
   return (
-    <GoalSheet title="Goal options" onClose={onClose}>
+    <CompanionSheet title="Goal options" onClose={onClose}>
       {(
         [
           ["showSubtitles", "Show subtitles"],
@@ -64,6 +64,6 @@ export function GoalOptions({
         <Text style={[pageStyles.rowTitle, { flex: 1 }]}>Completed goals</Text>
         <ChevronRight size={20} color={colors.muted} />
       </Pressable>
-    </GoalSheet>
+    </CompanionSheet>
   );
 }

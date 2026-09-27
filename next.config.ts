@@ -74,6 +74,10 @@ export default async function companionConfig(
         beforeFiles: [
           ...(sections.beforeFiles ?? []),
           {
+            source: "/api/companion/ideas/:ideaId/start",
+            destination: `${destination}/companion/ideas/:ideaId/start`,
+          },
+          {
             source: "/_matrix/app/v1/:path*",
             destination: `${destination}/_matrix/app/v1/:path*`,
           },

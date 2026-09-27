@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   sendMessageOutputSchema,
   sendMessageToolResultSchema,
-} from "./message-delivery";
+} from "@zoen/companion-ui/messages";
 
 describe("message delivery contract", () => {
   it("trims text and URL edges without normalizing the URL itself", () => {

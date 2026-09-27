@@ -21,6 +21,7 @@ export * from "./workspace-repository";
 export * from "./user-directory";
 export * from "./workstreams";
 export * from "./goal-preferences";
+export * from "./ideas";
 export * from "./workspace-agents";
 export * from "./personal-trust";
 export * from "./matrix";

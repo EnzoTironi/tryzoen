@@ -4,7 +4,7 @@ export { Welcome } from "./welcome";
 export { ActionButton } from "./button";
 export { Conversation } from "./conversation";
 
-export { Ideas } from "./ideas";
+export { IdeaCollection, type IdeasData } from "./ideas/collection";
 export { Goals } from "./goals";
 export { GoalCollection, type GoalsData } from "./goals/collection";
 export { Library } from "./library";

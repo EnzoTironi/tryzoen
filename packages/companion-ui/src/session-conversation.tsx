@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
+import { visibleConversationMessages } from "./session/delivered";
 
 export function SessionConversation({
   sessionId,
@@ -15,12 +16,16 @@ export function SessionConversation({
   readonly initialDraft?: string;
 }) {
   const agent = useSessionAgent(sessionId, client);
+  const messages = useMemo(
+    () => visibleConversationMessages(agent.data.messages, agent.events),
+    [agent.data.messages, agent.events]
+  );
   const [actionError, setActionError] = useState<string>();
   const busy = agent.status === "streaming" || agent.status === "submitted";
   return (
     <Conversation
       key={sessionId}
-      messages={agent.data.messages}
+      messages={messages}
       initialDraft={initialDraft}
       onCopyText={onCopyText}
       status={agent.status}

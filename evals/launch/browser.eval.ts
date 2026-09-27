@@ -5,8 +5,8 @@ import {
   requireWorkerSessionId,
 } from "@evals/browser/session";
 import { readTaskCompletion } from "@evals/browser/worker-events";
-import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
-import { reactToMessageToolResultSchema } from "@shared/chat/reaction";
+import { sendMessageToolResultSchema } from "@zoen/companion-ui/messages";
+import { reactToMessageToolResultSchema } from "@zoen/companion-ui/messages";
 
 export default defineEval({
   description:

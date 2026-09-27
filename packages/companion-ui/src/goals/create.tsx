@@ -10,7 +10,7 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { GoalSheet } from "./sheet";
+import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { pageStyles } from "../page";
 import { colors } from "../theme";
@@ -61,7 +61,7 @@ export function GoalCreation({
         ))}
       </View>
       {category && (
-        <GoalSheet
+        <CompanionSheet
           title={category.title}
           onClose={() => {
             setCategory(undefined);
@@ -79,7 +79,7 @@ export function GoalCreation({
           >
             Let’s go
           </ActionButton>
-        </GoalSheet>
+        </CompanionSheet>
       )}
     </>
   );

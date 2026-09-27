@@ -18,7 +18,7 @@ import {
 } from "@shared/identity/access-scope";
 import { getAuthSession } from "@db/services/auth/session";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
-import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
+import { sendMessageToolResultSchema } from "@zoen/companion-ui/messages";
 import {
   finalizeScheduledReportDelivery,
   releaseScheduledReportDelivery,

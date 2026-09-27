@@ -3,8 +3,8 @@ import { resolveModeValue } from "../lib/mode";
 import {
   addReactionToMessageOutputSchema,
   reactToMessageOutputSchema,
-} from "@shared/chat/reaction";
-import { sendMessageOutputSchema } from "@shared/chat/message-delivery";
+} from "@zoen/companion-ui/messages";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 import { privateMessageTool } from "../../server/tools/native/private-message-tool";
 function defineSendMessage() {
   return defineTool({

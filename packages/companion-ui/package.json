@@ -16,9 +16,17 @@
       "types": "./dist/editor/markdown.d.ts",
       "default": "./dist/editor/markdown.js"
     },
+    "./ideas": {
+      "types": "./dist/ideas/schema.d.ts",
+      "default": "./dist/ideas/schema.js"
+    },
     "./goals": {
       "types": "./dist/goals/preferences.d.ts",
       "default": "./dist/goals/preferences.js"
+    },
+    "./messages": {
+      "types": "./dist/session/messages.d.ts",
+      "default": "./dist/session/messages.js"
     }
   },
   "dependencies": {

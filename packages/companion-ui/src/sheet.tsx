@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { CompanionOverlay } from "../overlay";
-import { IconButton } from "../icon-button";
-import { colors } from "../theme";
+import { CompanionOverlay } from "./overlay";
+import { IconButton } from "./icon-button";
+import { colors } from "./theme";
 
-export function GoalSheet({
+export function CompanionSheet({
   title,
   onClose,
   children,

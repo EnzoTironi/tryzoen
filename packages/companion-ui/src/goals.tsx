@@ -4,7 +4,7 @@ import { Ellipsis } from "lucide-react-native";
 import { CompanionPage, pageStyles } from "./page";
 import { IconButton } from "./icon-button";
 import { GoalOptions } from "./goals/options";
-import { GoalSheet } from "./goals/sheet";
+import { CompanionSheet } from "./sheet";
 import { GoalCreation } from "./goals/create";
 import { GoalRow } from "./goals/row";
 import { GoalGroup } from "./goals/group";
@@ -93,7 +93,7 @@ export function Goals({
         />
       )}
       {view === "completed" && (
-        <GoalSheet
+        <CompanionSheet
           title="Completed goals"
           onClose={() => {
             setView(undefined);
@@ -116,7 +116,7 @@ export function Goals({
               }}
             />
           ))}
-        </GoalSheet>
+        </CompanionSheet>
       )}
     </>
   );

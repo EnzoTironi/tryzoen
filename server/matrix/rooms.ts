@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
   addReactionToMessageOutputSchema,
   reactionTextFor,
-} from "@shared/chat/reaction";
+} from "@zoen/companion-ui/messages";
 
 import {
   requireWorkspaceAccess,

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asSchema } from "ai";
 import { describe, expect, it } from "vitest";
 import messaging from "../../tools/messaging";
-import { sendMessageOutputSchema } from "../../../shared/chat/message-delivery";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 import {
   isToolSchema,
   serializeInputSchema,

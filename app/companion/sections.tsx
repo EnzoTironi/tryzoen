@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
 import { companionGoalsData } from "@shared/companion/goals";
 import {
-  Ideas,
+  IdeaCollection,
   GoalCollection,
   Feed,
   Library,
@@ -14,8 +14,8 @@ import {
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
-import { chatStarters } from "@app/(authenticated)/_lib/chat-starters";
-import { useI18n } from "@web/i18n/context";
+import { companionIdeasData } from "@shared/companion/ideas";
+import { browserSessionClient } from "@web/eve/client";
 import { FileEditor } from "@app/(authenticated)/space/(overview)/_components/file-editor";
 import { ModelConnections } from "@app/(authenticated)/_components/model-connections";
 import { WorkspaceSwitcher } from "@app/(authenticated)/_components/workspace-switcher";
@@ -30,20 +30,9 @@ export function ConnectedSections({
   readonly onPrompt: (prompt: string) => void;
   readonly onConversation: (sessionId?: string) => void;
 }) {
-  const { t } = useI18n();
   if (section === "ideas")
     return (
-      <Ideas
-        items={chatStarters.map((item) => ({
-          id: item.id,
-          title: t(item.label),
-          description: t(item.description),
-          prompt: t(item.text),
-          category: t(item.category),
-          imageUri: `/marketing/panel/zoen-${item.id === "preference" ? "memory" : item.id === "email-draft" ? "email" : item.id}.png`,
-        }))}
-        onChoose={onPrompt}
-      />
+      <ConnectedIdeas onPrompt={onPrompt} onConversation={onConversation} />
     );
   if (section === "goals") return <ConnectedGoals onPrompt={onPrompt} />;
   if (section === "search")
@@ -89,6 +78,29 @@ function ConnectedSettings({
         Personal memory
       </ActionButton>
     </CompanionPage>
+  );
+}
+
+function ConnectedIdeas({
+  onPrompt,
+  onConversation,
+}: {
+  readonly onPrompt: (text: string) => void;
+  readonly onConversation: (id: string) => void;
+}) {
+  const { client } = api.useUtils();
+  const params = useSearchParams();
+  const data = useMemo(
+    () => companionIdeasData(getUntypedClient(client), browserSessionClient),
+    [client]
+  );
+  return (
+    <IdeaCollection
+      data={data}
+      cacheScope={params.get("space") ?? "personal"}
+      onPrompt={onPrompt}
+      onConversation={onConversation}
+    />
   );
 }
 

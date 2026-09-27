@@ -1,0 +1,1 @@
+ALTER TABLE "personal_ideas" ADD COLUMN "status_event_id" text;
