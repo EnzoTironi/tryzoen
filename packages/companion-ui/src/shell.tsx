@@ -109,7 +109,7 @@ export function CompanionShell({
         </View>
       )}
       <View style={styles.body}>
-        {(section === "chat" || compact) && (
+        {(section === "chat" || (compact && Platform.OS !== "web")) && (
           <CompanionHeader
             compact={compact}
             title={title}

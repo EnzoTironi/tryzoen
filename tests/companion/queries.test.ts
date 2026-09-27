@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
@@ -49,6 +50,68 @@ function caller(scope: AccessScope) {
   });
   return router.createCaller({ requestHeaders: new Headers(), scope });
 }
+
+it("persists independent goal display options without sharing them with another member", async () => {
+  const api = caller(alice);
+  expect(await api.goalPreferences()).toEqual({
+    showSubtitles: true,
+    sortAutomatically: true,
+  });
+  await Promise.all([
+    api.setGoalPreference({ key: "showSubtitles", value: false }),
+    api.setGoalPreference({ key: "sortAutomatically", value: false }),
+  ]);
+  expect(await api.goalPreferences()).toEqual({
+    showSubtitles: false,
+    sortAutomatically: false,
+  });
+  // Replaying one setting must not revert a concurrent change to the other.
+  await api.setGoalPreference({ key: "showSubtitles", value: false });
+  expect((await api.goalPreferences()).sortAutomatically).toBe(false);
+  await database.insert(schema.workspaceMemberships).values({
+    workspaceId: alice.workspaceId,
+    userId: bob.userId,
+    role: "member",
+  });
+  const teammate = caller({ ...bob, workspaceId: alice.workspaceId });
+  expect(await teammate.goalPreferences()).toEqual({
+    showSubtitles: true,
+    sortAutomatically: true,
+  });
+  await teammate.setGoalPreference({ key: "showSubtitles", value: false });
+  expect(await caller(bob).goalPreferences()).toEqual({
+    showSubtitles: true,
+    sortAutomatically: true,
+  });
+  expect(await caller(alice).goalPreferences()).toEqual({
+    showSubtitles: false,
+    sortAutomatically: false,
+  });
+});
+
+it("removes goal preferences on membership revocation and refuses further access", async () => {
+  const api = caller(alice);
+  await api.setGoalPreference({ key: "showSubtitles", value: false });
+  await database
+    .delete(schema.workspaceMemberships)
+    .where(
+      and(
+        eq(schema.workspaceMemberships.workspaceId, alice.workspaceId),
+        eq(schema.workspaceMemberships.userId, alice.userId)
+      )
+    );
+  expect(await database.select().from(schema.goalPreferences)).toEqual([]);
+  vi.spyOn(WorkspaceSession, "resolveWorkspaceActor").mockRejectedValue(
+    new WorkspaceAccessDenied()
+  );
+  await expect(api.goalPreferences()).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  await expect(
+    api.setGoalPreference({ key: "sortAutomatically", value: false })
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(await database.select().from(schema.goalPreferences)).toEqual([]);
+});
 
 it("pages conversations without losing tied timestamps and excludes other users", async () => {
   await database.insert(schema.workspaceMemberships).values({

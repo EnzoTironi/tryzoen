@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn<(input: { message: string }) => Promise<unknown>>(),
   send: vi.fn<(message: string) => Promise<unknown>>(),
   save: vi.fn<(id: string, title: string) => Promise<void>>(),
-  created: vi.fn<(id: string) => void>(),
+  created: vi.fn<(id: string, draft?: string) => void>(),
   submit: undefined as ((text: string) => Promise<void>) | undefined,
 }));
 vi.mock("eve/client", () => ({
@@ -49,7 +49,10 @@ it("creates the first turn with its session before saving the title and navigati
     message: "Plan tomorrow",
   });
   expect(mocks.send).not.toHaveBeenCalled();
-  expect(mocks.created).toHaveBeenCalledExactlyOnceWith("test-session");
+  expect(mocks.created).toHaveBeenCalledExactlyOnceWith(
+    "test-session",
+    undefined
+  );
   expect(mocks.create.mock.invocationCallOrder[0]).toBeLessThan(
     mocks.save.mock.invocationCallOrder[0] ?? 0
   );
@@ -71,4 +74,21 @@ it("does not save or navigate when the first turn is rejected and allows retry",
   await mocks.submit?.("Try this");
   expect(mocks.create).toHaveBeenCalledTimes(2);
   expect(mocks.save).toHaveBeenCalledTimes(1);
+});
+it("preserves an edited draft when recovering an already accepted first turn", async () => {
+  mocks.save.mockRejectedValueOnce(new Error("Offline"));
+  await expect(mocks.submit?.("Original request")).rejects.toThrow("Offline");
+  await mocks.submit?.("A revised request");
+  expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+    message: "Original request",
+  });
+  expect(mocks.save).toHaveBeenLastCalledWith(
+    "test-session",
+    "Original request"
+  );
+  expect(mocks.created).toHaveBeenCalledExactlyOnceWith(
+    "test-session",
+    "A revised request"
+  );
+  expect(mocks.send).not.toHaveBeenCalled();
 });

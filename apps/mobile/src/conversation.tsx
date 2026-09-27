@@ -16,11 +16,12 @@ export function MobileConversation({
 }: {
   readonly sessionId?: string;
   readonly initialDraft?: string;
-  readonly onCreated: (id: string) => void;
+  readonly onCreated: (id: string, draft?: string) => void;
 }) {
   return sessionId ? (
     <SessionConversation
       sessionId={sessionId}
+      initialDraft={initialDraft}
       client={client}
       onCopyText={async (text) => {
         await setStringAsync(text);

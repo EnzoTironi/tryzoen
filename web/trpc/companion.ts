@@ -23,9 +23,24 @@ import {
 } from "@shared/companion/schema";
 import { WorkspaceRepository } from "../../server/workspaces/repository";
 import { workspaceProcedure } from "./workspace-procedure";
+import {
+  readGoalPreferences,
+  saveGoalPreference,
+} from "@db/services/goal-preferences";
+import {
+  goalPreferencesSchema,
+  goalPreferenceChangeSchema,
+} from "@zoen/companion-ui/goals";
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  goalPreferences: workspaceProcedure
+    .output(goalPreferencesSchema)
+    .query(({ ctx }) => readGoalPreferences(ctx.scope)),
+  setGoalPreference: workspaceProcedure
+    .input(goalPreferenceChangeSchema)
+    .output(goalPreferencesSchema)
+    .mutation(({ ctx, input }) => saveGoalPreference(ctx.scope, input)),
   identity: workspaceProcedure
     .output(companionIdentitySchema)
     .query(async ({ ctx }) => ({

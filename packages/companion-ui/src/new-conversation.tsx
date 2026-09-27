@@ -11,18 +11,26 @@ export function NewConversation({
 }: Omit<ComponentProps<typeof Welcome>, "onSend"> & {
   readonly client: Client;
   readonly save: (sessionId: string, title: string) => Promise<unknown>;
-  readonly onCreated: (sessionId: string) => void;
+  readonly onCreated: (sessionId: string, draft?: string) => void;
 }) {
-  const session = useRef<ClientSession | undefined>(undefined);
+  const accepted = useRef<
+    { session: ClientSession; message: string } | undefined
+  >(undefined);
   return (
     <Welcome
       {...welcome}
       onSend={async (message) => {
-        session.current ??= (await client.sessions.create({ message })).session;
-        const id = session.current.state.sessionId;
+        accepted.current ??= {
+          session: (await client.sessions.create({ message })).session,
+          message,
+        };
+        const id = accepted.current.session.state.sessionId;
         // A failed title write can be retried without replaying the accepted turn.
-        await save(id, message.slice(0, 240));
-        onCreated(id);
+        await save(id, accepted.current.message.slice(0, 240));
+        onCreated(
+          id,
+          message === accepted.current.message ? undefined : message
+        );
       }}
     />
   );

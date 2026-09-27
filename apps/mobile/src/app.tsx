@@ -151,8 +151,8 @@ function MobileCompanion({
           key={conversation.key}
           sessionId={conversation.id}
           initialDraft={conversation.draft}
-          onCreated={(id) => {
-            setConversation((current) => ({ ...current, id }));
+          onCreated={(id, draft) => {
+            setConversation((current) => ({ ...current, id, draft }));
           }}
         />
       ) : (

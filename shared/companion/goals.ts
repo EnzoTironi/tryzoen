@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GoalsData } from "@zoen/companion-ui";
 import { companionGoalsSchema, companionGoalHistorySchema } from "./schema";
+import { goalPreferencesSchema } from "@zoen/companion-ui/goals";
 
 export function companionGoalsData(
   rpc: {
@@ -11,6 +12,16 @@ export function companionGoalsData(
 ): GoalsData {
   return {
     newOperationId,
+    async preferences() {
+      return goalPreferencesSchema.parse(
+        await rpc.query("companion.goalPreferences")
+      );
+    },
+    async setPreference(change) {
+      return goalPreferencesSchema.parse(
+        await rpc.mutation("companion.setGoalPreference", change)
+      );
+    },
     async list() {
       const goals = companionGoalsSchema.parse(
         await rpc.query("companion.goals")
@@ -21,6 +32,7 @@ export function companionGoalsData(
               {
                 id: JSON.stringify([goal.scopeKey, goal.id]),
                 revision: goal.revision,
+                tracking: goal.content.kind === "tracking",
                 reference: goal.id,
                 parentId: goal.content.parentId
                   ? JSON.stringify([goal.scopeKey, goal.content.parentId])

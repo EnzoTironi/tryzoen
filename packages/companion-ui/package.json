@@ -15,6 +15,10 @@
     "./markdown": {
       "types": "./dist/editor/markdown.d.ts",
       "default": "./dist/editor/markdown.js"
+    },
+    "./goals": {
+      "types": "./dist/goals/preferences.d.ts",
+      "default": "./dist/goals/preferences.js"
     }
   },
   "dependencies": {

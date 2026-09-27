@@ -1,9 +1,19 @@
 import { useState, type ComponentProps } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Goals, GoalRow } from "../goals";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { z } from "zod";
+import {
+  goalPreferencesSchema,
+  type goalPreferenceChangeSchema,
+} from "./preferences";
+import { Goals } from "../goals";
+import { GoalRow } from "./row";
 import { GoalDetail } from "./detail";
 
 export interface GoalsData {
+  preferences: () => Promise<z.infer<typeof goalPreferencesSchema>>;
+  setPreference: (
+    change: z.infer<typeof goalPreferenceChangeSchema>
+  ) => Promise<z.infer<typeof goalPreferencesSchema>>;
   list: () => Promise<ComponentProps<typeof GoalDetail>["goal"][]>;
   newOperationId: () => string;
   rename: (
@@ -44,6 +54,17 @@ export function GoalCollection({
   readonly onPrompt: (prompt: string) => void;
 }) {
   const [selected, setSelected] = useState<string>();
+  const queryClient = useQueryClient();
+  const preferences = useQuery({
+    queryKey: ["goal-preferences", cacheScope],
+    queryFn: data.preferences,
+  });
+  const preference = useMutation({
+    mutationFn: data.setPreference,
+    onSuccess: (value) => {
+      queryClient.setQueryData(["goal-preferences", cacheScope], value);
+    },
+  });
   const goals = useQuery({
     queryKey: ["companion-goals", cacheScope],
     queryFn: data.list,
@@ -65,11 +86,26 @@ export function GoalCollection({
     <>
       <Goals
         items={goals.data ?? []}
+        preferences={preferences.data ?? goalPreferencesSchema.parse({})}
+        preferencePending={
+          preferences.isPending || preferences.isError || preference.isPending
+        }
+        preferenceError={
+          preferences.error?.message ?? preference.error?.message
+        }
+        onPreference={(change) => {
+          preference.mutate(change);
+        }}
         loading={goals.isPending}
-        error={goals.error?.message ?? complete.error?.message}
+        error={
+          goals.error?.message ??
+          complete.error?.message ??
+          preferences.error?.message
+        }
         onRetry={() => {
           complete.reset();
           void goals.refetch();
+          void preferences.refetch();
         }}
         pendingId={complete.isPending ? complete.variables.id : undefined}
         onOpen={setSelected}

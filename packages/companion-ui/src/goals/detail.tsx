@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type ComponentProps } from "react";
+import type { GoalRow } from "./row";
 import { Ellipsis, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ActionButton } from "../button";
@@ -20,15 +21,10 @@ export function GoalDetail({
   onClose,
   onPrompt,
 }: {
-  readonly goal: {
-    id: string;
+  readonly goal: ComponentProps<typeof GoalRow>["item"] & {
     revision: number;
-    title: string;
-    description: string;
     objective: string;
     notes: string;
-    completed: boolean;
-    parentId?: string;
     reference: string;
   };
   readonly subgoals: readonly ReactNode[] | undefined;

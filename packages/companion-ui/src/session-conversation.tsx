@@ -7,10 +7,12 @@ export function SessionConversation({
   sessionId,
   client,
   onCopyText,
+  initialDraft,
 }: {
   readonly sessionId: string;
   readonly client: Client;
   readonly onCopyText?: (text: string) => Promise<void>;
+  readonly initialDraft?: string;
 }) {
   const agent = useSessionAgent(sessionId, client);
   const [actionError, setActionError] = useState<string>();
@@ -19,6 +21,7 @@ export function SessionConversation({
     <Conversation
       key={sessionId}
       messages={agent.data.messages}
+      initialDraft={initialDraft}
       onCopyText={onCopyText}
       status={agent.status}
       error={actionError ?? agent.error?.message}

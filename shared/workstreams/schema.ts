@@ -14,6 +14,12 @@ const workstreamStatusSchema = z.enum([
 ]);
 
 const workstreamContentSchema = z.strictObject({
+  kind: z
+    .enum(["goal", "tracking"])
+    .optional()
+    .describe(
+      "A goal works toward a defined outcome; tracking follows an ongoing situation. Omit for a goal. Neither kind enables background execution."
+    ),
   parentId: workstreamIdSchema
     .nullish()
     .describe(

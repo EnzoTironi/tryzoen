@@ -110,6 +110,7 @@ export function ConnectedCompanion({
             ) : sessionId ? (
               <SessionConversation
                 sessionId={sessionId}
+                initialDraft={draft}
                 client={browserSessionClient}
                 onCopyText={(text) => navigator.clipboard.writeText(text)}
               />
@@ -120,10 +121,10 @@ export function ConnectedCompanion({
                 avatarUri="/marketing/zoen-avatar.webp"
                 save={(id, name) => saveChat({ sessionId: id, title: name })}
                 initialDraft={draft}
-                onCreated={(id) => {
+                onCreated={(id, retainedDraft) => {
                   router.replace(
                     workspaceHref(
-                      `/companion/${encodeURIComponent(id)}`,
+                      `/companion/${encodeURIComponent(id)}${retainedDraft ? `?draft=${encodeURIComponent(retainedDraft)}` : ""}`,
                       workspaceId
                     )
                   );

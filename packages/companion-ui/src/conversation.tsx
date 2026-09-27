@@ -37,6 +37,7 @@ export function Conversation({
   onLoadOlder,
   loadingOlder = false,
   onCopyText,
+  initialDraft,
 }: {
   readonly messages: readonly EveMessage[];
   readonly status: UseEveAgentStatus;
@@ -47,6 +48,7 @@ export function Conversation({
   readonly onLoadOlder?: () => void;
   readonly loadingOlder?: boolean;
   readonly onCopyText?: (text: string) => Promise<void>;
+  readonly initialDraft?: string;
 }) {
   const [reply, setReply] = useState<MessageReply>();
   const scroll = useRef<FlatList<EveMessage>>(null);
@@ -175,6 +177,7 @@ export function Conversation({
       <View style={styles.composer}>
         <View style={styles.column}>
           <Composer
+            initialDraft={initialDraft}
             onSend={async (text) => {
               await onSend(replyMessage(text, reply));
               setReply((current) =>

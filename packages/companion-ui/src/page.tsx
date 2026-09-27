@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,14 +37,21 @@ export function CompanionPage({
         setWidth(nativeEvent.layout.width);
       }}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[styles.scroll, compact && styles.compact]}
+      contentContainerStyle={[
+        styles.scroll,
+        compact && styles.compact,
+        compact && Platform.OS === "web" && styles.compactWeb,
+      ]}
     >
       <View style={styles.page}>
         {(!hideTitle || actions) && (
           <View style={styles.header}>
             <Text
               accessibilityRole="header"
-              style={[styles.title, compact && styles.compactTitle]}
+              style={[
+                styles.title,
+                compact && Platform.OS !== "web" && styles.compactTitle,
+              ]}
             >
               {title}
             </Text>
@@ -114,6 +122,7 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   compact: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
+  compactWeb: { paddingTop: 44 },
   compactTitle: { fontSize: 24, lineHeight: 30, letterSpacing: -0.6 },
   page: { width: "100%", maxWidth: 1000, alignSelf: "flex-start" },
   header: {
