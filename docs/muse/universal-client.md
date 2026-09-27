@@ -4,6 +4,8 @@ The product target is the complete Muse experience: its interaction model and vi
 
 The client now connects the main Muse-style surfaces to durable Zoen data. It is **not full Muse feature parity**. It must remain an opt-in route until the acceptance work below is complete.
 
+The [interface audit](interface-audit.md) records the observed screens, nested menus, platform differences and behavior gaps. Use it as the parity checklist. In particular, Muse's editorial Feed, personalized Ideas and four-tab agent-status surface are broader than the current connected sections.
+
 ## What runs now
 
 - `/companion` uses the shared welcome screen and composer against Zoen’s existing Eve channel. `/companion/:sessionId` checks account/workspace ownership before loading a conversation.
@@ -52,7 +54,7 @@ Reference: [Expo SDK 57](https://expo.dev/changelog/sdk-57), [Electron security 
 
 [OpenMuse](https://github.com/CopilotKit/openmuse) is a useful MIT-licensed reference, not a replacement backend. Its UI is coupled to CopilotKit’s protocol and its browser/task services. Preserve provenance and licenses if individual components are adopted. No OpenMuse code or Muse proprietary assets have been copied in this foundation.
 
-Use [Better Auth’s Electron integration](https://better-auth.com/docs/integrations/electron) for system-browser authentication and [its Expo integration](https://better-auth.com/docs/integrations/expo) for native sign-in and secure session storage. These are evaluated next steps, not capabilities installed by this change.
+Use [Better Auth’s Electron integration](https://better-auth.com/docs/integrations/electron) for the pending system-browser authentication flow. [Its Expo integration](https://better-auth.com/docs/integrations/expo) is already installed for native sign-in and secure session storage; real-device verification remains required.
 
 ## Running locally
 
@@ -60,9 +62,10 @@ Use [Better Auth’s Electron integration](https://better-auth.com/docs/integrat
 pnpm install --frozen-lockfile
 pnpm --filter @zoen/companion-ui build:ui
 
-# Shared interface preview, without a database or agent credentials
+# Connected shared interface; requires the normal local backend configuration
 pnpm preview:companion
-ZOEN_DESKTOP_URL=http://localhost:8081 pnpm dev:desktop
+# Open http://localhost:3000/companion
+ZOEN_DESKTOP_URL=http://localhost:3000 pnpm dev:desktop
 
 # Connected desktop, with the normal Zoen backend configured and running
 pnpm dev
