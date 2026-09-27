@@ -385,6 +385,9 @@ importers:
 
   packages/companion-ui:
     dependencies:
+      '@tanstack/react-query':
+        specifier: 5.102.6
+        version: 5.102.6(react@19.2.8)
       ai:
         specifier: ^7.0.107
         version: 7.0.107(zod@4.5.4)

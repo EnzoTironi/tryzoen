@@ -24,8 +24,10 @@ import { workspacesRouter } from "./workspaces";
 import { modelsRouter } from "./models";
 import { insightsRouter } from "./insights";
 import { companionRouter } from "./companion";
+import { personalMemoryRouter } from "./personal-memory";
 export const appRouter = createTRPCRouter({
   companion: companionRouter,
+  personalMemory: personalMemoryRouter,
   modelConnections: modelsRouter,
   insights: insightsRouter,
   workspaces: workspacesRouter,

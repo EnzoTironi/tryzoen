@@ -50,6 +50,7 @@ describe("source layout", () => {
       "identity",
       "models",
       "observability",
+      "personal-memory",
       "schedules",
       "user-profile",
       "vault",

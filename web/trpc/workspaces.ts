@@ -1,3 +1,5 @@
+import { reminderStatusSchema } from "@shared/schedules/reminders";
+import { listReminders } from "../../server/schedules/queries";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
@@ -28,10 +30,7 @@ import { workspaceRoomsRouter } from "./workspace-rooms";
 import { workspaceToolsRouter } from "./workspace-tools";
 import { workspaceAgentsRouter } from "./workspace-agents";
 import { readWorkspaceCapabilities } from "../../server/workspaces/capabilities";
-import {
-  ReminderStatusSchema,
-  setReminderStatus,
-} from "../../server/schedules/manage";
+import { setReminderStatus } from "../../server/schedules/manage";
 import {
   DirectoryProfileSchema,
   UsernameSchema,
@@ -56,8 +55,11 @@ export const workspacesRouter = {
   rooms: workspaceRoomsRouter,
   ...workspaceAgentsRouter,
   schedules: {
+    list: workspaceProcedure.query(({ ctx, signal }) =>
+      withSignal(signal, () => listReminders(ctx.scope))
+    ),
     setStatus: workspaceProcedure
-      .input(ReminderStatusSchema)
+      .input(reminderStatusSchema)
       .mutation(({ ctx, input, signal }) =>
         withSignal(signal, async () => {
           try {

@@ -7,7 +7,9 @@ import { ActionButton } from "./button";
 import { colors } from "./theme";
 export function ConversationSearch({
   items,
-  query,
+  query = "",
+  title = "Conversations",
+  intro,
   onQuery,
   onOpen,
   onCreate,
@@ -15,27 +17,34 @@ export function ConversationSearch({
   ...state
 }: Omit<ComponentProps<typeof CompanionPage>, "title" | "children"> & {
   readonly items: readonly { id: string; title: string; description: string }[];
-  readonly query: string;
-  readonly onQuery: (query: string) => void;
+  readonly query?: string;
+  readonly title?: string;
+  readonly intro?: string;
+  readonly onQuery?: (query: string) => void;
   readonly onOpen: (id: string) => void;
-  readonly onCreate: () => void;
+  readonly onCreate?: () => void;
   readonly onLoadMore?: () => void;
 }) {
   return (
     <CompanionPage
-      title="Conversations"
+      title={title}
       actions={
-        <IconButton icon={Plus} label="New conversation" onPress={onCreate} />
+        onCreate ? (
+          <IconButton icon={Plus} label="New conversation" onPress={onCreate} />
+        ) : undefined
       }
       {...state}
     >
-      <TextInput
-        accessibilityLabel="Search conversations"
-        placeholder="Search conversations"
-        value={query}
-        onChangeText={onQuery}
-        style={pageStyles.field}
-      />
+      {intro && <Text style={pageStyles.copy}>{intro}</Text>}
+      {onQuery && (
+        <TextInput
+          accessibilityLabel="Search conversations"
+          placeholder="Search conversations"
+          value={query}
+          onChangeText={onQuery}
+          style={pageStyles.field}
+        />
+      )}
       {items.map((item) => (
         <Pressable
           accessibilityRole="button"

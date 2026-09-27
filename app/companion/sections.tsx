@@ -1,11 +1,11 @@
 "use client";
-import { useDeferredValue, useState } from "react";
+import { ConnectedSearch } from "./search";
+import { useState } from "react";
 import {
   Ideas,
   Goals,
   Feed,
   Library,
-  ConversationSearch,
   CompanionPage,
   ActionButton,
   type CompanionSection,
@@ -16,6 +16,7 @@ import { useI18n } from "@web/i18n/context";
 import { FileEditor } from "@app/(authenticated)/space/(overview)/_components/file-editor";
 import { ModelConnections } from "@app/(authenticated)/_components/model-connections";
 import { WorkspaceSwitcher } from "@app/(authenticated)/_components/workspace-switcher";
+import { ConnectedMemory } from "./agent-panel";
 
 export function ConnectedSections({
   section,
@@ -49,6 +50,29 @@ export function ConnectedSections({
     return (
       <ConnectedFeed onPrompt={onPrompt} onConversation={onConversation} />
     );
+  return <ConnectedSettings onPrompt={onPrompt} />;
+}
+
+function ConnectedSettings({
+  onPrompt,
+}: {
+  readonly onPrompt: (prompt: string) => void;
+}) {
+  const [memory, setMemory] = useState(false);
+  if (memory)
+    return (
+      <>
+        <ActionButton
+          quiet
+          onPress={() => {
+            setMemory(false);
+          }}
+        >
+          Back to settings
+        </ActionButton>
+        <ConnectedMemory onPrompt={onPrompt} />
+      </>
+    );
   return (
     <CompanionPage title="Settings">
       <WorkspaceSwitcher />
@@ -56,58 +80,12 @@ export function ConnectedSections({
       <ActionButton
         quiet
         onPress={() => {
-          onPrompt(
-            "Show the information you remember about me so I can review and correct it."
-          );
+          setMemory(true);
         }}
       >
         Personal memory
       </ActionButton>
     </CompanionPage>
-  );
-}
-
-function ConnectedSearch({
-  onConversation,
-}: {
-  readonly onConversation: (id?: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const chats = api.companion.chats.useInfiniteQuery(
-    { query: deferredQuery },
-    { getNextPageParam: (last) => last.nextCursor }
-  );
-  return (
-    <ConversationSearch
-      query={query}
-      onQuery={setQuery}
-      items={
-        chats.data?.pages.flatMap((page) =>
-          page.items.map((chat) => ({
-            id: chat.sessionId,
-            title: chat.title,
-            description: new Date(chat.updatedAt).toLocaleString(),
-          }))
-        ) ?? []
-      }
-      onOpen={onConversation}
-      onCreate={() => {
-        onConversation();
-      }}
-      loading={chats.isPending || chats.isFetchingNextPage}
-      error={chats.error?.message}
-      onRetry={() => {
-        void chats.refetch();
-      }}
-      onLoadMore={
-        chats.hasNextPage
-          ? () => {
-              void chats.fetchNextPage();
-            }
-          : undefined
-      }
-    />
   );
 }
 

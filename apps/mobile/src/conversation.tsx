@@ -3,7 +3,7 @@ import { SessionConversation, NewConversation } from "@zoen/companion-ui";
 import { accountHeaders } from "./auth";
 import { apiOrigin } from "./environment";
 import { rpc } from "./api";
-const client = new Client({
+export const client = new Client({
   host: apiOrigin,
   headers: accountHeaders,
   redirect: "error",

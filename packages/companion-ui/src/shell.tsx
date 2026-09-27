@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { useState } from "react";
 import {
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -16,10 +18,10 @@ import {
   Menu,
   SquarePen,
   PanelsTopLeft,
-  ChevronDown,
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
+import { AgentPanel, type AgentPanelTab } from "./agent-panel";
 
 const sections = [
   { id: "chat", label: "Conversation", icon: MessageCircle },
@@ -46,6 +48,7 @@ export function CompanionShell({
   avatarUri,
   onNavigate,
   onNewConversation,
+  renderAgentPanel,
 }: {
   readonly children: ReactNode;
   readonly section?: CompanionSection;
@@ -53,16 +56,23 @@ export function CompanionShell({
   readonly avatarUri?: string;
   readonly onNavigate: (section: CompanionSection) => void;
   readonly onNewConversation: () => void;
+  readonly renderAgentPanel?: (
+    tab: AgentPanelTab,
+    close: () => void
+  ) => ReactNode;
 }) {
   const compact = useWindowDimensions().width < 720;
+  const [showAgent, setShowAgent] = useState(false);
   return (
     <View style={[styles.shell, compact && styles.compact]}>
       {!compact && (
         <View style={styles.rail}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="New conversation"
-            onPress={onNewConversation}
+            accessibilityLabel="Agent activity and memory"
+            onPress={() => {
+              setShowAgent(true);
+            }}
             style={styles.brand}
           >
             {avatarUri ? (
@@ -95,51 +105,17 @@ export function CompanionShell({
         </View>
       )}
       <View style={styles.body}>
-        {section === "chat" && (
-          <View
-            accessibilityLabel={title}
-            style={[styles.header, compact && styles.mobileHeader]}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Conversations"
-              onPress={() => {
-                onNavigate("search");
-              }}
-              style={styles.chatMenu}
-            >
-              <Menu size={20} color={colors.muted} />
-              {!compact && (
-                <Text style={styles.chatMenuLabel}>Conversations</Text>
-              )}
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Zoen profile and settings"
-              onPress={() => {
-                onNavigate("settings");
-              }}
-              style={styles.identity}
-            >
-              {avatarUri && (
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={styles.identityAvatar}
-                />
-              )}
-              <Text numberOfLines={1} style={styles.title}>
-                Zoen
-              </Text>
-              <ChevronDown size={16} color={colors.muted} />
-            </Pressable>
-            <View style={[styles.headerEnd, compact && styles.mobileHeaderEnd]}>
-              <IconButton
-                label="New conversation"
-                icon={SquarePen}
-                onPress={onNewConversation}
-              />
-            </View>
-          </View>
+        {(section === "chat" || compact) && (
+          <CompanionHeader
+            compact={compact}
+            title={title}
+            avatarUri={avatarUri}
+            onNavigate={onNavigate}
+            onNewConversation={onNewConversation}
+            onOpenAgent={() => {
+              setShowAgent(true);
+            }}
+          />
         )}
         <View style={styles.content}>{children}</View>
       </View>
@@ -158,16 +134,97 @@ export function CompanionShell({
                 }}
               />
             ))}
-          <IconButton
-            label="Settings"
-            icon={Menu}
-            selected={section === "settings"}
-            onPress={() => {
-              onNavigate("settings");
-            }}
-          />
+          {Platform.OS === "web" && (
+            <IconButton
+              label="Settings"
+              icon={Menu}
+              selected={section === "settings"}
+              onPress={() => {
+                onNavigate("settings");
+              }}
+            />
+          )}
         </View>
       )}
+      {showAgent && renderAgentPanel && (
+        <AgentPanel
+          onClose={() => {
+            setShowAgent(false);
+          }}
+        >
+          {(tab) =>
+            renderAgentPanel(tab, () => {
+              setShowAgent(false);
+            })
+          }
+        </AgentPanel>
+      )}
+    </View>
+  );
+}
+
+function CompanionHeader({
+  compact,
+  title,
+  avatarUri,
+  onNavigate,
+  onNewConversation,
+  onOpenAgent,
+}: Pick<
+  ComponentProps<typeof CompanionShell>,
+  "title" | "avatarUri" | "onNavigate" | "onNewConversation"
+> & { readonly compact: boolean; readonly onOpenAgent: () => void }) {
+  const nativeCompact = compact && Platform.OS !== "web";
+  return (
+    <View
+      accessibilityLabel={title}
+      style={[styles.header, compact && styles.mobileHeader]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Conversations"
+        onPress={() => {
+          onNavigate("search");
+        }}
+        style={styles.chatMenu}
+      >
+        <Menu size={20} color={colors.muted} />
+        {!compact && <Text style={styles.chatMenuLabel}>Conversations</Text>}
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Agent activity and memory"
+        onPress={() => {
+          onOpenAgent();
+        }}
+        style={[styles.identity, compact && styles.mobileIdentity]}
+      >
+        {avatarUri && (
+          <Image
+            source={{ uri: avatarUri }}
+            style={[styles.identityAvatar, compact && styles.mobileAvatar]}
+          />
+        )}
+        <Text
+          numberOfLines={1}
+          style={[styles.title, compact && styles.mobileTitle]}
+        >
+          Zoen
+        </Text>
+      </Pressable>
+      <View style={[styles.headerEnd, compact && styles.mobileHeaderEnd]}>
+        <IconButton
+          label={nativeCompact ? "Settings" : "New conversation"}
+          icon={nativeCompact ? Menu : SquarePen}
+          onPress={
+            nativeCompact
+              ? () => {
+                  onNavigate("settings");
+                }
+              : onNewConversation
+          }
+        />
+      </View>
     </View>
   );
 }
@@ -208,7 +265,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 8,
   },
-  mobileHeader: { minHeight: 60, paddingHorizontal: 20, paddingTop: 0 },
+  mobileHeader: {
+    minHeight: 104,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    alignItems: "flex-start",
+  },
   chatMenu: {
     flexDirection: "row",
     gap: 8,
@@ -231,6 +294,21 @@ const styles = StyleSheet.create({
     boxShadow: "0 3px 12px rgba(0,0,0,0.07)",
   },
   identityAvatar: { width: 28, height: 28, borderRadius: 14 },
+  mobileIdentity: {
+    flexDirection: "column",
+    gap: 0,
+    padding: 0,
+    backgroundColor: "transparent",
+    boxShadow: "none",
+  },
+  mobileAvatar: { width: 50, height: 50, borderRadius: 25 },
+  mobileTitle: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    boxShadow: "0 5px 12px rgba(0,0,0,0.06)",
+  },
   title: {
     textAlign: "center",
     fontSize: 15,
@@ -241,9 +319,12 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: "row",
     justifyContent: "space-around",
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    paddingVertical: 4,
-    backgroundColor: colors.canvas,
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 32,
+    backgroundColor: colors.surface,
+    boxShadow: "0 6px 28px rgba(0,0,0,0.08)",
   },
 });

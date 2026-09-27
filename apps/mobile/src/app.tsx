@@ -8,6 +8,7 @@ import {
   CompanionShell,
   type CompanionSection,
 } from "@zoen/companion-ui";
+import { MobileAgentPanel } from "./agent-panel";
 import { auth } from "./auth";
 import { MobileConversation } from "./conversation";
 import { MobileSections } from "./sections";
@@ -112,6 +113,19 @@ function MobileCompanion({
     <CompanionShell
       section={section}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
+      renderAgentPanel={(tab, close) => (
+        <MobileAgentPanel
+          tab={tab}
+          onPrompt={(prompt) => {
+            close();
+            openConversation(undefined, prompt);
+          }}
+          onConversation={(id) => {
+            close();
+            openConversation(id);
+          }}
+        />
+      )}
       onNavigate={setSection}
       onNewConversation={() => {
         openConversation();

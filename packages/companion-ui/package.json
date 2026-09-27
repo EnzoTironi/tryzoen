@@ -14,16 +14,17 @@
     }
   },
   "dependencies": {
+    "@tanstack/react-query": "5.102.6",
     "lucide-react-native": "1.48.0",
-    "react-native-svg": "15.15.4",
     "react-native-marked": "8.3.2",
+    "react-native-svg": "15.15.4",
     "zod": "4.5.4"
   },
   "peerDependencies": {
-    "react": "^19.2.3",
-    "react-native": ">=0.86.3",
+    "ai": "^7.0.107",
     "eve": "^0.63.0",
-    "ai": "^7.0.107"
+    "react": "^19.2.3",
+    "react-native": ">=0.86.3"
   },
   "scripts": {
     "build:ui": "tsc -p tsconfig.json",

@@ -4,6 +4,7 @@ import { browserSessionClient } from "@web/eve/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CompanionShell,
+  CompanionOverlayProvider,
   SessionConversation,
   NewConversation,
   type CompanionSection,
@@ -13,6 +14,8 @@ import { workspaceHref } from "@web/workspaces/navigation";
 import styles from "./companion.module.css";
 
 import { ConnectedSections } from "./sections";
+import { ConnectedAgentPanel } from "./agent-panel";
+import { renderWebCompanionOverlay } from "./overlay";
 
 const sections: readonly CompanionSection[] = [
   "chat",
@@ -43,54 +46,69 @@ export function ConnectedCompanion({
   };
   return (
     <div className={styles.viewport}>
-      <CompanionShell
-        section={section}
-        title={title ?? "Zoen"}
-        avatarUri="/marketing/zoen-avatar.webp"
-        onNavigate={(nextSection) => {
-          navigate(
-            `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
-          );
-        }}
-        onNewConversation={() => {
-          navigate("/companion");
-        }}
-      >
-        {section !== "chat" ? (
-          <ConnectedSections
-            section={section}
-            onPrompt={(prompt) => {
-              navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
-            }}
-            onConversation={(id) => {
-              navigate(
-                id ? `/companion/${encodeURIComponent(id)}` : "/companion"
-              );
-            }}
-          />
-        ) : sessionId ? (
-          <SessionConversation
-            sessionId={sessionId}
-            client={browserSessionClient}
-          />
-        ) : (
-          <NewConversation
-            key={draft}
-            client={browserSessionClient}
-            avatarUri="/marketing/zoen-avatar.webp"
-            save={(id, name) => saveChat({ sessionId: id, title: name })}
-            initialDraft={draft}
-            onCreated={(id) => {
-              router.replace(
-                workspaceHref(
-                  `/companion/${encodeURIComponent(id)}`,
-                  workspaceId
-                )
-              );
-            }}
-          />
-        )}
-      </CompanionShell>
+      <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
+        <CompanionShell
+          section={section}
+          title={title ?? "Zoen"}
+          avatarUri="/marketing/zoen-avatar.webp"
+          renderAgentPanel={(tab, close) => (
+            <ConnectedAgentPanel
+              tab={tab}
+              onPrompt={(prompt) => {
+                close();
+                navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+              }}
+              onConversation={(id) => {
+                close();
+                navigate(`/companion/${encodeURIComponent(id)}`);
+              }}
+            />
+          )}
+          onNavigate={(nextSection) => {
+            navigate(
+              `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
+            );
+          }}
+          onNewConversation={() => {
+            navigate("/companion");
+          }}
+        >
+          {section !== "chat" ? (
+            <ConnectedSections
+              section={section}
+              onPrompt={(prompt) => {
+                navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+              }}
+              onConversation={(id) => {
+                navigate(
+                  id ? `/companion/${encodeURIComponent(id)}` : "/companion"
+                );
+              }}
+            />
+          ) : sessionId ? (
+            <SessionConversation
+              sessionId={sessionId}
+              client={browserSessionClient}
+            />
+          ) : (
+            <NewConversation
+              key={draft}
+              client={browserSessionClient}
+              avatarUri="/marketing/zoen-avatar.webp"
+              save={(id, name) => saveChat({ sessionId: id, title: name })}
+              initialDraft={draft}
+              onCreated={(id) => {
+                router.replace(
+                  workspaceHref(
+                    `/companion/${encodeURIComponent(id)}`,
+                    workspaceId
+                  )
+                );
+              }}
+            />
+          )}
+        </CompanionShell>
+      </CompanionOverlayProvider>
     </div>
   );
 }

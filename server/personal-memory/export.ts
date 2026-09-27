@@ -33,7 +33,7 @@ export const exportPersonalMemory = async function (headers: Headers) {
   });
 };
 
-const requirePersonalMemorySession = async function (headers: Headers) {
+export const requirePersonalMemorySession = async function (headers: Headers) {
   const session = await readAuthSession(headers);
   if (!session) throw new PersonalMemoryError({ reason: "unauthenticated" });
   return await requirePersonalMemoryWebSession(

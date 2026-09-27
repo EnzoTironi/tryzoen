@@ -166,7 +166,7 @@ export function Conversation({
   );
 }
 
-function MessagePart({
+export function MessagePart({
   part,
   isUser,
   canRespond,
@@ -197,6 +197,28 @@ function MessagePart({
           enabled={canRespond}
           onRespond={onRespond}
         />
+      );
+    if (request && response)
+      return (
+        <View style={styles.request}>
+          <Text style={styles.author}>
+            {request.kind === "tool-approval" ? "Your decision" : "Your answer"}
+          </Text>
+          <Text selectable style={styles.text}>
+            {request.prompt}
+          </Text>
+          <Text selectable style={styles.caption}>
+            {request.options?.find((option) => option.id === response.optionId)
+              ?.label ??
+              response.text ??
+              response.optionId}
+          </Text>
+          {part.state === "output-error" && (
+            <Text style={styles.error}>
+              The action failed after your response.
+            </Text>
+          )}
+        </View>
       );
     return (
       <Text style={styles.caption}>

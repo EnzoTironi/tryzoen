@@ -6,6 +6,10 @@ The client now connects the main Muse-style surfaces to durable Zoen data. It is
 
 The [interface audit](interface-audit.md) records the observed screens, nested menus, platform differences and behavior gaps. Use it as the parity checklist. In particular, Muse's editorial Feed, personalized Ideas and four-tab agent-status surface are broader than the current connected sections.
 
+The avatar now opens a four-tab agent panel without replacing the conversation. Activity and approvals can be reviewed per conversation using the existing paginated Eve history. Upcoming reads real schedules and supports revision-checked pause/resume. Identity shows the current account's saved profile and personal notes, with direct note editing and protection against stale writes. Personal memory is also accessible from settings. This does not yet provide Muse's global task/approval timeline or editable agent identity files.
+
+The [ai-memory review](ai-memory-review.md) records the reuse decision for Fabio Akita's project. Zoen retains its Eve/PostgreSQL/private-Mem0 owners and exposes human-readable, revision-checked personal memory rather than introducing a second memory service.
+
 ## What runs now
 
 - `/companion` uses the shared welcome screen and composer against Zoen’s existing Eve channel. `/companion/:sessionId` checks account/workspace ownership before loading a conversation.
@@ -117,3 +121,11 @@ Better Auth and its Expo/OAuth adapters use 1.7.6. Upstream removed the temporar
 `pnpm preview:companion` starts the connected Next host. Open `/companion`; the standalone Expo web preview does not provide Zoen’s backend. For native devices, set `EXPO_PUBLIC_API_URL` to the deployed HTTPS origin (or a reachable development origin in a development build). No API secrets belong in Expo public variables.
 
 Release remains blocked on signed desktop/mobile distribution, real-device OAuth verification, desktop browser-to-app sign-in, full voice/attachment/device adapters, the remaining feature matrix and measured capacity. The one-million-account target has not been load-tested. Keep this route opt-in until those gates are satisfied.
+
+## Agent panel verification — 2026-09-27
+
+The shared panel uses the existing authenticated transport, TanStack Query and Eve session controller. The web adapter uses the existing Base UI dialog primitives for focus and portal lifecycle; native uses React Native Modal. Metro resolves the shared query package to the mobile host's singleton so both platforms use the same query context. Desktop presents a right panel and compact layouts present a bottom sheet.
+
+The synthetic browser review verified memory creation through an actual agent turn, direct correction, unsaved-change confirmation, two-tab conflict rejection with draft retention, refresh persistence, schedule creation, pause/resume, and bounded conversation activity pagination. The review reminder is left paused. Approval history's empty state was inspected; a new external permission request was not manufactured for the visual review. The isolated runtime tests cover the memory write and schedule authorization boundaries.
+
+The current milestone passed 1,239 unit/component tests in 189 files, the root check/build, and iOS/Android Hermes exports. These exports validate JavaScript compilation, not real-device sign-in or signed distribution. The memory/runtime suite passed six tests across the memory integration, revocation race and scheduled reminder files. Quality review removed duplicate platform controllers and conversation lists; remaining scanner warnings include JSX reachability, intentional platform adapters, component length and recent changes to the active shell.

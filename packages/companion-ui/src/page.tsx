@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -25,15 +25,23 @@ export function CompanionPage({
   readonly error?: string;
   readonly onRetry?: () => void;
 }) {
-  const compact = useWindowDimensions().width < 720;
+  const window = useWindowDimensions();
+  const [width, setWidth] = useState(window.width);
+  const compact = width < 720;
   return (
     <ScrollView
+      onLayout={({ nativeEvent }) => {
+        setWidth(nativeEvent.layout.width);
+      }}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.scroll, compact && styles.compact]}
     >
       <View style={styles.page}>
         <View style={styles.header}>
-          <Text accessibilityRole="header" style={styles.title}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.title, compact && styles.compactTitle]}
+          >
             {title}
           </Text>
           {actions}
@@ -101,7 +109,8 @@ const styles = StyleSheet.create({
     paddingTop: 44,
     paddingBottom: 60,
   },
-  compact: { paddingHorizontal: 16, paddingTop: 42, paddingBottom: 32 },
+  compact: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
+  compactTitle: { fontSize: 24, lineHeight: 30, letterSpacing: -0.6 },
   page: { width: "100%", maxWidth: 1000, alignSelf: "flex-start" },
   header: {
     flexDirection: "row",

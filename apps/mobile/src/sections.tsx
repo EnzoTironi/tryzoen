@@ -1,11 +1,11 @@
+import { SearchSection } from "./search";
 import { randomUUID } from "expo-crypto";
-import { useDeferredValue, useState } from "react";
+import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionPage,
-  ConversationSearch,
   Feed,
   Goals,
   Ideas,
@@ -16,6 +16,7 @@ import { chatStarters } from "../../../app/(authenticated)/_lib/chat-starters";
 import { queries, rpc } from "./api";
 import { apiOrigin } from "./environment";
 import { auth } from "./auth";
+import { MobileMemory } from "./agent-panel";
 
 export function MobileSections({
   section,
@@ -49,51 +50,6 @@ export function MobileSections({
     return <FeedSection onPrompt={onPrompt} onConversation={onConversation} />;
   if (section === "library") return <LibrarySection onPrompt={onPrompt} />;
   return <SettingsSection onSignOut={onSignOut} onPrompt={onPrompt} />;
-}
-function SearchSection({
-  onConversation,
-}: {
-  readonly onConversation: (id?: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const search = useDeferredValue(query);
-  const chats = useInfiniteQuery({
-    queryKey: ["chats", search],
-    queryFn: ({ pageParam }) => queries.chats(search, pageParam),
-    initialPageParam: null as Parameters<typeof queries.chats>[1],
-    getNextPageParam: (last) => last.nextCursor,
-  });
-  return (
-    <ConversationSearch
-      query={query}
-      onQuery={setQuery}
-      items={
-        chats.data?.pages.flatMap((page) =>
-          page.items.map((chat) => ({
-            id: chat.sessionId,
-            title: chat.title,
-            description: new Date(chat.updatedAt).toLocaleString(),
-          }))
-        ) ?? []
-      }
-      onOpen={onConversation}
-      onCreate={() => {
-        onConversation();
-      }}
-      loading={chats.isPending || chats.isFetchingNextPage}
-      error={chats.error?.message}
-      onRetry={() => {
-        void chats.refetch();
-      }}
-      onLoadMore={
-        chats.hasNextPage
-          ? () => {
-              void chats.fetchNextPage();
-            }
-          : undefined
-      }
-    />
-  );
 }
 function GoalsSection({
   onPrompt,
@@ -363,6 +319,21 @@ function SettingsSection({
 }) {
   const session = auth.useSession();
   const signOut = useMutation({ mutationFn: onSignOut });
+  const [memory, setMemory] = useState(false);
+  if (memory)
+    return (
+      <>
+        <ActionButton
+          quiet
+          onPress={() => {
+            setMemory(false);
+          }}
+        >
+          Back to settings
+        </ActionButton>
+        <MobileMemory onPrompt={onPrompt} />
+      </>
+    );
   return (
     <CompanionPage title="Settings" error={signOut.error?.message}>
       <View style={{ gap: 24 }}>
@@ -381,9 +352,7 @@ function SettingsSection({
         <ActionButton
           quiet
           onPress={() => {
-            onPrompt(
-              "Show what you remember about me so I can review and correct it."
-            );
+            setMemory(true);
           }}
         >
           Personal memory

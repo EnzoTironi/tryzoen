@@ -1,6 +1,6 @@
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
-import { z } from "zod";
+import type { z } from "zod";
 
 import {
   computeNextRun,
@@ -12,11 +12,7 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 
-export const ReminderStatusSchema = z.object({
-  id: z.uuid(),
-  revision: z.number().int().min(0),
-  status: z.enum(["active", "paused"]),
-});
+import { reminderStatusSchema } from "../../shared/schedules/reminders";
 export class ScheduleChanged extends Error {
   readonly _tag = "ScheduleChanged";
 
@@ -28,9 +24,9 @@ export class ScheduleChanged extends Error {
 
 export const setReminderStatus = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  raw: z.output<typeof ReminderStatusSchema>
+  raw: z.output<typeof reminderStatusSchema>
 ) {
-  const input = await ReminderStatusSchema.parseAsync(raw);
+  const input = await reminderStatusSchema.parseAsync(raw);
 
   return await withDatabaseTransaction(async () => {
     const access = await requireWorkspaceAccess(actor);

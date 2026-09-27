@@ -6,7 +6,10 @@ import { z } from "zod";
 import type { MemoryOperationContext } from "eve/memory";
 import { readUserProfile } from "@db/services/user-profile";
 import type { AccessScope } from "@shared/identity/access-scope";
-import { storedNoteSchema, type PersonalMemorySnapshot } from "./model";
+import {
+  storedNoteSchema,
+  type PersonalMemorySnapshot,
+} from "@shared/personal-memory/schema";
 import { PersonalMemoryError, requirePersonalMemoryMembership } from "./access";
 import { admitPersonalWipeTarget } from "./group-memory-policy";
 
