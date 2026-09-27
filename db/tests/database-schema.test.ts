@@ -236,8 +236,8 @@ describe("migration deployment policy", () => {
     const turbo = z
       .object({
         tasks: z.object({
-          "build:vercel": z.object({ dependsOn: z.array(z.string()) }),
-          "db:migrate": z.object({
+          "//#build:vercel": z.object({ dependsOn: z.array(z.string()) }),
+          "//#db:migrate": z.object({
             cache: z.boolean(),
             env: z.array(z.string()),
           }),
@@ -268,9 +268,9 @@ describe("migration deployment policy", () => {
     );
     expect(packageManifest.devDependencies).toHaveProperty("@next/env");
     expect(packageManifest.devDependencies).not.toHaveProperty("dotenv-cli");
-    expect(turbo.tasks["build:vercel"].dependsOn).toContain("db:migrate");
-    expect(turbo.tasks["db:migrate"].cache).toBe(false);
-    expect(turbo.tasks["db:migrate"].env).toEqual(["DATABASE_URL_UNPOOLED"]);
+    expect(turbo.tasks["//#build:vercel"].dependsOn).toContain("//#db:migrate");
+    expect(turbo.tasks["//#db:migrate"].cache).toBe(false);
+    expect(turbo.tasks["//#db:migrate"].env).toEqual(["DATABASE_URL_UNPOOLED"]);
     expect(vercel.buildCommand).toBe("pnpm turbo run build:vercel");
   });
 

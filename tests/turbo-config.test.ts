@@ -26,10 +26,10 @@ describe("Turbo configuration", () => {
     const turbo = z
       .object({
         tasks: z.object({
-          "build:app": z.object({ env: z.array(z.string()) }),
-          "build:vercel": z.object({ env: z.array(z.string()) }),
-          "dev:app": z.object({ passThroughEnv: z.array(z.string()) }),
-          "start:app": z.object({ passThroughEnv: z.array(z.string()) }),
+          "//#build:app": z.object({ env: z.array(z.string()) }),
+          "//#build:vercel": z.object({ env: z.array(z.string()) }),
+          "//#dev:app": z.object({ passThroughEnv: z.array(z.string()) }),
+          "//#start:app": z.object({ passThroughEnv: z.array(z.string()) }),
         }),
       })
       .loose()
@@ -40,18 +40,22 @@ describe("Turbo configuration", () => {
       );
 
     expect(turbo).not.toHaveProperty("globalEnv");
-    expect(turbo.tasks["build:app"].env).toEqual(
+    expect(turbo.tasks["//#build:app"].env).toEqual(
       expect.arrayContaining([
         ...applicationEnvironment,
         "EVE_NEXT_*",
         "OPEN_INSTINCT_LOW_MEM_BUILD",
       ])
     );
-    expect(turbo.tasks["build:app"].env).toHaveLength(
+    expect(turbo.tasks["//#build:app"].env).toHaveLength(
       applicationEnvironment.length + 2
     );
-    expect(turbo.tasks["build:vercel"].env).toEqual(applicationEnvironment);
-    expect(turbo.tasks["dev:app"].passThroughEnv).toEqual(runtimeEnvironment);
-    expect(turbo.tasks["start:app"].passThroughEnv).toEqual(runtimeEnvironment);
+    expect(turbo.tasks["//#build:vercel"].env).toEqual(applicationEnvironment);
+    expect(turbo.tasks["//#dev:app"].passThroughEnv).toEqual(
+      runtimeEnvironment
+    );
+    expect(turbo.tasks["//#start:app"].passThroughEnv).toEqual(
+      runtimeEnvironment
+    );
   });
 });

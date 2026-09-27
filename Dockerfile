@@ -7,12 +7,15 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
-RUN pnpm install --frozen-lockfile
+COPY packages/companion-ui/package.json ./packages/companion-ui/package.json
+# Desktop packaging and mobile tooling are not part of the server image.
+RUN pnpm --filter local-vault-assistant... install --frozen-lockfile
 
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages ./packages
 COPY --from=deps /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY . .
 # Channel rewrites bake Eve's loopback port at build time — keep start args matched.
@@ -28,6 +31,7 @@ ENV COMPANION_PUBLIC_BASE_URL=http://127.0.0.1:3000
 ENV DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/open_instinct_prod
 ENV DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@127.0.0.1:5432/open_instinct_prod
 # Skip turbo daemon; run Eve then Next in separate layers (RSS reclaim between).
+RUN pnpm --filter @zoen/companion-ui build:ui
 RUN pnpm exec eve build
 RUN pnpm exec next build
 

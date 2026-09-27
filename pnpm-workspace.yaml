@@ -1,3 +1,6 @@
+packages:
+  - apps/*
+  - packages/*
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
@@ -21,11 +24,15 @@ allowBuilds:
   cbor-extract: false
   core-js: false
   esbuild: true
+  electron: true
+  electron-winstaller: false
   msgpackr-extract: false
   node-liblzma: false
   protobufjs: false
   sharp: true
 overrides:
+  # xcode only uses uuid.v4(); 11 is the patched CommonJS-compatible release.
+  "xcode>uuid": 11.1.1
   # Security fixes within the existing parser majors.
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "qs@<6.16.0": 6.16.0

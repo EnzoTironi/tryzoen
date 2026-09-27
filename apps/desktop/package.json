@@ -1,0 +1,55 @@
+{
+  "name": "@zoen/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zoen desktop companion",
+  "author": "Zoen",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build:desktop": "tsc -p tsconfig.json",
+    "dev": "pnpm run build:desktop && electron .",
+    "package": "pnpm run build:desktop && electron-builder --dir --publish never",
+    "dist": "pnpm run build:desktop && electron-builder"
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "0.13.11",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.tryzoen.desktop",
+    "productName": "Zoen",
+    "asar": true,
+    "files": [
+      "dist/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "category": "Office",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "icon": "../../packages/companion-ui/assets/icon.png"
+  }
+}

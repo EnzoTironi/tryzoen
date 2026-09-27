@@ -1,5 +1,15 @@
 # eve Agent App
 
+## Product and delivery requirements
+
+- Recreate Muse's interface and complete feature set on Zoen's existing foundation.
+- Share product UI and logic across web, Electron desktop, and Expo mobile; keep device capabilities in explicit platform adapters.
+- Prefer the latest stable, mutually compatible library versions. Record any compatibility constraint that prevents using the newest release.
+- Reuse maintained npm libraries and appropriately licensed GitHub projects before implementing infrastructure ourselves.
+- Design for a million users: preserve account isolation, bounded reads, durable execution, measurable performance, and clear failure states. Treat capacity as something to prove with tests and operations.
+- Keep the interface and architecture elegant: cohesive responsibilities, accessible interactions, and minimal unnecessary code.
+- Always use `gh --attach` to add video and image evidence to pull requests so the user can review changes visually. Verify the running interface before capturing evidence.
+
 This project uses the eve framework: an agent is a directory of files under `agent/`, and eve compiles and runs it.
 
 For a content-only change to the root agent's identity, purpose, tone, or response guidelines, edit its existing authored instructions. Fresh projects use `agent/instructions.md`; a project may instead use `agent/instructions.ts` or files under `agent/instructions/`. You do not need to read the framework docs for a content-only instructions change. A fresh project already has its selected model in `agent/agent.ts`; preserve that file unless the user asks to change the model.
@@ -62,7 +72,7 @@ Run the validation the task requests. When it does not establish the behavior yo
 
 ## Repository contract
 
-- The repository root owns the single Next.js application, Eve agent, and shared UI contract.
+- The repository root owns the single Next.js application and Eve agent. `packages/companion-ui` owns the shared React Native UI; `apps/desktop` owns Electron and `apps/mobile` owns Expo. Keep the connected web adapter under `app/companion`.
 - The workspace manager lives on `/` and the agent chat on `/chat`. Eve owns tools, connections, skill discovery, approvals and durable execution. Keep product functions direct and colocated with their concrete owner.
 - Browser execution belongs only to the declared browser-agent's native tools. Keep each browser tool's schema and implementation together; share the Kernel SDK client through `agent/subagents/browser-agent/lib/kernel.ts`. The coordinator delegates browser work to that agent.
 - `agent/subagents/browser-agent/lib` is for code genuinely shared by worker tools. Group a shared worker domain in a lower-case folder, such as `trace/domains.ts` or `autofill/provider.ts`; do not use it as a holding area for a tool's one-off logic.
@@ -113,7 +123,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 The user authorized a full Eve-native rebuild on 2026-09-19. Preserve the existing landing page and application design, routes, languages and user-facing capabilities. The active implementation worktree includes the user's uncommitted interface changes from the original checkout.
 
-Use the latest published Eve release, currently 0.63.0, and its public APIs. Use plain TypeScript, async/await and Zod for application behavior. Migrate complete slices and their callers; remove Effect, the application ManagedRuntime and redundant Executor routing as their replacements become operational. Do not create an Effect-compatible shim or a second agent framework.
+Use public Eve APIs. The runtime currently pins 0.63.0; the breaking upgrade to the latest release is tracked in `docs/muse/universal-client.md` and must include its existing workflow patches and runtime tests. Use plain TypeScript, async/await and Zod for application behavior. Migrate complete slices and their callers; remove Effect, the application ManagedRuntime and redundant Executor routing as their replacements become operational. Do not create an Effect-compatible shim or a second agent framework.
 
 Keep identity, memberships, session ownership, persistent product records and provider idempotency explicit. Eve owns sessions, turns, tool invocation, approval and workflow orchestration. Integrations belong in native channels, connections, tools, memory slots and extensions. Prefer the existing Drizzle/PostgreSQL owner for application data.
 

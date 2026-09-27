@@ -1,8 +1,8 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "tasks": {
-    "build:app": {
-      "dependsOn": ["^build:app"],
+    "//#build:app": {
+      "dependsOn": ["@zoen/companion-ui#build:ui"],
       "env": [
         "BETTER_AUTH_*",
         "BLOB_*",
@@ -18,8 +18,8 @@
       ],
       "outputs": [".next/**", "!.next/cache/**", ".output/**", "next-env.d.ts"]
     },
-    "build:vercel": {
-      "dependsOn": ["db:migrate"],
+    "//#build:vercel": {
+      "dependsOn": ["//#db:migrate", "@zoen/companion-ui#build:ui"],
       "env": [
         "BETTER_AUTH_*",
         "BLOB_*",
@@ -33,12 +33,12 @@
       ],
       "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts"]
     },
-    "db:migrate": {
+    "//#db:migrate": {
       "cache": false,
       "env": ["DATABASE_URL_UNPOOLED"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
-    "dev:app": {
+    "//#dev:app": {
       "cache": false,
       "passThroughEnv": [
         "AI_GATEWAY_API_KEY",
@@ -57,20 +57,20 @@
       ],
       "persistent": true
     },
-    "deploy:app": {
+    "//#deploy:app": {
       "cache": false
     },
-    "format:check": {
+    "//#format:check": {
       "outputs": []
     },
-    "knip": {
+    "//#knip": {
       "outputs": []
     },
-    "lint:app": {
+    "//#lint:app": {
       "outputs": [],
-      "dependsOn": ["types:generate"]
+      "dependsOn": ["//#types:generate"]
     },
-    "start:app": {
+    "//#start:app": {
       "cache": false,
       "passThroughEnv": [
         "AI_GATEWAY_API_KEY",
@@ -89,15 +89,26 @@
       ],
       "persistent": true
     },
-    "test:app": {
+    "//#test:app": {
       "outputs": []
     },
-    "types:generate": {
-      "outputs": [".next/types/**", "next-env.d.ts"]
+    "//#types:generate": {
+      "outputs": [".next/types/**", "next-env.d.ts"],
+      "dependsOn": ["@zoen/companion-ui#build:ui"]
     },
-    "types:check:app": {
-      "dependsOn": ["types:generate"],
+    "//#types:check:app": {
+      "dependsOn": ["//#types:generate"],
       "outputs": ["*.tsbuildinfo"]
+    },
+    "build:ui": {
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build:ui"],
+      "outputs": []
+    },
+    "build:desktop": {
+      "outputs": ["dist/**"]
     }
   }
 }

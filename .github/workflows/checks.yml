@@ -45,6 +45,11 @@ jobs:
         # Each compiler/linter/test process also uses its own CPU pool.
         run: pnpm check --concurrency=1
 
+      - name: Verify Expo compatibility and export all shared client targets
+        run: |
+          pnpm --filter @zoen/mobile exec expo install --check
+          pnpm --filter @zoen/mobile exec expo export --platform all --max-workers 2
+
       - name: List native evaluations without provider credentials
         run: node --import tsx scripts/run-agent-evals.ts --list
 
@@ -53,6 +58,32 @@ jobs:
           pnpm --dir infrastructure peers check
           pnpm --dir infrastructure types:check
           pnpm --dir infrastructure test:providers
+
+  desktop:
+    name: Desktop package (${{ matrix.os }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build an unsigned desktop package without publishing
+        run: pnpm package:desktop
 
   runtime-storage:
     name: Runtime storage and build

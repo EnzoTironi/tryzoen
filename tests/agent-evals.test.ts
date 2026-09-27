@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
 import { spawn } from "node:child_process";
@@ -143,7 +144,7 @@ if (${String(options.interrupt ?? false)}) {
     [
       "--import",
       import.meta.resolve("tsx"),
-      new URL("../scripts/run-agent-evals.ts", import.meta.url).pathname,
+      fileURLToPath(new URL("../scripts/run-agent-evals.ts", import.meta.url)),
       ...args,
     ],
     {

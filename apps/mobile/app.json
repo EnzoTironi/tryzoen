@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Zoen",
+    "slug": "zoen",
+    "scheme": "zoen",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tryzoen.mobile"
+    },
+    "android": {
+      "package": "com.tryzoen.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "experiments": {
+      "autolinkingModuleResolution": true
+    },
+    "updates": {
+      "enabled": false
+    },
+    "platforms": ["ios", "android", "web"],
+    "icon": "../../packages/companion-ui/assets/icon.png"
+  }
+}
