@@ -144,7 +144,10 @@ function NewConversation({
     title.current ??= text.slice(0, 240);
     await agent.send(text, busy ? { turnPolicy: "steer" } : undefined);
     // oxlint-disable-next-line typescript/no-unnecessary-condition -- Eve's onError callback updates the ref while send awaits.
-    if (sendError.current) throw sendError.current;
+    if (sendError.current)
+      throw new Error("Unable to send your message.", {
+        cause: sendError.current,
+      });
   };
   if (agent.session || saveError) {
     return (

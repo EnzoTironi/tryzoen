@@ -69,7 +69,9 @@ describe("companion conversation handoff", () => {
       mocks.options?.onError?.(failure);
       return Promise.resolve();
     });
-    await expect(mocks.submit?.("Keep this draft")).rejects.toThrow(failure);
+    await expect(mocks.submit?.("Keep this draft")).rejects.toMatchObject({
+      cause: failure,
+    });
     expect(mocks.replace).not.toHaveBeenCalled();
     expect(mocks.save).not.toHaveBeenCalled();
   });
