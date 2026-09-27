@@ -90,6 +90,7 @@
       "persistent": true
     },
     "//#test:app": {
+      "dependsOn": ["@zoen/companion-ui#build:ui"],
       "outputs": []
     },
     "//#types:generate": {

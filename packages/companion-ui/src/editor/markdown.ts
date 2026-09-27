@@ -9,6 +9,8 @@ export const documentExtensions = [
 ];
 export const documentMarkdown = new MarkdownManager({
   extensions: documentExtensions,
+  // Identity fields occupy separate lines even inside one Markdown paragraph.
+  markedOptions: { breaks: true, gfm: true },
 });
 
 /** Keep unsupported source intact instead of silently dropping its nodes. */

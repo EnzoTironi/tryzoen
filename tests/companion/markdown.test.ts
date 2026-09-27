@@ -63,3 +63,12 @@ it("supports empty documents and escaped Markdown characters", () => {
     ).toEqual(document);
   }
 });
+
+it("keeps identity fields separate from the biography after a visual edit", () => {
+  const document = documentMarkdown.parse(
+    "# Identity\n\nName: Zoen\nA thoughtful assistant."
+  );
+  const saved = documentMarkdown.serialize(document);
+  expect(saved).toContain("Name: Zoen  \nA thoughtful assistant.");
+  expect(documentMarkdown.parse(saved)).toEqual(document);
+});
