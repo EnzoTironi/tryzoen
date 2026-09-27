@@ -33,6 +33,8 @@ Be **helpful**, *clear*, and ~~never~~ use \`care\`.
 });
 
 it.each([
+  "---\nname: daily-review\ndescription: Keep this metadata intact\n---\n# Daily review",
+  '+++\nname = "daily-review"\n+++\n# Daily review',
   "<!-- retain this comment -->\n# Soul",
   "<section>Keep me</section>",
   "![A diagram](https://example.com/image.png)",

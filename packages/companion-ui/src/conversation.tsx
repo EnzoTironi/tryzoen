@@ -20,6 +20,12 @@ import { ActionButton } from "./button";
 import { Composer } from "./composer";
 import { colors } from "./theme";
 import { isSafeWebLink } from "./links";
+import { MessageActions } from "./message-actions";
+import {
+  readReplyMessage,
+  replyMessage,
+  type MessageReply,
+} from "./session/reply";
 
 export function Conversation({
   messages,
@@ -30,6 +36,7 @@ export function Conversation({
   onCancel,
   onLoadOlder,
   loadingOlder = false,
+  onCopyText,
 }: {
   readonly messages: readonly EveMessage[];
   readonly status: UseEveAgentStatus;
@@ -39,7 +46,9 @@ export function Conversation({
   readonly onCancel: () => void;
   readonly onLoadOlder?: () => void;
   readonly loadingOlder?: boolean;
+  readonly onCopyText?: (text: string) => Promise<void>;
 }) {
+  const [reply, setReply] = useState<MessageReply>();
   const scroll = useRef<FlatList<EveMessage>>(null);
   const nearBottom = useRef(true);
   const positioned = useRef(false);
@@ -106,24 +115,35 @@ export function Conversation({
         }
         renderItem={({ item: message }) => (
           <View
-            style={[
-              styles.message,
-              message.role === "user" ? styles.user : styles.assistant,
-            ]}
+            style={
+              message.role === "user" ? styles.userGroup : styles.assistantGroup
+            }
           >
-            {message.parts.map((part, index) => (
-              <MessagePart
-                // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
-                key={`${message.id}:${index}`}
-                part={part}
-                isUser={message.role === "user"}
-                canRespond={canRespond}
-                onRespond={onRespond}
-              />
-            ))}
-            {message.metadata?.status === "failed" && (
-              <Text style={styles.error}>Message not delivered.</Text>
-            )}
+            <View
+              style={[
+                styles.message,
+                message.role === "user" ? styles.user : styles.assistant,
+              ]}
+            >
+              {message.parts.map((part, index) => (
+                <MessagePart
+                  // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
+                  key={`${message.id}:${index}`}
+                  part={part}
+                  isUser={message.role === "user"}
+                  canRespond={canRespond}
+                  onRespond={onRespond}
+                />
+              ))}
+              {message.metadata?.status === "failed" && (
+                <Text style={styles.error}>Message not delivered.</Text>
+              )}
+            </View>
+            <MessageActions
+              message={message}
+              onCopy={onCopyText}
+              onReply={setReply}
+            />
           </View>
         )}
         ListFooterComponent={
@@ -155,13 +175,47 @@ export function Conversation({
       <View style={styles.composer}>
         <View style={styles.column}>
           <Composer
-            onSend={onSend}
+            onSend={async (text) => {
+              await onSend(replyMessage(text, reply));
+              setReply((current) =>
+                current?.id === reply?.id ? undefined : current
+              );
+            }}
+            reply={reply}
+            onRemoveReply={() => {
+              setReply(undefined);
+            }}
             onCancel={onCancel}
             busy={busy}
             disabled={status === "resuming"}
           />
         </View>
       </View>
+    </View>
+  );
+}
+
+function UserMessage({ text }: { readonly text: string }) {
+  const quoted = readReplyMessage(text);
+  if (!quoted)
+    return (
+      <Text selectable style={styles.text}>
+        {text}
+      </Text>
+    );
+  return (
+    <View style={styles.quotedMessage}>
+      <View style={styles.quote}>
+        <Text style={styles.caption}>
+          {quoted.role === "assistant" ? "Replying to Zoen" : "Replying to you"}
+        </Text>
+        <Text selectable numberOfLines={4} style={styles.caption}>
+          {quoted.quote}
+        </Text>
+      </View>
+      <Text selectable style={styles.text}>
+        {quoted.text}
+      </Text>
     </View>
   );
 }
@@ -179,9 +233,7 @@ export function MessagePart({
 }) {
   if (part.type === "text") {
     return isUser ? (
-      <Text selectable style={styles.text}>
-        {part.text}
-      </Text>
+      <UserMessage text={part.text} />
     ) : (
       <AssistantMarkdown text={part.text} />
     );
@@ -372,6 +424,13 @@ function InputRequest({
 }
 
 const styles = StyleSheet.create({
+  quotedMessage: { gap: 12 },
+  quote: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.muted,
+    paddingLeft: 12,
+    gap: 4,
+  },
   root: { flex: 1, minHeight: 0 },
   messages: {
     flexGrow: 1,
@@ -389,17 +448,24 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   assistant: {
-    alignSelf: "flex-start",
-    maxWidth: "90%",
     backgroundColor: "#e9e9eb",
   },
   user: {
-    alignSelf: "flex-end",
-    maxWidth: "88%",
     backgroundColor: "#cbe5ff",
     borderRadius: 22,
     paddingHorizontal: 20,
     marginVertical: 10,
+  },
+  userGroup: {
+    alignSelf: "flex-end",
+    maxWidth: "88%",
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  assistantGroup: {
+    alignSelf: "flex-start",
+    maxWidth: "90%",
+    marginBottom: 12,
   },
   author: { fontSize: 13, fontWeight: "600", color: colors.ink },
   text: { fontSize: 16, lineHeight: 25, color: colors.ink },

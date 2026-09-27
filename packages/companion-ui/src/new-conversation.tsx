@@ -2,7 +2,7 @@ import { useRef, type ComponentProps } from "react";
 import type { Client, ClientSession } from "eve/client";
 import { Welcome } from "./welcome";
 
-/** Persist the conversation before sending its first message, so failed history writes are retryable. */
+/** Start the first turn atomically so Eve can establish the session's owner. */
 export function NewConversation({
   client,
   save,
@@ -14,19 +14,14 @@ export function NewConversation({
   readonly onCreated: (sessionId: string) => void;
 }) {
   const session = useRef<ClientSession | undefined>(undefined);
-  const saved = useRef(false);
   return (
     <Welcome
       {...welcome}
       onSend={async (message) => {
-        session.current ??= (await client.sessions.create()).session;
+        session.current ??= (await client.sessions.create({ message })).session;
         const id = session.current.state.sessionId;
-        if (!saved.current) {
-          await save(id, message.slice(0, 240));
-          saved.current = true;
-        }
-        // send resolves once the server accepts the turn; the routed screen follows its durable stream.
-        await session.current.send(message);
+        // A failed title write can be retried without replaying the accepted turn.
+        await save(id, message.slice(0, 240));
         onCreated(id);
       }}
     />

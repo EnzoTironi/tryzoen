@@ -1,5 +1,15 @@
-import { reminderStatusSchema } from "@shared/schedules/reminders";
-import { listReminders } from "../../server/schedules/queries";
+import {
+  GitRevisionSchema,
+  WorkspacePathSchema,
+} from "@shared/workspaces/files";
+import {
+  reminderStatusSchema,
+  reminderHistoryInputSchema,
+} from "@shared/schedules/reminders";
+import {
+  listReminders,
+  readReminderHistory,
+} from "../../server/schedules/queries";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
@@ -21,10 +31,7 @@ import {
   rollbackSkill,
   RollbackSkillSchema,
 } from "../../server/workspaces/skills";
-import {
-  GitRevisionSchema,
-  WorkspacePathSchema,
-} from "../../server/workspaces/git";
+
 import { workspaceProcedure } from "./workspace-procedure";
 import { workspaceRoomsRouter } from "./workspace-rooms";
 import { workspaceToolsRouter } from "./workspace-tools";
@@ -55,6 +62,11 @@ export const workspacesRouter = {
   rooms: workspaceRoomsRouter,
   ...workspaceAgentsRouter,
   schedules: {
+    history: workspaceProcedure
+      .input(reminderHistoryInputSchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () => readReminderHistory(ctx.scope, input))
+      ),
     list: workspaceProcedure.query(({ ctx, signal }) =>
       withSignal(signal, () => listReminders(ctx.scope))
     ),
@@ -204,11 +216,22 @@ export const workspacesRouter = {
     )
     .query(({ ctx, input, signal }) =>
       withSignal(signal, async () => {
-        return await WorkspaceRepository.read(
+        const result = await WorkspaceRepository.read(
           ctx.actor,
           input.path,
           input.revision
         );
+        return {
+          ...result,
+          canEdit:
+            ctx.actor.role !== "member" ||
+            Boolean(
+              input.path &&
+              (input.path.startsWith("knowledge/") ||
+                input.path.startsWith("proposals/skills/") ||
+                input.path.startsWith("proposals/tools/"))
+            ),
+        };
       })
     ),
   history: workspaceProcedure

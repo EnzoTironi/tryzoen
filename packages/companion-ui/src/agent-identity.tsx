@@ -208,6 +208,7 @@ export function AgentIdentity({
       {editing && (
         <DocumentEditor
           markdown
+          history={data.documentHistory(editing.document.path, cacheScope)}
           title={
             editing.document.path.split("/").at(-1) ?? editing.document.title
           }

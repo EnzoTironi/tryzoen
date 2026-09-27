@@ -3,6 +3,7 @@ import { SessionConversation, NewConversation } from "@zoen/companion-ui";
 import { accountHeaders } from "./auth";
 import { apiOrigin } from "./environment";
 import { rpc } from "./api";
+import { setStringAsync } from "expo-clipboard";
 export const client = new Client({
   host: apiOrigin,
   headers: accountHeaders,
@@ -18,7 +19,13 @@ export function MobileConversation({
   readonly onCreated: (id: string) => void;
 }) {
   return sessionId ? (
-    <SessionConversation sessionId={sessionId} client={client} />
+    <SessionConversation
+      sessionId={sessionId}
+      client={client}
+      onCopyText={async (text) => {
+        await setStringAsync(text);
+      }}
+    />
   ) : (
     <NewConversation
       client={client}

@@ -69,6 +69,52 @@ afterAll(async () => {
 });
 
 describe("workstream memory", () => {
+  it("bounds subgoals to one level and forgets only the selected family and its history", async () => {
+    const save = (
+      scope: typeof alice,
+      id: string,
+      parentId?: string,
+      expectedRevision = 0
+    ) =>
+      saveWorkstream(
+        scope,
+        "goals",
+        { id, expectedRevision, content: { ...content, parentId } },
+        `${id}-${expectedRevision}`,
+        null
+      );
+    await save(alice, "parent");
+    await save(alice, "neighbor");
+    await save(alice, "child", "parent");
+    await expect(save(alice, "grandchild", "child")).rejects.toThrow(
+      "Subgoals cannot contain subgoals"
+    );
+    await expect(save(alice, "self", "self")).rejects.toThrow("top-level goal");
+    await expect(save(bob, "foreign-child", "parent")).rejects.toThrow(
+      "top-level goal"
+    );
+    await expect(save(alice, "parent", "neighbor", 1)).rejects.toThrow(
+      "goal with subgoals"
+    );
+    await forgetWorkstream(
+      alice,
+      "goals",
+      { id: "parent", expectedRevision: 1 },
+      "forget-family"
+    );
+    expect(await readWorkstream(alice, "goals", "parent")).toBeNull();
+    expect(await readWorkstream(alice, "goals", "child")).toBeNull();
+    expect(await readWorkstream(alice, "goals", "neighbor")).not.toBeNull();
+    expect(
+      (await database.select().from(schema.workstreamRevisions)).map(
+        (row) => row.id
+      )
+    ).toEqual(["neighbor"]);
+    await expect(save(alice, "child", "neighbor", 0)).rejects.toThrow(
+      "forgotten"
+    );
+  });
+
   it("recalls an undertaking in a new session and preserves a corrected constraint", async () => {
     const firstContext = context("first");
     const tools = await workstreamMemory.provider.tools(firstContext);

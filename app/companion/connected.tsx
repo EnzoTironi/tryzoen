@@ -23,9 +23,12 @@ import {
   ConnectedAgentName,
 } from "./agent-panel";
 import { renderWebCompanionOverlay } from "./overlay";
-const RichTextEditor = dynamic(() => import("./editor/rich-text"), {
-  ssr: false,
-});
+const RichTextEditor = dynamic(
+  () => import("@web/components/markdown-editor/rich-text"),
+  {
+    ssr: false,
+  }
+);
 
 const sections: readonly CompanionSection[] = [
   "chat",
@@ -108,6 +111,7 @@ export function ConnectedCompanion({
               <SessionConversation
                 sessionId={sessionId}
                 client={browserSessionClient}
+                onCopyText={(text) => navigator.clipboard.writeText(text)}
               />
             ) : (
               <NewConversation

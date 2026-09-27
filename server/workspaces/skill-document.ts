@@ -1,6 +1,5 @@
+import { WorkspacePathSchema } from "@shared/workspaces/files";
 import { z } from "zod";
-
-import { WorkspacePathSchema } from "./git";
 
 const toolId = /^[a-z][a-zA-Z0-9._-]{0,79}$/;
 const frontmatter = /^---\r?\nrequires:\s*\[(?<list>[^\]]*)\]\s*\r?\n---\r?\n/;

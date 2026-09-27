@@ -1,3 +1,8 @@
+import {
+  GitRevisionSchema,
+  WorkspacePathSchema,
+  workspaceRevisionSchema,
+} from "@shared/workspaces/files";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { ZodError as SchemaError } from "zod";
@@ -25,12 +30,10 @@ import {
   WorkspaceCapabilitiesSchema,
 } from "@shared/workspaces/capabilities";
 import {
-  GitRevisionSchema,
   publishWorkspaceGit,
   readWorkspaceGit,
   readWorkspaceGitSelection,
   searchWorkspaceGit,
-  WorkspacePathSchema,
 } from "./git";
 import {
   isSkillContentPath,
@@ -64,14 +67,7 @@ const repositorySchema = z.object({
   head: GitRevisionSchema,
   bundle: z.instanceof(Uint8Array),
 });
-const revisionSchema = z.object({
-  revision: GitRevisionSchema,
-  parent: z.nullable(GitRevisionSchema),
-  path: WorkspacePathSchema,
-  author: z.string(),
-  createdAt: z.string(),
-  source: z.string(),
-});
+
 function unavailable(): never {
   throw new WorkspaceRepositoryError({
     reason: "unavailable",
@@ -277,7 +273,7 @@ export const WorkspaceRepository = {
           await query(sql`SELECT revision, parent_revision AS parent, path, author_user_id AS author,
           created_at::text AS "createdAt", source FROM workspace_revision
           WHERE workspace_id = ${actor.workspaceId} AND path = ${filename} ORDER BY created_at DESC, revision DESC LIMIT 50`);
-        return await z.array(revisionSchema).parseAsync(rows);
+        return await z.array(workspaceRevisionSchema).parseAsync(rows);
       });
     } catch (error) {
       if (error instanceof SqlError || error instanceof SchemaError) {

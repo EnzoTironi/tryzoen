@@ -1,9 +1,12 @@
 "use client";
 import { ConnectedSearch } from "./search";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { getUntypedClient } from "@trpc/client";
+import { companionGoalsData } from "@shared/companion/goals";
 import {
   Ideas,
-  Goals,
+  GoalCollection,
   Feed,
   Library,
   CompanionPage,
@@ -94,57 +97,18 @@ function ConnectedGoals({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
-  const goals = api.companion.goals.useQuery();
-  const complete = api.companion.setGoalCompleted.useMutation({
-    onSuccess: async () => {
-      await goals.refetch();
-    },
-  });
-  const items = goals.data ?? [];
+  const { client } = api.useUtils();
+  const params = useSearchParams();
+  const data = useMemo(
+    () =>
+      companionGoalsData(getUntypedClient(client), () => crypto.randomUUID()),
+    [client]
+  );
   return (
-    <Goals
-      items={items.map((item) => ({
-        id: `${item.scopeKey}:${item.id}`,
-        title: item.content?.title ?? item.id,
-        description: item.content?.nextStep.trim()
-          ? item.content.nextStep
-          : (item.content?.objective ?? ""),
-        completed: item.content?.status === "completed",
-      }))}
-      loading={goals.isPending}
-      error={goals.error?.message ?? complete.error?.message}
-      pendingId={
-        complete.isPending
-          ? `${complete.variables.scopeKey}:${complete.variables.id}`
-          : undefined
-      }
-      onRetry={() => {
-        complete.reset();
-        void goals.refetch();
-      }}
-      onOpen={(id) => {
-        const item = items.find((goal) => `${goal.scopeKey}:${goal.id}` === id);
-        if (item)
-          onPrompt(
-            `Read my saved workstream ${item.id} (${item.content?.title ?? ""}) and help me review its progress and next step.`
-          );
-      }}
-      onCreate={(category) => {
-        onPrompt(
-          `Help me create a goal in ${category}. Ask what I want to achieve and save the agreed goal as a workstream. Explain any schedule separately before enabling it.`
-        );
-      }}
-      onToggle={(id) => {
-        const item = items.find((goal) => `${goal.scopeKey}:${goal.id}` === id);
-        if (!item || complete.isPending) return;
-        complete.mutate({
-          id: item.id,
-          scopeKey: item.scopeKey,
-          expectedRevision: item.revision,
-          completed: item.content?.status !== "completed",
-          operationId: crypto.randomUUID(),
-        });
-      }}
+    <GoalCollection
+      data={data}
+      cacheScope={params.get("space") ?? "personal"}
+      onPrompt={onPrompt}
     />
   );
 }
@@ -266,7 +230,7 @@ function ConnectedFile({
           path={path}
           content={file.data.content ?? ""}
           revision={file.data.revision}
-          readOnly={false}
+          readOnly={!file.data.canEdit}
           onClose={onClose}
           onSaved={async () => {
             await file.refetch();

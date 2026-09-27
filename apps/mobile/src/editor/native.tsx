@@ -19,9 +19,12 @@ import {
   ListOrdered,
   Undo2,
   Redo2,
+  MoreHorizontal,
 } from "lucide-react-native";
 import {
   MarkdownSourceEditor,
+  ActionButton,
+  type MarkdownEditorHandle,
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
 import {
@@ -29,6 +32,8 @@ import {
   needsSourceEditor,
 } from "@zoen/companion-ui/markdown";
 import { Pressable } from "react-native";
+import { setStringAsync } from "expo-clipboard";
+import { shareMarkdown } from "./export";
 
 // The native bundle supports these Markdown nodes; omit marks that cannot be serialized.
 const bridges = TenTapStartKit.filter(
@@ -38,13 +43,121 @@ const bridges = TenTapStartKit.filter(
     )
 );
 
-export function MobileEditor(props: MarkdownEditorProps) {
-  return needsSourceEditor(props.initialMarkdown, true) ? (
-    <MarkdownSourceEditor {...props} />
-  ) : (
-    <VisualEditor {...props} />
+export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
+  const editor = useRef<MarkdownEditorHandle>(null);
+  const [document, setDocument] = useState({
+    text: props.initialMarkdown,
+    version: 0,
+  });
+  const [source, setSource] = useState(() =>
+    needsSourceEditor(props.initialMarkdown, true)
+  );
+  const [menu, setMenu] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  useImperativeHandle(
+    ref,
+    () => ({
+      read: async () => {
+        if (!editor.current)
+          throw new Error("The editor is still loading. Try again.");
+        return await editor.current.read();
+      },
+    }),
+    []
+  );
+  const act = async (action: "source" | "copy" | "share") => {
+    if (busy || !editor.current) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const text = await editor.current.read();
+      if (action === "source") {
+        if (source && needsSourceEditor(text, true)) {
+          setStatus(
+            "This document needs source mode to preserve its formatting and metadata."
+          );
+          return;
+        }
+        setDocument((current) => ({ text, version: current.version + 1 }));
+        setSource(!source);
+      } else if (action === "copy") {
+        await setStringAsync(text);
+        setStatus("Markdown copied.");
+      } else await shareMarkdown(text, props.filename);
+      setMenu(false);
+    } catch (error) {
+      props.onError(
+        error instanceof Error
+          ? error.message
+          : "The document action failed. Try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={styles.root}>
+      <View style={styles.documentActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Document actions"
+          accessibilityState={{ expanded: menu }}
+          onPress={() => {
+            setMenu(!menu);
+          }}
+          style={styles.tool}
+        >
+          <MoreHorizontal size={22} color="#111112" />
+        </Pressable>
+      </View>
+      {menu && (
+        <View style={styles.toolbar}>
+          {(
+            [
+              ["source", source ? "Visual editor" : "View Markdown source"],
+              ["copy", "Copy Markdown"],
+              ["share", "Save or share Markdown"],
+            ] as const
+          ).map(([action, label]) => (
+            <ActionButton
+              key={action}
+              quiet
+              disabled={busy}
+              onPress={() => {
+                void act(action);
+              }}
+            >
+              {label}
+            </ActionButton>
+          ))}
+        </View>
+      )}
+      {status ? (
+        <Text accessibilityRole="alert" style={styles.status}>
+          {status}
+        </Text>
+      ) : null}
+      {source ? (
+        <MarkdownSourceEditor
+          key={document.version}
+          {...props}
+          ref={editor}
+          initialMarkdown={document.text}
+          notice="Markdown source"
+        />
+      ) : (
+        <VisualEditor
+          key={document.version}
+          {...props}
+          ref={editor}
+          initialMarkdown={document.text}
+        />
+      )}
+    </View>
   );
 }
+
 function VisualEditor({
   initialMarkdown,
   editable,
@@ -189,6 +302,8 @@ function VisualEditor({
 }
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0, backgroundColor: "#fcfcfc" },
+  documentActions: { alignItems: "flex-end", paddingHorizontal: 16 },
+  status: { color: "#666", padding: 16, fontSize: 14 },
   toolbar: {
     flexDirection: "row",
     flexWrap: "wrap",

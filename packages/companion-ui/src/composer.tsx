@@ -8,7 +8,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ArrowUp, Square } from "lucide-react-native";
+import { ArrowUp, Square, X } from "lucide-react-native";
+import { IconButton } from "./icon-button";
+import type { MessageReply } from "./session/reply";
 import { colors } from "./theme";
 
 export function Composer({
@@ -17,12 +19,16 @@ export function Composer({
   busy = false,
   disabled = false,
   initialDraft = "",
+  reply,
+  onRemoveReply,
 }: {
   readonly onSend: (message: string) => Promise<void>;
   readonly onCancel?: () => void;
   readonly busy?: boolean;
   readonly disabled?: boolean;
   readonly initialDraft?: string;
+  readonly reply?: MessageReply;
+  readonly onRemoveReply?: () => void;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [sending, setSending] = useState(false);
@@ -49,6 +55,25 @@ export function Composer({
   }
   return (
     <View style={styles.wrapper}>
+      {reply && (
+        <View style={styles.quote}>
+          <View style={styles.quoteText}>
+            <Text style={styles.quoteAuthor}>
+              {reply.role === "user" ? "Replying to you" : "Replying to Zoen"}
+            </Text>
+            <Text numberOfLines={3} style={styles.quoteExcerpt}>
+              {reply.text}
+            </Text>
+          </View>
+          <IconButton
+            icon={X}
+            label="Remove reply"
+            onPress={() => {
+              onRemoveReply?.();
+            }}
+          />
+        </View>
+      )}
       <View style={styles.composer}>
         <TextInput
           accessibilityLabel="Message Zoen"
@@ -111,6 +136,19 @@ export function Composer({
 }
 
 const styles = StyleSheet.create({
+  quote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: colors.wash,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+  },
+  quoteText: { flex: 1, gap: 4 },
+  quoteAuthor: { fontSize: 13, fontWeight: "600", color: colors.ink },
+  quoteExcerpt: { fontSize: 14, lineHeight: 20, color: colors.muted },
   wrapper: { width: "100%", gap: 10 },
   composer: {
     backgroundColor: colors.surface,

@@ -4,6 +4,8 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   ChevronDown,
+  LayoutGrid,
+  List,
   FileText,
   Folder,
   Globe,
@@ -26,6 +28,7 @@ import {
 import { CompanionPage, pageStyles } from "./page";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
+import { FileTree } from "./library/tree";
 
 const categories = [
   {
@@ -70,10 +73,12 @@ export function Library({
   const [showCategories, setShowCategories] = useState(false);
   const [query, setQuery] = useState("");
   const [descending, setDescending] = useState(false);
+  const [list, setList] = useState(false);
+  const systemFiles = category.label === "System files";
   const matching = items
     .filter(
       (item) =>
-        category.pattern.test(item.id) &&
+        (systemFiles || category.pattern.test(item.id)) &&
         item.title.toLowerCase().includes(query.trim().toLowerCase())
     )
     // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
@@ -133,6 +138,15 @@ export function Library({
                   }}
                 />
               )}
+              {!systemFiles && (
+                <IconButton
+                  icon={list ? LayoutGrid : List}
+                  label={list ? "Grid view" : "List view"}
+                  onPress={() => {
+                    setList(!list);
+                  }}
+                />
+              )}
               <IconButton
                 icon={descending ? ArrowUpAZ : ArrowDownAZ}
                 label={descending ? "Sort files A to Z" : "Sort files Z to A"}
@@ -152,43 +166,62 @@ export function Library({
           }
           {...state}
         >
-          <Text accessibilityRole="header" style={pageStyles.heading}>
-            {query ? "Search results" : "Your files"}
-          </Text>
-          <View style={styles.grid}>
-            {matching.map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={item.title}
-                onPress={() => {
-                  onOpen(item.id);
-                }}
-                style={styles.card}
-              >
-                <View style={styles.preview}>
-                  <FileText size={56} strokeWidth={1} color={colors.muted} />
-                  <Text numberOfLines={2} style={styles.previewTitle}>
-                    {item.title}
-                  </Text>
-                </View>
-                <View style={styles.caption}>
-                  <Text numberOfLines={1} style={pageStyles.rowTitle}>
-                    {item.title}
-                  </Text>
-                  <Text numberOfLines={1} style={pageStyles.copy}>
-                    {item.description}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-          {!state.loading && !state.error && matching.length === 0 && (
-            <Text style={pageStyles.copy}>
-              {query
-                ? "No files match your search."
-                : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
-            </Text>
+          {systemFiles ? (
+            <FileTree
+              paths={items.map((item) => item.id)}
+              query={query}
+              descending={descending}
+              onOpen={onOpen}
+            />
+          ) : (
+            <>
+              <Text accessibilityRole="header" style={pageStyles.heading}>
+                {query ? "Search results" : "Your files"}
+              </Text>
+              <View style={list ? styles.rows : styles.grid}>
+                {matching.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    onPress={() => {
+                      onOpen(item.id);
+                    }}
+                    style={list ? styles.fileRow : styles.card}
+                  >
+                    {list ? (
+                      <FileText size={24} color={colors.muted} />
+                    ) : (
+                      <View style={styles.preview}>
+                        <FileText
+                          size={56}
+                          strokeWidth={1}
+                          color={colors.muted}
+                        />
+                        <Text numberOfLines={2} style={styles.previewTitle}>
+                          {item.title}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={list ? styles.rowCaption : styles.caption}>
+                      <Text numberOfLines={1} style={pageStyles.rowTitle}>
+                        {item.title}
+                      </Text>
+                      <Text numberOfLines={1} style={pageStyles.copy}>
+                        {item.description}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+              {!state.loading && !state.error && matching.length === 0 && (
+                <Text style={pageStyles.copy}>
+                  {query
+                    ? "No files match your search."
+                    : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
+                </Text>
+              )}
+            </>
           )}
         </CompanionPage>
       </View>
@@ -255,6 +288,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  rows: { gap: 0 },
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    minHeight: 76,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  rowCaption: { flex: 1, gap: 4, paddingVertical: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
   card: {
     width: 336,

@@ -1,3 +1,4 @@
+import { GitRevisionSchema } from "@shared/workspaces/files";
 import { withSignal } from "../../operations/async";
 import { z } from "zod";
 
@@ -12,7 +13,6 @@ import {
 } from "../../workspaces/access";
 import { readWorkspaceCapabilities } from "../../workspaces/capabilities";
 import { applyOntologyAction } from "../../workspaces/ontology";
-import { GitRevisionSchema } from "../../workspaces/git";
 
 export const ontologyActionInputSchema = z.object({
   ...OntologyActionSchema.shape,

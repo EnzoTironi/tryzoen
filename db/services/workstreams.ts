@@ -1,6 +1,17 @@
-import { and, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  isNotNull,
+  inArray,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { z } from "zod";
-import { db, workspaces, workstreams } from "@db";
+import { db, workspaces, workstreams, workstreamRevisions } from "@db";
 import type { AccessScope } from "@shared/identity/access-scope";
 import {
   findWorkstreamsSchema,
@@ -124,6 +135,41 @@ export async function saveWorkstream(
     ) {
       throw new WorkstreamConflict();
     }
+    if (content.parentId) {
+      const [parent] = await transaction
+        .select({ content: workstreams.content })
+        .from(workstreams)
+        .where(
+          and(
+            eq(workstreams.workspaceId, scope.workspaceId),
+            eq(workstreams.scopeKey, scopeKey),
+            eq(workstreams.id, content.parentId),
+            isNotNull(workstreams.content)
+          )
+        )
+        .limit(1);
+      if (
+        content.parentId === id ||
+        !parent?.content ||
+        parent.content.parentId
+      )
+        throw new Error(
+          "Choose an existing top-level goal in this workspace as the parent. Subgoals cannot contain subgoals."
+        );
+      const [child] = await transaction
+        .select({ id: workstreams.id })
+        .from(workstreams)
+        .where(
+          and(
+            eq(workstreams.workspaceId, scope.workspaceId),
+            eq(workstreams.scopeKey, scopeKey),
+            sql`${workstreams.content}->>'parentId' = ${id}`
+          )
+        )
+        .limit(1);
+      if (child)
+        throw new Error("A goal with subgoals cannot become a subgoal.");
+    }
     if (!current) {
       const [total] = await transaction
         .select({ value: count() })
@@ -164,6 +210,14 @@ export async function saveWorkstream(
           .values({ ...values, id, scopeKey, workspaceId: scope.workspaceId })
           .returning();
     if (!saved) throw new Error("The workstream could not be saved.");
+    await transaction.insert(workstreamRevisions).values({
+      workspaceId: scope.workspaceId,
+      scopeKey,
+      id,
+      revision: saved.revision,
+      content,
+      createdAt: saved.updatedAt,
+    });
     return workstreamResult(saved);
   });
 }
@@ -195,10 +249,19 @@ export async function forgetWorkstream(
       .limit(1);
     if (current?.content === null) return { forgotten: true };
     if (current && current.revision !== expectedRevision) {
-      throw new Error(
-        "Workstream changed. Read the current revision before forgetting it."
-      );
+      throw new WorkstreamConflict();
     }
+    const children = await transaction
+      .select({ id: workstreams.id })
+      .from(workstreams)
+      .where(
+        and(
+          eq(workstreams.workspaceId, scope.workspaceId),
+          eq(workstreams.scopeKey, scopeKey),
+          sql`${workstreams.content}->>'parentId' = ${id}`
+        )
+      )
+      .limit(100);
     // Retain only a tombstone, including when a save for this ID has not arrived yet.
     const values = {
       content: null,
@@ -214,8 +277,71 @@ export async function forgetWorkstream(
         .insert(workstreams)
         .values({ ...values, id, scopeKey, workspaceId: scope.workspaceId });
     }
+    if (children.length > 0)
+      await transaction
+        .update(workstreams)
+        .set({
+          content: null,
+          sessionId: null,
+          lastOperationId: operationId,
+          revision: sql`${workstreams.revision} + 1`,
+          updatedAt: values.updatedAt,
+        })
+        .where(
+          and(
+            eq(workstreams.workspaceId, scope.workspaceId),
+            eq(workstreams.scopeKey, scopeKey),
+            inArray(
+              workstreams.id,
+              children.map((child) => child.id)
+            )
+          )
+        );
+    await transaction
+      .delete(workstreamRevisions)
+      .where(
+        and(
+          eq(workstreamRevisions.workspaceId, scope.workspaceId),
+          eq(workstreamRevisions.scopeKey, scopeKey),
+          inArray(workstreamRevisions.id, [
+            id,
+            ...children.map((child) => child.id),
+          ])
+        )
+      );
     return { forgotten: true };
   });
+}
+
+export async function workstreamHistory(
+  scope: AccessScope,
+  scopeKey: string,
+  id: string,
+  beforeRevision?: number
+) {
+  const rows = await db
+    .select()
+    .from(workstreamRevisions)
+    .where(
+      and(
+        eq(workstreamRevisions.workspaceId, scope.workspaceId),
+        eq(workstreamRevisions.scopeKey, scopeKey),
+        eq(workstreamRevisions.id, id),
+        beforeRevision
+          ? lt(workstreamRevisions.revision, beforeRevision)
+          : undefined
+      )
+    )
+    .orderBy(desc(workstreamRevisions.revision))
+    .limit(21);
+  return {
+    items: rows.slice(0, 20).map((row) => ({
+      revision: row.revision,
+      content: row.content,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    nextRevision: rows.length > 20 ? (rows[19]?.revision ?? null) : null,
+  };
 }
 
 function workstreamResult(row: typeof workstreams.$inferSelect) {

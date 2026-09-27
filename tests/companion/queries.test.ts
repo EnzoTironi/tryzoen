@@ -190,6 +190,86 @@ it("saves goal completion idempotently, preserves its notes and rejects stale or
   });
 });
 
+it("keeps goal revisions atomic, paginates history and erases it with a forgotten goal", async () => {
+  const content = {
+    title: "Reading",
+    objective: "Read daily",
+    status: "active" as const,
+    notes: "Preserve my notes",
+    nextStep: "Choose a book",
+    sources: [],
+  };
+  await saveWorkstream(
+    alice,
+    "memory",
+    { id: "reading", expectedRevision: 0, content },
+    "initial",
+    null
+  );
+  const api = caller(alice);
+  const rename = {
+    id: "reading",
+    scopeKey: "memory",
+    expectedRevision: 1,
+    title: "Reading club",
+    operationId: randomUUID(),
+  };
+  const result = await api.renameGoal(rename);
+  expect(await api.renameGoal(rename)).toEqual(result);
+  expect(result.content?.notes).toBe(content.notes);
+  expect(
+    (await api.goalHistory(rename)).items.map((entry) => entry.content.title)
+  ).toEqual(["Reading club", "Reading"]);
+  await expect(
+    api.renameGoal({ ...rename, title: "Stale", operationId: randomUUID() })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  for (let revision = 2; revision < 25; revision++) {
+    await saveWorkstream(
+      alice,
+      "memory",
+      {
+        id: "reading",
+        expectedRevision: revision,
+        content: { ...content, nextStep: `Chapter ${revision}` },
+      },
+      `step-${revision}`,
+      null
+    );
+  }
+  const first = await api.goalHistory({ id: "reading", scopeKey: "memory" });
+  const second = await api.goalHistory({
+    id: "reading",
+    scopeKey: "memory",
+    beforeRevision: first.nextRevision ?? undefined,
+  });
+  expect([first.items.length, second.items.length]).toEqual([20, 5]);
+  expect(
+    new Set([...first.items, ...second.items].map((entry) => entry.revision))
+      .size
+  ).toBe(25);
+  expect(second.nextRevision).toBeNull();
+  const foreign = caller(bob);
+  await expect(
+    foreign.goalHistory({ id: "reading", scopeKey: "memory" })
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(foreign.renameGoal(rename)).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
+  await foreign.deleteGoal({ ...rename, expectedRevision: 25 });
+  expect(await readWorkstream(alice, "memory", "reading")).not.toBeNull();
+  await expect(
+    caller(alice).deleteGoal({ ...rename, expectedRevision: 24 })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(
+    (await database.select().from(schema.workstreamRevisions)).length
+  ).toBe(25);
+  await caller(alice).deleteGoal({ ...rename, expectedRevision: 25 });
+  expect(await database.select().from(schema.workstreamRevisions)).toEqual([]);
+  await expect(
+    caller(alice).goalHistory({ id: "reading", scopeKey: "memory" })
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
 it("pages useful feed updates and never links a different user's conversation", async () => {
   await database.insert(schema.agentSessions).values({
     sessionId: "bob-session",

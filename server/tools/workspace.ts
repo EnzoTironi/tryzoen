@@ -8,7 +8,10 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { WorkspaceRepository } from "../workspaces/repository";
-import { WorkspacePathSchema, GitRevisionSchema } from "../workspaces/git";
+import {
+  WorkspacePathSchema,
+  GitRevisionSchema,
+} from "@shared/workspaces/files";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { LearnedMemory } from "../memory/learned";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";

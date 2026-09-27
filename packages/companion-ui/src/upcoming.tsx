@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Clock3 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { CompanionPage, pageStyles } from "./page";
@@ -8,6 +8,8 @@ import { colors } from "./theme";
 export interface UpcomingItem {
   readonly id: string;
   readonly title: string;
+  readonly cadence: string;
+  readonly group: string;
   readonly status: "active" | "paused" | "completed";
   readonly nextRun?: string;
   readonly lastRun?: string;
@@ -25,6 +27,7 @@ export function Upcoming({
   onToggle,
   onConversation,
   onCreate,
+  renderHistory,
 }: {
   readonly items: readonly UpcomingItem[];
   readonly loading?: boolean;
@@ -35,6 +38,7 @@ export function Upcoming({
   readonly onToggle: (id: string) => void;
   readonly onConversation: (id: string) => void;
   readonly onCreate: () => void;
+  readonly renderHistory: (id: string) => ReactNode;
 }) {
   return (
     <CompanionPage
@@ -43,16 +47,26 @@ export function Upcoming({
       error={error}
       onRetry={onRetry}
     >
-      {items.map((item) => (
-        <UpcomingRow
-          key={item.id}
-          item={item}
-          pending={pendingId !== undefined}
-          onToggle={() => {
-            onToggle(item.id);
-          }}
-          onConversation={onConversation}
-        />
+      {[...new Set(items.map((item) => item.group))].map((group) => (
+        <View key={group}>
+          <Text accessibilityRole="header" style={pageStyles.heading}>
+            {group}
+          </Text>
+          {items
+            .filter((item) => item.group === group)
+            .map((item) => (
+              <UpcomingRow
+                key={item.id}
+                item={item}
+                pending={pendingId !== undefined}
+                onToggle={() => {
+                  onToggle(item.id);
+                }}
+                onConversation={onConversation}
+                renderHistory={renderHistory}
+              />
+            ))}
+        </View>
       ))}
       {!loading && !error && items.length === 0 && (
         <Text style={pageStyles.copy}>
@@ -78,11 +92,13 @@ function UpcomingRow({
   pending,
   onToggle,
   onConversation,
+  renderHistory,
 }: {
   readonly item: UpcomingItem;
   readonly pending: boolean;
   readonly onToggle: () => void;
   readonly onConversation: (id: string) => void;
+  readonly renderHistory: (id: string) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const Chevron = expanded ? ChevronDown : ChevronRight;
@@ -102,6 +118,7 @@ function UpcomingRow({
         </View>
         <View style={pageStyles.rowCopy}>
           <Text style={pageStyles.rowTitle}>{item.title}</Text>
+          <Text style={pageStyles.copy}>{item.cadence}</Text>
           <Text style={pageStyles.copy}>
             {item.status === "paused"
               ? "Paused"
@@ -137,6 +154,7 @@ function UpcomingRow({
               </ActionButton>
             )}
           </View>
+          {renderHistory(item.id)}
         </View>
       )}
     </View>

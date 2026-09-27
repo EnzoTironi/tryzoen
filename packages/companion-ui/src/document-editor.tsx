@@ -1,9 +1,17 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { CompanionPage, pageStyles } from "./page";
 import { ActionButton } from "./button";
 import { CompanionOverlay } from "./overlay";
 import { colors } from "./theme";
+import { DocumentHistory, type DocumentHistoryData } from "./document-history";
 import {
   MarkdownEditorProvider,
   type MarkdownEditorHandle,
@@ -24,6 +32,7 @@ export function DocumentEditor({
   readOnly = false,
   allowUnchanged = false,
   markdown = false,
+  history,
   onSave,
   onClose,
 }: {
@@ -36,6 +45,7 @@ export function DocumentEditor({
   readonly readOnly?: boolean;
   readonly allowUnchanged?: boolean;
   readonly markdown?: boolean;
+  readonly history?: DocumentHistoryData;
   readonly onSave: (text: string) => Promise<void>;
   readonly onClose: () => void;
 }) {
@@ -49,6 +59,11 @@ export function DocumentEditor({
     };
   }, [reportEditing]);
   const [text, setText] = useState(initialText);
+  const [editorSeed, setEditorSeed] = useState({
+    text: initialText,
+    revision: 0,
+  });
+  const [showHistory, setShowHistory] = useState(false);
   const [unreadChanges, setUnreadChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
@@ -114,6 +129,17 @@ export function DocumentEditor({
                 {title}
               </Text>
               <View style={styles.headerActions}>
+                {history && (
+                  <ActionButton
+                    quiet
+                    disabled={saving}
+                    onPress={() => {
+                      setShowHistory(!showHistory);
+                    }}
+                  >
+                    {showHistory ? "Hide history" : "History"}
+                  </ActionButton>
+                )}
                 {!readOnly && (
                   <ActionButton
                     quiet
@@ -136,21 +162,39 @@ export function DocumentEditor({
               </Text>
             )}
             {discardConfirmation}
-            {renderMarkdown({
-              ref: editor,
-              initialMarkdown: initialText,
-              label,
-              description,
-              editable: !saving && !readOnly,
-              onChange: (value) => {
-                setText(value);
-                setUnreadChanges(false);
-              },
-              onDirty: () => {
-                setUnreadChanges(true);
-              },
-              onError: setError,
-            })}
+            {showHistory && history && (
+              <DocumentHistory
+                data={history}
+                readOnly={readOnly || saving}
+                onRestore={(value) => {
+                  setText(value);
+                  setUnreadChanges(false);
+                  setEditorSeed((current) => ({
+                    text: value,
+                    revision: current.revision + 1,
+                  }));
+                  setShowHistory(false);
+                }}
+              />
+            )}
+            <Fragment key={editorSeed.revision}>
+              {renderMarkdown({
+                ref: editor,
+                filename: title,
+                initialMarkdown: editorSeed.text,
+                label,
+                description,
+                editable: !saving && !readOnly,
+                onChange: (value) => {
+                  setText(value);
+                  setUnreadChanges(false);
+                },
+                onDirty: () => {
+                  setUnreadChanges(true);
+                },
+                onError: setError,
+              })}
+            </Fragment>
           </>
         ) : (
           <CompanionPage

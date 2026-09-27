@@ -10,7 +10,8 @@ export function MarkdownSourceEditor({
   description,
   onChange,
   ref,
-}: MarkdownEditorProps) {
+  notice = "This document uses formatting the visual editor does not support yet. Edit its Markdown here to preserve it.",
+}: MarkdownEditorProps & { readonly notice?: string }) {
   const [text, setText] = useState(initialMarkdown);
   useImperativeHandle(ref, () => ({ read: () => Promise.resolve(text) }), [
     text,
@@ -21,11 +22,10 @@ export function MarkdownSourceEditor({
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.document}>
-        <Text style={styles.about}>{description}</Text>
-        <Text style={styles.notice}>
-          This document uses formatting the visual editor does not support yet.
-          Edit its Markdown here to preserve it.
-        </Text>
+        {Boolean(description) && (
+          <Text style={styles.about}>{description}</Text>
+        )}
+        {Boolean(notice) && <Text style={styles.notice}>{notice}</Text>}
         <TextInput
           accessibilityLabel={label}
           editable={editable}

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -40,5 +41,37 @@ export const workstreams = pgTable(
       table.updatedAt
     ),
     check("workstreams_revision_check", sql`${table.revision} > 0`),
+  ]
+);
+
+export const workstreamRevisions = pgTable(
+  "workstream_revisions",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    scopeKey: text("scope_key").notNull(),
+    id: text("id").notNull(),
+    revision: integer("revision").notNull(),
+    content: jsonb("content").$type<WorkstreamContent>().notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "date",
+      precision: 3,
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.workspaceId, table.scopeKey, table.id, table.revision],
+    }),
+    foreignKey({
+      columns: [table.workspaceId, table.scopeKey, table.id],
+      foreignColumns: [
+        workstreams.workspaceId,
+        workstreams.scopeKey,
+        workstreams.id,
+      ],
+    }).onDelete("cascade"),
+    check("workstream_revisions_revision_check", sql`${table.revision} > 0`),
   ]
 );

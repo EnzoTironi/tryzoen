@@ -1,13 +1,14 @@
 import { SearchSection } from "./search";
 import { randomUUID } from "expo-crypto";
-import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { Text, View } from "react-native";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionPage,
+  DocumentEditor,
   Feed,
-  Goals,
+  GoalCollection,
   Ideas,
   Library,
   type CompanionSection,
@@ -17,6 +18,8 @@ import { queries, rpc } from "./api";
 import { apiOrigin } from "./environment";
 import { auth } from "./auth";
 import { MobileMemory } from "./agent-panel";
+import { companionGoalsData } from "../../../shared/companion/goals";
+import { companionDocumentHistory } from "../../../shared/companion/files";
 
 export function MobileSections({
   section,
@@ -56,67 +59,17 @@ function GoalsSection({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
-  const goals = useQuery({ queryKey: ["goals"], queryFn: queries.goals });
-  const toggle = useMutation({
-    mutationFn: (input: {
-      id: string;
-      scopeKey: string;
-      expectedRevision: number;
-      completed: boolean;
-      operationId: string;
-    }) => rpc.mutation("companion.setGoalCompleted", input),
-    onSuccess: async () => {
-      await goals.refetch();
-    },
-  });
-  const items = goals.data ?? [];
+  const session = auth.useSession();
   return (
-    <Goals
-      items={items.map((item) => ({
-        id: `${item.scopeKey}:${item.id}`,
-        title: item.content?.title ?? item.id,
-        description: item.content?.nextStep.trim()
-          ? item.content.nextStep
-          : (item.content?.objective ?? ""),
-        completed: item.content?.status === "completed",
-      }))}
-      loading={goals.isPending}
-      error={goals.error?.message ?? toggle.error?.message}
-      onRetry={() => {
-        toggle.reset();
-        void goals.refetch();
-      }}
-      pendingId={
-        toggle.isPending
-          ? `${toggle.variables.scopeKey}:${toggle.variables.id}`
-          : undefined
-      }
-      onOpen={(id) => {
-        const item = items.find((goal) => `${goal.scopeKey}:${goal.id}` === id);
-        if (item)
-          onPrompt(
-            `Read my saved workstream ${item.id} and help me review its progress.`
-          );
-      }}
-      onCreate={(category) => {
-        onPrompt(
-          `Help me create a goal in ${category}. Ask what I want to achieve and save the agreed goal as a workstream. Confirm any schedule separately before enabling it.`
-        );
-      }}
-      onToggle={(id) => {
-        const item = items.find((goal) => `${goal.scopeKey}:${goal.id}` === id);
-        if (!item || toggle.isPending) return;
-        toggle.mutate({
-          id: item.id,
-          scopeKey: item.scopeKey,
-          expectedRevision: item.revision,
-          completed: item.content?.status !== "completed",
-          operationId: randomUUID(),
-        });
-      }}
+    <GoalCollection
+      data={mobileGoals}
+      cacheScope={session.data?.user.id ?? "anonymous"}
+      onPrompt={onPrompt}
     />
   );
 }
+const mobileGoals = companionGoalsData(rpc, randomUUID);
+
 function FeedSection({
   onPrompt,
   onConversation,
@@ -222,94 +175,72 @@ function FileSection({
   readonly path: string;
   readonly onClose: () => void;
 }) {
+  const session = auth.useSession();
   const file = useQuery({
     queryKey: ["files", path],
     queryFn: () => queries.files(path),
   });
-  const [draft, setDraft] = useState<{
+  const pendingSave = useRef<{
     content: string;
-    expectedRevision: string | null;
+    revision: string | null;
     operationId: string;
-  }>();
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!draft) throw new Error("There are no edits to save.");
-      return await rpc.mutation("workspaces.write", { path, ...draft });
-    },
-    onSuccess: async () => {
-      await file.refetch();
-      setDraft(undefined);
-    },
-  });
+  }>(undefined);
+  // Capture the revision when the editor opens; background refetches must never
+  // grant a stale draft permission to overwrite newer work.
+  const [snapshot, setSnapshot] = useState<typeof file.data>();
+  if (file.data && !snapshot) setSnapshot(file.data);
+  if (snapshot)
+    return (
+      <DocumentEditor
+        title={path.split("/").at(-1) ?? path}
+        label="File content"
+        description="Only this workspace can access this document."
+        initialText={snapshot.content ?? ""}
+        maxLength={262144}
+        markdown={path.endsWith(".md")}
+        history={companionDocumentHistory(
+          rpc,
+          path,
+          session.data?.user.id ?? "signed-out"
+        )}
+        readOnly={!snapshot.canEdit}
+        onClose={onClose}
+        onSave={async (content) => {
+          if (pendingSave.current?.content !== content)
+            pendingSave.current = {
+              content,
+              revision: snapshot.revision,
+              operationId: randomUUID(),
+            };
+          await rpc.mutation("workspaces.write", {
+            path,
+            content,
+            expectedRevision: snapshot.revision,
+            operationId: pendingSave.current.operationId,
+          });
+          await file.refetch();
+        }}
+      />
+    );
   return (
     <CompanionPage
       title={path.split("/").at(-1) ?? path}
       loading={file.isPending}
-      error={file.error?.message ?? save.error?.message}
+      error={file.error?.message}
       onRetry={() => {
         void file.refetch();
       }}
       actions={
-        <ActionButton
-          quiet
-          disabled={draft !== undefined || save.isPending}
-          onPress={onClose}
-        >
+        <ActionButton quiet onPress={onClose}>
           Back
         </ActionButton>
       }
     >
-      {file.data && (
-        <View style={{ gap: 16 }}>
-          <TextInput
-            accessibilityLabel="File content"
-            multiline
-            value={draft?.content ?? file.data.content ?? ""}
-            onChangeText={(content) => {
-              setDraft((current) => ({
-                content,
-                expectedRevision: current
-                  ? current.expectedRevision
-                  : file.data.revision,
-                operationId: randomUUID(),
-              }));
-              save.reset();
-            }}
-            editable={!save.isPending}
-            style={{
-              minHeight: 300,
-              fontSize: 16,
-              lineHeight: 24,
-              padding: 16,
-              backgroundColor: "#ededee",
-              borderRadius: 16,
-              textAlignVertical: "top",
-            }}
-          />
-          <ActionButton
-            disabled={draft === undefined || save.isPending}
-            onPress={() => {
-              save.mutate();
-            }}
-          >
-            {save.isPending ? "Saving…" : "Save changes"}
-          </ActionButton>
-          {draft !== undefined && (
-            <ActionButton
-              quiet
-              disabled={save.isPending}
-              onPress={() => {
-                setDraft(undefined);
-              }}
-            >
-              Discard edits
-            </ActionButton>
-          )}
-        </View>
-      )}
+      {null}
     </CompanionPage>
   );
 }
+
 function SettingsSection({
   onSignOut,
   onPrompt,

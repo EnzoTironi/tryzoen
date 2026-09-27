@@ -7,9 +7,12 @@ import { ActionButton } from "./button";
 import { ConversationReview } from "./conversation-review";
 import type { AgentPanelTab } from "./agent-panel";
 import { AgentIdentity } from "./agent-identity";
+import { UpcomingHistory, type ScheduleHistoryPage } from "./upcoming-history";
+import type { DocumentHistoryData } from "./document-history";
 
 /** Authenticated platform adapter. Data is already mapped for the shared views. */
 export interface AgentPanelData {
+  documentHistory: (path: string, cacheScope: string) => DocumentHistoryData;
   identity: () => Promise<{
     name: string;
     revision: string | null;
@@ -39,6 +42,10 @@ export interface AgentPanelData {
     items: readonly (UpcomingItem & { revision: number })[];
     hasMore: boolean;
   }>;
+  scheduleHistory: (
+    id: string,
+    cursor?: string
+  ) => Promise<ScheduleHistoryPage>;
   setScheduleActive: (
     id: string,
     revision: number,
@@ -165,6 +172,9 @@ function UpcomingSection({
   });
   return (
     <Upcoming
+      renderHistory={(id) => (
+        <UpcomingHistory id={id} data={data} cacheScope={cacheScope} />
+      )}
       items={schedules.data?.items ?? []}
       hasMore={schedules.data?.hasMore}
       loading={schedules.isPending}

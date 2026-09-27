@@ -6,6 +6,7 @@ export { Conversation } from "./conversation";
 
 export { Ideas } from "./ideas";
 export { Goals } from "./goals";
+export { GoalCollection, type GoalsData } from "./goals/collection";
 export { Library } from "./library";
 export { Feed } from "./feed";
 export { ConversationSearch } from "./search";
@@ -33,3 +34,5 @@ export {
 } from "./overlay";
 
 export { MarkdownSourceEditor } from "./editor/source";
+export { DocumentEditor } from "./document-editor";
+export type { DocumentHistoryData } from "./document-history";

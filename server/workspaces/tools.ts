@@ -1,3 +1,4 @@
+import { GitRevisionSchema } from "@shared/workspaces/files";
 import { mapAsync } from "../operations/async";
 import { isValid } from "@shared/validation";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import {
   type WorkspaceActorSchema,
 } from "./access";
 import { WorkspaceRepository, WorkspaceWriteSchema } from "./repository";
-import { GitRevisionSchema } from "./git";
+
 import {
   CustomerToolError,
   customerToolId,

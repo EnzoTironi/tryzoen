@@ -7,6 +7,7 @@ export interface MarkdownEditorProps {
   readonly initialMarkdown: string;
   readonly label: string;
   readonly description: string;
+  readonly filename?: string;
   readonly editable: boolean;
   readonly onChange: (markdown: string) => void;
   readonly onDirty: () => void;

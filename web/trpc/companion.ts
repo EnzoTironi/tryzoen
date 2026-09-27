@@ -6,14 +6,20 @@ import {
   readWorkstream,
   saveWorkstream,
   WorkstreamConflict,
+  workstreamHistory,
+  forgetWorkstream,
 } from "@db/services/workstreams";
-import { workstreamIdSchema } from "@shared/workstreams/schema";
+import {
+  workstreamIdSchema,
+  saveWorkstreamSchema,
+} from "@shared/workstreams/schema";
 import { scheduledRunOutcomeSchema } from "@shared/schedules/outcome";
 import {
   companionChatsSchema,
   companionGoalsSchema,
   companionFeedSchema,
   companionIdentitySchema,
+  companionGoalHistorySchema,
 } from "@shared/companion/schema";
 import { WorkspaceRepository } from "../../server/workspaces/repository";
 import { workspaceProcedure } from "./workspace-procedure";
@@ -131,6 +137,13 @@ export const companionRouter = {
           content: {
             ...current.content,
             status: input.completed ? "completed" : "active",
+            progress: {
+              title: input.completed
+                ? `Completed ${current.content.title}`
+                : `Reopened ${current.content.title}`,
+              description:
+                current.content.nextStep || current.content.objective,
+            },
           },
         },
         input.operationId,
@@ -140,6 +153,94 @@ export const companionRouter = {
           throw new TRPCError({
             code: "CONFLICT",
             message: "This goal changed. Refresh before updating it.",
+            cause: error,
+          });
+        throw error;
+      });
+    }),
+  goalHistory: workspaceProcedure
+    .input(
+      z.object({
+        id: workstreamIdSchema,
+        scopeKey: z.string().min(1).max(1024),
+        beforeRevision: z.number().int().positive().optional(),
+      })
+    )
+    .output(companionGoalHistorySchema)
+    .query(async ({ ctx, input }) => {
+      if (!(await readWorkstream(ctx.scope, input.scopeKey, input.id)))
+        throw new TRPCError({ code: "NOT_FOUND" });
+      return workstreamHistory(
+        ctx.scope,
+        input.scopeKey,
+        input.id,
+        input.beforeRevision
+      );
+    }),
+  renameGoal: workspaceProcedure
+    .input(
+      z.object({
+        id: workstreamIdSchema,
+        scopeKey: z.string().min(1).max(1024),
+        expectedRevision: z.number().int().positive(),
+        title: saveWorkstreamSchema.shape.content.shape.title,
+        operationId: z.uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await readWorkstream(ctx.scope, input.scopeKey, input.id);
+      if (!current?.content) throw new TRPCError({ code: "NOT_FOUND" });
+      try {
+        return await saveWorkstream(
+          ctx.scope,
+          input.scopeKey,
+          {
+            id: input.id,
+            expectedRevision: input.expectedRevision,
+            content: {
+              ...current.content,
+              title: input.title,
+              progress: {
+                title: `Renamed to ${input.title}`,
+                description: `Previously ${current.content.title}`,
+              },
+            },
+          },
+          input.operationId,
+          current.sessionId
+        );
+      } catch (error) {
+        if (error instanceof WorkstreamConflict)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This goal changed. Refresh before updating it.",
+            cause: error,
+          });
+        throw error;
+      }
+    }),
+  deleteGoal: workspaceProcedure
+    .input(
+      z.object({
+        id: workstreamIdSchema,
+        scopeKey: z.string().min(1).max(1024),
+        expectedRevision: z.number().int().positive(),
+        operationId: z.uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const current = await readWorkstream(ctx.scope, input.scopeKey, input.id);
+      if (!current) return { forgotten: true };
+      return forgetWorkstream(
+        ctx.scope,
+        input.scopeKey,
+        { id: input.id, expectedRevision: input.expectedRevision },
+        input.operationId
+      ).catch((error: unknown) => {
+        if (error instanceof WorkstreamConflict)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This goal changed. Refresh before deleting it.",
             cause: error,
           });
         throw error;

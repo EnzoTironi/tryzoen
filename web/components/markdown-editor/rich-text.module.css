@@ -5,6 +5,44 @@
   flex-direction: column;
   min-height: 0;
 }
+.status {
+  padding: 8px 24px;
+  color: var(--muted-foreground, #666);
+  font-size: 14px;
+}
+.sourceActions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 24px;
+}
+@media print {
+  :global(body) {
+    visibility: hidden;
+  }
+  .root[data-document-editor] {
+    visibility: visible;
+    position: absolute;
+    inset: 0;
+    display: block;
+    height: auto;
+    overflow: visible;
+    background: white;
+    color: black;
+  }
+  .root .toolbar,
+  .root .sourceActions,
+  .root .status,
+  .root .about {
+    display: none;
+  }
+  .root .scroller {
+    overflow: visible;
+  }
+  .root .document {
+    padding: 0;
+    width: 100%;
+  }
+}
 .toolbar {
   position: absolute;
   top: 8px;
@@ -166,4 +204,13 @@
 .toolbar svg {
   width: 18px;
   height: 18px;
+}
+@media (max-width: 600px) {
+  .toolbar {
+    gap: 2px;
+  }
+  .toolbar button {
+    width: 32px;
+    height: 40px;
+  }
 }

@@ -1,3 +1,4 @@
+import { GitRevisionSchema } from "@shared/workspaces/files";
 import { withSignal } from "../../server/operations/async";
 import { WhatsAppBridgeUnavailable } from "../../server/whatsapp/client";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
@@ -7,7 +8,7 @@ import {
   OntologySchema,
   OntologyActionSchema,
 } from "@shared/workspaces/ontology";
-import { GitRevisionSchema } from "../../server/workspaces/git";
+
 import {
   applyOntologyAction,
   publishOntology,

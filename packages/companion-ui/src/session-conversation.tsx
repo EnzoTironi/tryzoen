@@ -6,9 +6,11 @@ import { useSessionAgent } from "./session/use-session-agent";
 export function SessionConversation({
   sessionId,
   client,
+  onCopyText,
 }: {
   readonly sessionId: string;
   readonly client: Client;
+  readonly onCopyText?: (text: string) => Promise<void>;
 }) {
   const agent = useSessionAgent(sessionId, client);
   const [actionError, setActionError] = useState<string>();
@@ -17,6 +19,7 @@ export function SessionConversation({
     <Conversation
       key={sessionId}
       messages={agent.data.messages}
+      onCopyText={onCopyText}
       status={agent.status}
       error={actionError ?? agent.error?.message}
       onSend={(text) =>

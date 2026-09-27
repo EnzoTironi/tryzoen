@@ -35,6 +35,7 @@ export function Goals({
     title: string;
     description: string;
     completed: boolean;
+    parentId?: string;
   }[];
   readonly onOpen: (id: string) => void;
   readonly onToggle: (id: string) => void;
@@ -48,43 +49,26 @@ export function Goals({
           <Text accessibilityRole="header" style={styles.tracking}>
             ● Tracking
           </Text>
-          {items.map((item) => (
-            <View key={item.id} style={pageStyles.row}>
-              <Pressable
-                // Native Pressable provides checkbox semantics on every platform.
-                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Shared React Native components cannot render an HTML input.
-                role="checkbox"
-                aria-checked={item.completed}
-                aria-disabled={pendingId === item.id}
-                hitSlop={12}
-                accessibilityLabel={`Complete ${item.title}`}
-                disabled={pendingId === item.id}
-                onPress={() => {
-                  onToggle(item.id);
-                }}
-                style={[styles.checkbox, item.completed && styles.checked]}
-              >
-                {item.completed && <Check size={16} color="white" />}
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
+          {items
+            .filter((item) => !item.parentId)
+            .flatMap((parent) =>
+              [parent].concat(
+                items.filter((item) => item.parentId === parent.id)
+              )
+            )
+            .map((item) => (
+              <GoalRow
+                key={item.id}
+                item={item}
+                pending={pendingId === item.id}
+                onOpen={() => {
                   onOpen(item.id);
                 }}
-                style={pageStyles.rowCopy}
-              >
-                <Text
-                  style={[
-                    pageStyles.rowTitle,
-                    item.completed && styles.completed,
-                  ]}
-                >
-                  {item.title}
-                </Text>
-                <Text style={pageStyles.copy}>{item.description}</Text>
-              </Pressable>
-            </View>
-          ))}
+                onToggle={() => {
+                  onToggle(item.id);
+                }}
+              />
+            ))}
         </View>
       )}
       <View style={pageStyles.section}>
@@ -109,7 +93,48 @@ export function Goals({
     </CompanionPage>
   );
 }
+export function GoalRow({
+  item,
+  pending,
+  onOpen,
+  onToggle,
+}: {
+  readonly item: ComponentProps<typeof Goals>["items"][number];
+  readonly pending: boolean;
+  readonly onOpen: () => void;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <View style={[pageStyles.row, item.parentId && styles.subgoal]}>
+      <Pressable
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- React Native provides shared checkbox semantics.
+        role="checkbox"
+        aria-checked={item.completed}
+        aria-disabled={pending}
+        hitSlop={12}
+        accessibilityLabel={`${item.completed ? "Reopen" : "Complete"} ${item.title}`}
+        disabled={pending}
+        onPress={onToggle}
+        style={[styles.checkbox, item.completed && styles.checked]}
+      >
+        {item.completed && <Check size={16} color="white" />}
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onOpen}
+        style={pageStyles.rowCopy}
+      >
+        <Text style={[pageStyles.rowTitle, item.completed && styles.completed]}>
+          {item.title}
+        </Text>
+        <Text style={pageStyles.copy}>{item.description}</Text>
+      </Pressable>
+      <ChevronRight size={16} color={colors.muted} />
+    </View>
+  );
+}
 const styles = StyleSheet.create({
+  subgoal: { marginLeft: 28 },
   tracking: {
     fontSize: 18,
     fontWeight: "600",

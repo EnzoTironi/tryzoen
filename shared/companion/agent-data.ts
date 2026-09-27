@@ -1,9 +1,16 @@
+import type { z } from "zod";
+import type { scheduleTimingSchema } from "../schedules/timing";
 import type { AgentPanelData } from "@zoen/companion-ui";
 import { personalMemorySnapshotSchema } from "../personal-memory/schema";
 import { personalNoteText } from "../personal-memory/document";
-import { remindersPageSchema } from "../schedules/reminders";
+import {
+  remindersPageSchema,
+  reminderHistoryInputSchema,
+  reminderHistorySchema,
+} from "../schedules/reminders";
 import { companionIdentitySchema } from "./schema";
 import { agentFiles } from "../workspaces/agent-files";
+import { companionDocumentHistory } from "./files";
 
 export function companionAgentData(
   rpc: {
@@ -13,6 +20,8 @@ export function companionAgentData(
   newOperationId: () => string
 ): AgentPanelData {
   return {
+    documentHistory: (path, cacheScope) =>
+      companionDocumentHistory(rpc, path, cacheScope),
     newOperationId,
     async identity() {
       const snapshot = companionIdentitySchema.parse(
@@ -83,17 +92,46 @@ export function companionAgentData(
       );
       return {
         hasMore: page.hasMore,
-        items: page.reminders.map((item) => ({
-          id: item.id,
-          revision: item.revision,
-          title: item.prompt,
-          status: item.status,
-          canManage: item.mayManage,
-          conversationId: item.originalSessionId ?? undefined,
-          nextRun: item.nextRunAt?.toLocaleString(),
-          lastRun: item.latestRunStatus?.replaceAll("_", " "),
-          delivery: item.latestReportStatus?.replaceAll("_", " "),
+        items: page.reminders.map((item) => {
+          const cadence = scheduleCadence(item.timing);
+          return {
+            id: item.id,
+            revision: item.revision,
+            title: item.prompt,
+            group: cadence.group,
+            cadence: cadence.cadence,
+            status: item.status,
+            canManage: item.mayManage,
+            conversationId: item.originalSessionId ?? undefined,
+            nextRun: item.nextRunAt?.toLocaleString(),
+            lastRun: item.latestRunStatus?.replaceAll("_", " "),
+            delivery: item.latestReportStatus?.replaceAll("_", " "),
+          };
+        }),
+      };
+    },
+    async scheduleHistory(id, cursor) {
+      const input = reminderHistoryInputSchema.parse({
+        id,
+        cursor: cursor
+          ? reminderHistoryInputSchema.shape.cursor.parse(JSON.parse(cursor))
+          : undefined,
+      });
+      const page = reminderHistorySchema.parse(
+        await rpc.query("workspaces.schedules.history", input)
+      );
+      return {
+        items: page.items.map((run) => ({
+          id: run.id,
+          date: run.scheduledFor.toLocaleString(),
+          status: run.status.replaceAll("_", " "),
+          delivery: run.reportStatus.replaceAll("_", " "),
+          summary:
+            run.outcome?.kind === "nothing_to_report"
+              ? run.outcome.reason
+              : (run.outcome?.summary ?? ""),
         })),
+        nextCursor: page.nextCursor ? JSON.stringify(page.nextCursor) : null,
       };
     },
     async setScheduleActive(id, revision, active) {
@@ -103,5 +141,37 @@ export function companionAgentData(
         status: active ? "active" : "paused",
       });
     },
+  };
+}
+
+function scheduleCadence(timing: z.output<typeof scheduleTimingSchema>) {
+  if (timing.kind === "once")
+    return {
+      group: "Once",
+      cadence: `Once · ${new Date(timing.at).toLocaleString()}`,
+    };
+  if (timing.kind === "interval")
+    return {
+      group: "Repeating",
+      cadence: `Every ${timing.everyMinutes} minutes`,
+    };
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const frequency =
+    timing.frequency === "weekly"
+      ? (days[timing.weekday ?? 0] ?? "Weekly")
+      : timing.frequency === "weekdays"
+        ? "Weekdays"
+        : "Daily";
+  return {
+    group: timing.frequency === "weekly" ? "Weekly" : "Daily",
+    cadence: `${frequency} at ${timing.localTime} · ${timing.timezone}`,
   };
 }

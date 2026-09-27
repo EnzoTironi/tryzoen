@@ -23,6 +23,16 @@ export const companionGoalsSchema = z.array(
     sessionId: z.string().nullable(),
   })
 );
+export const companionGoalHistorySchema = z.object({
+  items: z.array(
+    z.object({
+      revision: z.number().int().positive(),
+      content: saveWorkstreamSchema.shape.content,
+      createdAt: z.iso.datetime(),
+    })
+  ),
+  nextRevision: z.number().int().positive().nullable(),
+});
 export const companionFeedSchema = z.object({
   items: z.array(
     z.object({
@@ -36,6 +46,7 @@ export const companionFeedSchema = z.object({
   nextCursor: z.object({ date: z.iso.datetime(), id: z.string() }).nullable(),
 });
 export const companionFilesSchema = z.object({
+  canEdit: z.boolean(),
   revision: z.string().nullable(),
   content: z.string().nullable().optional(),
   files: z.array(z.string()),
