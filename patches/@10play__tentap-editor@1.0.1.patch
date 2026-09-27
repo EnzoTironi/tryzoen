@@ -1,0 +1,129 @@
+diff --git a/lib/commonjs/RichText/AsyncMessages.js b/lib/commonjs/RichText/AsyncMessages.js
+index dadf6de2609384c1e19af5ba4551c1238cae0ce3..a2a001bd6518fd753578877c238a506778386b7f 100644
+--- a/lib/commonjs/RichText/AsyncMessages.js
++++ b/lib/commonjs/RichText/AsyncMessages.js
+@@ -10,8 +10,10 @@ class AsyncMessages {
+     this.subscriptions = {};
+   }
+   onMessage(id, value) {
+-    if (this.subscriptions[id]) {
+-      this.subscriptions[id].forEach(callback => {
++    const callbacks = this.subscriptions[id];
++    delete this.subscriptions[id];
++    if (callbacks) {
++      callbacks.forEach(callback => {
+         callback(value);
+       });
+     }
+@@ -26,9 +28,22 @@ class AsyncMessages {
+     const messageId = Math.random().toString(36).substring(7);
+     message.payload = message.payload || {};
+     message.payload.messageId = messageId;
+-    return new Promise(resolve => {
+-      this.addListener(messageId, resolve);
+-      postMessage(message);
++    return new Promise((resolve, reject) => {
++      const timeout = setTimeout(() => {
++        delete this.subscriptions[messageId];
++        reject(new Error('The editor did not respond. Try again.'));
++      }, 10000);
++      this.addListener(messageId, (value) => {
++        clearTimeout(timeout);
++        resolve(value);
++      });
++      try {
++        postMessage(message);
++      } catch (error) {
++        clearTimeout(timeout);
++        delete this.subscriptions[messageId];
++        reject(error);
++      }
+     });
+   }
+ }
+diff --git a/lib/module/RichText/AsyncMessages.js b/lib/module/RichText/AsyncMessages.js
+index 8fd46bea1a45aa9511ea672d55582eb16dfaf62e..f94d3a4145a2f7c0ef940595630e92c1203d83ac 100644
+--- a/lib/module/RichText/AsyncMessages.js
++++ b/lib/module/RichText/AsyncMessages.js
+@@ -4,8 +4,10 @@ class AsyncMessages {
+     this.subscriptions = {};
+   }
+   onMessage(id, value) {
+-    if (this.subscriptions[id]) {
+-      this.subscriptions[id].forEach(callback => {
++    const callbacks = this.subscriptions[id];
++    delete this.subscriptions[id];
++    if (callbacks) {
++      callbacks.forEach(callback => {
+         callback(value);
+       });
+     }
+@@ -20,9 +22,22 @@ class AsyncMessages {
+     const messageId = Math.random().toString(36).substring(7);
+     message.payload = message.payload || {};
+     message.payload.messageId = messageId;
+-    return new Promise(resolve => {
+-      this.addListener(messageId, resolve);
+-      postMessage(message);
++    return new Promise((resolve, reject) => {
++      const timeout = setTimeout(() => {
++        delete this.subscriptions[messageId];
++        reject(new Error('The editor did not respond. Try again.'));
++      }, 10000);
++      this.addListener(messageId, (value) => {
++        clearTimeout(timeout);
++        resolve(value);
++      });
++      try {
++        postMessage(message);
++      } catch (error) {
++        clearTimeout(timeout);
++        delete this.subscriptions[messageId];
++        reject(error);
++      }
+     });
+   }
+ }
+diff --git a/src/RichText/AsyncMessages.ts b/src/RichText/AsyncMessages.ts
+index a0864725cef763f2e6c077e03c0e8ad8b6fb98a5..fd8b361ffe428fa068b55c7b12c8ec0d6531c373 100644
+--- a/src/RichText/AsyncMessages.ts
++++ b/src/RichText/AsyncMessages.ts
+@@ -5,8 +5,10 @@ class AsyncMessages {
+   }
+ 
+   onMessage(id: string, value: any) {
+-    if (this.subscriptions[id]) {
+-      this.subscriptions[id]!.forEach((callback) => {
++    const callbacks = this.subscriptions[id];
++    delete this.subscriptions[id];
++    if (callbacks) {
++      callbacks.forEach((callback) => {
+         callback(value);
+       });
+     }
+@@ -23,9 +25,22 @@ class AsyncMessages {
+     const messageId = Math.random().toString(36).substring(7);
+     message.payload = message.payload || {};
+     message.payload.messageId = messageId;
+-    return new Promise<T>((resolve) => {
+-      this.addListener(messageId, resolve);
+-      postMessage(message);
++    return new Promise<T>((resolve, reject) => {
++      const timeout = setTimeout(() => {
++        delete this.subscriptions[messageId];
++        reject(new Error('The editor did not respond. Try again.'));
++      }, 10000);
++      this.addListener(messageId, (value: T) => {
++        clearTimeout(timeout);
++        resolve(value);
++      });
++      try {
++        postMessage(message);
++      } catch (error) {
++        clearTimeout(timeout);
++        delete this.subscriptions[messageId];
++        reject(error);
++      }
+     });
+   }
+ }

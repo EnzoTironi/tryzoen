@@ -13,6 +13,12 @@ export { CompanionPage } from "./page";
 export { NewConversation } from "./new-conversation";
 export { SessionConversation } from "./session-conversation";
 export { AgentPanel, type AgentPanelTab } from "./agent-panel";
+export { AgentPresence, AgentName } from "./agent-identity";
+export {
+  MarkdownEditorProvider,
+  type MarkdownEditorHandle,
+  type MarkdownEditorProps,
+} from "./markdown-editor";
 export { Upcoming } from "./upcoming";
 export { PersonalMemory } from "./personal-memory";
 export { ConversationReview } from "./conversation-review";
@@ -25,3 +31,5 @@ export {
   CompanionOverlayProvider,
   type CompanionOverlayProps,
 } from "./overlay";
+
+export { MarkdownSourceEditor } from "./editor/source";

@@ -2,12 +2,58 @@ import type { AgentPanelData } from "@zoen/companion-ui";
 import { personalMemorySnapshotSchema } from "../personal-memory/schema";
 import { personalNoteText } from "../personal-memory/document";
 import { remindersPageSchema } from "../schedules/reminders";
+import { companionIdentitySchema } from "./schema";
+import { agentFiles } from "../workspaces/agent-files";
 
-export function companionAgentData(rpc: {
-  query: (path: string, input?: unknown) => Promise<unknown>;
-  mutation: (path: string, input?: unknown) => Promise<unknown>;
-}): AgentPanelData {
+export function companionAgentData(
+  rpc: {
+    query: (path: string, input?: unknown) => Promise<unknown>;
+    mutation: (path: string, input?: unknown) => Promise<unknown>;
+  },
+  newOperationId: () => string
+): AgentPanelData {
   return {
+    newOperationId,
+    async identity() {
+      const snapshot = companionIdentitySchema.parse(
+        await rpc.query("companion.identity")
+      );
+      const identity = snapshot.documents.find(
+        (document) => document.path === "agent/IDENTITY.md"
+      );
+      return {
+        revision: snapshot.revision,
+        canEdit: snapshot.canEdit,
+        name:
+          /^Name:[ \t]*(\S[^\r\n]*)$/im
+            .exec(identity?.content ?? "")?.[1]
+            ?.trim()
+            .slice(0, 80) ?? "Zoen",
+        documents: ["IDENTITY", "SOUL", "MEMORY"].map((name) => {
+          const path = `agent/${name}.md`;
+          const saved = snapshot.documents.find(
+            (document) => document.path === path
+          );
+          return {
+            path,
+            title:
+              name === "IDENTITY"
+                ? "Identity"
+                : name === "SOUL"
+                  ? "Soul"
+                  : "Memory",
+            text:
+              saved?.content ??
+              agentFiles.find((file) => file.path === path)?.content ??
+              "",
+            saved: Boolean(saved),
+          };
+        }),
+      };
+    },
+    async saveIdentity(input) {
+      await rpc.mutation("workspaces.write", input);
+    },
     async memory() {
       const memory = personalMemorySnapshotSchema.parse(
         await rpc.query("personalMemory.read")

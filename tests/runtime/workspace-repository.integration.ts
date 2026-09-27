@@ -119,6 +119,12 @@ test("members cannot alter agent instructions; removal blocks current files, his
       (error: unknown) => ({ ok: false as const, error })
     );
     expect(!denied.ok && denied.error).toBeInstanceOf(WorkspaceAccessDenied);
+    expect(
+      await repository.selection(guest, ["agent/SOUL.md", "agent/IDENTITY.md"])
+    ).toEqual({
+      revision: first.revision,
+      documents: [{ path: "agent/SOUL.md", content: "Be helpful." }],
+    });
     await query(
       sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${guest.userId}`
     );
@@ -127,6 +133,7 @@ test("members cannot alter agent instructions; removal blocks current files, his
         repository.read(guest),
         repository.history(guest, "agent/SOUL.md"),
         repository.export(guest),
+        repository.selection(guest, ["agent/SOUL.md"]),
       ].map((operation) =>
         expect(operation).rejects.toBeInstanceOf(WorkspaceAccessDenied)
       )

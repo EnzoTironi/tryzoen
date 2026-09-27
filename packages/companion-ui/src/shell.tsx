@@ -46,20 +46,24 @@ export function CompanionShell({
   section = "chat",
   title = "Zoen",
   avatarUri,
+  agentName = "Zoen",
   onNavigate,
   onNewConversation,
   renderAgentPanel,
+  renderAgentHeader,
 }: {
   readonly children: ReactNode;
   readonly section?: CompanionSection;
   readonly title?: string;
   readonly avatarUri?: string;
+  readonly agentName?: ReactNode;
   readonly onNavigate: (section: CompanionSection) => void;
   readonly onNewConversation: () => void;
   readonly renderAgentPanel?: (
     tab: AgentPanelTab,
     close: () => void
   ) => ReactNode;
+  readonly renderAgentHeader?: (onEdit: () => void) => ReactNode;
 }) {
   const compact = useWindowDimensions().width < 720;
   const [showAgent, setShowAgent] = useState(false);
@@ -110,6 +114,7 @@ export function CompanionShell({
             compact={compact}
             title={title}
             avatarUri={avatarUri}
+            agentName={agentName}
             onNavigate={onNavigate}
             onNewConversation={onNewConversation}
             onOpenAgent={() => {
@@ -148,6 +153,7 @@ export function CompanionShell({
       )}
       {showAgent && renderAgentPanel && (
         <AgentPanel
+          renderHeader={renderAgentHeader}
           onClose={() => {
             setShowAgent(false);
           }}
@@ -167,12 +173,13 @@ function CompanionHeader({
   compact,
   title,
   avatarUri,
+  agentName,
   onNavigate,
   onNewConversation,
   onOpenAgent,
 }: Pick<
   ComponentProps<typeof CompanionShell>,
-  "title" | "avatarUri" | "onNavigate" | "onNewConversation"
+  "title" | "avatarUri" | "agentName" | "onNavigate" | "onNewConversation"
 > & { readonly compact: boolean; readonly onOpenAgent: () => void }) {
   const nativeCompact = compact && Platform.OS !== "web";
   return (
@@ -209,7 +216,7 @@ function CompanionHeader({
           numberOfLines={1}
           style={[styles.title, compact && styles.mobileTitle]}
         >
-          Zoen
+          {agentName}
         </Text>
       </Pressable>
       <View style={[styles.headerEnd, compact && styles.mobileHeaderEnd]}>

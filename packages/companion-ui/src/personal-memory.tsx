@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { CompanionPage, pageStyles } from "./page";
 import { ActionButton } from "./button";
 import { colors } from "./theme";
-import { CompanionOverlay } from "./overlay";
+import { DocumentEditor } from "./document-editor";
 
 export interface MemoryDocumentView {
   readonly id: string;
@@ -105,112 +105,20 @@ export function PersonalMemory({
         separate. Editing notes does not erase earlier conversations.
       </Text>
       {editing && (
-        <MemoryEditor
-          document={editing}
-          onSave={onSave}
+        <DocumentEditor
+          title="Edit personal notes"
+          label="Personal notes"
+          description="Put each fact or preference on its own line. Saving replaces this document’s notes."
+          initialText={editing.text}
+          maxLength={4000}
+          saveLabel="Save notes"
+          onSave={(text) => onSave(editing.id, text)}
           onClose={() => {
             setEditing(undefined);
           }}
         />
       )}
     </CompanionPage>
-  );
-}
-function MemoryEditor({
-  document,
-  onSave,
-  onClose,
-}: {
-  readonly document: MemoryDocumentView;
-  readonly onSave: (id: string, text: string) => Promise<void>;
-  readonly onClose: () => void;
-}) {
-  const [text, setText] = useState(document.text);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const dirty = text !== document.text;
-  const close = () => {
-    if (saving) return;
-    if (dirty) setConfirmDiscard(true);
-    else onClose();
-  };
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      await onSave(document.id, text);
-      onClose();
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Your notes could not be saved. Try again."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <CompanionOverlay title="Edit personal notes" onClose={close}>
-      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-        <CompanionPage
-          title="Edit personal notes"
-          error={error}
-          actions={
-            <ActionButton quiet disabled={saving} onPress={close}>
-              Close
-            </ActionButton>
-          }
-        >
-          <Text style={pageStyles.copy}>
-            Put each fact or preference on its own line. Saving replaces this
-            document’s notes.
-          </Text>
-          <TextInput
-            accessibilityLabel="Personal notes"
-            multiline
-            value={text}
-            onChangeText={setText}
-            maxLength={4000}
-            editable={!saving}
-            style={[pageStyles.field, styles.editor]}
-          />
-          <Text style={pageStyles.copy}>
-            {text.length} characters · Keep each fact short and on its own line.
-          </Text>
-          <View style={styles.actions}>
-            <ActionButton
-              disabled={!dirty || saving}
-              onPress={() => {
-                void save();
-              }}
-            >
-              {saving ? "Saving…" : "Save notes"}
-            </ActionButton>
-          </View>
-          {confirmDiscard && (
-            <View style={styles.discard}>
-              <Text style={pageStyles.rowTitle}>
-                Discard your unsaved changes?
-              </Text>
-              <View style={styles.actions}>
-                <ActionButton
-                  quiet
-                  onPress={() => {
-                    setConfirmDiscard(false);
-                  }}
-                >
-                  Keep editing
-                </ActionButton>
-                <ActionButton onPress={onClose}>Discard changes</ActionButton>
-              </View>
-            </View>
-          )}
-        </CompanionPage>
-      </View>
-    </CompanionOverlay>
   );
 }
 const styles = StyleSheet.create({
@@ -223,12 +131,4 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   note: { fontSize: 16, lineHeight: 25, color: colors.ink },
-  editor: { minHeight: 300, textAlignVertical: "top", lineHeight: 24 },
-  discard: {
-    gap: 8,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: colors.wash,
-    marginTop: 24,
-  },
 });

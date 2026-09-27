@@ -5,6 +5,7 @@
     "noUncheckedIndexedAccess": true,
     "allowJs": true,
     "checkJs": true,
+    "paths": { "@web/*": ["../../web/*"] },
     "types": ["node", "react", "react-native"]
   },
   "include": ["**/*.ts", "**/*.tsx", "metro.config.mjs"]

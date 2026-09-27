@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   user: {
     alignSelf: "flex-end",
     maxWidth: "88%",
-    backgroundColor: "#dceaff",
+    backgroundColor: "#cbe5ff",
     borderRadius: 22,
     paddingHorizontal: 20,
     marginVertical: 10,

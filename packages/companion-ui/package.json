@@ -11,10 +11,18 @@
     "./session": {
       "types": "./dist/session/index.d.ts",
       "default": "./dist/session/index.js"
+    },
+    "./markdown": {
+      "types": "./dist/editor/markdown.d.ts",
+      "default": "./dist/editor/markdown.js"
     }
   },
   "dependencies": {
     "@tanstack/react-query": "5.102.6",
+    "@tiptap/core": "3.31.3",
+    "@tiptap/markdown": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
     "lucide-react-native": "1.48.0",
     "react-native-marked": "8.3.2",
     "react-native-svg": "15.15.4",

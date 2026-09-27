@@ -13,11 +13,23 @@ import {
   companionChatsSchema,
   companionGoalsSchema,
   companionFeedSchema,
+  companionIdentitySchema,
 } from "@shared/companion/schema";
+import { WorkspaceRepository } from "../../server/workspaces/repository";
 import { workspaceProcedure } from "./workspace-procedure";
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  identity: workspaceProcedure
+    .output(companionIdentitySchema)
+    .query(async ({ ctx }) => ({
+      ...(await WorkspaceRepository.selection(ctx.actor, [
+        "agent/IDENTITY.md",
+        "agent/SOUL.md",
+        "agent/MEMORY.md",
+      ])),
+      canEdit: ctx.actor.role !== "member",
+    })),
   chats: workspaceProcedure
     .input(
       z.object({

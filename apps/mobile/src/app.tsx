@@ -6,13 +6,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionShell,
+  MarkdownEditorProvider,
   type CompanionSection,
+  type MarkdownEditorProps,
 } from "@zoen/companion-ui";
-import { MobileAgentPanel } from "./agent-panel";
+import {
+  MobileAgentPanel,
+  MobileAgentHeader,
+  MobileAgentName,
+} from "./agent-panel";
 import { auth } from "./auth";
 import { MobileConversation } from "./conversation";
 import { MobileSections } from "./sections";
 import { apiOrigin } from "./environment";
+import { MobileEditor } from "./editor";
+
+function renderMarkdownEditor(props: MarkdownEditorProps) {
+  return <MobileEditor {...props} />;
+}
 
 export function App() {
   const session = auth.useSession();
@@ -82,14 +93,16 @@ function AccountCompanion() {
   );
   return (
     <QueryClientProvider client={client}>
-      <MobileCompanion
-        onSignOut={async () => {
-          const result = await auth.signOut();
-          if (result.error)
-            throw new Error(result.error.message ?? "Could not sign out.");
-          client.clear();
-        }}
-      />
+      <MarkdownEditorProvider value={renderMarkdownEditor}>
+        <MobileCompanion
+          onSignOut={async () => {
+            const result = await auth.signOut();
+            if (result.error)
+              throw new Error(result.error.message ?? "Could not sign out.");
+            client.clear();
+          }}
+        />
+      </MarkdownEditorProvider>
     </QueryClientProvider>
   );
 }
@@ -113,6 +126,8 @@ function MobileCompanion({
     <CompanionShell
       section={section}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
+      agentName={<MobileAgentName />}
+      renderAgentHeader={(onEdit) => <MobileAgentHeader onEdit={onEdit} />}
       renderAgentPanel={(tab, close) => (
         <MobileAgentPanel
           tab={tab}

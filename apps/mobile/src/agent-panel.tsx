@@ -2,13 +2,31 @@ import {
   AgentPanelContent,
   PersonalMemorySection,
   type AgentPanelTab,
+  AgentPresence,
+  AgentName,
 } from "@zoen/companion-ui";
+import { randomUUID } from "expo-crypto";
+import { apiOrigin } from "./environment";
 import { companionAgentData } from "../../../shared/companion/agent-data";
 import { SearchSection } from "./search";
 import { client } from "./conversation";
 import { rpc } from "./api";
 
-const data = companionAgentData(rpc);
+const data = companionAgentData(rpc, randomUUID);
+export function MobileAgentName() {
+  return <AgentName data={data} cacheScope="personal" />;
+}
+export function MobileAgentHeader({ onEdit }: { readonly onEdit: () => void }) {
+  return (
+    <AgentPresence
+      data={data}
+      cacheScope="personal"
+      client={client}
+      avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
+      onEdit={onEdit}
+    />
+  );
+}
 export function MobileAgentPanel(props: {
   readonly tab: AgentPanelTab;
   readonly onPrompt: (text: string) => void;

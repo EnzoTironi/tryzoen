@@ -6,9 +6,28 @@ import { Upcoming, type UpcomingItem } from "./upcoming";
 import { ActionButton } from "./button";
 import { ConversationReview } from "./conversation-review";
 import type { AgentPanelTab } from "./agent-panel";
+import { AgentIdentity } from "./agent-identity";
 
 /** Authenticated platform adapter. Data is already mapped for the shared views. */
 export interface AgentPanelData {
+  identity: () => Promise<{
+    name: string;
+    revision: string | null;
+    canEdit: boolean;
+    documents: readonly {
+      path: string;
+      title: string;
+      text: string;
+      saved: boolean;
+    }[];
+  }>;
+  newOperationId: () => string;
+  saveIdentity: (input: {
+    path: string;
+    content: string;
+    expectedRevision: string | null;
+    operationId: string;
+  }) => Promise<void>;
   memory: () => Promise<
     Pick<
       ComponentProps<typeof PersonalMemory>,
@@ -51,10 +70,16 @@ export function AgentPanelContent({
 }) {
   if (tab === "identity")
     return (
-      <PersonalMemorySection
+      <AgentIdentity
         data={data}
         cacheScope={cacheScope}
-        onPrompt={onPrompt}
+        renderPersonalNotes={() => (
+          <PersonalMemorySection
+            data={data}
+            cacheScope={cacheScope}
+            onPrompt={onPrompt}
+          />
+        )}
       />
     );
   if (tab === "upcoming")

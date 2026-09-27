@@ -15,6 +15,7 @@ import { createTRPCRouter } from "@web/trpc/init";
 import { companionRouter } from "@web/trpc/companion";
 import * as WorkspaceSession from "../../server/workspaces/session";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
+import { WorkspaceRepository } from "../../server/workspaces/repository";
 
 const client = new PGlite();
 const database = drizzle(client, { schema });
@@ -267,4 +268,34 @@ it("rechecks workspace access for every product query", async () => {
   await expect(api.chats({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(api.goals()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(api.feed({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(api.identity()).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+it("reads only the three agent documents in the authenticated workspace and exposes the member restriction", async () => {
+  const selection = vi
+    .spyOn(WorkspaceRepository, "selection")
+    .mockResolvedValue({
+      revision: "a".repeat(40),
+      documents: [{ path: "agent/IDENTITY.md", content: "Name: Reader" }],
+    });
+  try {
+    const api = caller(alice);
+    expect(await api.identity()).toMatchObject({
+      canEdit: true,
+      documents: [{ path: "agent/IDENTITY.md", content: "Name: Reader" }],
+    });
+    expect(selection).toHaveBeenLastCalledWith(expect.objectContaining(alice), [
+      "agent/IDENTITY.md",
+      "agent/SOUL.md",
+      "agent/MEMORY.md",
+    ]);
+    vi.spyOn(WorkspaceSession, "resolveWorkspaceActor").mockResolvedValue({
+      ...alice,
+      role: "member",
+      organizationId: null,
+    });
+    expect(await api.identity()).toMatchObject({ canEdit: false });
+  } finally {
+    selection.mockRestore();
+  }
 });

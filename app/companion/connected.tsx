@@ -1,21 +1,31 @@
 "use client";
 import { browserSessionClient } from "@web/eve/client";
+import dynamic from "next/dynamic";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CompanionShell,
   CompanionOverlayProvider,
+  MarkdownEditorProvider,
   SessionConversation,
   NewConversation,
   type CompanionSection,
+  type MarkdownEditorProps,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
 import { workspaceHref } from "@web/workspaces/navigation";
 import styles from "./companion.module.css";
 
 import { ConnectedSections } from "./sections";
-import { ConnectedAgentPanel } from "./agent-panel";
+import {
+  ConnectedAgentPanel,
+  ConnectedAgentHeader,
+  ConnectedAgentName,
+} from "./agent-panel";
 import { renderWebCompanionOverlay } from "./overlay";
+const RichTextEditor = dynamic(() => import("./editor/rich-text"), {
+  ssr: false,
+});
 
 const sections: readonly CompanionSection[] = [
   "chat",
@@ -26,6 +36,10 @@ const sections: readonly CompanionSection[] = [
   "library",
   "settings",
 ];
+
+function renderMarkdownEditor(props: MarkdownEditorProps) {
+  return <RichTextEditor {...props} />;
+}
 
 export function ConnectedCompanion({
   sessionId,
@@ -47,67 +61,73 @@ export function ConnectedCompanion({
   return (
     <div className={styles.viewport}>
       <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
-        <CompanionShell
-          section={section}
-          title={title ?? "Zoen"}
-          avatarUri="/marketing/zoen-avatar.webp"
-          renderAgentPanel={(tab, close) => (
-            <ConnectedAgentPanel
-              tab={tab}
-              onPrompt={(prompt) => {
-                close();
-                navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
-              }}
-              onConversation={(id) => {
-                close();
-                navigate(`/companion/${encodeURIComponent(id)}`);
-              }}
-            />
-          )}
-          onNavigate={(nextSection) => {
-            navigate(
-              `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
-            );
-          }}
-          onNewConversation={() => {
-            navigate("/companion");
-          }}
-        >
-          {section !== "chat" ? (
-            <ConnectedSections
-              section={section}
-              onPrompt={(prompt) => {
-                navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
-              }}
-              onConversation={(id) => {
-                navigate(
-                  id ? `/companion/${encodeURIComponent(id)}` : "/companion"
-                );
-              }}
-            />
-          ) : sessionId ? (
-            <SessionConversation
-              sessionId={sessionId}
-              client={browserSessionClient}
-            />
-          ) : (
-            <NewConversation
-              key={draft}
-              client={browserSessionClient}
-              avatarUri="/marketing/zoen-avatar.webp"
-              save={(id, name) => saveChat({ sessionId: id, title: name })}
-              initialDraft={draft}
-              onCreated={(id) => {
-                router.replace(
-                  workspaceHref(
-                    `/companion/${encodeURIComponent(id)}`,
-                    workspaceId
-                  )
-                );
-              }}
-            />
-          )}
-        </CompanionShell>
+        <MarkdownEditorProvider value={renderMarkdownEditor}>
+          <CompanionShell
+            section={section}
+            title={title ?? "Zoen"}
+            avatarUri="/marketing/zoen-avatar.webp"
+            agentName={<ConnectedAgentName />}
+            renderAgentHeader={(onEdit) => (
+              <ConnectedAgentHeader onEdit={onEdit} />
+            )}
+            renderAgentPanel={(tab, close) => (
+              <ConnectedAgentPanel
+                tab={tab}
+                onPrompt={(prompt) => {
+                  close();
+                  navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+                }}
+                onConversation={(id) => {
+                  close();
+                  navigate(`/companion/${encodeURIComponent(id)}`);
+                }}
+              />
+            )}
+            onNavigate={(nextSection) => {
+              navigate(
+                `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
+              );
+            }}
+            onNewConversation={() => {
+              navigate("/companion");
+            }}
+          >
+            {section !== "chat" ? (
+              <ConnectedSections
+                section={section}
+                onPrompt={(prompt) => {
+                  navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+                }}
+                onConversation={(id) => {
+                  navigate(
+                    id ? `/companion/${encodeURIComponent(id)}` : "/companion"
+                  );
+                }}
+              />
+            ) : sessionId ? (
+              <SessionConversation
+                sessionId={sessionId}
+                client={browserSessionClient}
+              />
+            ) : (
+              <NewConversation
+                key={draft}
+                client={browserSessionClient}
+                avatarUri="/marketing/zoen-avatar.webp"
+                save={(id, name) => saveChat({ sessionId: id, title: name })}
+                initialDraft={draft}
+                onCreated={(id) => {
+                  router.replace(
+                    workspaceHref(
+                      `/companion/${encodeURIComponent(id)}`,
+                      workspaceId
+                    )
+                  );
+                }}
+              />
+            )}
+          </CompanionShell>
+        </MarkdownEditorProvider>
       </CompanionOverlayProvider>
     </div>
   );

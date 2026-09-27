@@ -40,3 +40,11 @@ export const companionFilesSchema = z.object({
   content: z.string().nullable().optional(),
   files: z.array(z.string()),
 });
+
+export const companionIdentitySchema = z.object({
+  revision: companionFilesSchema.shape.revision,
+  canEdit: z.boolean(),
+  documents: z
+    .array(z.object({ path: z.string(), content: z.string() }))
+    .max(3),
+});

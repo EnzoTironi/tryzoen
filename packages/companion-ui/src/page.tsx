@@ -17,6 +17,7 @@ export function CompanionPage({
   loading,
   error,
   onRetry,
+  hideTitle = false,
 }: {
   readonly title: string;
   readonly children: ReactNode;
@@ -24,6 +25,7 @@ export function CompanionPage({
   readonly loading?: boolean;
   readonly error?: string;
   readonly onRetry?: () => void;
+  readonly hideTitle?: boolean;
 }) {
   const window = useWindowDimensions();
   const [width, setWidth] = useState(window.width);
@@ -37,15 +39,17 @@ export function CompanionPage({
       contentContainerStyle={[styles.scroll, compact && styles.compact]}
     >
       <View style={styles.page}>
-        <View style={styles.header}>
-          <Text
-            accessibilityRole="header"
-            style={[styles.title, compact && styles.compactTitle]}
-          >
-            {title}
-          </Text>
-          {actions}
-        </View>
+        {(!hideTitle || actions) && (
+          <View style={styles.header}>
+            <Text
+              accessibilityRole="header"
+              style={[styles.title, compact && styles.compactTitle]}
+            >
+              {title}
+            </Text>
+            {actions}
+          </View>
+        )}
         {loading && (
           <ActivityIndicator
             accessibilityLabel={`Loading ${title}`}
