@@ -32,6 +32,7 @@ export const creatorDraftSchema = z.object({
   revision: z.uuid(),
   content: creatorDraftContentSchema,
   updatedAt: z.iso.datetime(),
+  archivedAt: z.iso.datetime().nullable(),
 });
 
 export const creatorDraftSaveSchema = z
@@ -39,6 +40,14 @@ export const creatorDraftSaveSchema = z
     id: z.uuid(),
     expectedRevision: z.uuid().nullable(),
     content: creatorDraftContentSchema,
+  })
+  .strict();
+
+export const creatorDraftStateSchema = z
+  .object({
+    id: z.uuid(),
+    expectedRevision: z.uuid(),
+    archived: z.boolean(),
   })
   .strict();
 
@@ -50,7 +59,7 @@ export const creatorDraftListSchema = z
       examples: z.number().int().min(0).max(20),
     })
   )
-  .max(20);
+  .max(100);
 
 export const creatorPlaybookTemplate = `# How I help
 

@@ -98,8 +98,7 @@ failed or unsaved text. Four isolated PostgreSQL cases cover actor/workspace
 isolation, forged authority, deletion cascade, concurrent revisions, 25 parallel
 creates against the 20-draft limit and source/rights/input bounds.
 
-Still required: draft lifecycle/archival and account-merge export qualification,
-model-assisted playbook synthesis, version-bound held-out evaluation, immutable
+Still required after the authoring checkpoint: model-assisted playbook synthesis, version-bound held-out evaluation, immutable
 selected-source publishing, discovery, entitlements, withdrawal, bot execution,
 human-assist feedback and outcome measurement. This is a private authoring slice,
 not a working public or paid marketplace.
@@ -115,3 +114,49 @@ and 390×844 mobile sheet evidence is attached to
 These exports are compile checks, not physical-device qualification. The
 structural quality report still flags RPC-wrapper similarity and component size;
 it is not a clean structural gate and no finding was suppressed.
+
+## Creator archive and export — 2026-09-28
+
+Migration 0070 adds reversible archival. The studio separates active and archived
+drafts, keeps archived playbooks/examples readable in the shared visual editor,
+and restores editing only after a revision-checked restore. Archived drafts
+cannot be changed by a stale editor. Archive/restore response-loss retries are
+no-ops only when the requested state already holds; an old archive request cannot
+archive a subsequently restored draft. Owner serialization enforces 20 active
+and 100 total retained drafts. Lists contain at most 100 summaries, never bodies.
+These are explicit initial storage limits; archival is not deletion.
+
+Export reauthorizes and fetches the selected draft before preparing one JSON file
+with its Markdown, examples, attribution, rights, revision and archive state. Web
+uses the existing Blob download; Expo uses its file-sharing adapter. The archive
+of a linked former account now lists and exports its creator drafts individually,
+limited to that former person and workspace. It does not copy private drafts into
+the target workspace, grant editing authority or bundle every large body in one
+response. Partial personal-memory exports/wipes explicitly exclude creator drafts.
+There is no draft import/restore-from-export contract yet.
+
+Seven isolated PostgreSQL cases cover creator ownership, missing/forged/live
+authority, membership deletion, stale writes, state retries, simultaneous restores,
+the active/retained quotas and former-account export isolation/revocation. Chrome
+verification exported the fictional Cedarbay specialist and checked the downloaded
+JSON, archived it, opened its formatted playbook with disabled editing controls,
+found it in the archived list and restored editing. The desktop modal and 390×844
+mobile sheet were visually checked. A session-loading race discovered during this
+pass was fixed by waiting for the authenticated identity before opening the studio.
+
+The structural pass reduced the enlarged draft component by moving example editing
+and draft creation to their concrete owners. Six gating findings remain: short RPC
+wrappers, similar bounded SQL projections and recent route/export churn. JSX usage
+is not recognized by that scanner's dead-code report; the application's unused-code
+check passes. No structural findings were suppressed.
+
+The session-loading fix was also verified by delaying only Chrome's own session
+request: the studio showed its loading state, then enabled the entry after the
+request completed. The delay was removed after the test. Evidence is attached
+with `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5865808237).
+The final general check passes 1,323 tests across 205 files, including type, lint,
+format, unused-code and shared/mobile/desktop compile gates. Migration validation
+and Expo exports for web/iOS/Android pass. Physical-device qualification,
+production deployment and marketplace execution are still outstanding.
+
+The final production build also passes after the session-loading correction.

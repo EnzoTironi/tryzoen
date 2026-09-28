@@ -22,9 +22,10 @@ import { auth } from "./auth";
 import { MobileMemory } from "./agent-panel";
 import { companionGoalsData } from "../../../shared/companion/goals";
 import { companionDocumentHistory } from "../../../shared/companion/files";
+import { shareFile } from "./files/share";
 import { companionCreatorData } from "../../../shared/companion/creators";
 
-const mobileCreators = companionCreatorData(rpc, randomUUID);
+const mobileCreators = companionCreatorData(rpc, randomUUID, shareFile);
 
 export function MobileSections({
   section,

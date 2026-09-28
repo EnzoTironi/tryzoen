@@ -6,6 +6,7 @@
 export const accountPrivacyExportExcluded = [
   "conversation-history",
   "artifacts",
+  "creator-drafts",
   "connected-accounts",
   "schedules",
   "unbound-memory-documents",
@@ -17,6 +18,7 @@ export const accountPrivacyExportExcluded = [
 export const accountOnlineWipeNotWiped = [
   "conversation-history",
   "artifacts",
+  "creator-drafts",
   "connected-accounts",
   "schedules",
   "unbound-memory-documents",

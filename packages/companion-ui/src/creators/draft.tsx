@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
@@ -7,13 +7,10 @@ import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
 import { pageStyles } from "../page";
 import type { CreatorStudioData } from "./studio";
-import { CreatorExample } from "./example";
+import { CreatorExamples } from "./examples";
+import { CreatorDraftActions } from "./actions";
 import { CreatorDetails } from "./details";
-import {
-  creatorExampleTemplate,
-  type creatorDraftSchema,
-  type creatorExampleSchema,
-} from "./schema";
+import type { creatorDraftSchema } from "./schema";
 
 export function CreatorDraft({
   id,
@@ -32,10 +29,6 @@ export function CreatorDraft({
   const [playbook, setPlaybook] =
     useState<z.infer<typeof creatorDraftSchema>>();
   const [details, setDetails] = useState<z.infer<typeof creatorDraftSchema>>();
-  const [example, setExample] = useState<{
-    snapshot: z.infer<typeof creatorDraftSchema>;
-    value: z.infer<typeof creatorExampleSchema>;
-  }>();
   return (
     <CompanionSheet
       title={draft.data?.content.title ?? "Specialist draft"}
@@ -58,24 +51,35 @@ export function CreatorDraft({
           </ActionButton>
         </>
       )}
-      {draft.data && (
+      {draft.data && !draft.isError && (
         <>
           <Text style={pageStyles.copy}>
-            Private draft · Only you can open this specialist in this workspace.
+            {draft.data.archivedAt
+              ? "Archived draft · Restore it to make changes."
+              : "Private draft · Only you can open this specialist in this workspace."}
           </Text>
           {Boolean(draft.data.content.description) && (
             <Text style={pageStyles.copy}>
               {draft.data.content.description}
             </Text>
           )}
-          <ActionButton
-            quiet
-            onPress={() => {
-              setDetails(draft.data);
+          <CreatorDraftActions
+            draft={draft.data}
+            data={data}
+            onChanged={(updated) => {
+              client.setQueryData(queryKey, updated);
             }}
-          >
-            Edit specialist details
-          </ActionButton>
+          />
+          {!draft.data.archivedAt && (
+            <ActionButton
+              quiet
+              onPress={() => {
+                setDetails(draft.data);
+              }}
+            >
+              Edit specialist details
+            </ActionButton>
+          )}
           <Text
             accessibilityRole="header"
             style={[pageStyles.heading, { marginBottom: 0 }]}
@@ -91,51 +95,15 @@ export function CreatorDraft({
               setPlaybook(draft.data);
             }}
           >
-            Edit playbook
+            {draft.data.archivedAt ? "Read playbook" : "Edit playbook"}
           </ActionButton>
-          <Text
-            accessibilityRole="header"
-            style={[pageStyles.heading, { marginBottom: 0 }]}
-          >
-            Authored examples
-          </Text>
-          <Text style={pageStyles.copy}>
-            Use representative cases you can share. Include your observations,
-            chosen strategy, alternatives and a useful response. Keep private
-            conversations and client details out of these examples.
-          </Text>
-          {draft.data.content.examples.map((item) => (
-            <View key={item.id} style={{ gap: 8, paddingVertical: 8 }}>
-              <Text style={pageStyles.rowTitle}>{item.title}</Text>
-              <Text style={pageStyles.copy}>{item.source}</Text>
-              <ActionButton
-                quiet
-                onPress={() => {
-                  setExample({ snapshot: draft.data, value: item });
-                }}
-              >
-                {`Edit ${item.title}`}
-              </ActionButton>
-            </View>
-          ))}
-          <ActionButton
-            quiet
-            disabled={draft.data.content.examples.length >= 20}
-            onPress={() => {
-              setExample({
-                snapshot: draft.data,
-                value: {
-                  id: data.newId(),
-                  title: "",
-                  content: creatorExampleTemplate,
-                  source: "",
-                  rights: "original",
-                },
-              });
+          <CreatorExamples
+            draft={draft.data}
+            data={data}
+            onChanged={(updated) => {
+              client.setQueryData(queryKey, updated);
             }}
-          >
-            Add an example
-          </ActionButton>
+          />
         </>
       )}
       {playbook && (
@@ -146,6 +114,7 @@ export function CreatorDraft({
           initialText={playbook.content.playbook}
           maxLength={64000}
           markdown
+          readOnly={Boolean(playbook.archivedAt)}
           onClose={() => {
             setPlaybook(undefined);
           }}
@@ -168,46 +137,6 @@ export function CreatorDraft({
           }}
           onClose={() => {
             setDetails(undefined);
-          }}
-        />
-      )}
-      {example && (
-        <CreatorExample
-          key={example.value.id}
-          initial={example.value}
-          onRemove={
-            example.snapshot.content.examples.some(
-              (item) => item.id === example.value.id
-            )
-              ? async () => {
-                  const updated = await data.save({
-                    id,
-                    expectedRevision: example.snapshot.revision,
-                    content: {
-                      ...example.snapshot.content,
-                      examples: example.snapshot.content.examples.filter(
-                        (item) => item.id !== example.value.id
-                      ),
-                    },
-                  });
-                  client.setQueryData(queryKey, updated);
-                }
-              : undefined
-          }
-          onClose={() => {
-            setExample(undefined);
-          }}
-          onSave={async (value) => {
-            const previous = example.snapshot.content.examples;
-            const examples = previous.some((item) => item.id === value.id)
-              ? previous.map((item) => (item.id === value.id ? value : item))
-              : [...previous, value];
-            const updated = await data.save({
-              id,
-              expectedRevision: example.snapshot.revision,
-              content: { ...example.snapshot.content, examples },
-            });
-            client.setQueryData(queryKey, updated);
           }}
         />
       )}

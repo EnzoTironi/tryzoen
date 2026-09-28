@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { Text, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { pageStyles } from "../page";
+import { CreatorDraftCreate } from "./create";
 import { CreatorDraft } from "./draft";
-import {
-  creatorPlaybookTemplate,
-  type creatorDraftListSchema,
-  type creatorDraftSaveSchema,
-  type creatorDraftSchema,
+import type {
+  creatorDraftListSchema,
+  creatorDraftSaveSchema,
+  creatorDraftSchema,
+  creatorDraftStateSchema,
 } from "./schema";
 
 export interface CreatorStudioData {
@@ -19,6 +20,10 @@ export interface CreatorStudioData {
   save: (
     input: z.infer<typeof creatorDraftSaveSchema>
   ) => Promise<z.infer<typeof creatorDraftSchema>>;
+  archive: (
+    input: z.infer<typeof creatorDraftStateSchema>
+  ) => Promise<z.infer<typeof creatorDraftSchema>>;
+  exportDraft: (id: string) => Promise<void>;
   newId: () => string;
 }
 
@@ -62,31 +67,11 @@ function StudioDrafts({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [draftId, setDraftId] = useState(data.newId);
+  const [archived, setArchived] = useState(false);
   const [selected, setSelected] = useState<string>();
   const drafts = useQuery({
     queryKey: ["creator-drafts", cacheScope],
     queryFn: data.list,
-  });
-  const create = useMutation({
-    mutationFn: () =>
-      data.save({
-        id: draftId,
-        expectedRevision: null,
-        content: {
-          title,
-          description: "",
-          playbook: creatorPlaybookTemplate,
-          examples: [],
-        },
-      }),
-    onSuccess: async (draft) => {
-      setSelected(draft.id);
-      setTitle("");
-      setDraftId(data.newId());
-      await drafts.refetch();
-    },
   });
   return (
     <CompanionSheet title="Creator studio" onClose={onClose}>
@@ -98,35 +83,47 @@ function StudioDrafts({
         Drafts are private to you in this workspace. Publishing and release
         evaluation are not available yet.
       </Text>
-      <TextInput
-        accessibilityLabel="Specialist name"
-        placeholder="Name your specialist"
-        value={title}
-        onChangeText={setTitle}
-        maxLength={80}
-        editable={!create.isPending}
-        style={pageStyles.field}
-      />
-      <ActionButton
-        disabled={
-          !title.trim() ||
-          create.isPending ||
-          !drafts.data ||
-          drafts.data.length >= 20
-        }
-        onPress={() => {
-          create.mutate();
-        }}
-      >
-        {create.isPending ? "Creating…" : "Create a draft"}
-      </ActionButton>
+      {!archived && (
+        <CreatorDraftCreate
+          data={data}
+          disabled={
+            !drafts.data ||
+            drafts.isError ||
+            drafts.data.filter((item) => !item.archivedAt).length >= 20 ||
+            drafts.data.length >= 100
+          }
+          onCreated={setSelected}
+          onRefresh={drafts.refetch}
+        />
+      )}
+      <View style={{ flexDirection: "row", gap: 12 }}>
+        <ActionButton
+          quiet={archived}
+          onPress={() => {
+            setArchived(false);
+          }}
+        >
+          Active drafts
+        </ActionButton>
+        <ActionButton
+          quiet={!archived}
+          onPress={() => {
+            setArchived(true);
+          }}
+        >
+          Archived drafts
+        </ActionButton>
+      </View>
+      <Text style={pageStyles.copy}>
+        Up to 20 active drafts and 100 total drafts per workspace. Archived
+        drafts are kept for you to read, export or restore.
+      </Text>
       {drafts.isPending && (
         <Text style={pageStyles.copy}>Loading your drafts…</Text>
       )}
-      {(drafts.isError || create.isError) && (
+      {drafts.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Your drafts could not be updated. Your specialist name has been kept.
-          Try again.
+          Your drafts could not be loaded. Try again.
         </Text>
       )}
       {drafts.isError && (
@@ -139,25 +136,34 @@ function StudioDrafts({
           Try again
         </ActionButton>
       )}
-      {drafts.data?.length === 0 && (
-        <Text style={pageStyles.copy}>Your first specialist starts here.</Text>
+      {drafts.data?.filter((item) => Boolean(item.archivedAt) === archived)
+        .length === 0 && (
+        <Text style={pageStyles.copy}>
+          {archived
+            ? "No archived drafts yet."
+            : "Your first specialist starts here."}
+        </Text>
       )}
-      {drafts.data?.map((draft) => (
-        <View key={draft.id} style={{ gap: 8, paddingVertical: 12 }}>
-          <Text style={pageStyles.rowTitle}>{draft.title}</Text>
-          <Text style={pageStyles.copy}>
-            {draft.examples} authored examples · Private draft
-          </Text>
-          <ActionButton
-            quiet
-            onPress={() => {
-              setSelected(draft.id);
-            }}
-          >
-            {`Open ${draft.title}`}
-          </ActionButton>
-        </View>
-      ))}
+      {!drafts.isError &&
+        drafts.data
+          ?.filter((item) => Boolean(item.archivedAt) === archived)
+          .map((draft) => (
+            <View key={draft.id} style={{ gap: 8, paddingVertical: 12 }}>
+              <Text style={pageStyles.rowTitle}>{draft.title}</Text>
+              <Text style={pageStyles.copy}>
+                {draft.examples} authored examples ·{" "}
+                {draft.archivedAt ? "Archived" : "Private draft"}
+              </Text>
+              <ActionButton
+                quiet
+                onPress={() => {
+                  setSelected(draft.id);
+                }}
+              >
+                {`Open ${draft.title}`}
+              </ActionButton>
+            </View>
+          ))}
       {selected && (
         <CreatorDraft
           key={selected}

@@ -19,7 +19,7 @@ export async function GET(
       try {
         try {
           const section = await z
-            .enum(["memory", "files", "attachment", "source"])
+            .enum(["memory", "files", "attachment", "source", "creator"])
             .parseAsync(query.get("section"));
           return await downloadAccountArchive(
             request.headers,

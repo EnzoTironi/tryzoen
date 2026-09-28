@@ -4,17 +4,33 @@ import {
   creatorDraftListSchema,
   creatorDraftSaveSchema,
   creatorDraftSchema,
+  creatorDraftStateSchema,
 } from "@zoen/companion-ui/creators";
 import {
   CreatorDraftConflict,
   listCreatorDrafts,
   readCreatorDraft,
   saveCreatorDraft,
+  setCreatorDraftArchived,
 } from "../../server/creators/drafts";
 import { withSignal } from "../../server/operations/async";
 import { workspaceProcedure } from "./workspace-procedure";
 
 export const creatorsRouter = {
+  archive: workspaceProcedure
+    .input(creatorDraftStateSchema)
+    .output(creatorDraftSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, async () => {
+        try {
+          return await setCreatorDraftArchived(ctx.actor, input);
+        } catch (error) {
+          if (error instanceof CreatorDraftConflict)
+            throw new TRPCError({ code: "CONFLICT", message: error.message });
+          throw error;
+        }
+      })
+    ),
   list: workspaceProcedure
     .output(creatorDraftListSchema)
     .query(({ ctx, signal }) =>

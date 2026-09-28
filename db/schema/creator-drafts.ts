@@ -23,6 +23,7 @@ export const creatorDrafts = pgTable(
     content: jsonb("content")
       .$type<z.infer<typeof creatorDraftContentSchema>>()
       .notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true, precision: 3 }),
     updatedAt: timestamp("updated_at", { withTimezone: true, precision: 3 })
       .defaultNow()
       .notNull(),

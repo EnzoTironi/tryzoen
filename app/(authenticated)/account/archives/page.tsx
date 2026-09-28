@@ -70,6 +70,15 @@ export default async function AccountArchivesPage({
                 <span>{t("Baixar arquivos e versões")}</span>
               </a>
             )}
+            {archive.creatorDrafts.map((draft) => (
+              <a
+                key={draft.id}
+                href={`/api/account/archives/${archive.id}?section=creator&attachment=${draft.id}`}
+              >
+                <DownloadIcon aria-hidden="true" />
+                <span>{draft.title} (.json)</span>
+              </a>
+            ))}
             {archive.attachments.map((file) => (
               <a
                 key={file.id}
