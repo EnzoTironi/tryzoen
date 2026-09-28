@@ -1,18 +1,8 @@
-import { SettingsEntry } from "./entry";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ActionButton } from "@zoen/companion-ui";
-import { CompanionSheet } from "@zoen/companion-ui/sheet";
 import { auth } from "../auth";
-
-export function SessionSettingsButton() {
-  return (
-    <SettingsEntry label="Signed-in sessions">
-      {(close) => <SignedInSessions onClose={close} />}
-    </SettingsEntry>
-  );
-}
 
 function useSessionList() {
   const account = auth.useSession();
@@ -56,22 +46,16 @@ function useSessionList() {
   return { account, currentId, userId, sessions, revoke };
 }
 
-export function SignedInSessions({
-  onClose,
-}: {
-  readonly onClose: () => void;
-}) {
+export function SignedInSessions() {
   const state = useSessionList();
   return (
-    <CompanionSheet title="Signed-in sessions" onClose={onClose}>
-      <View style={styles.content}>
-        <Text style={styles.description}>
-          These are your signed-in apps and browsers. Device control requires
-          separate permission.
-        </Text>
-        <SessionList state={state} />
-      </View>
-    </CompanionSheet>
+    <View style={styles.content}>
+      <Text style={styles.description}>
+        These are your signed-in apps and browsers. Device control requires
+        separate permission.
+      </Text>
+      <SessionList state={state} />
+    </View>
   );
 }
 

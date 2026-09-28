@@ -7,18 +7,23 @@ export function RoomComposer({
   disabled,
   thread = false,
   direct = false,
+  onTyping,
 }: {
   readonly draft: ReturnType<typeof useRoomDraft>;
   readonly disabled: boolean;
   readonly thread?: boolean;
   readonly direct?: boolean;
+  readonly onTyping?: (typing: boolean) => void;
 }) {
   const reply = disabled ? undefined : draft.reply;
   return (
     <View style={styles.composer}>
       <Composer
         value={disabled ? "" : draft.text}
-        onChangeText={draft.change}
+        onChangeText={(text) => {
+          draft.change(text);
+          onTyping?.(text.trim().length > 0);
+        }}
         sendStatus={draft.status}
         reply={
           reply
@@ -45,7 +50,10 @@ export function RoomComposer({
         }
         placeholder={thread ? "Responder…" : "Mensagem…"}
         disabled={disabled}
-        onSend={draft.send}
+        onSend={(message) => {
+          onTyping?.(false);
+          return draft.send(message);
+        }}
       />
     </View>
   );

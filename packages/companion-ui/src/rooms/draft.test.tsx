@@ -14,6 +14,8 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  setTyping: vi.fn<RoomData["setTyping"]>(),
+  readTyping: vi.fn<RoomData["readTyping"]>(),
   markRead: vi.fn<RoomData["markRead"]>(),
   savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
   clearUnavailableSavedMessages:

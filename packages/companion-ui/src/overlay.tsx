@@ -8,6 +8,7 @@ export interface CompanionOverlayProps {
   readonly focusOnOpen?: () => void;
 }
 function NativeOverlay({
+  title,
   children,
   onClose,
   focusOnOpen,
@@ -15,6 +16,7 @@ function NativeOverlay({
   const compact = useWindowDimensions().width < 720;
   return (
     <Modal
+      accessibilityLabel={title}
       transparent
       animationType={compact ? "slide" : "fade"}
       onRequestClose={onClose}

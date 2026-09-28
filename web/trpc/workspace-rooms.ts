@@ -1,3 +1,9 @@
+import { setMatrixTyping, readMatrixTyping } from "../../server/matrix/typing";
+import {
+  roomTypingWriteSchema,
+  roomTypingReadSchema,
+  roomTypingPageSchema,
+} from "@zoen/companion-ui/rooms";
 import {
   readSavedMessageState,
   readSavedCleanupState,
@@ -65,6 +71,17 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  setTyping: workspaceProcedure
+    .input(roomTypingWriteSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setMatrixTyping(ctx.actor, input))
+    ),
+  readTyping: workspaceProcedure
+    .input(roomTypingReadSchema)
+    .output(roomTypingPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readMatrixTyping(ctx.actor, input))
+    ),
   savedCleanupState: workspaceProcedure
     .output(savedCleanupStateSchema)
     .query(({ ctx, signal }) =>

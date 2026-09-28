@@ -1,23 +1,13 @@
-import { SettingsEntry } from "./entry";
 import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionButton } from "@zoen/companion-ui";
-import { CompanionSheet } from "@zoen/companion-ui/sheet";
 import {
   linkedChannelIdentitySchema,
   channelUnlinkResultSchema,
 } from "../../../../shared/identity/channel-auth";
 import { auth } from "../auth";
 import { rpc } from "../api";
-
-export function ChannelSettingsButton() {
-  return (
-    <SettingsEntry label="Messaging channels">
-      {(close) => <LinkedChannels onClose={close} />}
-    </SettingsEntry>
-  );
-}
 
 function useLinkedChannels() {
   const account = auth.useSession();
@@ -111,18 +101,16 @@ function useLinkedChannels() {
     refresh,
   };
 }
-export function LinkedChannels({ onClose }: { readonly onClose: () => void }) {
+export function LinkedChannels() {
   const state = useLinkedChannels();
   return (
-    <CompanionSheet title="Messaging channels" onClose={onClose}>
-      <View style={styles.content}>
-        <Text style={styles.description}>
-          Review the messengers linked to your account. Unlinking a messenger
-          signs you out of all your Zoen apps and browsers.
-        </Text>
-        <ChannelContent state={state} />
-      </View>
-    </CompanionSheet>
+    <View style={styles.content}>
+      <Text style={styles.description}>
+        Review the messengers linked to your account. Unlinking a messenger
+        signs you out of all your Zoen apps and browsers.
+      </Text>
+      <ChannelContent state={state} />
+    </View>
   );
 }
 function ChannelContent({

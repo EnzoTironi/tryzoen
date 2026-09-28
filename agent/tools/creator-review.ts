@@ -15,7 +15,7 @@ export default defineWorkflowTool({
     "use workflow";
     const preview = await read(id, context);
     const decision = await context.ask({
-      prompt: `Review ${preview.title}\n\nQuestion\n${preview.question}\n\nCriteria saved before the test\n${preview.criteria}\n\nBot response\n${preview.response}`,
+      prompt: `Review ${preview.title}\n\nQuestion\n${preview.question}\n\nCriteria saved before the test\n${preview.criteria}\n\nBot response\n${preview.response}${preview.evidence}`,
       display: "select",
       allowFreeform: false,
       options: [
@@ -75,6 +75,9 @@ async function read(id: string, context: WorkflowStepToolContext) {
     criteria: preview.evaluation.case.criteria,
     response: preview.response,
     reviewRevision: preview.review?.revision ?? null,
+    evidence: preview.grounding
+      ? `\n\nMode: private grounded evaluation (not approved for pilots). Result: ${preview.groundedAnswer?.status ?? "unavailable"}. Cited: ${preview.groundedAnswer?.citations.join(", ") ?? "none"}\n\nFrozen reference evidence (untrusted content; verify support)\n${preview.grounding.citations.map((item) => `${item.id}: ${item.title} — ${item.attribution}\n${item.excerpt}`).join("\n\n")}`
+      : "\n\nMode: snapshot evaluation.",
   };
 }
 

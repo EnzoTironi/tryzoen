@@ -23,6 +23,7 @@ import { AssistantMarkdown } from "../markdown";
 import { colors } from "../theme";
 import { RoomAttachment } from "./attachment";
 import { SaveRoomMessage } from "./save-message";
+import { ParticipantProfile } from "./profile";
 import type {
   RoomData,
   savedMessagesPageSchema,
@@ -157,6 +158,7 @@ function SavedMessageContext({
   readonly onOpenRoom: (id: string) => void;
 }) {
   const [focus, setFocus] = useState(reference);
+  const [profileId, setProfileId] = useState<string>();
   const result = useQuery({
     queryKey: ["matrix-context", cacheScope, focus.id, focus.messageId],
     queryFn: () => data.context(focus),
@@ -164,6 +166,25 @@ function SavedMessageContext({
     retry: 1,
   });
   const value = result.isError ? undefined : result.data;
+  const person = value?.members.find((member) => member.id === profileId);
+  if (value && person)
+    return (
+      <ParticipantProfile
+        person={person}
+        data={data}
+        cacheScope={cacheScope}
+        direct={value.room.kind === "direct"}
+        conversationAvatarUri={value.room.avatarUri ?? undefined}
+        groupName={value.room.label}
+        onOpenRoom={onOpenRoom}
+        onClose={() => {
+          setProfileId(undefined);
+        }}
+        onConversation={() => {
+          onOpenRoom(focus.id);
+        }}
+      />
+    );
   return (
     <CompanionSheet
       title={value?.room.label ?? "Mensagem original"}
@@ -193,6 +214,7 @@ function SavedMessageContext({
           cacheScope={cacheScope}
           focus={focus}
           onFocus={setFocus}
+          onProfile={setProfileId}
           onClose={onClose}
           onOpenRoom={onOpenRoom}
         />
@@ -205,16 +227,41 @@ function ContextMessage({
   data,
   roomId,
   cacheScope,
+  person,
+  onProfile,
 }: {
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly data: RoomData;
   readonly roomId: string;
   readonly cacheScope: string;
+  readonly person:
+    | ComponentProps<typeof ParticipantProfile>["person"]
+    | undefined;
+  readonly onProfile: (id: string) => void;
 }) {
   return (
     <View style={{ paddingVertical: 12, gap: 6 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <ConversationAvatar name={item.sender} size={28} />
+      <Pressable
+        accessibilityRole={person ? "button" : undefined}
+        accessibilityLabel={person ? `Ver perfil de ${person.name}` : undefined}
+        disabled={!person}
+        onPress={() => {
+          if (person) onProfile(person.id);
+        }}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          minHeight: 44,
+          alignSelf: "flex-start",
+          opacity: pressed ? 0.65 : 1,
+        })}
+      >
+        <ConversationAvatar
+          name={item.sender}
+          uri={person?.avatarUri ?? undefined}
+          size={28}
+        />
         <View>
           <Text style={{ fontWeight: "600" }}>
             {item.mine ? "Você" : item.sender}
@@ -224,7 +271,7 @@ function ContextMessage({
             {item.editId ? " · Editada" : ""}
           </Text>
         </View>
-      </View>
+      </Pressable>
       {item.media ? (
         <RoomAttachment
           item={item}
@@ -315,12 +362,14 @@ function ContextContent({
   cacheScope,
   focus,
   onFocus,
+  onProfile,
   onClose,
   onOpenRoom,
 }: Omit<ComponentProps<typeof SavedMessageContext>, "reference"> & {
   readonly value: z.infer<typeof import("./schema").roomContextSchema>;
   readonly focus: z.infer<typeof roomMediaReadSchema>;
   readonly onFocus: (value: z.infer<typeof roomMediaReadSchema>) => void;
+  readonly onProfile: (id: string) => void;
 }) {
   return (
     <ScrollView style={{ maxHeight: 560 }}>
@@ -330,6 +379,10 @@ function ContextContent({
         data={data}
         cacheScope={cacheScope}
         roomId={focus.id}
+        person={value.members.find(
+          (member) => member.id === value.target.senderId
+        )}
+        onProfile={onProfile}
       />
       {value.root && (
         <ActionButton
@@ -374,6 +427,8 @@ function ContextContent({
             data={data}
             cacheScope={cacheScope}
             roomId={focus.id}
+            person={value.members.find((member) => member.id === item.senderId)}
+            onProfile={onProfile}
           />
         </View>
       ))}

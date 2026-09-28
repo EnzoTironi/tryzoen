@@ -1149,3 +1149,33 @@ retained exactly the same measured vertical positions (187.5, 373.5 and 559.5px)
 The latest shortcut showed the new message. Web scroll anchoring supplies the
 behavior missing from React Native Web's maintainVisibleContentPosition; native
 uses the platform implementation. Physical-device scrolling remains unqualified.
+
+### Integrated parity checkpoint — 2026-09-28, wave 6
+
+The active delivery is PR 152 on `codex/conversation-parity`. The later verified
+slices supersede the earlier open-item list above: global activity-ordered inbox
+pagination and bounded native Matrix sync, private read markers, own-message
+editing/deletion, saved references with exact event context and participant
+profiles, plus focused-room typing are implemented. Matrix remains the source of
+message content, relations and private account data. These slices do not yet
+qualify notification counts, full gap reconciliation, offline, push, E2EE or calls.
+
+Creator teaching and evaluation use the chat workflow. Approved versions freeze
+reviewed sources and an Akita 2.4.1 corpus; private grounded evaluations preserve
+exact excerpts and reject invalid citations. A real synthetic chat test retrieved
+the fictional source, correctly abstained from inventing a novel quotation and
+saved the review separately. Grounded evaluations cannot qualify or silently
+change existing snapshot pilots. Public publishing, YouTube ingestion and
+creator-qualified grounded pilots remain open.
+
+Shared settings now work inside the Expo panel with named overlays, keyboard focus
+containment on web, channels, credential delegation and signed-in sessions. Vault
+CRUD, provider onboarding and physical-device qualification remain separate work.
+The mobile navigation remains visible; the web overlay is a modal on desktop.
+
+Wave 6 passed `pnpm check` (245 files / 1,518 tests), `pnpm build`, database
+migration validation and Expo web/iOS/Android exports. Isolated runtime coverage
+includes five Matrix and nineteen creator tests. Structural findings remain
+recorded, without suppression. See [the parity roadmap](parity-roadmap.md) for
+current acceptance criteria, evidence and the three parallel implementation lanes.
+No production database was reset and no full-parity or capacity claim is made.

@@ -1,11 +1,8 @@
-import { ChannelSettingsButton } from "./settings/channels";
+import { MobileSettings } from "./settings";
 import { SearchSection } from "./search";
-import { PermissionSettingsButton } from "./settings/permissions";
-import { SessionSettingsButton } from "./settings/sessions";
 import { randomUUID } from "expo-crypto";
 import { useRef, useState } from "react";
-import { Text, View } from "react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   ActionButton,
   DiscoverBots,
@@ -15,7 +12,6 @@ import {
   GoalCollection,
   IdeaCollection,
   Library,
-  CreatorStudio,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { companionFeedData } from "../../../shared/companion/feed";
@@ -23,7 +19,6 @@ import { companionIdeasData } from "../../../shared/companion/ideas";
 import { client } from "./conversation";
 import { queries, rpc } from "./api";
 import { auth } from "./auth";
-import { MobileMemory } from "./agent-panel";
 import { companionGoalsData } from "../../../shared/companion/goals";
 import { companionDocumentHistory } from "../../../shared/companion/files";
 import { shareFile } from "./files/share";
@@ -55,7 +50,16 @@ export function MobileSections({
   if (section === "goals") return <GoalsSection onPrompt={onPrompt} />;
   if (section === "feed") return <FeedSection onPrompt={onPrompt} />;
   if (section === "library") return <LibrarySection onPrompt={onPrompt} />;
-  return <SettingsSection onSignOut={onSignOut} onPrompt={onPrompt} />;
+  return (
+    <MobileSettings
+      onSignOut={onSignOut}
+      onPrompt={onPrompt}
+      onClose={() => {
+        onConversation();
+      }}
+      creators={mobileCreators}
+    />
+  );
 }
 function IdeasSection({
   onPrompt,
@@ -218,75 +222,6 @@ function FileSection({
       }
     >
       {null}
-    </CompanionPage>
-  );
-}
-
-function SettingsSection({
-  onSignOut,
-  onPrompt,
-}: {
-  readonly onSignOut: () => Promise<void>;
-  readonly onPrompt: (text: string) => void;
-}) {
-  const session = auth.useSession();
-  const signOut = useMutation({ mutationFn: onSignOut });
-  const [memory, setMemory] = useState(false);
-  if (memory)
-    return (
-      <>
-        <ActionButton
-          quiet
-          onPress={() => {
-            setMemory(false);
-          }}
-        >
-          Back to settings
-        </ActionButton>
-        <MobileMemory onPrompt={onPrompt} />
-      </>
-    );
-  return (
-    <CompanionPage title="Settings" error={signOut.error?.message}>
-      <View style={{ gap: 24 }}>
-        <Text style={{ fontSize: 20 }}>{session.data?.user.name}</Text>
-        <Text>{session.data?.user.email}</Text>
-        <CreatorStudio
-          key={session.data?.user.id}
-          data={mobileCreators}
-          cacheScope={session.data?.user.id ?? "signed-out"}
-        />
-        <ActionButton
-          quiet
-          onPress={() => {
-            onPrompt(
-              "Help me review my connected tools, available models, and account preferences. Ask what I want to change before applying anything."
-            );
-          }}
-        >
-          Connections and preferences
-        </ActionButton>
-        <ChannelSettingsButton />
-        <PermissionSettingsButton />
-        <SessionSettingsButton />
-        <ActionButton
-          quiet
-          onPress={() => {
-            setMemory(true);
-          }}
-        >
-          Personal memory
-        </ActionButton>
-        <ActionButton
-          disabled={signOut.isPending}
-          quiet
-          onPress={() => {
-            signOut.mutate();
-          }}
-        >
-          Sign out
-        </ActionButton>
-      </View>
     </CompanionPage>
   );
 }

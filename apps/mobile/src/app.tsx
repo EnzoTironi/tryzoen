@@ -1,3 +1,4 @@
+import { MobileOverlayProvider } from "./overlay";
 import { useAudioRecording } from "./audio-recording";
 import { renderComposerEditor } from "./composer";
 import { linkPreviewSchema } from "@zoen/companion-ui/previews";
@@ -109,27 +110,29 @@ function AccountCompanion() {
   );
   return (
     <QueryClientProvider client={client}>
-      <MarkdownEditorProvider value={renderMarkdownEditor}>
-        <ComposerEditorProvider value={composerAdapter}>
-          <AttachmentProvider
-            pick={pickAttachments}
-            save={saveAttachment}
-            renderMedia={renderMedia}
-            startAudioRecording={startAudioRecording}
-          >
-            <MobileCompanion
-              onSignOut={async () => {
-                const result = await auth.signOut();
-                if (result.error)
-                  throw new Error(
-                    result.error.message ?? "Could not sign out."
-                  );
-                client.clear();
-              }}
-            />
-          </AttachmentProvider>
-        </ComposerEditorProvider>
-      </MarkdownEditorProvider>
+      <MobileOverlayProvider>
+        <MarkdownEditorProvider value={renderMarkdownEditor}>
+          <ComposerEditorProvider value={composerAdapter}>
+            <AttachmentProvider
+              pick={pickAttachments}
+              save={saveAttachment}
+              renderMedia={renderMedia}
+              startAudioRecording={startAudioRecording}
+            >
+              <MobileCompanion
+                onSignOut={async () => {
+                  const result = await auth.signOut();
+                  if (result.error)
+                    throw new Error(
+                      result.error.message ?? "Could not sign out."
+                    );
+                  client.clear();
+                }}
+              />
+            </AttachmentProvider>
+          </ComposerEditorProvider>
+        </MarkdownEditorProvider>
+      </MobileOverlayProvider>
     </QueryClientProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
-export const creatorPreviewProjection = sql`id, draft_id AS "draftId", pilot_id AS "pilotId", revision, kind, question, snapshot->>'title' AS title,
+export const creatorPreviewProjection = sql`id, draft_id AS "draftId", pilot_id AS "pilotId", revision, kind, grounding, grounded_answer AS "groundedAnswer",
+  CASE WHEN kind = 'grounded-answer' THEN 'grounded' ELSE 'snapshot' END AS "answerMode", grounding->>'releaseId' AS "releaseId", question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
   response, evaluation, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
   extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",

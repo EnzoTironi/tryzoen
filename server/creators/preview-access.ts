@@ -1,3 +1,4 @@
+import { readCreatorRelease } from "./releases";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -13,12 +14,17 @@ export async function requirePreview(
   id: string
 ) {
   const [owned] =
-    await query(sql`SELECT draft_id AS "draftId", pilot_id AS "pilotId" FROM creator_previews
+    await query(sql`SELECT draft_id AS "draftId", pilot_id AS "pilotId", grounding->>'releaseId' AS "releaseId" FROM creator_previews
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
   if (!owned) throw new WorkspaceAccessDenied();
   const source = z
-    .object({ draftId: z.uuid(), pilotId: z.uuid().nullable() })
+    .object({
+      draftId: z.uuid(),
+      pilotId: z.uuid().nullable(),
+      releaseId: z.uuid().nullable(),
+    })
     .parse(owned);
   if (source.pilotId) await requireActiveCreatorPilot(actor, source.pilotId);
   else await readCreatorDraft(actor, source.draftId);
+  if (source.releaseId) await readCreatorRelease(actor, source.releaseId);
 }

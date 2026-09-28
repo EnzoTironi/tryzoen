@@ -81,6 +81,8 @@ vi.mock("@tanstack/react-query", async (original) => ({
   },
 }));
 const rooms: RoomData = {
+  setTyping: vi.fn<RoomData["setTyping"]>(),
+  readTyping: vi.fn<RoomData["readTyping"]>(),
   markRead: vi.fn<RoomData["markRead"]>(),
   savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
   clearUnavailableSavedMessages:

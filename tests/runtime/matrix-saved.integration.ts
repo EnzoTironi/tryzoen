@@ -97,6 +97,9 @@ test(
         messageId: reply.event_id,
       });
       expect(context.target.id).toBe(reply.event_id);
+      expect(
+        context.members.find((member) => member.id === context.target.senderId)
+      ).toMatchObject({ mine: true, bot: false });
       expect(context.root?.id).toBe(first.event_id);
       expect(context.root?.text).toBe("Edited source");
       expect(context.messages.map((item) => item.timestamp)).toEqual(

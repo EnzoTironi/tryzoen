@@ -67,6 +67,7 @@ export async function readMatrixContext(
     await requireMatrixRoom(actor, input.id);
     return roomContextSchema.parse({
       room,
+      members,
       target,
       root,
       messages: [

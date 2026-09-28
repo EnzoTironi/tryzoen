@@ -1,3 +1,5 @@
+import { useRoomTyping } from "./typing";
+import { RoomTypingIndicator } from "./typing-indicator";
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -64,6 +66,12 @@ export function RoomConversation({
   });
   const current = messages.isError ? undefined : messages.data;
   const room = current?.pages[0]?.room;
+  const typing = useRoomTyping(
+    data,
+    cacheScope,
+    roomId,
+    !!room && !messages.isError && !details && !profile
+  );
   const showProfile = () => {
     if (room?.kind === "direct")
       setProfile(current?.pages[0]?.members.find((person) => !person.mine));
@@ -132,7 +140,12 @@ export function RoomConversation({
                 void messages.fetchNextPage({ cancelRefetch: false });
             }}
           />
+          <RoomTypingIndicator
+            userIds={typing.userIds}
+            members={current?.pages[0]?.members ?? []}
+          />
           <RoomComposer
+            onTyping={typing.change}
             draft={draft}
             disabled={!room || messages.isError}
             direct={room?.kind === "direct"}
@@ -177,6 +190,7 @@ export function RoomConversation({
             onCopyText={onCopyText}
             onProfile={setProfile}
             visible={!details && !profile}
+            typing={typing}
           />
         </View>
       )}
@@ -289,6 +303,7 @@ function RoomThread({
   onCopyText,
   onProfile,
   visible,
+  typing,
 }: Pick<
   Parameters<typeof RoomConversation>[0],
   "data" | "cacheScope" | "roomId" | "avatarUri" | "onCopyText"
@@ -296,6 +311,7 @@ function RoomThread({
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
+  readonly typing: ReturnType<typeof useRoomTyping>;
 }) {
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
   const reactions = useRoomReactions(data, cacheScope, roomId);
@@ -366,7 +382,12 @@ function RoomThread({
             void result.fetchNextPage({ cancelRefetch: false });
         }}
       />
+      <RoomTypingIndicator
+        userIds={typing.userIds}
+        members={result.isError ? [] : (result.data?.pages[0]?.members ?? [])}
+      />
       <RoomComposer
+        onTyping={typing.change}
         draft={draft}
         thread
         disabled={!result.data || result.isError}

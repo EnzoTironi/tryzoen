@@ -12,7 +12,7 @@ import {
 import { MatrixError, matrixConfiguration } from "./client";
 import { ensureMatrixIdentity } from "./identities";
 import { openSyncCursor, sealSyncCursor, syncFingerprint } from "./sync/cursor";
-import { pollNativeInbox } from "./sync/native";
+import { pollNativeSync } from "./sync/native";
 
 /** Foreground metadata invalidation; no transaction is held during provider I/O. */
 export async function syncConversationInbox(
@@ -106,10 +106,11 @@ async function readAuthorizedChanges(
   };
   const head = await readInboxSyncHead(actor, options, input.focusedRoomId);
   const native = head.scope.length
-    ? await pollNativeInbox(
+    ? await pollNativeSync(
         await ensureMatrixIdentity(actor),
         head.scope.map((room) => room.roomId),
-        since
+        since,
+        "inbox"
       )
     : null;
   // The second authorization removes revoked rooms and detects head changes during I/O.

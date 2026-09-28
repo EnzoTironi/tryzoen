@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  creatorGroundingSchema,
+  creatorGroundedAnswerSchema,
+} from "./grounding";
+export {
+  creatorGroundingSchema,
+  creatorGroundedAnswerSchema,
+} from "./grounding";
 
 export const creatorExampleSchema = z
   .object({
@@ -96,7 +104,8 @@ export const creatorPreviewRequestSchema = z.strictObject({
   id: z.uuid(),
   draftId: z.uuid(),
   revision: z.uuid(),
-  kind: z.enum(["answer", "playbook"]),
+  kind: z.enum(["answer", "playbook", "grounded-answer"]),
+  releaseId: z.uuid().optional(),
   question: creatorEvaluationCaseSchema.shape.question,
   pilotId: z.uuid().optional(),
   caseRef: z.strictObject({ id: z.uuid(), revision: z.uuid() }).optional(),
@@ -129,6 +138,10 @@ export const creatorPreviewSchema = creatorPreviewRequestSchema
   .omit({ caseRef: true })
   .extend({
     pilotId: z.uuid().nullable(),
+    releaseId: z.uuid().nullable(),
+    answerMode: z.enum(["snapshot", "grounded"]),
+    grounding: creatorGroundingSchema.nullable(),
+    groundedAnswer: creatorGroundedAnswerSchema.nullable(),
     evaluation: creatorEvaluationSnapshotSchema.nullable(),
     title: z.string().min(1).max(80),
     status: z.enum(["pending", "running", "completed", "failed", "expired"]),
@@ -147,7 +160,14 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
 });
 
 export const creatorReleaseEvidenceSchema = creatorPreviewSchema
-  .omit({ kind: true, pilotId: true })
+  .omit({
+    kind: true,
+    pilotId: true,
+    answerMode: true,
+    grounding: true,
+    groundedAnswer: true,
+    releaseId: true,
+  })
   .strip()
   .extend({
     status: z.literal("completed"),

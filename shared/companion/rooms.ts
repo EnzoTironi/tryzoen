@@ -8,6 +8,7 @@ import {
 import { roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 import {
+  roomTypingPageSchema,
   roomListSchema,
   directPeopleSchema,
   directListSchema,
@@ -27,6 +28,14 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async setTyping(input) {
+      await rpc.mutation("workspaces.rooms.setTyping", input);
+    },
+    async readTyping(input, signal) {
+      return roomTypingPageSchema.parse(
+        await rpc.query("workspaces.rooms.readTyping", input, { signal })
+      );
+    },
     async savedCleanupState() {
       return savedCleanupStateSchema.parse(
         await rpc.query("workspaces.rooms.savedCleanupState")

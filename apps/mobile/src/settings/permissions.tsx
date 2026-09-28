@@ -1,20 +1,10 @@
-import { SettingsEntry } from "./entry";
 import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionButton } from "@zoen/companion-ui";
-import { CompanionSheet } from "@zoen/companion-ui/sheet";
 import { credentialPermissionsSchema } from "../../../../shared/vault/permissions";
 import { auth } from "../auth";
 import { rpc } from "../api";
-
-export function PermissionSettingsButton() {
-  return (
-    <SettingsEntry label="Permissions">
-      {(close) => <CredentialPermissions onClose={close} />}
-    </SettingsEntry>
-  );
-}
 
 function useCredentialPermissions() {
   const account = auth.useSession();
@@ -96,26 +86,20 @@ function useCredentialPermissions() {
   };
 }
 
-export function CredentialPermissions({
-  onClose,
-}: {
-  readonly onClose: () => void;
-}) {
+export function CredentialPermissions() {
   const state = useCredentialPermissions();
   return (
-    <CompanionSheet title="Permissions" onClose={onClose}>
-      <View style={styles.content}>
-        <Text accessibilityRole="header" style={styles.heading}>
-          Saved credential access
-        </Text>
-        <Text style={styles.description}>
-          Review credentials Zoen is allowed to use. Revoking access keeps the
-          saved credential in your vault. These permissions do not control
-          browser actions or device access.
-        </Text>
-        <PermissionContent state={state} />
-      </View>
-    </CompanionSheet>
+    <View style={styles.content}>
+      <Text accessibilityRole="header" style={styles.heading}>
+        Saved credential access
+      </Text>
+      <Text style={styles.description}>
+        Review credentials Zoen is allowed to use. Revoking access keeps the
+        saved credential in your vault. These permissions do not control browser
+        actions or device access.
+      </Text>
+      <PermissionContent state={state} />
+    </View>
   );
 }
 

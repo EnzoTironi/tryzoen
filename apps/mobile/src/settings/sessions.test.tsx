@@ -49,15 +49,6 @@ vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useState: () => [mocks.selected, vi.fn<() => void>()],
 }));
-vi.mock("@zoen/companion-ui/sheet", () => ({
-  CompanionSheet: ({
-    title,
-    children,
-  }: {
-    title: string;
-    children: ReactNode;
-  }) => <section aria-label={title}>{children}</section>,
-}));
 vi.mock("@zoen/companion-ui", () => ({
   ActionButton: ({
     children,
@@ -107,9 +98,7 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 function render() {
-  return renderToStaticMarkup(
-    <SignedInSessions onClose={vi.fn<() => void>()} />
-  );
+  return renderToStaticMarkup(<SignedInSessions />);
 }
 beforeEach(() => {
   vi.clearAllMocks();

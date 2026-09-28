@@ -4,10 +4,10 @@ import { syncConversationInbox } from "./sync";
 import { MatrixError } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 import type { readInboxSyncHead } from "@db/services/inbox";
-import type { pollNativeInbox } from "./sync/native";
+import type { pollNativeSync } from "./sync/native";
 const mocks = vi.hoisted(() => ({
   head: vi.fn<typeof readInboxSyncHead>(),
-  native: vi.fn<typeof pollNativeInbox>(),
+  native: vi.fn<typeof pollNativeSync>(),
   access: vi.fn<() => Promise<void>>(),
 }));
 vi.mock("@db/services/inbox", () => ({ readInboxSyncHead: mocks.head }));
@@ -18,7 +18,7 @@ vi.mock("@db/services/auth", () => ({
     }),
   }),
 }));
-vi.mock("./sync/native", () => ({ pollNativeInbox: mocks.native }));
+vi.mock("./sync/native", () => ({ pollNativeSync: mocks.native }));
 vi.mock("./identities", () => ({
   ensureMatrixIdentity: async () => "@viewer:test",
 }));

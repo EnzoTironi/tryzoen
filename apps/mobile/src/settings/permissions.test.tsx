@@ -54,11 +54,6 @@ vi.mock("react-native", () => ({
   Text: ({ children }: { children: ReactNode }) => <p>{children}</p>,
   StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 },
 }));
-vi.mock("@zoen/companion-ui/sheet", () => ({
-  CompanionSheet: ({ children }: { children: ReactNode }) => (
-    <section>{children}</section>
-  ),
-}));
 vi.mock("@zoen/companion-ui", () => ({
   ActionButton: ({
     children,
@@ -106,9 +101,7 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 function render() {
-  return renderToStaticMarkup(
-    <CredentialPermissions onClose={() => undefined} />
-  );
+  return renderToStaticMarkup(<CredentialPermissions />);
 }
 function mutation() {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The mocked useMutation captures these exact production callback options.

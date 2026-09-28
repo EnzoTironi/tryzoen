@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { beforeEach, expect, it, vi } from "vitest";
-import { pollNativeInbox } from "./native";
+import { pollNativeSync } from "./native";
 import { MatrixError, type matrixRequest } from "../client";
 const mocks = vi.hoisted(() => ({ request: vi.fn<typeof matrixRequest>() }));
 vi.mock("../client", async (original) => ({
@@ -11,7 +11,7 @@ beforeEach(() => {
   mocks.request.mockReset().mockResolvedValue({ next_batch: "native-token" });
 });
 it("bootstraps one stable bridge device and bounds metadata responses", async () => {
-  await pollNativeInbox("@viewer:test", ["!room:test"], null);
+  await pollNativeSync("@viewer:test", ["!room:test"], null, "inbox");
   expect(mocks.request).toHaveBeenCalledWith(
     "PUT",
     "devices/ZOEN_INBOX_BRIDGE_V1",
@@ -27,7 +27,12 @@ it("bootstraps one stable bridge device and bounds metadata responses", async ()
   );
 });
 it("uses the exact previous native cursor without device churn", async () => {
-  await pollNativeInbox("@viewer:test", ["!room:test"], "s123&unsafe=x");
+  await pollNativeSync(
+    "@viewer:test",
+    ["!room:test"],
+    "s123&unsafe=x",
+    "inbox"
+  );
   expect(mocks.request).toHaveBeenCalledTimes(1);
   expect(mocks.request.mock.calls[0]?.[1]).toContain("since=s123%26unsafe%3Dx");
 });
@@ -55,6 +60,41 @@ it.each([
 ])("rejects provider output outside the bounded scope", async (result) => {
   mocks.request.mockResolvedValue(z.json().parse(result));
   await expect(
-    pollNativeInbox("@viewer:test", ["!room:test"], "previous")
+    pollNativeSync("@viewer:test", ["!room:test"], "previous", "inbox")
+  ).rejects.toThrow(MatrixError);
+});
+it("typing uses one-room ephemeral sync and finite native long-poll", async () => {
+  await pollNativeSync(
+    "@viewer:test",
+    ["!room:test"],
+    "native-cursor",
+    "typing"
+  );
+  expect(mocks.request).toHaveBeenLastCalledWith(
+    "GET",
+    expect.stringContaining("device_id=ZOEN_TYPING_BRIDGE_V1&timeout=10000"),
+    undefined,
+    "@viewer:test",
+    { maxResponseBytes: 65536 }
+  );
+  const request = mocks.request.mock.calls[0]?.[1] ?? "";
+  const filter: unknown = JSON.parse(
+    new URL(request, "https://matrix.invalid/").searchParams.get("filter") ??
+      "{}"
+  );
+  expect(filter).toMatchObject({
+    room: {
+      rooms: ["!room:test"],
+      timeline: { types: [] },
+      ephemeral: { types: ["m.typing"] },
+    },
+  });
+  await expect(
+    pollNativeSync(
+      "@viewer:test",
+      ["!room:test", "!other:test"],
+      null,
+      "typing"
+    )
   ).rejects.toThrow(MatrixError);
 });

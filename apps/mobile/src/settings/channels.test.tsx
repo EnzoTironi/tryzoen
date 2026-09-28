@@ -61,11 +61,6 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-vi.mock("@zoen/companion-ui/sheet", () => ({
-  CompanionSheet: ({ children }: { children: ReactNode }) => (
-    <section>{children}</section>
-  ),
-}));
 vi.mock("@zoen/companion-ui", () => ({
   ActionButton: ({
     children,
@@ -124,7 +119,7 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 function render() {
-  return renderToStaticMarkup(<LinkedChannels onClose={() => undefined} />);
+  return renderToStaticMarkup(<LinkedChannels />);
 }
 function unlink() {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The mocked hook captures production mutation options.

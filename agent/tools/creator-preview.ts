@@ -1,5 +1,6 @@
 import { defineWorkflowTool, type WorkflowStepToolContext } from "eve/tools";
 import { z } from "zod";
+import { creatorGroundedAnswerSchema } from "@zoen/companion-ui/creators";
 import { workspaceActorFromPrincipal } from "../../server/workspaces/access";
 import {
   claimCreatorPreview,
@@ -14,12 +15,22 @@ export default defineWorkflowTool({
   async execute({ id }, context) {
     "use workflow";
     const snapshot = await claim(id, context);
-    let response: string | null;
+    let response: string | z.infer<typeof creatorGroundedAnswerSchema> | null;
     try {
-      const result = await context.agent("creator-specialist", {
-        message: JSON.stringify(snapshot),
-      });
-      response = typeof result === "string" ? result : null;
+      if (snapshot.kind === "grounded-answer") {
+        const result = await context.agent("creator-specialist", {
+          message: JSON.stringify(snapshot),
+          outputSchema: z
+            .record(z.string(), z.json())
+            .parse(z.toJSONSchema(creatorGroundedAnswerSchema)),
+        });
+        response = creatorGroundedAnswerSchema.parse(result);
+      } else {
+        const result = await context.agent("creator-specialist", {
+          message: JSON.stringify(snapshot),
+        });
+        response = typeof result === "string" ? result : null;
+      }
     } catch {
       // Persist a clear failure without copying provider errors or private context.
       response = null;
@@ -43,14 +54,16 @@ async function claim(id: string, context: WorkflowStepToolContext) {
 
 async function finish(
   id: string,
-  response: string | null,
+  response: string | z.infer<typeof creatorGroundedAnswerSchema> | null,
   context: WorkflowStepToolContext
 ) {
   "use step";
   const actor = await workspaceActorFromPrincipal(
     context.session.auth.current ?? context.session.auth.initiator ?? undefined
   );
-  const answer = z.string().trim().min(1).max(32000).safeParse(response);
+  const answer = z
+    .union([z.string().trim().min(1).max(32000), creatorGroundedAnswerSchema])
+    .safeParse(response);
   return finishCreatorPreview(
     actor,
     id,
