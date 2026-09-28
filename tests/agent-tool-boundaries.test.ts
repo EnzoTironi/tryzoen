@@ -25,6 +25,7 @@ describe("root and worker capability boundaries", () => {
       "capabilities.ts",
       "creator-library.ts",
       "creator-preview.ts",
+      "creator-review.ts",
       "feed.ts",
       "ideas.ts",
       "messaging.ts",

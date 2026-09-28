@@ -20,8 +20,26 @@ export default defineAgent({
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           if (
+            lastUserMessage?.startsWith("creator-review ") &&
+            !toolResults.some((result) => result.name === "creator-review")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-review",
+                  input: {
+                    id: lastUserMessage.slice("creator-review ".length),
+                  },
+                },
+              ],
+            };
+          if (
             lastUserMessage?.startsWith("creator-authoring ") &&
-            !toolResults.some((result) => result.name === "creator-library")
+            !messages
+              .slice(
+                messages.findLastIndex((message) => message.role === "user") + 1
+              )
+              .some((message) => message.role === "tool")
           )
             return {
               toolCalls: [

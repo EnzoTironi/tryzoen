@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { z } from "zod";
+import { inputRequestSchema } from "eve/client";
+import { saveCreatorPreviewReview } from "../../server/creators/reviews";
 import { freePort } from "../helpers/ports";
 import {
   compileEveFixture,
@@ -40,7 +42,7 @@ beforeAll(async () => {
       recursive: true,
     });
   // Workflow tools must be compiled as authored modules, not re-exported definitions.
-  for (const name of ["creator-preview", "creator-library"]) {
+  for (const name of ["creator-preview", "creator-library", "creator-review"]) {
     const tool = await readFile(
       new URL(`../../agent/tools/${name}.ts`, import.meta.url),
       "utf8"
@@ -235,6 +237,145 @@ test.each([
   90000
 );
 
+test("a creator reviews a genuine specialist result through human questions after a process restart", async () => {
+  await using workspace = await workspaceFixture();
+  const source = await reviewedCreatorVersion(workspace.personal);
+  const preview = await createCreatorPreview(workspace.personal, {
+    ...source.request,
+    id: randomUUID(),
+  });
+  const server = await runtime(await freePort(), "127.0.0.1", directory);
+  const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
+  const { sessionId } = z.object({ sessionId: z.string() }).parse(
+    await server.request("/probe/send", {
+      address: randomUUID(),
+      id: randomUUID(),
+      message: `preview ${preview.id}`,
+      auth,
+    })
+  );
+  await server.settled(sessionId);
+  const result = await exportCreatorPreview(workspace.personal, preview.id);
+  expect(result.status).toBe("completed");
+  expect(result.models).toHaveLength(1);
+  await server.request(`/probe/message/${sessionId}`, {
+    message: `creator-review ${preview.id}`,
+    auth,
+  });
+  const waiting = await server.settled(sessionId, 2);
+  const question = z
+    .object({ requests: z.array(inputRequestSchema) })
+    .parse(waiting.findLast((event) => event.type === "input.requested")?.data)
+    .requests[0];
+  if (!question) throw new Error("Expected creator's verdict question");
+  expect(JSON.stringify(question)).toContain(
+    JSON.stringify(result.response).slice(1, -1)
+  );
+  expect(JSON.stringify(question)).toContain(source.review.content.criteria);
+  expect(
+    (await exportCreatorPreview(workspace.personal, preview.id)).review
+  ).toBeNull();
+  await server.stop();
+  const resumed = await runtime(await freePort(), "127.0.0.1", directory);
+  await resumed.request(`/probe/input/${sessionId}`, {
+    auth,
+    responses: [{ requestId: question.requestId, optionId: "needs-revision" }],
+  });
+  const notesWaiting = await resumed.settled(sessionId, 3);
+  const notes = z
+    .object({ requests: z.array(inputRequestSchema) })
+    .parse(
+      notesWaiting.findLast((event) => event.type === "input.requested")?.data
+    ).requests[0];
+  if (!notes) throw new Error("Expected creator's feedback question");
+  expect(
+    (await exportCreatorPreview(workspace.personal, preview.id)).review
+  ).toBeNull();
+  await resumed.request(`/probe/input/${sessionId}`, {
+    auth,
+    responses: [
+      {
+        requestId: notes.requestId,
+        text: "Human feedback after restart: make the invitation clearer.",
+      },
+    ],
+  });
+  await resumed.settled(sessionId, 4);
+  const reviewed = await exportCreatorPreview(workspace.personal, preview.id);
+  expect(reviewed.review?.content).toEqual({
+    criteria: source.review.content.criteria,
+    verdict: "needs-revision",
+    notes: "Human feedback after restart: make the invitation clearer.",
+  });
+  expect(reviewed.response).toBe(result.response);
+  await resumed.stop();
+}, 90000);
+
+test("a conversational review cannot overwrite feedback changed while its questions were pending", async () => {
+  await using workspace = await workspaceFixture();
+  const source = await reviewedCreatorVersion(workspace.personal);
+  const server = await runtime(await freePort(), "127.0.0.1", directory);
+  const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
+  try {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        message: `creator-review ${source.preview.id}`,
+        auth,
+      })
+    );
+    const waiting = await server.settled(sessionId);
+    const verdict = z
+      .object({ requests: z.array(inputRequestSchema) })
+      .parse(
+        waiting.findLast((event) => event.type === "input.requested")?.data
+      ).requests[0];
+    if (!verdict) throw new Error("Missing verdict question");
+    await server.request(`/probe/input/${sessionId}`, {
+      auth,
+      responses: [{ requestId: verdict.requestId, optionId: "useful" }],
+    });
+    const feedbackWaiting = await server.settled(sessionId, 2);
+    const feedback = z
+      .object({ requests: z.array(inputRequestSchema) })
+      .parse(
+        feedbackWaiting.findLast((event) => event.type === "input.requested")
+          ?.data
+      ).requests[0];
+    if (!feedback) throw new Error("Missing feedback question");
+    const newer = await saveCreatorPreviewReview(workspace.personal, {
+      id: source.preview.id,
+      expectedRevision: source.review.revision,
+      content: {
+        ...source.review.content,
+        verdict: "unsafe-or-unsupported",
+        notes: "Newer human correction must survive.",
+      },
+    });
+    await server.request(`/probe/input/${sessionId}`, {
+      auth,
+      responses: [
+        { requestId: feedback.requestId, text: "Stale pending review" },
+      ],
+    });
+    await expect
+      .poll(
+        async () => {
+          const events = await server.request(`/probe/events/${sessionId}`);
+          return JSON.stringify(events);
+        },
+        { timeout: 30000 }
+      )
+      .toContain("This review changed elsewhere");
+    expect(
+      (await exportCreatorPreview(workspace.personal, source.preview.id)).review
+    ).toEqual(newer);
+  } finally {
+    await server.stop();
+  }
+}, 60000);
+
 test("an accepted pilot runs the creator's approved teaching as the participant's isolated Eve child", async () => {
   await using workspace = await workspaceFixture();
   const source = await reviewedCreatorVersion(workspace.actor);
@@ -353,6 +494,47 @@ test("the native conversational authoring tool persists private drafts and denie
     await server.settled(identity.sessionId);
     expect((await readCreatorDraft(workspace.actor, draft.id)).username).toBe(
       username
+    );
+    const evaluationCase = {
+      id: randomUUID(),
+      title: "A quiet group",
+      question: "How can we invite participation?",
+      criteria: "Ask an open question.",
+    };
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-authoring ${JSON.stringify({ action: "evaluation", evaluation: { draftId: draft.id, expectedRevision: null, cases: [evaluationCase] } })}`,
+    });
+    await server.settled(sessionId, 2);
+    const evaluated = await readCreatorDraft(workspace.actor, draft.id);
+    expect(evaluated.evaluation?.cases).toEqual([evaluationCase]);
+    const previewInput = {
+      id: randomUUID(),
+      draftId: draft.id,
+      revision: saved.revision,
+      kind: "answer",
+      question: evaluationCase.question,
+      caseRef: {
+        id: evaluationCase.id,
+        revision: evaluated.evaluation?.revision,
+      },
+    };
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-authoring ${JSON.stringify({ action: "preview", preview: previewInput })}`,
+    });
+    await server.settled(sessionId, 3);
+    expect(
+      (await exportCreatorPreview(workspace.actor, previewInput.id)).evaluation
+        ?.case
+    ).toEqual(evaluationCase);
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-authoring ${JSON.stringify({ action: "candidate", draftId: draft.id })}`,
+    });
+    const candidateEvents = await server.settled(sessionId, 4);
+    expect(JSON.stringify(candidateEvents)).toContain(
+      "latest run needs a completed answer"
     );
   } finally {
     await server.stop();
