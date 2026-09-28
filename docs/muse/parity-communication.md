@@ -1,0 +1,118 @@
+# Communication parity: executable backlog
+
+Updated 2026-09-28 against `f17b039` and the latest social/Matrix handoff. This is a planning audit, not new runtime verification. “Implemented” means code plus recorded tests/browser evidence; it does not mean production capacity or physical-device qualification. “Partial” means a functioning subset. “Missing” means no delivered product path in the inspected owner/handoff. “Unverified” means evidence is insufficient, not that the feature is absent.
+
+## Product boundary
+
+Build one coherent messenger for people, groups and registered AI accounts, with Muse's personal agent and workspace capabilities. Keep the existing mobile product navigation; Discover belongs in the inbox or appropriate discovery entry, not a new bottom tab. Preserve the native-looking card/composer design. Member profiles open sheets on mobile and modals on desktop. Composer references appear above the input on both.
+
+Matrix owns conversational events, relations, receipts, typing, membership and synchronization. PostgreSQL owns Zoen identities, workspace authorization, provider bindings and any explicit application projections. Eve owns agent execution and approvals. TanStack owns request/cache lifecycle; it is not the event authority. Do not duplicate messaging state in Yjs, RxDB or Liveblocks. Collaborative artifact editing is a separate, presently unqualified requirement; assess a CRDT only for that document boundary.
+
+Current private DMs are restricted to two existing members of the same shared workspace. They are not a global contact network. A mention is not a grant to a file, memory or bot. A bot's presence in a group must be explicit, visible and authorized; the current two-person DM excludes the shared agent.
+
+## Reference evidence and interpretation
+
+These are interaction references, not a mandate to copy every unrelated product feature.
+
+- [Apple audio messages](https://support.apple.com/en-gb/guide/iphone/iph2e42d3117/27/ios/27): record and play audio in the conversation. Target: a direct, compact recording experience, with cancel/review/send.
+- [Apple editing and unsending](https://support.apple.com/en-ie/guide/iphone/iphe67195653/ios): editing and unsending are explicit message operations with recipient compatibility implications. Zoen needs its own disclosed policy, not Apple's time limits copied without a decision.
+- [Slack threads](https://slack.com/help/articles/115000769927-Use-threads-to-organize-discussions): discussions anchored to a message. Target: focused side pane on desktop, accessible mobile thread navigation, clear unread/following behavior.
+- [Slack notifications](https://slack.com/help/articles/360025446073-Guide-to-Slack-notifications): meaningful notification and unread presentation. Target: avoid counting own events or repeatedly notifying for retries.
+- [Slack huddles](https://slack.com/help/articles/4402059015315-Use-huddles-in-Slack): live conversation with invitation/access distinctions. Target: joinable hangouts whose participant and content permissions are explicit.
+- [WhatsApp groups](https://www.whatsapp.com/groups): polls, events/RSVPs and large-file sharing. These are useful later coordination slices, not prerequisites for basic reliable delivery.
+- [WhatsApp safety](https://faq.whatsapp.com/1376344666327568): blocking/reporting and profile/device controls. Target: real enforced controls, with no promise to erase copies already received.
+- [WhatsApp calling](https://www.whatsapp.com/calling?lang=en): voice/video as a first-class messaging flow. Zoen calling needs a separately qualified media transport and device lifecycle.
+- [Matrix client/server API](https://spec.matrix.org/v1.18/client-server-api/): incremental synchronization, event relations, receipts, typing and presence already have protocol ownership. Pin implementation decisions to the deployed homeserver/SDK's supported stable features; do not assume the newest spec version is deployed.
+- Muse evidence is the supplied screenshots and `interface-audit.md`: message cards, identity/activity panel, approvals, file editing, goals and settings. No new live Muse inspection occurred in this audit.
+- Ando/Buzz: the user-approved visual concept and hangout direction are requirements. Prior recorded research identifies [Ando](https://www.ando.so/), its [introduction](https://www.ando.so/blog/introducing-ando), and [Block Buzz](https://github.com/block/buzz); see the social handoff. This audit did not reverify their full feature catalogs. Do not label guessed capabilities as verified competitor parity.
+
+## Capability matrix
+
+| Capability                            | Status and current evidence                                                                                | Remaining acceptance requirement                                                                                                                                           |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Personal agent conversation           | Implemented baseline; shared companion/Eve path                                                            | Agent state, errors, approvals and generated cards remain consistent with group/bot presentation without losing execution ownership.                                       |
+| Workspace DMs                         | Implemented bounded subset; `server/matrix/direct.ts`, isolated `matrix-direct.integration.ts`             | Global contact invitations are separate. Pair reuse, revocation and third-admin exclusion must survive every future projection/sync/media route.                           |
+| Group rooms and member profiles       | Partial; `rooms/create.tsx`, `details.tsx`, `profile.tsx`                                                  | Complete roles/invites/removal/leave policy, observable membership changes, user-owned profile fields and visibility rules.                                                |
+| Threads, replies, reactions           | Implemented baseline; `rooms/conversation.tsx`, `messages.tsx`, `server/matrix/replies.ts`, `reactions.ts` | Thread following, unread thread state, jump-to-parent, edit/redact propagation and notification policy.                                                                    |
+| Infinite history                      | Implemented; TanStack queries, cursor-loop tests, 151-message/110-reply browser fixture                    | Physical-device anchor/keyboard qualification; bounded retention and sync so refresh work does not grow with all loaded pages.                                             |
+| Unified inbox                         | Partial; inbox concatenates directs, groups and agent chats                                                | Stable last-activity order across kinds, authorized preview/time, unread/mention badges, loading/error/empty states; pagination without duplicates or hidden rows.         |
+| Pin/archive/rename/export             | Partial; personal agent library has operations                                                             | Define and implement per-user DM/group equivalents; archive is not server deletion or leaving.                                                                             |
+| Realtime                              | Missing product sync; messages poll 10s, reactions/direct list 30s                                         | Resumable Matrix sync, deduplication, limited-timeline gap fill, cancellation on account change/revocation, no stale cache disclosure.                                     |
+| Receipts, typing, presence            | Missing                                                                                                    | Separate private read position from optional public receipts; thread-aware semantics; typing TTL and background expiry; presence preferences, never fake online state.     |
+| Notifications/offline                 | Missing/unqualified                                                                                        | Mobile/desktop push, per-conversation mute and mention/thread preferences, deep-link target, session-scoped offline state and idempotent replay.                           |
+| Search                                | Partial title/name/username filtering                                                                      | Server-authorized message search, filters by sender/type/date, jump to exact event/thread with surrounding history, safe deleted/revoked results.                          |
+| Message editing/deletion/forward/save | Missing complete uniform product flows                                                                     | Ownership checks; Matrix replacement/redaction semantics; visible edited/deleted state; forwarding never grants original private artifacts; bookmarks scoped to owner.     |
+| Media and files                       | Partial; upload/download/playback/cards, 4 files/3 MiB total                                               | Resumable large uploads, progress/cancel/retry, durable storage, authorized thumbnails/streaming, unsupported format fallback, malware/abuse boundaries and expiry policy. |
+| Voice composition                     | Missing; playback exists                                                                                   | Record/pause/review/delete/send, interrupted recording recovery, permission denial, native routing, accessible duration, no accidental send.                               |
+| Rich composer/references              | Implemented baseline                                                                                       | Preserve reference display labels across remount; native IME, selection, undo and keyboard qualification; no capability grants implicit in tags.                           |
+| Rich cards                            | Partial; media, artifacts and opt-in links                                                                 | Interactive MCP Apps not a delivered host. Keep downloaded image/video/audio free of redundant titles; safe previews and authenticated artifact actions.                   |
+| Calls and persistent hangouts         | Missing                                                                                                    | Visible join/leave/participants, mic/camera consent, reconnect, device switching, bounded permissions, screen share if supported, bot participation/recording consent.     |
+| Polls, events, reminders              | Missing messaging flows                                                                                    | Poll lifecycle/results; timezone-safe events/RSVPs; permission-aware reminders via Eve, with explicit send approval where required.                                        |
+| Contacts/block/report                 | Missing outside workspace membership                                                                       | Username lookup limits, invitation/request handling, effective block enforcement, reporting with explicit evidence disclosure and abuse review.                            |
+| E2EE/devices                          | Missing                                                                                                    | Document trust boundary for humans and bots, device verification, key backup/recovery, logout/revocation and encrypted media; no encryption badge before end-to-end tests. |
+| Native quality                        | Partial shared responsive UI; web browser evidence                                                         | Physical iOS/Android/macOS/Windows checks: focus, accessibility, reduce motion, dynamic text, drag/drop, share/pickers, keyboard, background and notification behavior.    |
+
+## Ownership map
+
+- Product UI: `packages/companion-ui/src/chats/{inbox,row,collection,library,schema}.tsx|ts`, `packages/companion-ui/src/rooms/{conversation,messages,composer,details,profile,schema,draft,reactions}.tsx|ts`. Existing filenames govern; these braces describe the owner families, not literal paths.
+- Connected web adapter: `app/companion/inbox.tsx`; shared adapter: `shared/companion/rooms.ts`; RPC: `web/trpc/workspace-rooms.ts`.
+- Protocol/authorization: `server/matrix/{client,rooms,direct,messages,replies,reactions,authority,identities,inbound}.ts`; transport ingress/delivery stays with its existing owner. Read both group and direct authorization before adding an endpoint.
+- Bindings/data: `db/schema/matrix.ts`, `matrix-direct.ts`, `matrix-conversations.ts`; personal library in `db/services/chat-library.ts`. Any new projection must be explicitly disposable/rebuildable from its authority, not a second source of message truth.
+- Attachments: `server/matrix/media/{upload,read}.ts`, `packages/companion-ui/src/rooms/attachment.tsx`, `attachments/{schema,limits,card,provider}.tsx|ts` and platform adapters.
+- Narrow validation: `server/matrix/rooms.test.ts`, `replies.test.ts`, `reactions.test.ts`, `packages/companion-ui/src/rooms/conversation.test.tsx`, `draft.test.tsx`; isolated `tests/runtime/matrix-{direct,rooms,network,ingress}.integration.ts`.
+
+## Ordered delivery slices
+
+### C1. Useful, truthful inbox — smallest next slice
+
+Deliver last-activity ordering, latest authorized preview, timestamp and per-user read position for workspace DMs/groups, integrated with agent rows rather than separate permanently prioritized buckets. Choose the projection/cursor contract before editing UI. A server projection is acceptable only with a declared event source, replay/idempotency and revocation behavior; do not implement an N+1 message-history scan for every inbox row. Keep unread semantics explicit for own events, redactions and threads. Full public read receipts are C2, not a prerequisite for private read position.
+
+Owners: inbox/row/schema, room adapter/RPC, Matrix room/direct query and an explicitly owned projection/read-position service/schema if necessary. This lane is the sole writer of the room data contract; other lanes coordinate additions through it.
+
+Acceptance:
+
+1. Two isolated accounts send in alternating DM/group rooms; both inboxes order by actual latest message, with deterministic tie-breakers. Pagination over more than 20 rooms neither duplicates nor loses stable records; activity changes refresh the head deliberately.
+2. Text/media-only/edited/redacted latest events have truthful compact previews. No media download or model call is needed to list rooms.
+3. Own sends do not increment unread. Opening a background tab or fetching history does not mark unseen messages read. A visible read cursor survives reload; an older device cannot move it backwards.
+4. A revoked member and third workspace admin cannot obtain private previews/counts. Switching account clears scoped cached rows.
+5. Isolated DB/Matrix tests and desktop/mobile browser captures establish behavior. Query count/read budget is measured for the page; no “million users ready” claim follows from small fixtures.
+
+### C2. Resumable delivery and attention
+
+After C1 contracts settle, implement Matrix incremental sync, receipt/typing/presence adapters, gap handling, bounded history retention, notification preferences and platform push/deep links. Avoid one separate polling loop per rendered row/thread. A prototype must prove the existing Matrix principal/device model can support the chosen sync API without exposing service tokens.
+
+Owners: Matrix client/identities/ingress and new narrowly scoped sync owner; room query lifecycle; platform adapters. Acceptance: dropped connection, duplicate events, expired token, limited timeline, two devices, offline send retry, concurrent read cursors, thread receipts, account switch and membership revocation all recover without message loss, duplicated sends or cross-user disclosure. Typing expires after disconnection. Push obeys mute/mention settings and lands on the correct event. Foreground latency and background wake-up behavior are measured, with agreed budgets before release.
+
+### C3. Complete everyday message and media actions
+
+Can run largely parallel to C2 after schema ownership is coordinated: editing/redaction, bookmarks/forwarding, scoped message search, audio recording and resumable uploads. Transport actions must use existing Matrix relations and idempotency. Search and media authorization cannot rely on a client-supplied room identifier alone.
+
+Owners: messages/composer/action components, Matrix media/replies/actions, platform recording adapters; avoid editing inbox while C1 is active. Acceptance: retry after timeout produces one event/upload; interrupted recordings remain private; edits/redactions update timeline, search and inbox; receiving unsupported media remains usable; remote previews cannot access private networks; physical-device picker/player/recording checks pass.
+
+### C4. Safe social network and encrypted devices
+
+Contacts/invitation requests beyond one workspace, enforced block/report, group roles/invites/leaving, DM archive/delete/export and device/E2EE qualification. Decide global identity versus workspace access separately. Do not relax the current two-member DM boundary to make a global contact flow work.
+
+Owners: user directory/membership services and Matrix authority/identities plus profile/details UI; schema changes require coordination with C1. Acceptance: blocked send/invite attempts fail server-side; reports disclose exactly selected evidence; role change/revocation is immediate; joining does not silently reveal forbidden history; encrypted human rooms and explicitly invited bots have tested key access/recovery/revocation. Encryption and retention limitations are represented honestly.
+
+### C5. Hangouts and group coordination
+
+Live voice/video hangouts, optional authorized bot participation, polls/events/RSVPs and reminders. Research maintained, licensed Matrix-compatible RTC components before authoring media infrastructure. Device/permission/notification prerequisites come from C2/C4; UI exploration can run earlier against explicit contracts, but nonfunctional join buttons are not delivered capability.
+
+Owners: a concrete room-call domain and platform RTC adapters, room details/header; Eve tools/schedules for reminders. Acceptance: two humans join/rejoin across platforms; mute/camera/device switching work; removed members cannot remain; recording/transcription/bot entry is explicit; event timezones and recurring reminder cancellation are tested. A hangout does not grant access to unrelated chat history.
+
+## Parallel execution boundaries
+
+C1 inbox/projection, C3 recording/media, and creator/Muse work can run concurrently with different file ownership. C2 protocol design can proceed in parallel but its schema changes land through the C1 contract owner. C4 threat/trust design and C5 vendor feasibility can proceed without production mutations. Do not split agents across simultaneous edits to `rooms/schema.ts`, `shared/companion/rooms.ts`, the central inbox or RPC router. Land each complete vertical slice with narrow tests, then integrated `pnpm check`, `pnpm build`, browser evidence and `gh --attach` PR evidence. Native exports are not physical-device verification.
+
+The existing 20 structural findings are a maintenance risk to manage while touching the affected components, not permission for a broad rewrite. Keep every slice's shipped/unverified boundary visible in the handoff.
+
+## First implementation decision
+
+C1 requires reliable appservice projection coverage (the present ingress does not project DM/non-agent message activity), reconciliation of existing history, and stable global ordering. It is not safe to approximate this by sorting loaded pages. The first independent delivery is native own-message redaction in groups/DMs/threads, preserving thread roots and removing media content from rendered tombstones. C1 remains the next foundational inbox slice.
+
+### Implemented redaction slice — validation
+
+Own-message actions now include a confirmation sheet/mobile or modal/desktop, retryable native Matrix redaction, and a sanitized message tombstone. The server checks the current actor, exact target event and sender, and rechecks room access before publishing. Deleting a root keeps the thread readable and permits subsequent replies. The client removes deleted media bytes from its query cache and hides reaction/copy/reply actions on tombstones; thread navigation remains available. The operation makes no promise to erase downloaded copies, screenshots, previously quoted content or server backups.
+
+Validation: 36 focused unit/component tests across six files passed; two new isolated PostgreSQL/Synapse integration tests passed (`tests/runtime/matrix-redaction.integration.ts`). These cover repeated deletion, lost-response retries, other senders, cross-room/mismatched events, membership revocation, preserved root/reply history, and denied downloads after media redaction. Query-cache tests preserve other-account isolation and prove failure does not prematurely remove content. Shared UI compile and scoped lint passed. Browser visual verification and integrated check/build are pending the root integration pass; real devices remain unqualified. No schema migration, production data operation, or new message-content authority was introduced.

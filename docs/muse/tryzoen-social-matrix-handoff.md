@@ -1,5 +1,10 @@
 # Social/Matrix implementation handoff
 
+The current cross-product backlog and parallel execution order live in
+[the parity roadmap](parity-roadmap.md). This document retains the decisions and
+historical verification checkpoints behind that plan; later evidence supersedes
+older gap descriptions.
+
 Updated 2026-09-28 from the user-provided `tryzoen-social-matrix-handoff.md` and the HUMA and Tutor CoPilot PDFs. This reconciles that handoff with the running code; it does not replace Muse parity work or claim a completed social client.
 
 ## Direction and proposals

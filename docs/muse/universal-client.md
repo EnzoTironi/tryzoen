@@ -4,7 +4,7 @@ The product target is the complete Muse experience: its interaction model and vi
 
 The client now connects the main Muse-style surfaces to durable Zoen data. It is **not full Muse feature parity**. It must remain an opt-in route until the acceptance work below is complete.
 
-The [interface audit](interface-audit.md) records the observed screens, nested menus, platform differences and behavior gaps. Use it as the parity checklist. In particular, Muse's editorial Feed, personalized Ideas and four-tab agent-status surface are broader than the current connected sections.
+The [interface audit](interface-audit.md) records observed Muse screens and evidence gaps. The [parity roadmap](parity-roadmap.md) consolidates the latest implementation state, the user's social/creator vision and the delivery order across Muse, iMessage, WhatsApp, Slack and Ando references. Its linked implementation plans supersede stale gap descriptions in older checkpoints.
 
 The shared settings panel now uses the reference row order and a rounded compact sheet, with a centered desktop dialog. The web adapter keeps the underlying screen mounted and connects General, Connectors, Wallet, Credential vault, Permissions, Messaging channels, Devices and Data controls to existing account operations. Vault reads use 20-item keyset pages and only return masked metadata. Devices currently lists authenticated app/browser sessions, not OS pairing. Permissions currently controls credential delegations, not all browser/network grants. Help and legal information remain basic; native mobile settings still need the shared panel adapter. This is not full settings parity.
 
