@@ -644,3 +644,27 @@ public marketplace policy and billing/cost accounting. This report mechanism
 supports that process without automatically opening private conversations to
 a creator. Memory dreams/temporal completeness, native transports/devices and
 full Muse parity remain separate unfinished work.
+
+## Reflection must preserve later human intent — 2026-09-28
+
+The [native dream qualification](file-memory.md#native-dream-qualification--2026-09-28)
+now exercises Akita 2.4.1 with synthetic model responses, source history and
+interruption. It reproduces two blockers for an active shared product: a pending
+merge overwrites an acknowledged later edit, and can recreate acknowledged
+deleted pages. Native cancellation finishes the current cluster before stopping
+the next. These are executable race checks, not assumptions inferred from the
+paper or a fabricated creator evaluation. Production dreaming stays disabled.
+
+For HUMA's bounded reflection, native consolidation must run behind the current
+owner/grant boundary. A staged proposal must retain its source revisions and be
+rejected when any source or grant changes before apply. Pausing reflection cannot
+mean allowing one final stale write to replace human intent. Account/room erasure
+must cover staged snapshots, receipts that contain source content and in-flight
+jobs as well as the active corpus. No raw person-to-person messages or private
+pilot responses may be copied into a creator's playbook by this process.
+
+Tutor CoPilot's author-led improvement remains a separate action over explicitly
+provided examples and participant-submitted reports. Dreaming does not imply
+permission to train on private pilots, edit authored SOUL/playbook instructions,
+publish a new approved version or change a recipient's selected teaching. Public
+distribution and real creator-led outcome measurement remain unfinished.

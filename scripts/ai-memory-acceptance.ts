@@ -1,3 +1,4 @@
+import { memoryTool } from "../server/memory/ai-memory/protocol";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
@@ -87,25 +88,8 @@ async function openEngine(name: string) {
   };
 }
 
-async function call(
-  client: Client,
-  name: string,
-  args: Record<string, unknown>
-) {
-  const result = await client.callTool({ name, arguments: args }, undefined, {
-    timeout: 20_000,
-  });
-  assert(!result.isError, `${name} failed: ${JSON.stringify(result)}`);
-  const content = z
-    .array(z.object({ type: z.literal("text"), text: z.string() }))
-    .parse(result.content);
-  return z
-    .record(z.string(), z.unknown())
-    .parse(JSON.parse(content.map((block) => block.text).join("\n")));
-}
-
 async function search(client: Client, args: Record<string, unknown>) {
-  const result = await call(client, "memory_query", args);
+  const result = await memoryTool(client, "memory_query", args);
   // Assert actual result rows, not echoed query text or transport envelopes.
   const parsed = z
     .object({
@@ -119,7 +103,7 @@ async function search(client: Client, args: Record<string, unknown>) {
 let asOf: string;
 {
   await using engine = await openEngine("person-a");
-  await call(engine.client, "memory_write_page", {
+  await memoryTool(engine.client, "memory_write_page", {
     ...scope,
     path: "notes/reading.md",
     body: "# Reading\nThe synthetic reading club meets at Blueharbor.",
@@ -127,7 +111,7 @@ let asOf: string;
   });
   asOf = new Date().toISOString();
   await new Promise((done) => setTimeout(done, 20));
-  await call(engine.client, "memory_write_page", {
+  await memoryTool(engine.client, "memory_write_page", {
     ...scope,
     path: "notes/reading.md",
     body: "# Reading\nThe synthetic reading club now meets at Ambertrail.",
@@ -170,7 +154,7 @@ let asOf: string;
   // supported human-editable Markdown + watcher path, not a made-up API field.
   for (const relation of ["causes", "fixes", "contradicts"]) {
     const path = `notes/${relation}.md`;
-    await call(engine.client, "memory_write_page", {
+    await memoryTool(engine.client, "memory_write_page", {
       ...scope,
       path,
       body: `# ${relation}\nSynthetic relationship evidence.`,
@@ -349,7 +333,7 @@ const acceptedPath = await writeSessionSource(
   // and close marker after a process restart, not just the same HTTP connection.
   await ingestSessionSource(engine, owner, source);
   await ingestSessionSource(engine, owner, boundary);
-  const observations = await call(
+  const observations = await memoryTool(
     engine.client,
     "memory_read_session_observations",
     {
@@ -357,7 +341,8 @@ const acceptedPath = await writeSessionSource(
       session_id: memorySession,
       limit: 200,
       body_max_chars: 16384,
-    }
+    },
+    { maxResultCharacters: 4 * 1024 * 1024 }
   );
   const parsed = z
     .object({
@@ -390,7 +375,7 @@ const acceptedPath = await writeSessionSource(
   assert.doesNotMatch(JSON.stringify(parsed), /Prismvale/);
   assert.doesNotMatch(JSON.stringify(parsed), /Bluefern/);
   assert(parsed.observations.every((item) => item.extension === "eve"));
-  const page = await call(engine.client, "memory_read_page", {
+  const page = await memoryTool(engine.client, "memory_read_page", {
     ...memoryScope,
     path: `sessions/${memorySession}.md`,
   });

@@ -1,3 +1,4 @@
+import { memoryTool } from "./protocol";
 import { lstat, opendir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -32,21 +33,12 @@ export async function noteTool(
   args: Record<string, unknown>
 ) {
   operationSignal().throwIfAborted();
-  const result = await engine.client.callTool(
-    { name, arguments: { ...args, ...scope } },
-    undefined,
-    { timeout: 20_000, signal: operationSignal() }
+  return memoryTool(
+    engine.client,
+    name,
+    { ...args, ...scope },
+    { signal: operationSignal() }
   );
-  if (result.isError) throw new Error("The private memory operation failed.");
-  const content = z
-    .array(
-      z.object({ type: z.literal("text"), text: z.string().max(64 * 1024) })
-    )
-    .max(1)
-    .parse(result.content);
-  return z
-    .record(z.string(), z.unknown())
-    .parse(JSON.parse(content.map((part) => part.text).join("")));
 }
 
 async function scopeDirectories(root: string) {

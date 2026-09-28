@@ -128,10 +128,11 @@ jobs:
           pnpm test:runtime:setup
       - name: Verify PostgreSQL, Matrix and compiled Eve restart behavior
         run: pnpm test:runtime
-      - name: Verify file memory ingestion and isolated restore
+      - name: Verify file memory ingestion, isolated restore and dream contracts
         run: |
           pnpm test:memory:upstream "$ZOEN_AI_MEMORY_BINARY"
           pnpm test:memory:lifecycle "$ZOEN_AI_MEMORY_BINARY"
+          pnpm test:memory:dream "$ZOEN_AI_MEMORY_BINARY"
       - name: Build web app and agent
         run: |
           set -a

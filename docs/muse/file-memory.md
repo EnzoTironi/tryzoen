@@ -63,6 +63,71 @@ pnpm exec tsx scripts/ai-memory-acceptance.ts /absolute/path/to/ai-memory
 
 The harness uses disposable synthetic stores and explicit configuration. It does not install hooks, touch Zoen databases, inherit provider secrets or enable dreams. Test directories and a JSON report remain available for inspection. This proves engine behavior, not deployed integration, Zoen authorization, dream quality or capacity. The separate lifecycle qualification below distinguishes restoring a complete snapshot from rebuilding an index with Markdown alone. The report lists pending gates explicitly.
 
+## Native dream qualification — 2026-09-28
+
+`pnpm test:memory:dream /absolute/path/to/ai-memory` exercises the pinned 2.4.1
+executable against disposable synthetic corpora and a loopback-only model and
+embedding fixture. No application database, user files or provider credentials
+are inherited. Requests, bounded native logs and a JSON report are retained in
+the printed private temporary directory. CI runs this after ingestion and restore
+qualification. A completed report distinguishes passed contracts, reproduced
+upstream blockers and unimplemented product gates; it is not a product-readiness
+verdict. A failing harness writes `status: failed` and exits unsuccessfully.
+
+The native scheduler consolidates a deliberately cold cluster of two episodic
+pages while leaving an unrelated third page unchanged. Tests cover the disabled
+flag, malformed output (including native unstructured fallback), death while
+awaiting the model, reopening without forced unlocking, source Git history,
+merged-page provenance, an explicit Git checkpoint, pre-dream `as_of` after
+restart, public `restore-page`, a separate person's empty corpus and resuming
+MCP activity between two eligible clusters. This is 11 qualified contracts.
+Fixtures accelerate time and supply deterministic vectors and text; they do not
+measure real-model accuracy, cost, production idle behavior or capacity. The
+process-death case precedes apply; interruption halfway through apply remains
+unqualified.
+
+Two live public-MCP races reproduce on the release: while the model response is
+held, editing both source pages is acknowledged, but the old pending merge then
+overwrites both corrections; deleting both pages is acknowledged, but the merge
+recreates them. The edit remains accessible through pre-merge temporal history,
+which does not make replacing current user intent acceptable. The harness lists
+these as `v2.4.1-in-flight-dream-overwrites-later-user-edit` and
+`v2.4.1-in-flight-dream-recreates-deleted-pages`. No real person's corpus was used.
+
+The released [dream implementation](https://github.com/akitaonrails/ai-memory/blob/v2.4.1/crates/ai-memory-consolidate/src/dream.rs)
+reads source bodies before calling the model and applies the resulting batch
+later. Cancellation is checked between clusters, not before committing the
+in-flight cluster. The [scheduler](https://github.com/akitaonrails/ai-memory/blob/v2.4.1/crates/ai-memory-cli/src/commands/serve.rs)
+samples activity every two seconds and discards detailed merge reports after
+logging aggregate counts. There is no public `dream` command or `/admin/dream`
+endpoint in the release; the Rust dry-run function is not an exposed service
+contract. Native scheduled changes also need an explicit Git checkpoint for a
+durable review revision.
+
+**Product dreams remain disabled.** Do not enable this scheduler on an active
+Zoen corpus or treat its log lines as a durable workflow receipt. The next
+implementation must either qualify an upstream revision-checked apply/report
+contract or run native consolidation against an isolated snapshot, persist
+reviewable candidate changes and apply them through Zoen's current authorization,
+namespace serialization and exact source-revision checks. An edit, deletion,
+membership loss or changed source revision must invalidate the candidate.
+Snapshot creation/promotion must follow the quarantined-restore constraints below.
+Provider choice, explicit owner opt-in, observable runs, bounded retries/cost,
+recovery and erasure of staged copies remain implementation requirements. A room,
+another participant and a creator's published teaching must never become implicit
+sources for a personal dream; see the social/Matrix handoff.
+
+Local macOS arm64 verification passes all 11 dream contracts above, the existing
+17 ingestion and seven restore contracts, and 25 isolated PostgreSQL cases for
+learned notes, authorization and total-corpus loss. The shared memory protocol
+retains the 64 KiB note-result bound, single text block and cancellation signal;
+the source-observation qualification requests its separate, explicit 4 MiB bound.
+Four boundary tests cover per-call bounds, invalid limits, private error details
+and ambiguous results. `pnpm check` passes all nine tasks (1,327 tests in 206
+files) and `pnpm build` passes. The structural delta has three unsuppressed gating
+findings for a process-stop idiom and recent edits; new fixture size/complexity
+also remain visible. This is not a clean structural, production or capacity gate.
+
 ## Eve source capture — 2026-09-28
 
 Implemented behind `ZOEN_SESSION_ARCHIVE_DIR`, an absolute directory on a persistent, private POSIX filesystem. It is configured only for local review; a Vercel temporary directory is not a deployment target. Hooks capture visible `message.received`, `message.completed` and turn completion/cancellation/failure coordinates. Framework background inputs, reasoning, tools and provider payloads are excluded. Known credential patterns are redacted before the delivery queue, without claiming perfect recognition of arbitrary secrets.
