@@ -9,7 +9,10 @@ import {
   writeSessionSource,
   eraseSessionSources,
 } from "../server/memory/session-files";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 import { glob, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -385,6 +388,76 @@ const otherOwner = randomUUID();
     "[]"
   );
 }
+
+// Terminate the real application owner, not the engine or a mocked cleanup hook.
+// Its separate supervisor must release the upstream single-writer lock so a new
+// worker can resume the same private directory without force-unlocking it.
+const crashOwner = randomUUID();
+const crashedWorker = spawn(
+  process.execPath,
+  [
+    "--import",
+    "tsx",
+    "--input-type=module",
+    "--eval",
+    String.raw`
+      const [module, binary, root, owner] = process.argv.slice(1);
+      const { openSessionMemoryEngine } = await import(module);
+      const engine = await openSessionMemoryEngine(binary, root, owner);
+      const result = await engine.client.callTool({
+        name: 'memory_write_page',
+        arguments: {
+          workspace: 'zoen', project: 'private', path: 'notes/crash.md',
+          body: '# Crash recovery\nThe synthetic signal is Willowgate.'
+        }
+      });
+      if (result.isError) throw new Error('Synthetic pre-crash write failed.');
+      process.send({ ready: true });
+      await new Promise(() => {});
+    `,
+    "--",
+    pathToFileURL(resolve("server/memory/ai-memory/engine.ts")).href,
+    binary,
+    directory,
+    crashOwner,
+  ],
+  { stdio: ["ignore", "ignore", "pipe", "ipc"] }
+);
+const crashedExit = once(crashedWorker, "exit");
+let crashDiagnostics = "";
+crashedWorker.stderr?.on("data", (chunk: Buffer) => {
+  crashDiagnostics = (crashDiagnostics + chunk.toString()).slice(-8192);
+});
+try {
+  const ready: unknown = await Promise.race([
+    once(crashedWorker, "message", { signal: AbortSignal.timeout(30_000) }),
+    crashedExit.then(() => {
+      throw new Error(`Synthetic worker exited: ${crashDiagnostics}`);
+    }),
+  ]);
+  assert.deepEqual(ready, [{ ready: true }, undefined]);
+  await assert.rejects(
+    openSessionMemoryEngine(binary, directory, crashOwner),
+    /exited before readiness/,
+    "A second writer must remain excluded before the crash."
+  );
+  crashedWorker.kill("SIGKILL");
+  await crashedExit;
+  await delay(2_000);
+  await using resumed = await openSessionMemoryEngine(
+    binary,
+    directory,
+    crashOwner
+  );
+  assert.match(
+    await search(resumed.client, { ...memoryScope, query: "Willowgate" }),
+    /Willowgate/
+  );
+} finally {
+  if (crashedWorker.exitCode === null && crashedWorker.signalCode === null)
+    crashedWorker.kill("SIGKILL");
+  await crashedExit;
+}
 const raw = (await readFile(sourcePath, "utf8")).trimEnd().split("\n");
 assert.equal(
   raw.map((line) => sessionSourceSchema.parse(JSON.parse(line)).text).join(""),
@@ -418,6 +491,7 @@ const report = {
     "session-to-versioned-markdown",
     "unsettled-assistant-excluded",
     "source-and-derived-memory-erasure",
+    "owner-crash-releases-writer-and-preserves-recall",
   ],
   pending: [
     "accepted-assistant-history",

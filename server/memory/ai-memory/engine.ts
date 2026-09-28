@@ -11,6 +11,36 @@ import { privateMemoryDirectory } from "../session-files";
 
 const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
 
+// Run in a separate Node process: IPC disconnect still fires if the application
+// is SIGKILLed. Static source avoids a runtime TypeScript loader or bundled asset
+// path; the executable and arguments are argv values, never interpolated code.
+const supervisor = String.raw`
+const { spawn } = require('node:child_process');
+if (!process.connected) process.exit(1);
+const [binary, ...args] = process.argv.slice(1);
+const child = spawn(binary, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+let stopping = false;
+let force;
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  child.kill('SIGTERM');
+  force = setTimeout(() => child.kill('SIGKILL'), 1000);
+};
+const lease = setTimeout(stop, 15 * 60 * 1000);
+process.on('disconnect', stop);
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
+process.stderr.on('error', stop);
+child.stderr.pipe(process.stderr);
+child.once('error', () => process.exit(1));
+child.once('exit', (code) => {
+  clearTimeout(lease);
+  clearTimeout(force);
+  process.exit(code ?? 1);
+});
+`;
+
 async function prepareSessionMemory(root: string, namespaceId: string) {
   const namespace = z.uuid().parse(namespaceId);
   await privateMemoryDirectory(root);
@@ -61,8 +91,13 @@ async function launchSessionMemory(binary: string, data: string) {
     throw new Error("Requalify ai-memory before changing the engine version.");
   const token = randomBytes(32).toString("hex");
   const child = spawn(
-    binary,
+    process.execPath,
     [
+      "--input-type=commonjs",
+      "--eval",
+      supervisor,
+      "--",
+      binary,
       "--data-dir",
       data,
       "--config",
@@ -76,7 +111,7 @@ async function launchSessionMemory(binary: string, data: string) {
     {
       env: { ...processEnv, AI_MEMORY_AUTH_TOKEN: token },
       cwd: data,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
     }
   );
   const exited = new Promise<void>((resolve) => {
@@ -89,7 +124,7 @@ async function launchSessionMemory(binary: string, data: string) {
   });
   const stop = async () => {
     child.kill("SIGTERM");
-    await Promise.race([exited, delay(2_000)]);
+    await Promise.race([exited, delay(3_000)]);
     if (child.exitCode === null && child.signalCode === null)
       child.kill("SIGKILL");
     await exited;
