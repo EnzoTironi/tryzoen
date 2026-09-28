@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./sheet": {
+      "types": "./dist/sheet.d.ts",
+      "default": "./dist/sheet.js"
+    },
     "./rooms": {
       "types": "./dist/rooms/schema.d.ts",
       "default": "./dist/rooms/schema.js"

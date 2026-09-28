@@ -1,4 +1,5 @@
 import { SearchSection } from "./search";
+import { SessionSettingsButton } from "./settings/sessions";
 import { randomUUID } from "expo-crypto";
 import { useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -263,6 +264,7 @@ function SettingsSection({
         >
           Connections and preferences
         </ActionButton>
+        <SessionSettingsButton />
         <ActionButton
           quiet
           onPress={() => {
