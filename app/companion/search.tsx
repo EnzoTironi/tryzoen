@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { authClient } from "@web/auth/client";
 import { ConversationSearch } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
+import { downloadConversationArchive } from "@web/files/download";
 export function ConnectedSearch({
   onConversation,
   title,
@@ -38,6 +39,13 @@ export function ConnectedSearch({
       title={title}
       intro={intro}
       onOpen={onConversation}
+      onExport={(sessionId) =>
+        downloadConversationArchive(
+          window.location.origin,
+          sessionId,
+          params.get("space")
+        )
+      }
       onCreate={
         allowCreate
           ? () => {

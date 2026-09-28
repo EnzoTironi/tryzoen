@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { glob, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  glob,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
@@ -17,6 +25,10 @@ import {
   captureSessionSource,
   drainSessionSources,
 } from "../../server/memory/session-capture";
+import {
+  exportSessionSources,
+  SessionArchiveUnavailable,
+} from "../../server/memory/session-export";
 
 const { directory } = await vi.hoisted(async () => {
   const { mkdtemp } = await import("node:fs/promises");
@@ -46,6 +58,121 @@ const source = (
   type: "message.received",
   meta: { id, at: "2026-09-28T12:00:00.000Z" },
   data: { message: text, sequence: 0, turnId: "turn_0" },
+});
+
+test("exports delivered sources only to their owner, including segmented text while memory is paused", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  const event = source(randomUUID(), "Cedarfield ".repeat(600));
+  await captureSessionSource(actor, sessionSource(event, sessionId));
+  await expect(
+    exportSessionSources(actor, sessionId, new AbortController().signal)
+  ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
+  await drainSessionSources();
+  await query(
+    sql`UPDATE workspace_memory_namespace SET enabled = false WHERE workspace_id = ${actor.workspaceId}`
+  );
+  await expect(
+    exportSessionSources(
+      workspace.guestPersonal,
+      sessionId,
+      new AbortController().signal
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    exportSessionSources(
+      workspace.actor,
+      sessionId,
+      new AbortController().signal
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  const response = await exportSessionSources(
+    actor,
+    sessionId,
+    new AbortController().signal
+  );
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  const lines = (await response.text())
+    .trim()
+    .split("\n")
+    .map((line) => sessionSourceSchema.parse(JSON.parse(line)));
+  expect(lines.length).toBeGreaterThan(1);
+  expect(lines.map((line) => line.text).join("")).toBe(event.data.message);
+  expect(
+    lines.every(
+      (line) => line.sessionId === sessionId && line.eventId === event.meta.id
+    )
+  ).toBe(true);
+});
+
+test("stops streaming further private sources after membership revocation or request cancellation", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  for (let index = 0; index < 3; index++)
+    await captureSessionSource(actor, sessionSource(source(), sessionId));
+  await drainSessionSources();
+  const cancelled = new AbortController();
+  const response = await exportSessionSources(
+    actor,
+    sessionId,
+    cancelled.signal
+  );
+  if (!response.body) throw new Error("Expected archive stream");
+  const reader = response.body.getReader();
+  expect((await reader.read()).done).toBe(false);
+  cancelled.abort(new Error("Download cancelled"));
+  await expect(reader.read()).rejects.toThrow("Download cancelled");
+  const active = await exportSessionSources(
+    actor,
+    sessionId,
+    new AbortController().signal
+  );
+  if (!active.body) throw new Error("Expected archive stream");
+  const activeReader = active.body.getReader();
+  expect((await activeReader.read()).done).toBe(false);
+  await query(
+    sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
+  );
+  await expect(activeReader.read()).rejects.toBeInstanceOf(
+    WorkspaceAccessDenied
+  );
+});
+
+test("rejects tampered content, public files and symlink replacements in a private archive", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  const event = source();
+  await captureSessionSource(actor, sessionSource(event, sessionId));
+  await drainSessionSources();
+  const [owner] = await query<{ id: string }>(
+    sql`SELECT namespace_id AS id FROM workspace_memory_namespace WHERE workspace_id = ${actor.workspaceId}`
+  );
+  const paths = await Array.fromAsync(
+    glob(join(directory, owner?.id ?? "missing", "raw/eve/**/*.jsonl"))
+  );
+  const path = paths[0];
+  if (!path) throw new Error("Expected saved source");
+  const original = await readFile(path, "utf8");
+  await writeFile(path, original.replace("Cedarfield", "Tamperedxx"));
+  await expect(
+    exportSessionSources(actor, sessionId, new AbortController().signal)
+  ).rejects.toThrow("receipt");
+  await writeFile(path, original);
+  await chmod(path, 0o644);
+  await expect(
+    exportSessionSources(actor, sessionId, new AbortController().signal)
+  ).rejects.toThrow("verified");
+  await rm(path);
+  await symlink("/dev/null", path);
+  await expect(
+    exportSessionSources(actor, sessionId, new AbortController().signal)
+  ).rejects.toThrow("unexpected file");
 });
 
 test("owns capture by persisted session and retires outbox content only after private disk delivery", async () => {

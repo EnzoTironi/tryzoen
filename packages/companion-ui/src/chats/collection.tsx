@@ -24,6 +24,7 @@ export function ConversationSearch({
   intro,
   selectedId,
   panel,
+  onExport,
 }: {
   readonly data: ChatData;
   readonly cacheScope: string;
@@ -33,6 +34,7 @@ export function ConversationSearch({
   readonly intro?: string;
   readonly selectedId?: string;
   readonly panel?: ComponentProps<typeof ConversationToolbar>["panel"];
+  readonly onExport: (sessionId: string) => Promise<void>;
 }) {
   const client = useQueryClient();
   const [query, setQuery] = useState("");
@@ -89,6 +91,7 @@ export function ConversationSearch({
             chat={item}
             onOpen={onOpen}
             onChange={change}
+            onExport={onExport}
             dense={Boolean(panel)}
             selected={item.sessionId === selectedId}
           />

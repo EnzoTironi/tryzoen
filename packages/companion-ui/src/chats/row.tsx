@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   Check,
@@ -9,6 +10,7 @@ import {
   Pencil,
   Archive,
   ArchiveRestore,
+  Download,
   X,
 } from "lucide-react-native";
 import type { z } from "zod";
@@ -18,36 +20,43 @@ import { pageStyles } from "../page";
 import { colors } from "../theme";
 import { chatTitleSchema, type ChatData, type chatPageSchema } from "./schema";
 
+type ConversationAction =
+  | Parameters<ChatData["change"]>[0]["change"]
+  | "export";
+
 export function ConversationRow({
   chat,
   onOpen,
   onChange,
+  onExport,
   dense = false,
   selected = false,
 }: {
   readonly chat: z.infer<typeof chatPageSchema>["items"][number];
   readonly onOpen: (id: string) => void;
   readonly onChange: ChatData["change"];
+  readonly onExport: (sessionId: string) => Promise<void>;
   readonly dense?: boolean;
   readonly selected?: boolean;
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-  const change = async (next: Parameters<ChatData["change"]>[0]["change"]) => {
-    setPending(true);
-    setError(undefined);
-    try {
-      await onChange({ sessionId: chat.sessionId, change: next });
+  const operation = useMutation({
+    mutationFn: async (next: ConversationAction) => {
+      if (next === "export") return onExport(chat.sessionId);
+      try {
+        await onChange({ sessionId: chat.sessionId, change: next });
+      } catch {
+        throw new Error("Couldn’t save the change. Try again.");
+      }
+    },
+    onSuccess: () => {
       setMenu(false);
       setRenaming(false);
-    } catch {
-      setError("Couldn’t save the change. Try again.");
-    } finally {
-      setPending(false);
-    }
-  };
+    },
+  });
+  const pending = operation.isPending;
+  const error = operation.error?.message;
   return (
     <View>
       <View
@@ -67,11 +76,11 @@ export function ConversationRow({
             initialTitle={chat.title}
             pending={pending}
             onSave={(title) => {
-              void change({ title });
+              operation.mutate({ title });
             }}
             onCancel={() => {
               setRenaming(false);
-              setError(undefined);
+              operation.reset();
             }}
           />
         ) : (
@@ -93,7 +102,7 @@ export function ConversationRow({
               icon={Ellipsis}
               label={`Options for ${chat.title}`}
               onPress={() => {
-                setError(undefined);
+                operation.reset();
                 setMenu(true);
               }}
             />
@@ -106,59 +115,92 @@ export function ConversationRow({
         </Text>
       )}
       {menu && (
-        <CompanionSheet
-          title={chat.title}
+        <ConversationMenu
+          chat={chat}
+          pending={pending}
+          error={error}
+          onAction={operation.mutate}
           onClose={() => {
             if (!pending) setMenu(false);
           }}
-        >
-          {[
-            {
-              label: chat.pinned ? "Unpin" : "Pin",
-              icon: chat.pinned ? PinOff : Pin,
-              press: () => {
-                void change({ pinned: !chat.pinned });
-              },
-            },
-            {
-              label: "Rename",
-              icon: Pencil,
-              press: () => {
-                setMenu(false);
-                setRenaming(true);
-              },
-            },
-            {
-              label: chat.archived ? "Restore conversation" : "Archive",
-              icon: chat.archived ? ArchiveRestore : Archive,
-              press: () => {
-                void change({ archived: !chat.archived });
-              },
-            },
-          ].map(({ label, icon: Icon, press }) => (
-            <Pressable
-              key={label}
-              accessibilityRole="button"
-              disabled={pending}
-              aria-disabled={pending}
-              onPress={press}
-              style={({ pressed }) => [
-                pageStyles.row,
-                (pressed || pending) && styles.dimmed,
-              ]}
-            >
-              <Icon size={24} strokeWidth={1.8} color={colors.ink} />
-              <Text style={pageStyles.rowTitle}>{label}</Text>
-            </Pressable>
-          ))}
-          {error && (
-            <Text accessibilityRole="alert" style={styles.error}>
-              {error}
-            </Text>
-          )}
-        </CompanionSheet>
+          onRename={() => {
+            setMenu(false);
+            setRenaming(true);
+          }}
+        />
       )}
     </View>
+  );
+}
+function ConversationMenu({
+  chat,
+  pending,
+  error,
+  onAction,
+  onClose,
+  onRename,
+}: Pick<Parameters<typeof ConversationRow>[0], "chat"> & {
+  readonly pending: boolean;
+  readonly error?: string;
+  readonly onAction: (action: ConversationAction) => void;
+  readonly onClose: () => void;
+  readonly onRename: () => void;
+}) {
+  return (
+    <CompanionSheet title={chat.title} onClose={onClose}>
+      {[
+        {
+          label: chat.pinned ? "Unpin" : "Pin",
+          icon: chat.pinned ? PinOff : Pin,
+          press: () => {
+            onAction({ pinned: !chat.pinned });
+          },
+        },
+        {
+          label: "Rename",
+          icon: Pencil,
+          press: onRename,
+        },
+        {
+          label: "Export conversation archive",
+          icon: Download,
+          press: () => {
+            onAction("export");
+          },
+        },
+        {
+          label: chat.archived ? "Restore conversation" : "Archive",
+          icon: chat.archived ? ArchiveRestore : Archive,
+          press: () => {
+            onAction({ archived: !chat.archived });
+          },
+        },
+      ].map(({ label, icon: Icon, press }) => (
+        <Pressable
+          key={label}
+          accessibilityRole="button"
+          disabled={pending}
+          aria-disabled={pending}
+          onPress={press}
+          style={({ pressed }) => [
+            pageStyles.row,
+            (pressed || pending) && styles.dimmed,
+          ]}
+        >
+          <Icon size={24} strokeWidth={1.8} color={colors.ink} />
+          <Text style={pageStyles.rowTitle}>{label}</Text>
+        </Pressable>
+      ))}
+      <Text style={pageStyles.copy}>
+        Exports include messages already saved to your private archive.
+        Attachments are separate.
+      </Text>
+      {error && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      )}
+    </CompanionSheet>
   );
 }
 function ConversationName({

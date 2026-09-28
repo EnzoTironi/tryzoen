@@ -1,4 +1,5 @@
 import type { FileUIPart } from "ai";
+import { downloadBlob } from "./download";
 import {
   requireAttachmentSizes,
   inlineAttachmentSchema,
@@ -87,20 +88,8 @@ export async function saveBrowserAttachment(file: FileUIPart) {
   const attachment = inlineAttachmentSchema.parse(file);
   const binary = atob(attachment.url.slice(attachment.url.indexOf(",") + 1));
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  const url = URL.createObjectURL(
-    new Blob([bytes], { type: attachment.mediaType })
+  downloadBlob(
+    new Blob([bytes], { type: attachment.mediaType }),
+    attachment.filename?.length ? attachment.filename : "attachment"
   );
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = attachment.filename?.length
-      ? attachment.filename.replace(/[/\\\p{Cc}]/gu, "-")
-      : "attachment";
-    link.click();
-  } finally {
-    // Leave the object URL alive until the browser has processed the download.
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 1000);
-  }
 }

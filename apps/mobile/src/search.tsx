@@ -4,6 +4,7 @@ import { ConversationSearch } from "@zoen/companion-ui";
 import { companionChatData } from "../../../shared/companion/chats";
 import { rpc } from "./api";
 import { auth } from "./auth";
+import { exportConversation } from "./files/conversation";
 const data = companionChatData(rpc);
 export function SearchSection({
   onConversation,
@@ -30,6 +31,7 @@ export function SearchSection({
       title={title}
       intro={intro}
       onOpen={onConversation}
+      onExport={exportConversation}
       onCreate={
         allowCreate
           ? () => {
