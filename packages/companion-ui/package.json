@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./creators": {
+      "types": "./dist/creators/schema.d.ts",
+      "default": "./dist/creators/schema.js"
+    },
     "./memory": {
       "types": "./dist/learned/schema.d.ts",
       "default": "./dist/learned/schema.js"

@@ -32,3 +32,4 @@ export * from "./tool-connections";
 export * from "./matrix-conversations";
 export * from "./telemetry";
 export * from "./session-memory";
+export * from "./creator-drafts";

@@ -1,0 +1,43 @@
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import {
+  creatorDraftListSchema,
+  creatorDraftSaveSchema,
+  creatorDraftSchema,
+} from "@zoen/companion-ui/creators";
+import {
+  CreatorDraftConflict,
+  listCreatorDrafts,
+  readCreatorDraft,
+  saveCreatorDraft,
+} from "../../server/creators/drafts";
+import { withSignal } from "../../server/operations/async";
+import { workspaceProcedure } from "./workspace-procedure";
+
+export const creatorsRouter = {
+  list: workspaceProcedure
+    .output(creatorDraftListSchema)
+    .query(({ ctx, signal }) =>
+      withSignal(signal, () => listCreatorDrafts(ctx.actor))
+    ),
+  read: workspaceProcedure
+    .input(z.object({ id: z.uuid() }).strict())
+    .output(creatorDraftSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readCreatorDraft(ctx.actor, input.id))
+    ),
+  save: workspaceProcedure
+    .input(creatorDraftSaveSchema)
+    .output(creatorDraftSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, async () => {
+        try {
+          return await saveCreatorDraft(ctx.actor, input);
+        } catch (error) {
+          if (error instanceof CreatorDraftConflict)
+            throw new TRPCError({ code: "CONFLICT", message: error.message });
+          throw error;
+        }
+      })
+    ),
+};

@@ -41,6 +41,7 @@ import { workspaceProcedure } from "./workspace-procedure";
 import { workspaceRoomsRouter } from "./workspace-rooms";
 import { workspaceToolsRouter } from "./workspace-tools";
 import { workspaceAgentsRouter } from "./workspace-agents";
+import { creatorsRouter } from "./creators";
 import { readWorkspaceCapabilities } from "../../server/workspaces/capabilities";
 import { setReminderStatus } from "../../server/schedules/manage";
 import {
@@ -63,6 +64,7 @@ import {
   LearnedMemoryWriteSchema,
 } from "../../server/memory/learned";
 export const workspacesRouter = {
+  creators: creatorsRouter,
   tools: workspaceToolsRouter,
   rooms: workspaceRoomsRouter,
   ...workspaceAgentsRouter,

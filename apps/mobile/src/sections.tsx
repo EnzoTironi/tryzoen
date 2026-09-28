@@ -11,6 +11,7 @@ import {
   GoalCollection,
   IdeaCollection,
   Library,
+  CreatorStudio,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { companionFeedData } from "../../../shared/companion/feed";
@@ -21,6 +22,9 @@ import { auth } from "./auth";
 import { MobileMemory } from "./agent-panel";
 import { companionGoalsData } from "../../../shared/companion/goals";
 import { companionDocumentHistory } from "../../../shared/companion/files";
+import { companionCreatorData } from "../../../shared/companion/creators";
+
+const mobileCreators = companionCreatorData(rpc, randomUUID);
 
 export function MobileSections({
   section,
@@ -236,6 +240,11 @@ function SettingsSection({
       <View style={{ gap: 24 }}>
         <Text style={{ fontSize: 20 }}>{session.data?.user.name}</Text>
         <Text>{session.data?.user.email}</Text>
+        <CreatorStudio
+          key={session.data?.user.id}
+          data={mobileCreators}
+          cacheScope={session.data?.user.id ?? "signed-out"}
+        />
         <ActionButton
           quiet
           onPress={() => {

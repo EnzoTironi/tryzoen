@@ -1,5 +1,6 @@
 export { CompanionShell, type CompanionSection } from "./shell";
 export { SettingsPanel, type SettingsPage } from "./settings";
+export { CreatorStudio, type CreatorStudioData } from "./creators/studio";
 export { Composer } from "./composer";
 export { AttachmentProvider } from "./attachments/provider";
 export { Welcome } from "./welcome";

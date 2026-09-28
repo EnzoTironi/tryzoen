@@ -44,7 +44,7 @@ The study involved 97 participants in short roleplayed generative-art chats (41 
 5. Enforce entitlement/revocation before paid access. Pricing and final navigation remain product decisions.
 6. Measure useful outcomes, second-specialist discovery, retention, recall accuracy and cost. Message/account counts alone are not success or capacity proof.
 
-No new Expo Matrix transport, device encryption proof, creator billing or HUMA router was introduced merely by adding this handoff.
+No new Expo Matrix transport, device encryption proof, creator billing or HUMA router was introduced merely by adding this handoff. The private authoring implementation below is a separate verified step toward creator publishing.
 
 ## Creator workflow from Tutor CoPilot
 
@@ -63,3 +63,55 @@ Apply that process to Zoen as a versioned publishing workflow:
 7. **Measure outcomes after release.** Compare useful task outcomes and subgroup failures, record feedback tied to the released version, allow withdrawal and make cost/usage understandable. Engagement volume alone is not proof of expert quality.
 
 The trial involved about 900 tutors and 1,800 K–12 students and reported a 4 percentage-point mastery improvement overall and 9 points for students of lower-rated tutors; these findings do not validate unrelated domains or Zoen's marketplace. Grade-inappropriate suggestions remained a reported problem. Reuse research code only after checking the official [Tutor CoPilot repository](https://github.com/rosewang2008/tutor-copilot) and Bridge implementation, maintenance, license and privacy behavior. The paper supplies a process and evaluation reference, not a ready-to-deploy marketplace backend.
+
+## Private creator authoring — 2026-09-28
+
+Creator studio now opens from companion General settings on web/Electron and the
+native settings screen. The shared React Native screens create a specialist
+draft, edit its name/description, edit its Markdown playbook, and add, revise or
+remove authored examples. Playbooks and example bodies use the same visual
+document editor as the rest of the product. Desktop uses centered modals; mobile
+uses sheets, with the full document editor for Markdown.
+
+The example template asks for the situation, observations, chosen strategy,
+alternatives, useful response and limits. Each saved example has an explicit
+source and an original/permission/public-domain declaration. The interface asks
+the creator to confirm that declaration for each save; this is an attestation,
+not automated verification of a license. No model reasoning or private sessions
+are extracted. Authoring is manual at this checkpoint; model-assisted synthesis
+and separate held-out evaluation remain unimplemented.
+
+Migration 0069 stores drafts under the current person and workspace, with a
+membership foreign key and deletion cascade. Only a live authenticated human
+session can access them; workspace peers and agent grants cannot read them.
+They are separate from generic workspace files, private learned memory, room
+context and the existing workspace-bot grant protocol. Creating a draft neither
+publishes it nor connects its instructions to an active agent.
+
+The initial bound is 20 drafts per person/workspace and 20 examples per draft.
+Each playbook is at most 64,000 characters and each example at most 24,000.
+Lists return summaries without large bodies. An owner-scoped advisory lock
+serializes quota checks before membership share locks. Revision checks reject
+stale overwrites; exact current-content retries preserve their revision after a
+lost response. Editor snapshots retain their opening revision and preserve
+failed or unsaved text. Four isolated PostgreSQL cases cover actor/workspace
+isolation, forged authority, deletion cascade, concurrent revisions, 25 parallel
+creates against the 20-draft limit and source/rights/input bounds.
+
+Still required: draft lifecycle/archival and account-merge export qualification,
+model-assisted playbook synthesis, version-bound held-out evaluation, immutable
+selected-source publishing, discovery, entitlements, withdrawal, bot execution,
+human-assist feedback and outcome measurement. This is a private authoring slice,
+not a working public or paid marketplace.
+
+Verification for this authoring checkpoint: `pnpm check` passed all 1,323 tests
+across 205 files; `pnpm build`, `pnpm db:check` and Expo exports for web, iOS and
+Android passed. Four creator cases passed against the isolated PostgreSQL
+runtime database. In Chrome, a clearly fictional specialist was created, its
+visual playbook and attributed example were saved and reopened, its description
+was edited, and the example-removal confirmation was cancelled. Desktop modal
+and 390×844 mobile sheet evidence is attached to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5865419575).
+These exports are compile checks, not physical-device qualification. The
+structural quality report still flags RPC-wrapper similarity and component size;
+it is not a clean structural gate and no finding was suppressed.

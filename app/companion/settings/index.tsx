@@ -13,6 +13,7 @@ import { SettingsConnections } from "./connections";
 import { SettingsDevices } from "./devices";
 import { SettingsPermissions } from "./permissions";
 import { SettingsVault } from "./vault";
+import { ConnectedCreatorStudio } from "./creators";
 
 export function ConnectedSettings({
   onClose,
@@ -73,6 +74,7 @@ function SettingsContent({
           <WorkspaceSwitcher />
           <LanguagePicker />
           <ModelConnections />
+          <ConnectedCreatorStudio />
         </>
       );
     case "connectors":
