@@ -6,9 +6,11 @@ The client now connects the main Muse-style surfaces to durable Zoen data. It is
 
 The [interface audit](interface-audit.md) records the observed screens, nested menus, platform differences and behavior gaps. Use it as the parity checklist. In particular, Muse's editorial Feed, personalized Ideas and four-tab agent-status surface are broader than the current connected sections.
 
+The shared settings panel now uses the reference row order and a rounded compact sheet, with a centered desktop dialog. The web adapter keeps the underlying screen mounted and connects General, Connectors, Wallet, Credential vault, Permissions, Messaging channels, Devices and Data controls to existing account operations. Vault reads use 20-item keyset pages and only return masked metadata. Devices currently lists authenticated app/browser sessions, not OS pairing. Permissions currently controls credential delegations, not all browser/network grants. Help and legal information remain basic; native mobile settings still need the shared panel adapter. This is not full settings parity.
+
 The avatar now opens a four-tab agent panel without replacing the conversation. Activity and approvals can be reviewed per conversation using the existing paginated Eve history. Upcoming reads real schedules and supports revision-checked pause/resume. Identity opens the real workspace IDENTITY.md, SOUL.md and MEMORY.md files, with revision-checked visual editing. Account profile and personal notes remain separate from workspace identity and are also accessible from settings. Desktop docks the panel beside the active conversation; compact layouts use a sheet. This does not yet provide Muse's global task/approval timeline or avatar customization.
 
-The [ai-memory review](ai-memory-review.md) records the reuse decision for Fabio Akita's project. Zoen retains its Eve/PostgreSQL/private-Mem0 owners and exposes human-readable, revision-checked personal memory rather than introducing a second memory service.
+The [file-memory adoption plan](file-memory.md) records the user's 2026-09-28 decision to adopt Akita's file-authoritative model, relations, ingestion-time `as_of` and opt-in dreams. Eve retains execution and PostgreSQL retains account/product ownership. The current Mem0/profile implementation has not yet been replaced; isolated upstream acceptance is separate from application integration. The [social/Matrix handoff](tryzoen-social-matrix-handoff.md) applies the same private/published/community boundaries.
 
 ## What runs now
 
