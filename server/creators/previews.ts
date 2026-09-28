@@ -15,7 +15,7 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 
-const projection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
+export const creatorPreviewProjection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
   response, evaluation, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
   extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",
@@ -44,7 +44,7 @@ export function exportCreatorPreview(
   return transaction(async () => {
     await requirePreview(actor, id);
     const [row] = await query(
-      sql`SELECT ${projection}, snapshot FROM creator_previews WHERE id = ${id}`
+      sql`SELECT ${creatorPreviewProjection}, snapshot FROM creator_previews WHERE id = ${id}`
     );
     return creatorPreviewExportSchema.parse(row);
   });
@@ -57,7 +57,7 @@ export function listCreatorPreviews(
   return transaction(async () => {
     await readCreatorDraft(actor, draftId);
     return creatorPreviewListSchema.parse(
-      await query(sql`SELECT ${projection} FROM creator_previews
+      await query(sql`SELECT ${creatorPreviewProjection} FROM creator_previews
       WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId} AND draft_id = ${draftId}
       ORDER BY created_at DESC, id DESC LIMIT 20`)
     );
@@ -75,7 +75,7 @@ export function createCreatorPreview(
     );
     const draft = await readCreatorDraft(actor, input.draftId);
     const existing =
-      await query(sql`SELECT ${projection} FROM creator_previews WHERE id = ${input.id}
+      await query(sql`SELECT ${creatorPreviewProjection} FROM creator_previews WHERE id = ${input.id}
       AND workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
     if (existing[0]) {
       const preview = creatorPreviewSchema.parse(existing[0]);
@@ -130,7 +130,7 @@ export function createCreatorPreview(
     const rows =
       await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, snapshot, question, evaluation)
       VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${JSON.stringify(draft.content)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
-      ON CONFLICT (id) DO NOTHING RETURNING ${projection}`);
+      ON CONFLICT (id) DO NOTHING RETURNING ${creatorPreviewProjection}`);
     if (!rows[0]) throw new WorkspaceAccessDenied();
     return creatorPreviewSchema.parse(rows[0]);
   });

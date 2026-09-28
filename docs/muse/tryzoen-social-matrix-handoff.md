@@ -413,3 +413,59 @@ The responsive viewport override was cleared after evidence capture.
 
 The verified desktop/mobile, fixed criteria, failed-save and response screenshots
 are attached with `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867871597).
+
+## Private approved creator versions — 2026-09-28
+
+A live human owner can now review and approve a private version of a specialist.
+Approval copies the teaching playbook, its explicitly authored sources, each
+current evaluation case and its completed response, recorded model/timing,
+creator review and approval notes. Later draft, case or review edits do not
+rewrite this copy. The application exposes no update operation for approved
+versions; this is not an administrator-proof database immutability guarantee.
+Approval does not publish a bot or certify its expertise.
+
+Every current case must have a completed, reviewed-as-useful latest run for the
+exact teaching and case-set revisions. A newer pending, failed or unreviewed
+attempt blocks approval even when an older useful result exists. The write
+locks draft and preview changes in a consistent order, verifies live ownership
+and rechecks the exact review revisions the person saw. Stale approvals cannot
+silently accept different evidence. Identical retries return the same receipt;
+the same ID with changed content cannot overwrite it. Reads and writes are
+private to the account/workspace, including in multiplayer spaces, and reject
+group-agent and protocol-task actors.
+
+Migration 0076 stores at most 50 approved versions per owner/workspace, each
+with at most 20 reviewed cases and a 2 MiB evidence bound. Existing account and
+membership cascades retain their deletion behavior. The former-account archive
+lists metadata and exports one authorized version at a time rather than loading
+every evidence bundle. Normal export contains the same selected sources,
+cases, responses, provenance and approval notes; it includes no personal memory
+or unrelated conversations.
+
+The review, saved-version and evidence views reuse the shared mobile sheet /
+desktop modal and Markdown editor. The editor now honors a supplied save label
+in visual mode, so the approval action is explicitly named. Chrome verified a
+blocked save with notes retained, successful retry, reload persistence, read-only
+approval notes and a downloaded receipt for the fictional Cedarbay fixture. The
+approval expressly identifies the coding agent's synthetic verification and its
+limits; it is not a human expert endorsement. Responsive viewport and network
+interception overrides were cleared after verification.
+
+Creator-approved synthesis, public listings and discovery, entitlement enforcement,
+withdrawal, billing/cost receipts, specialist assistance in authorized conversations,
+native-device verification and real-world outcome evaluation remain open. The
+paper's human review and pilot process is not replaced by this approval record.
+
+Validation passes: all nine workspace checks, 1,323 tests across 205 files,
+production build, migration-chain check and Expo web/iOS/Android exports.
+Nineteen isolated PostgreSQL tests in five suites cover approvals, evaluations,
+reviews, previews and account archives, including concurrent retries, stale
+reviews, revocation, cross-owner collisions and the 50-version limit. Migration
+0076 was applied only to local review and isolated test databases. The structural
+delta retains 26 unsuppressed gating findings for typed-wrapper similarity,
+recent edits and component/function growth; JSX call reachability is also not
+recognized by that tool. The unused-code check passes, but this is not a clean
+structural or production gate.
+
+The verified desktop/mobile approval and memory-navigation images are attached
+with `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5868523688).

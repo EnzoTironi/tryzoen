@@ -8,6 +8,7 @@ import { CompanionPage, pageStyles } from "./page";
 import { ActionButton } from "./button";
 import { DocumentEditor } from "./document-editor";
 import { colors } from "./theme";
+import { SheetSurface } from "./sheet";
 
 function useIdentity(data: AgentPanelData, cacheScope: string) {
   return useQuery({
@@ -94,7 +95,7 @@ export function AgentIdentity({
 }: {
   readonly data: AgentPanelData;
   readonly cacheScope: string;
-  readonly renderPersonalNotes: () => ReactNode;
+  readonly renderPersonalNotes: (onBack: () => void) => ReactNode;
 }) {
   const identity = useIdentity(data, cacheScope);
   const [personal, setPersonal] = useState(false);
@@ -107,20 +108,6 @@ export function AgentIdentity({
   const operation = useRef<{ content: string; id: string } | undefined>(
     undefined
   );
-  if (personal)
-    return (
-      <>
-        <ActionButton
-          quiet
-          onPress={() => {
-            setPersonal(false);
-          }}
-        >
-          Back to agent identity
-        </ActionButton>
-        {renderPersonalNotes()}
-      </>
-    );
   const profile = identity.data?.documents.find(
     (document) => document.title === "Identity"
   );
@@ -205,6 +192,21 @@ export function AgentIdentity({
           </ActionButton>
         </View>
       </View>
+      {personal && (
+        <SheetSurface
+          title="Personal memory"
+          onClose={() => {
+            setPersonal(false);
+          }}
+          panelStyle={{ height: "85%", maxHeight: 780 }}
+        >
+          <View style={{ flex: 1, minHeight: 0 }}>
+            {renderPersonalNotes(() => {
+              setPersonal(false);
+            })}
+          </View>
+        </SheetSurface>
+      )}
       {editing && (
         <DocumentEditor
           markdown

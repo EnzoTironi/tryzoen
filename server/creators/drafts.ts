@@ -24,7 +24,9 @@ export class CreatorDraftConflict extends Error {
 }
 
 /** Only an authenticated person can author or read a private creator draft. */
-async function requireCreator(actor: z.infer<typeof WorkspaceActorSchema>) {
+export async function requireCreator(
+  actor: z.infer<typeof WorkspaceActorSchema>
+) {
   await requireWorkspaceAccess(actor);
   if (!actor.authSessionId || actor.groupBindingId || actor.protocolTaskId)
     throw new WorkspaceAccessDenied();

@@ -2,7 +2,10 @@ import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { mapAsync } from "../operations/async";
 import { z } from "zod";
-import { creatorDraftSchema } from "@zoen/companion-ui/creators";
+import {
+  creatorDraftSchema,
+  creatorReleaseSchema,
+} from "@zoen/companion-ui/creators";
 import { FileMemory } from "../memory/ai-memory/learned";
 import { requireControlSession } from "./controls";
 
@@ -81,6 +84,14 @@ export const readAccountArchive = async function (
     SELECT id, content->>'title' AS title FROM creator_drafts
     WHERE workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`}
     ORDER BY updated_at DESC, id DESC LIMIT 100`);
+  const creatorReleases = await query<{
+    id: string;
+    title: string;
+    createdAt: string;
+  }>(sql`
+    SELECT id, content->>'title' AS title, created_at::text AS "createdAt" FROM creator_releases
+    WHERE workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`}
+    ORDER BY created_at DESC, id DESC LIMIT 50`);
   const repositories = await query(
     sql`SELECT head_sha FROM workspace_repository WHERE workspace_id = ${archive.workspaceId}`
   );
@@ -93,13 +104,20 @@ export const readAccountArchive = async function (
     nextFile: attachments.length > 50 ? attachments[49]?.id : undefined,
     hasRepository: repositories.length === 1,
     creatorDrafts,
+    creatorReleases,
   };
 };
 
 export const downloadAccountArchive = async function (
   headers: Headers,
   id: string,
-  section: "memory" | "files" | "attachment" | "source" | "creator",
+  section:
+    | "memory"
+    | "files"
+    | "attachment"
+    | "source"
+    | "creator"
+    | "creator-release",
   attachmentId?: string
 ) {
   const archive = (await ownedArchives(headers, id))[0];
@@ -112,6 +130,12 @@ export const downloadAccountArchive = async function (
   };
   if (section === "creator")
     return creatorArchiveResponse(archive, attachmentId, responseHeaders);
+  if (section === "creator-release")
+    return creatorReleaseArchiveResponse(
+      archive,
+      attachmentId,
+      responseHeaders
+    );
   if (section === "files") {
     const files = await query<{
       bundle: Uint8Array;
@@ -209,6 +233,32 @@ async function creatorArchiveResponse(
       headers: {
         ...responseHeaders,
         "content-disposition": `attachment; filename="zoen-creator-${key}.json"`,
+      },
+    }
+  );
+}
+
+async function creatorReleaseArchiveResponse(
+  archive: z.infer<typeof Archive>,
+  attachmentId: string | undefined,
+  responseHeaders: Record<string, string>
+) {
+  const id = Id.parse(attachmentId);
+  const [row] =
+    await query(sql`SELECT id, draft_id AS "draftId", revision, evaluation_revision AS "evaluationRevision", content, evidence, notes,
+    extract(epoch FROM created_at)::float8 * 1000 AS "createdAt" FROM creator_releases
+    WHERE id = ${id} AND workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`}`);
+  if (!row) throw new AccountArchiveMissing();
+  return Response.json(
+    {
+      format: "zoen-creator-release",
+      version: 1,
+      release: creatorReleaseSchema.parse(row),
+    },
+    {
+      headers: {
+        ...responseHeaders,
+        "content-disposition": `attachment; filename="zoen-release-${id}.json"`,
       },
     }
   );

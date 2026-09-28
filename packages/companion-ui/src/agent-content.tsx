@@ -2,6 +2,8 @@ import { useState, type ComponentProps, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
 import { View } from "react-native";
+import { ChevronLeft } from "lucide-react-native";
+import { IconButton } from "./icon-button";
 import { LearnedNotes, type LearnedNotesData } from "./learned/notes";
 import { PersonalMemory } from "./personal-memory";
 import { Upcoming, type UpcomingItem } from "./upcoming";
@@ -83,11 +85,12 @@ export function AgentPanelContent({
       <AgentIdentity
         data={data}
         cacheScope={cacheScope}
-        renderPersonalNotes={() => (
+        renderPersonalNotes={(onBack) => (
           <PersonalMemorySection
             data={data}
             cacheScope={cacheScope}
             onPrompt={onPrompt}
+            onBack={onBack}
           />
         )}
       />
@@ -210,10 +213,11 @@ export function PersonalMemorySection({
   data,
   cacheScope,
   onPrompt,
+  onBack,
 }: Pick<
   ComponentProps<typeof AgentPanelContent>,
   "data" | "cacheScope" | "onPrompt"
->) {
+> & { readonly onBack?: () => void }) {
   const [showLearned, setShowLearned] = useState(false);
   const memory = useQuery({
     queryKey: ["companion-personal-memory", cacheScope],
@@ -222,43 +226,55 @@ export function PersonalMemorySection({
   if (showLearned)
     return (
       <View style={{ flex: 1 }}>
-        <ActionButton
-          quiet
-          onPress={() => {
-            setShowLearned(false);
-          }}
-        >
-          Back to personal memory
-        </ActionButton>
+        <View style={{ paddingHorizontal: 16 }}>
+          <IconButton
+            label="Back to personal memory"
+            icon={ChevronLeft}
+            onPress={() => {
+              setShowLearned(false);
+            }}
+          />
+        </View>
         <LearnedNotes data={data.learned} cacheScope={cacheScope} />
       </View>
     );
   return (
-    <PersonalMemory
-      onLearned={() => {
-        setShowLearned(true);
-      }}
-      profile={memory.data?.profile ?? []}
-      documents={memory.data?.documents ?? []}
-      unresolved={memory.data?.unresolved ?? true}
-      loading={memory.isPending}
-      error={
-        memory.error
-          ? "Your personal memory couldn’t be loaded. Try again."
-          : undefined
-      }
-      onRetry={() => {
-        void memory.refetch();
-      }}
-      onSave={async (expectedVersion, content) => {
-        await data.saveNote(expectedVersion, content);
-        await memory.refetch();
-      }}
-      onCorrectProfile={() => {
-        onPrompt(
-          "Help me review and update my saved personal profile. Ask which details I want to change, and save only the changes I confirm."
-        );
-      }}
-    />
+    <>
+      {onBack && (
+        <View style={{ paddingHorizontal: 16 }}>
+          <IconButton
+            label="Back to agent identity"
+            icon={ChevronLeft}
+            onPress={onBack}
+          />
+        </View>
+      )}
+      <PersonalMemory
+        onLearned={() => {
+          setShowLearned(true);
+        }}
+        profile={memory.data?.profile ?? []}
+        documents={memory.data?.documents ?? []}
+        unresolved={memory.data?.unresolved ?? true}
+        loading={memory.isPending}
+        error={
+          memory.error
+            ? "Your personal memory couldn’t be loaded. Try again."
+            : undefined
+        }
+        onRetry={() => {
+          void memory.refetch();
+        }}
+        onSave={async (expectedVersion, content) => {
+          await data.saveNote(expectedVersion, content);
+          await memory.refetch();
+        }}
+        onCorrectProfile={() => {
+          onPrompt(
+            "Help me review and update my saved personal profile. Ask which details I want to change, and save only the changes I confirm."
+          );
+        }}
+      />
+    </>
   );
 }

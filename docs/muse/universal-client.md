@@ -213,3 +213,10 @@ Reaction checkpoint validation: `pnpm check` passed 1,314 tests in 202 files; `p
 Per the user's explicit direction, mobile sheets become centered desktop modals at the shared 720px breakpoint. `SheetSurface` owns this presentation for settings, goal details and actions, generic action sheets, conversations, and the agent activity/identity panel. A stable component tree preserves open Markdown drafts while crossing the breakpoint. Web dialogs retain focus containment and Escape behavior through the existing Base UI adapter; native overlays use slide on compact screens and fade on larger screens. Desktop sheet handles are hidden.
 
 The old pinned/resizable conversation panel and its saved visibility preference were removed with their callers and unused resizer dependency. The account/workspace panel and the older chat activity surface also use dialogs on desktop. Full-screen document editing remains full-screen; it is not a mobile sheet. This change does not assert completed native settings adapters or full Muse parity.
+
+Personal memory now opens its own responsive surface from agent identity. The
+learned-memory browser has one back action to personal memory, then one back to
+identity; it no longer sits underneath the large avatar and duplicate full-width
+back controls. Desktop and 390 × 844 mobile Chrome checks verified navigation
+and the increased reading space. This browser evidence does not qualify native
+keyboard or physical-device behavior.

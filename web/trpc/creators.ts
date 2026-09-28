@@ -12,6 +12,10 @@ import {
   creatorPreviewExportSchema,
   creatorPreviewReviewSaveSchema,
   creatorPreviewReviewSchema,
+  creatorReleaseCandidateSchema,
+  creatorReleaseListSchema,
+  creatorReleaseRequestSchema,
+  creatorReleaseSchema,
 } from "@zoen/companion-ui/creators";
 import {
   CreatorReviewConflict,
@@ -25,6 +29,12 @@ import {
   setCreatorDraftArchived,
 } from "../../server/creators/drafts";
 import { saveCreatorEvaluation } from "../../server/creators/evaluation";
+import { readCreatorReleaseCandidate } from "../../server/creators/release-candidate";
+import {
+  approveCreatorRelease,
+  listCreatorReleases,
+  readCreatorRelease,
+} from "../../server/creators/releases";
 import { withSignal } from "../../server/operations/async";
 import { workspaceProcedure } from "./workspace-procedure";
 import {
@@ -34,6 +44,32 @@ import {
 } from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  releaseCandidate: workspaceProcedure
+    .input(z.strictObject({ draftId: z.uuid() }))
+    .output(creatorReleaseCandidateSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () =>
+        readCreatorReleaseCandidate(ctx.actor, input.draftId)
+      )
+    ),
+  approveRelease: workspaceProcedure
+    .input(creatorReleaseRequestSchema)
+    .output(creatorReleaseSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => approveCreatorRelease(ctx.actor, input))
+    ),
+  releases: workspaceProcedure
+    .input(z.strictObject({ draftId: z.uuid() }))
+    .output(creatorReleaseListSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listCreatorReleases(ctx.actor, input.draftId))
+    ),
+  release: workspaceProcedure
+    .input(z.strictObject({ id: z.uuid() }))
+    .output(creatorReleaseSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readCreatorRelease(ctx.actor, input.id))
+    ),
   saveEvaluation: workspaceProcedure
     .input(creatorEvaluationSaveSchema)
     .output(creatorDraftSchema)

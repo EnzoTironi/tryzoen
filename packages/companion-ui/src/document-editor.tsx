@@ -16,7 +16,7 @@ export function DocumentEditor({
   description,
   initialText,
   maxLength,
-  saveLabel = "Save changes",
+  saveLabel,
   readOnly = false,
   allowUnchanged = false,
   markdown = false,
@@ -129,7 +129,7 @@ export function DocumentEditor({
                       void save();
                     }}
                   >
-                    {saving ? "Saving…" : "Save"}
+                    {saving ? "Saving…" : (saveLabel ?? "Save")}
                   </ActionButton>
                 )}
                 <ActionButton quiet disabled={saving} onPress={close}>
@@ -206,7 +206,7 @@ export function DocumentEditor({
                     void save();
                   }}
                 >
-                  {saving ? "Saving…" : saveLabel}
+                  {saving ? "Saving…" : (saveLabel ?? "Save changes")}
                 </ActionButton>
               </View>
             )}

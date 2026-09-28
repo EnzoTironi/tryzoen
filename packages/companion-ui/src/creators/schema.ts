@@ -135,6 +135,49 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
   snapshot: creatorDraftContentSchema,
 });
 
+export const creatorReleaseEvidenceSchema = creatorPreviewSchema.extend({
+  status: z.literal("completed"),
+  response: z.string().min(1).max(32000),
+  evaluation: creatorEvaluationSnapshotSchema,
+  review: creatorPreviewReviewSchema.extend({
+    content: creatorPreviewReviewContentSchema.extend({
+      verdict: z.literal("useful"),
+    }),
+  }),
+  models: z.array(creatorPreviewModelSchema).min(1).max(8),
+  startedAt: z.number(),
+  finishedAt: z.number(),
+});
+
+export const creatorReleaseRequestSchema = z.strictObject({
+  id: z.uuid(),
+  draftId: z.uuid(),
+  revision: z.uuid(),
+  evaluationRevision: z.uuid(),
+  evidence: z
+    .array(z.strictObject({ id: z.uuid(), reviewRevision: z.uuid() }))
+    .min(1)
+    .max(20),
+  notes: z.string().trim().min(1).max(8000),
+});
+
+export const creatorReleaseSchema = creatorReleaseRequestSchema
+  .omit({ evidence: true })
+  .extend({
+    content: creatorDraftContentSchema,
+    evidence: z.array(creatorReleaseEvidenceSchema).min(1).max(20),
+    createdAt: z.number(),
+  });
+
+export const creatorReleaseListSchema = z
+  .array(creatorReleaseSchema.omit({ content: true, evidence: true }))
+  .max(50);
+export const creatorReleaseCandidateSchema = z.object({
+  draft: creatorDraftSchema,
+  evidence: z.array(creatorReleaseEvidenceSchema).max(20),
+  issues: z.array(z.string()).max(22),
+});
+
 export const creatorDraftListSchema = z
   .array(
     creatorDraftSchema.omit({ content: true, evaluation: true }).extend({

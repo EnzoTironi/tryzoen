@@ -17,9 +17,24 @@ import type {
   creatorPreviewListSchema,
   creatorPreviewReviewSaveSchema,
   creatorPreviewReviewSchema,
+  creatorReleaseCandidateSchema,
+  creatorReleaseListSchema,
+  creatorReleaseRequestSchema,
+  creatorReleaseSchema,
 } from "./schema";
 
 export interface CreatorStudioData {
+  releaseCandidate: (
+    draftId: string
+  ) => Promise<z.infer<typeof creatorReleaseCandidateSchema>>;
+  approveRelease: (
+    input: z.infer<typeof creatorReleaseRequestSchema>
+  ) => Promise<z.infer<typeof creatorReleaseSchema>>;
+  releases: (
+    draftId: string
+  ) => Promise<z.infer<typeof creatorReleaseListSchema>>;
+  release: (id: string) => Promise<z.infer<typeof creatorReleaseSchema>>;
+  exportRelease: (id: string) => Promise<void>;
   saveEvaluation: (
     input: z.infer<typeof creatorEvaluationSaveSchema>
   ) => Promise<z.infer<typeof creatorDraftSchema>>;
@@ -98,8 +113,8 @@ function StudioDrafts({
         permission to use, then review your strategies and limits.
       </Text>
       <Text style={pageStyles.copy}>
-        Drafts are private to you in this workspace. Publishing and release
-        evaluation are not available yet.
+        Drafts and approved versions are private to you in this workspace.
+        Public publishing is not available yet.
       </Text>
       {!archived && (
         <CreatorDraftCreate

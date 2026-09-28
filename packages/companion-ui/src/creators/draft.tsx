@@ -12,6 +12,7 @@ import { CreatorDraftActions } from "./actions";
 import { CreatorDetails } from "./details";
 import { CreatorEvaluation } from "./evaluation";
 import { CreatorPreviews } from "./previews";
+import { CreatorReleases } from "./releases";
 import type { creatorDraftSchema } from "./schema";
 
 export function CreatorDraft({
@@ -33,6 +34,7 @@ export function CreatorDraft({
   const [details, setDetails] = useState<z.infer<typeof creatorDraftSchema>>();
   const [evaluation, setEvaluation] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [releases, setReleases] = useState(false);
   return (
     <CompanionSheet
       title={draft.data?.content.title ?? "Specialist draft"}
@@ -89,6 +91,14 @@ export function CreatorDraft({
             }}
           >
             Evaluation cases
+          </ActionButton>
+          <ActionButton
+            quiet
+            onPress={() => {
+              setReleases(true);
+            }}
+          >
+            Approved versions
           </ActionButton>
           {!draft.data.archivedAt && (
             <ActionButton
@@ -179,6 +189,17 @@ export function CreatorDraft({
           cacheScope={cacheScope}
           onClose={() => {
             setPreview(false);
+          }}
+        />
+      )}
+      {releases && draft.data && !draft.isError && (
+        <CreatorReleases
+          draftId={id}
+          data={data}
+          cacheScope={cacheScope}
+          archived={Boolean(draft.data.archivedAt)}
+          onClose={() => {
+            setReleases(false);
           }}
         />
       )}
