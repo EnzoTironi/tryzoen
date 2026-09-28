@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { z, ZodError } from "zod";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { rm, glob, readFile } from "node:fs/promises";
+import { rm, glob, readFile, rename, lstat, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
@@ -43,6 +43,69 @@ const run = async (
   await using workspace = await workspaceFixture();
   await body({ ...workspace, memory: LearnedMemory });
 };
+
+test.each([
+  { missing: "db", empty: false },
+  { missing: "wiki", empty: false },
+  { missing: "db/memory.sqlite", empty: false },
+  { missing: "db/memory.sqlite", empty: true },
+])(
+  "damaged corpus ($missing, empty=$empty) cannot pass recovery or be overwritten",
+  ({ missing, empty }) =>
+    run(async ({ actor, memory }) => {
+      const writes = vi.spyOn(FileMemory, "mutate");
+      const saved = await memory.write(actor, {
+        action: "remember",
+        operationId: randomUUID(),
+        text: "The book club meets in Cedarbay.",
+      });
+      const asOf = new Date().toISOString();
+      await delay(20);
+      await memory.write(actor, {
+        action: "update",
+        memoryId: z.uuid().parse(saved.ids[0]),
+        operationId: randomUUID(),
+        text: "The book club now meets in Ambertrail.",
+      });
+      const input = { query: "Cedarbay", asOf };
+      expect((await memory.history(actor, input)).hits[0]?.excerpt).toContain(
+        "Cedarbay"
+      );
+      const corpus = join(
+        directory,
+        z.uuid().parse(writes.mock.calls[0]?.[0]),
+        "learned-memory"
+      );
+      const index = join(corpus, missing);
+      const preserved = join(corpus, "preserved-source");
+      await rename(index, preserved);
+      if (empty) await writeFile(index, "", { mode: 0o600 });
+      try {
+        await expect(memory.history(actor, input)).rejects.toBeInstanceOf(
+          FileMemoryError
+        );
+        await expect(memory.recover(actor)).rejects.toBeInstanceOf(
+          FileMemoryError
+        );
+        await expect(
+          lstat(index).then(
+            (info) => info.size,
+            (error: unknown) => z.object({ code: z.string() }).parse(error).code
+          )
+        ).resolves.toBe(empty ? 0 : "ENOENT");
+      } finally {
+        // Only this fixture's disposable index is removed, preserving its original snapshot.
+        await rm(index, { recursive: true, force: true });
+        await rename(preserved, index);
+      }
+      expect((await memory.history(actor, input)).hits[0]?.excerpt).toContain(
+        "Cedarbay"
+      );
+      expect((await memory.read(actor)).results[0]?.memory).toContain(
+        "Ambertrail"
+      );
+    })
+);
 
 test("historical excerpts preserve the old version and enforce owner, pause and mutation fences", () =>
   run(async ({ actor, guest, personal, memory }) => {

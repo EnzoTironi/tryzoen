@@ -42,6 +42,43 @@ child.once('exit', (code) => {
 });
 `;
 
+async function verifyMemoryIndex(data: string) {
+  const [wiki, directory] = await Promise.all(
+    ["wiki", "db"].map((name) =>
+      lstat(join(data, name)).catch((error: unknown) => {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          return null;
+        throw error;
+      })
+    )
+  );
+  if (!wiki && !directory) return; // The first launch creates both together.
+  if (!wiki || !directory)
+    throw new Error(
+      "Memory requires both its source files and original index."
+    );
+  const index = await lstat(join(data, "db", "memory.sqlite"));
+  if (
+    !wiki.isDirectory() ||
+    wiki.isSymbolicLink() ||
+    !directory.isDirectory() ||
+    directory.isSymbolicLink() ||
+    !index.isFile() ||
+    index.isSymbolicLink() ||
+    index.size < 100 ||
+    ((wiki.mode | directory.mode | index.mode) & 0o077) !== 0
+  )
+    throw new Error(
+      "Memory requires its original private index or a verified restore."
+    );
+  // Native startup may create an empty DB when one is missing. Do not launch it
+  // against an existing wiki: reindex restores current pages, not all history.
+}
+
 async function prepareSessionMemory(
   root: string,
   namespaceId: string,
@@ -77,6 +114,7 @@ async function prepareSessionMemory(
         { cause: error }
       );
   }
+  await verifyMemoryIndex(data);
   return data;
 }
 

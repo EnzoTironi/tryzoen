@@ -61,7 +61,7 @@ Download the official **v2.4.1** binary for the host architecture and verify its
 pnpm exec tsx scripts/ai-memory-acceptance.ts /absolute/path/to/ai-memory
 ```
 
-The harness uses disposable synthetic stores and explicit configuration. It does not install hooks, touch Zoen databases, inherit provider secrets or enable dreams. Test directories and a JSON report remain available for inspection. This proves engine behavior, not deployed integration, Zoen authorization, historical reconstruction after index loss, dream quality or capacity. The report lists pending gates explicitly.
+The harness uses disposable synthetic stores and explicit configuration. It does not install hooks, touch Zoen databases, inherit provider secrets or enable dreams. Test directories and a JSON report remain available for inspection. This proves engine behavior, not deployed integration, Zoen authorization, dream quality or capacity. The separate lifecycle qualification below distinguishes restoring a complete snapshot from rebuilding an index with Markdown alone. The report lists pending gates explicitly.
 
 ## Eve source capture — 2026-09-28
 
@@ -283,3 +283,63 @@ wrapper similarity, component length and recent ownership changes. No findings
 were suppressed. The unused-code check passes; the scanner does not recognize
 the shared editor's JSX usage. This checkpoint does not qualify physical devices,
 production deployment, dreams, public marketplace releases or million-user load.
+
+## Native index loss and lifecycle qualification, 2026-09-28
+
+The engine adapter now checks an existing corpus before launching the native
+writer. A missing wiki or database directory, missing/empty SQLite file, or
+non-private/symlinked index boundary fails without allowing native startup to
+recreate an empty replacement. Both directories absent is still the fresh-store
+case; this is not detection of total corpus/volume loss or a full consistency
+audit. The baseline isolated test demonstrated that native startup recreated the
+missing database before the read/recovery failed. The treatment prevents that
+mutation. Four real-engine cases preserve the damaged fixture, reject recovery,
+then recover current and historical content after the original files are put back.
+
+The lifecycle harness is separate because upstream restore/reindex refuse when
+any other ai-memory process is active. Run it without another qualification or
+application memory worker running:
+
+```sh
+pnpm exec tsx scripts/ai-memory-lifecycle-acceptance.ts /absolute/path/to/ai-memory
+```
+
+Only temporary synthetic corpora are used. The macOS arm64 2.4.1 executable
+passed live backup, live-writer refusal, failed restoration into quarantine with
+the original unchanged, restoration of current and superseded content, and Git
+commit preservation. Reindexing a separate copy of just the Markdown recovered
+the current note, but not its superseded Cedarbay excerpt. These are seven
+qualified contracts; the JSON report also records blockers and pending work.
+
+**Do not run `restore --force` over an occupied 2.4.1 corpus.** Our first corrupt
+archive test failed: native restore had already changed the destination database.
+The [released implementation](https://github.com/akitaonrails/ai-memory/blob/v2.4.1/crates/ai-memory-cli/src/commands/restore.rs)
+removes the existing wiki/database before validating the archive. The safer
+staging implementation documented on main is not in this release. As checked on
+2026-09-28, [2.4.1 remains the latest stable release](https://github.com/akitaonrails/ai-memory/releases/tag/v2.4.1).
+The repeatable acceptance therefore restores only into a new private directory
+and verifies that the original remains byte-identical. Native extraction also
+produces 0644 files despite a private umask: group/other permissions are removed
+inside quarantine before the Zoen adapter opens the restored corpus. This is an
+operator qualification, not an exposed restore endpoint or an implemented atomic
+promotion workflow.
+
+Production backups still need live owner authorization, coordination with raw
+Eve sources and PostgreSQL receipts, retention/erasure rules, volume placement,
+recoverable promotion and capacity tests. A native corpus archive is not a full
+account backup. Dreams remain off until their provider, isolation, cancellation,
+evidence and undo contracts are implemented and verified.
+
+Validation: all nine workspace checks pass (1,323 tests in 205 files), as does
+the production build. The isolated learned-memory suite passes 14 cases,
+including the four damaged-corpus cases; the existing upstream harness passes
+17 contracts and the lifecycle harness passes the seven contracts above with
+its in-place restore blocker retained. The structural delta for this change has
+no gating regressions and one unsuppressed minor recent-edit finding. This is
+not a clean structural assessment of earlier commits or production recovery
+qualification. No production data, migration or deployment was changed.
+
+Chrome reopened the local companion after the build, loaded both existing
+fictional Cedarbay notes and retained the saved relationship. The screenshot
+records this normal read path; the damage/restore behavior is established by
+the isolated filesystem/runtime tests, not by that screenshot.

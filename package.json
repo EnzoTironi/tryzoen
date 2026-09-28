@@ -160,7 +160,8 @@
     "package:desktop": "pnpm --filter @zoen/desktop package",
     "dev:mobile": "pnpm --filter @zoen/mobile start",
     "preview:companion": "next dev",
-    "test:memory:upstream": "tsx scripts/ai-memory-acceptance.ts"
+    "test:memory:upstream": "tsx scripts/ai-memory-acceptance.ts",
+    "test:memory:lifecycle": "tsx scripts/ai-memory-lifecycle-acceptance.ts"
   },
   "version": "0.0.0",
   "type": "module"
