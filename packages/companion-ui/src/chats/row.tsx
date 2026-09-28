@@ -22,21 +22,19 @@ export function ConversationRow({
   chat,
   onOpen,
   onChange,
+  dense = false,
+  selected = false,
 }: {
   readonly chat: z.infer<typeof chatPageSchema>["items"][number];
   readonly onOpen: (id: string) => void;
   readonly onChange: ChatData["change"];
+  readonly dense?: boolean;
+  readonly selected?: boolean;
 }) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [title, setTitle] = useState(chat.title);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
-  const renameInput = useRef<TextInput>(null);
-  useEffect(() => {
-    // Rename is explicit: place focus in the field only when that action opens it.
-    if (renaming) renameInput.current?.focus();
-  }, [renaming]);
   const change = async (next: Parameters<ChatData["change"]>[0]["change"]) => {
     setPending(true);
     setError(undefined);
@@ -52,49 +50,35 @@ export function ConversationRow({
   };
   return (
     <View>
-      <View style={pageStyles.row}>
+      <View
+        style={[
+          pageStyles.row,
+          dense && styles.dense,
+          selected && styles.selected,
+        ]}
+      >
         {chat.pinned ? (
           <Pin size={22} color={colors.ink} />
-        ) : (
+        ) : !dense ? (
           <MessageCircle size={22} color={colors.muted} />
-        )}
+        ) : null}
         {renaming ? (
-          <View style={styles.rename}>
-            <TextInput
-              ref={renameInput}
-              accessibilityLabel="Conversation name"
-              value={title}
-              onChangeText={setTitle}
-              maxLength={240}
-              editable={!pending}
-              onSubmitEditing={() => {
-                if (!pending && chatTitleSchema.safeParse(title).success)
-                  void change({ title });
-              }}
-              style={styles.input}
-            />
-            <IconButton
-              icon={X}
-              label="Cancel conversation rename"
-              disabled={pending}
-              onPress={() => {
-                setRenaming(false);
-                setError(undefined);
-              }}
-            />
-            <IconButton
-              icon={Check}
-              label="Save conversation name"
-              disabled={pending || !chatTitleSchema.safeParse(title).success}
-              onPress={() => {
-                void change({ title });
-              }}
-            />
-          </View>
+          <ConversationName
+            initialTitle={chat.title}
+            pending={pending}
+            onSave={(title) => {
+              void change({ title });
+            }}
+            onCancel={() => {
+              setRenaming(false);
+              setError(undefined);
+            }}
+          />
         ) : (
           <>
             <Pressable
               accessibilityRole="button"
+              aria-pressed={selected}
               onPress={() => {
                 onOpen(chat.sessionId);
               }}
@@ -103,12 +87,7 @@ export function ConversationRow({
               }}
               style={pageStyles.rowCopy}
             >
-              <Text style={pageStyles.rowTitle} numberOfLines={2}>
-                {chat.title}
-              </Text>
-              <Text style={pageStyles.copy}>
-                {new Date(chat.updatedAt).toLocaleString()}
-              </Text>
+              <ConversationPreview chat={chat} dense={dense} />
             </Pressable>
             <IconButton
               icon={Ellipsis}
@@ -145,7 +124,6 @@ export function ConversationRow({
               label: "Rename",
               icon: Pencil,
               press: () => {
-                setTitle(chat.title);
                 setMenu(false);
                 setRenaming(true);
               },
@@ -183,7 +161,85 @@ export function ConversationRow({
     </View>
   );
 }
+function ConversationName({
+  initialTitle,
+  pending,
+  onSave,
+  onCancel,
+}: {
+  readonly initialTitle: string;
+  readonly pending: boolean;
+  readonly onSave: (title: string) => void;
+  readonly onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initialTitle);
+  const renameInput = useRef<TextInput>(null);
+  useEffect(() => {
+    renameInput.current?.focus();
+  }, []);
+  return (
+    <View style={styles.rename}>
+      <TextInput
+        ref={renameInput}
+        accessibilityLabel="Conversation name"
+        value={title}
+        onChangeText={setTitle}
+        maxLength={240}
+        editable={!pending}
+        onSubmitEditing={() => {
+          if (!pending && chatTitleSchema.safeParse(title).success)
+            onSave(title);
+        }}
+        style={styles.input}
+      />
+      <IconButton
+        icon={X}
+        label="Cancel conversation rename"
+        disabled={pending}
+        onPress={onCancel}
+      />
+      <IconButton
+        icon={Check}
+        label="Save conversation name"
+        disabled={pending || !chatTitleSchema.safeParse(title).success}
+        onPress={() => {
+          onSave(title);
+        }}
+      />
+    </View>
+  );
+}
+function ConversationPreview({
+  chat,
+  dense,
+}: Pick<Parameters<typeof ConversationRow>[0], "chat" | "dense">) {
+  return (
+    <>
+      <Text
+        style={[pageStyles.rowTitle, dense && styles.denseTitle]}
+        numberOfLines={dense ? 1 : 2}
+      >
+        {chat.title}
+      </Text>
+      {!dense && (
+        <Text style={pageStyles.copy}>
+          {new Date(chat.updatedAt).toLocaleString()}
+        </Text>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  dense: {
+    paddingVertical: 0,
+    paddingLeft: 8,
+    minHeight: 44,
+    gap: 6,
+    borderRadius: 12,
+  },
+  denseTitle: { fontSize: 14, fontWeight: "400" },
+  selected: { backgroundColor: colors.wash },
   dimmed: { opacity: 0.5 },
   rename: {
     flex: 1,

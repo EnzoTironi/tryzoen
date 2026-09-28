@@ -37,3 +37,4 @@ export {
 export { MarkdownSourceEditor } from "./editor/source";
 export { DocumentEditor } from "./document-editor";
 export type { DocumentHistoryData } from "./document-history";
+export type { ConversationLayoutProps } from "./chats/layout";

@@ -18,6 +18,7 @@ import {
   AttachmentProvider,
   type CompanionSection,
   type MarkdownEditorProps,
+  type ConversationLayoutProps,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
 import { getUntypedClient } from "@trpc/client";
@@ -29,6 +30,9 @@ import {
   saveBrowserAttachment,
 } from "@web/files/attachments";
 
+import { ConnectedSearch } from "./search";
+import { BrowserConversationLayout } from "./conversations/frame";
+import { useConversationPanelPreference } from "./conversations/preference";
 import { ConnectedSections } from "./sections";
 import {
   ConnectedAgentPanel,
@@ -57,6 +61,10 @@ function renderMarkdownEditor(props: MarkdownEditorProps) {
   return <RichTextEditor {...props} />;
 }
 
+function renderConversationLayout(props: ConversationLayoutProps) {
+  return <BrowserConversationLayout {...props} />;
+}
+
 export function ConnectedCompanion({
   sessionId,
   title,
@@ -67,6 +75,7 @@ export function ConnectedCompanion({
   readonly draftScope: string;
 }) {
   const router = useRouter();
+  const panelPreference = useConversationPanelPreference(draftScope);
   const { client } = api.useUtils();
   const reactions = useMemo(
     () => companionReactionData(getUntypedClient(client)),
@@ -89,6 +98,10 @@ export function ConnectedCompanion({
   const navigate = (path: string) => {
     router.push(workspaceHref(path, workspaceId));
   };
+  const openConversation = (id?: string) => {
+    if (id === sessionId && id !== undefined) return;
+    navigate(id ? `/companion/${encodeURIComponent(id)}` : "/companion");
+  };
   const stagePrompt = (prompt: string) => {
     try {
       const draftToken = writeConversationDraft(draftScope, {
@@ -103,6 +116,7 @@ export function ConnectedCompanion({
   };
   return (
     <div className={styles.viewport}>
+      {panelPreference.error && <p role="alert">{panelPreference.error}</p>}
       {draftError && (
         <p role="alert">
           Couldn’t open the draft. Allow storage for this site and try again.
@@ -131,7 +145,23 @@ export function ConnectedCompanion({
                   }}
                   onConversation={(id) => {
                     close();
-                    navigate(`/companion/${encodeURIComponent(id)}`);
+                    openConversation(id);
+                  }}
+                />
+              )}
+              keepConversationsVisible={panelPreference.keepVisible}
+              renderConversationLayout={renderConversationLayout}
+              renderConversations={({ close, selected }) => (
+                <ConnectedSearch
+                  selectedId={sessionId}
+                  panel={{
+                    onClose: close,
+                    keepVisible: panelPreference.keepVisible,
+                    onKeepVisibleChange: panelPreference.setKeepVisible,
+                  }}
+                  onConversation={(id) => {
+                    selected();
+                    openConversation(id);
                   }}
                 />
               )}
@@ -141,18 +171,14 @@ export function ConnectedCompanion({
                 );
               }}
               onNewConversation={() => {
-                navigate("/companion");
+                openConversation();
               }}
             >
               {section !== "chat" ? (
                 <ConnectedSections
                   section={section}
                   onPrompt={stagePrompt}
-                  onConversation={(id) => {
-                    navigate(
-                      id ? `/companion/${encodeURIComponent(id)}` : "/companion"
-                    );
-                  }}
+                  onConversation={openConversation}
                 />
               ) : sessionId ? (
                 <SessionConversation

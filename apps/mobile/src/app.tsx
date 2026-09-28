@@ -18,6 +18,7 @@ import {
 } from "./agent-panel";
 import { auth } from "./auth";
 import { MobileConversation } from "./conversation";
+import { SearchSection } from "./search";
 import { MobileSections } from "./sections";
 import { apiOrigin } from "./environment";
 import { MobileEditor } from "./editor";
@@ -147,6 +148,17 @@ function MobileCompanion({
           onConversation={(id) => {
             close();
             openConversation(id);
+          }}
+        />
+      )}
+      renderConversations={({ close, selected }) => (
+        <SearchSection
+          selectedId={conversation.id}
+          panel={{ onClose: close }}
+          onConversation={(id) => {
+            selected();
+            if (id !== conversation.id || id === undefined)
+              openConversation(id);
           }}
         />
       )}

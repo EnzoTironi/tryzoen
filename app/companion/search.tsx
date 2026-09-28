@@ -1,4 +1,5 @@
 "use client";
+import type { ComponentProps } from "react";
 import { useMemo } from "react";
 import { getUntypedClient } from "@trpc/client";
 import { companionChatData } from "@shared/companion/chats";
@@ -11,11 +12,15 @@ export function ConnectedSearch({
   title,
   intro,
   allowCreate = true,
+  panel,
+  selectedId,
 }: {
   readonly onConversation: (id?: string) => void;
   readonly title?: string;
   readonly intro?: string;
   readonly allowCreate?: boolean;
+  readonly panel?: ComponentProps<typeof ConversationSearch>["panel"];
+  readonly selectedId?: string;
 }) {
   const { client } = api.useUtils();
   const data = useMemo(
@@ -28,6 +33,8 @@ export function ConnectedSearch({
     <ConversationSearch
       data={data}
       cacheScope={`${account.data?.user.id ?? "anonymous"}:${params.get("space") ?? "personal"}`}
+      panel={panel}
+      selectedId={selectedId}
       title={title}
       intro={intro}
       onOpen={onConversation}

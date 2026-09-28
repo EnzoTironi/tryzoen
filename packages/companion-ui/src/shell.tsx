@@ -22,6 +22,7 @@ import {
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
 import { AgentPanel, type AgentPanelTab } from "./agent-panel";
+import { ConversationNavigation } from "./chats/navigation";
 
 const sections = [
   { id: "chat", label: "Conversation", icon: MessageCircle },
@@ -51,6 +52,9 @@ export function CompanionShell({
   onNewConversation,
   renderAgentPanel,
   renderAgentHeader,
+  renderConversations,
+  keepConversationsVisible,
+  renderConversationLayout,
 }: {
   readonly children: ReactNode;
   readonly section?: CompanionSection;
@@ -64,7 +68,12 @@ export function CompanionShell({
     close: () => void
   ) => ReactNode;
   readonly renderAgentHeader?: (onEdit: () => void) => ReactNode;
-}) {
+} & Pick<
+  ComponentProps<typeof ConversationNavigation>,
+  | "renderConversations"
+  | "keepConversationsVisible"
+  | "renderConversationLayout"
+>) {
   const compact = useWindowDimensions().width < 720;
   const [showAgent, setShowAgent] = useState(false);
   return (
@@ -108,22 +117,33 @@ export function CompanionShell({
           />
         </View>
       )}
-      <View style={styles.body}>
-        {(section === "chat" || (compact && Platform.OS !== "web")) && (
-          <CompanionHeader
-            compact={compact}
-            title={title}
-            avatarUri={avatarUri}
-            agentName={agentName}
-            onNavigate={onNavigate}
-            onNewConversation={onNewConversation}
-            onOpenAgent={() => {
-              setShowAgent(true);
-            }}
-          />
+      <ConversationNavigation
+        compact={compact}
+        active={section === "chat"}
+        keepConversationsVisible={keepConversationsVisible}
+        renderConversations={renderConversations}
+        renderConversationLayout={renderConversationLayout}
+      >
+        {(toggle) => (
+          <View style={styles.body}>
+            {(section === "chat" || (compact && Platform.OS !== "web")) && (
+              <CompanionHeader
+                compact={compact}
+                title={title}
+                avatarUri={avatarUri}
+                agentName={agentName}
+                onNavigate={onNavigate}
+                onNewConversation={onNewConversation}
+                onOpenConversations={toggle}
+                onOpenAgent={() => {
+                  setShowAgent(true);
+                }}
+              />
+            )}
+            <View style={styles.content}>{children}</View>
+          </View>
         )}
-        <View style={styles.content}>{children}</View>
-      </View>
+      </ConversationNavigation>
       {compact && (
         <View style={styles.bottomBar}>
           {sections
@@ -177,10 +197,15 @@ function CompanionHeader({
   onNavigate,
   onNewConversation,
   onOpenAgent,
+  onOpenConversations,
 }: Pick<
   ComponentProps<typeof CompanionShell>,
   "title" | "avatarUri" | "agentName" | "onNavigate" | "onNewConversation"
-> & { readonly compact: boolean; readonly onOpenAgent: () => void }) {
+> & {
+  readonly compact: boolean;
+  readonly onOpenAgent: () => void;
+  readonly onOpenConversations: () => void;
+}) {
   const nativeCompact = compact && Platform.OS !== "web";
   return (
     <View
@@ -190,9 +215,7 @@ function CompanionHeader({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Conversations"
-        onPress={() => {
-          onNavigate("search");
-        }}
+        onPress={onOpenConversations}
         style={styles.chatMenu}
       >
         <Menu size={20} color={colors.muted} />

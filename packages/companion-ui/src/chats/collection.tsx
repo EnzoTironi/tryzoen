@@ -1,10 +1,16 @@
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useState, type ComponentProps } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { StyleSheet, Text, TextInput, View } from "react-native";
-import { Archive, ArrowLeft, Plus } from "lucide-react-native";
-import { CompanionPage, pageStyles } from "../page";
-import { IconButton } from "../icon-button";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { pageStyles } from "../page";
 import { ActionButton } from "../button";
+import { colors } from "../theme";
+import { ConversationToolbar } from "./toolbar";
 import { ConversationRow } from "./row";
 import type { ChatData, chatPageSchema } from "./schema";
 import type { z } from "zod";
@@ -16,6 +22,8 @@ export function ConversationSearch({
   onCreate,
   title = "Conversations",
   intro,
+  selectedId,
+  panel,
 }: {
   readonly data: ChatData;
   readonly cacheScope: string;
@@ -23,10 +31,13 @@ export function ConversationSearch({
   readonly onCreate?: () => void;
   readonly title?: string;
   readonly intro?: string;
+  readonly selectedId?: string;
+  readonly panel?: ComponentProps<typeof ConversationToolbar>["panel"];
 }) {
   const client = useQueryClient();
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
+  const [width, setWidth] = useState(0);
   const search = useDeferredValue(query);
   const key = ["conversation-library", cacheScope];
   const chats = useInfiniteQuery({
@@ -35,80 +46,116 @@ export function ConversationSearch({
     queryFn: ({ pageParam }) =>
       data.list({ query: search, archived, cursor: pageParam }),
     getNextPageParam: (last) => last.nextCursor,
+    staleTime: 15_000,
+    gcTime: 60_000,
   });
   const items = chats.data?.pages.flatMap((page) => page.items) ?? [];
   const change: ChatData["change"] = async (input) => {
     await data.change(input);
     await client.invalidateQueries({ queryKey: key });
   };
+  const toggleArchive = () => {
+    setArchived(!archived);
+    setQuery("");
+  };
   return (
-    <CompanionPage
-      title={archived ? "Archived conversations" : title}
-      loading={chats.isPending || chats.isFetchingNextPage}
-      error={chats.error?.message}
-      onRetry={() => {
-        void chats.refetch();
+    <View
+      onLayout={({ nativeEvent }) => {
+        setWidth(nativeEvent.layout.width);
       }}
-      actions={
-        <View style={styles.actions}>
-          <IconButton
-            icon={archived ? ArrowLeft : Archive}
-            label={
-              archived ? "Back to conversations" : "Show archived conversations"
-            }
-            onPress={() => {
-              setArchived(!archived);
-              setQuery("");
-            }}
-          />
-          {!archived && onCreate && (
-            <IconButton
-              icon={Plus}
-              label="New conversation"
-              onPress={onCreate}
-            />
-          )}
-        </View>
-      }
+      style={[styles.page, width >= 720 && styles.wide, panel && styles.panel]}
     >
-      {intro && !archived && <Text style={pageStyles.copy}>{intro}</Text>}
-      <TextInput
-        accessibilityLabel="Search conversations"
-        placeholder="Search conversations"
-        value={query}
-        onChangeText={setQuery}
-        maxLength={200}
-        style={pageStyles.field}
+      <ConversationToolbar
+        title={title}
+        intro={intro}
+        query={query}
+        onQuery={setQuery}
+        archived={archived}
+        onToggleArchive={toggleArchive}
+        onCreate={onCreate}
+        panel={panel}
       />
-      {items.map((chat) => (
-        <ConversationRow
-          key={chat.sessionId}
-          chat={chat}
-          onOpen={onOpen}
-          onChange={change}
-        />
-      ))}
-      {!chats.isPending && !chats.error && items.length === 0 && (
-        <Text style={pageStyles.copy}>
-          {search
-            ? "No conversations match your search."
-            : archived
-              ? "No archived conversations. Conversations you archive will appear here."
-              : "Start a conversation. You can return to it here anytime."}
-        </Text>
-      )}
-      {chats.hasNextPage && (
-        <ActionButton
-          quiet
-          disabled={chats.isFetchingNextPage}
-          onPress={() => {
-            void chats.fetchNextPage();
-          }}
-        >
-          Load more
-        </ActionButton>
-      )}
-    </CompanionPage>
+      <FlatList
+        key={panel ? "panel" : "page"}
+        data={items}
+        keyExtractor={(chat) => chat.sessionId}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        keyboardShouldPersistTaps="handled"
+        style={styles.list}
+        renderItem={({ item }) => (
+          <ConversationRow
+            chat={item}
+            onOpen={onOpen}
+            onChange={change}
+            dense={Boolean(panel)}
+            selected={item.sessionId === selectedId}
+          />
+        )}
+        ListEmptyComponent={
+          !chats.isPending && !chats.error ? (
+            <Text style={pageStyles.copy}>
+              {search
+                ? "No conversations match your search."
+                : archived
+                  ? "No archived conversations. Conversations you archive will appear here."
+                  : "Start a conversation. You can return to it here anytime."}
+            </Text>
+          ) : null
+        }
+        ListFooterComponent={
+          <View style={styles.feedback}>
+            {chats.isFetching && (
+              <ActivityIndicator
+                accessibilityLabel="Loading conversations"
+                color={colors.accent}
+              />
+            )}
+            {chats.error && (
+              <>
+                <Text accessibilityRole="alert" style={styles.error}>
+                  {chats.error.message}
+                </Text>
+                <ActionButton
+                  quiet
+                  onPress={() => {
+                    void chats.refetch();
+                  }}
+                >
+                  Try again
+                </ActionButton>
+              </>
+            )}
+            {chats.hasNextPage && (
+              <ActionButton
+                quiet
+                disabled={chats.isFetchingNextPage}
+                onPress={() => {
+                  void chats.fetchNextPage();
+                }}
+              >
+                Load more
+              </ActionButton>
+            )}
+          </View>
+        }
+      />
+    </View>
   );
 }
-const styles = StyleSheet.create({ actions: { flexDirection: "row", gap: 8 } });
+const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+    minHeight: 0,
+    paddingHorizontal: 16,
+    paddingTop: 44,
+    paddingBottom: 16,
+    maxWidth: 1128,
+  },
+  wide: { paddingHorizontal: 64 },
+  panel: { paddingHorizontal: 8, paddingTop: 12, paddingBottom: 0 },
+  list: { flex: 1, minHeight: 0 },
+  feedback: { paddingVertical: 16, gap: 12, alignItems: "center" },
+  error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
+});
