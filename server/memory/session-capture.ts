@@ -1,17 +1,12 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
-import type { HookEvent } from "eve/hooks";
 import { query, transaction } from "@db/queries";
 import { env } from "@shared/environment/env";
 import { openSessionMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
 import { memoryNamespace } from "./learned";
-import {
-  sessionSource,
-  sessionSourceSchema,
-  writeSessionSource,
-} from "./session-files";
+import { sessionSourceSchema, writeSessionSource } from "./session-files";
 import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
@@ -19,17 +14,15 @@ import {
 
 export async function captureSessionSource(
   actor: z.infer<typeof WorkspaceActorSchema>,
-  sessionId: string,
-  event: HookEvent
+  input: z.infer<typeof sessionSourceSchema> | null
 ) {
-  if (!env.ZOEN_SESSION_ARCHIVE_DIR) return;
-  const source = sessionSource(event, sessionId);
-  if (!source) return;
+  if (!env.ZOEN_SESSION_ARCHIVE_DIR || !input) return;
+  const source = sessionSourceSchema.parse(input);
   await transaction(async () => {
     const partition = await memoryNamespace(actor);
     if (!partition.enabled) return;
     const owner = await query(sql`SELECT session_id FROM agent_sessions
-      WHERE session_id = ${sessionId} AND workspace_id = ${actor.workspaceId}
+      WHERE session_id = ${source.sessionId} AND workspace_id = ${actor.workspaceId}
       AND created_by_user_id = ${actor.userId} FOR SHARE`);
     if (!owner.length) throw new WorkspaceAccessDenied();
     const payload = JSON.stringify(source);

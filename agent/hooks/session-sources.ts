@@ -2,6 +2,7 @@ import { defineHook, type HookContext, type HookEvent } from "eve/hooks";
 import { env } from "@shared/environment/env";
 import { isSharedPrincipal } from "@shared/identity/principal-scope";
 import { captureSessionSource } from "../../server/memory/session-capture";
+import { sessionSource } from "../../server/memory/session-files";
 import {
   workspaceActorFromPrincipal,
   WorkspaceAccessDenied,
@@ -29,7 +30,7 @@ async function capture(event: HookEvent, context: HookContext) {
     return;
   try {
     const actor = await workspaceActorFromPrincipal(principal);
-    await captureSessionSource(actor, context.session.id, event);
+    await captureSessionSource(actor, sessionSource(event, context.session.id));
   } catch (error) {
     if (error instanceof WorkspaceAccessDenied) return;
     // A failed capture already fails its turn. Never turn that failure into

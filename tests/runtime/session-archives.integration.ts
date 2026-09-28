@@ -6,7 +6,11 @@ import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
 import type { HookEvent } from "eve/hooks";
 import { workspaceFixture } from "./workspace-fixture";
-import { sessionSourceSchema } from "../../server/memory/session-files";
+import {
+  sessionSource,
+  settledSessionSource,
+  sessionSourceSchema,
+} from "../../server/memory/session-files";
 import { claimSession } from "../../db/services/sessions";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import {
@@ -50,13 +54,19 @@ test("owns capture by persisted session and retires outbox content only after pr
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
   const event = source();
-  await captureSessionSource(actor, sessionId, event);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await expect(
-    captureSessionSource(workspace.guestPersonal, sessionId, source())
+    captureSessionSource(
+      workspace.guestPersonal,
+      sessionSource(source(), sessionId)
+    )
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   await expect(
-    captureSessionSource(actor, sessionId, source(event.meta.id, "Conflict"))
+    captureSessionSource(
+      actor,
+      sessionSource(source(event.meta.id, "Conflict"), sessionId)
+    )
   ).rejects.toThrow("identity conflict");
   const [receipt] = await query<{
     namespaceId: string;
@@ -94,12 +104,12 @@ test("owns capture by persisted session and retires outbox content only after pr
     occurredAt: event.meta.at,
     captureSequence: Number(receipt?.captureSequence),
   });
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
   await query(
     sql`UPDATE workspace_memory_namespace SET enabled = false WHERE namespace_id = ${receipt?.namespaceId}`
   );
-  await captureSessionSource(actor, sessionId, source());
+  await captureSessionSource(actor, sessionSource(source(), sessionId));
   expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
 });
 
@@ -109,7 +119,7 @@ test("disk errors retain queued content for retry; account deletion fences sourc
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   const [owner] = await query<{ id: string }>(
     sql`SELECT namespace_id AS id FROM workspace_memory_namespace WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
   );
@@ -136,7 +146,7 @@ test("disk errors retain queued content for retry; account deletion fences sourc
     )
   ).toHaveLength(1);
   await expect(
-    captureSessionSource(actor, sessionId, source())
+    captureSessionSource(actor, sessionSource(source(), sessionId))
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });
 
@@ -147,7 +157,9 @@ test("drains at most 25 events and serializes capture identity inside its owner 
   await claimSession(actor, sessionId);
   const events = Array.from({ length: 26 }, () => source());
   await Promise.all(
-    events.map((event) => captureSessionSource(actor, sessionId, event))
+    events.map((event) =>
+      captureSessionSource(actor, sessionSource(event, sessionId))
+    )
   );
   expect(await drainSessionSources()).toEqual({ stored: 25, configured: true });
   expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
@@ -159,7 +171,7 @@ test("revoked membership cannot deliver previously queued private sources", asyn
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await query(
     sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
   );
@@ -176,7 +188,7 @@ test("replays the same file when acknowledgement rolls back after filesystem del
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await expect(
     transaction(async () => {
       expect(await drainSessionSources()).toEqual({
@@ -208,9 +220,12 @@ test("preserves long escaped text and rejects excess queued bytes atomically", a
   await claimSession(actor, sessionId);
   const text = "\u0001".repeat(1_000_000);
   const event = source(randomUUID(), text);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await expect(
-    captureSessionSource(actor, sessionId, source(randomUUID(), text))
+    captureSessionSource(
+      actor,
+      sessionSource(source(randomUUID(), text), sessionId)
+    )
   ).rejects.toThrow("archive is full");
   const receipts = await query<{ namespaceId: string }>(sql`
     SELECT namespace_id AS "namespaceId" FROM memory_session_sources WHERE payload->>'sessionId' = ${sessionId}`);
@@ -242,7 +257,7 @@ test("refuses to acknowledge a modified outbox payload", async () => {
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await query(
     sql`UPDATE memory_session_sources SET payload = jsonb_set(payload, '{text}', '"Modified without receipt"') WHERE event_id = ${event.meta.id}`
   );
@@ -259,7 +274,7 @@ test("pausing memory fences delivery of already queued sources until it is resum
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
-  await captureSessionSource(actor, sessionId, event);
+  await captureSessionSource(actor, sessionSource(event, sessionId));
   await query(
     sql`UPDATE workspace_memory_namespace SET enabled = false WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
   );
@@ -268,4 +283,43 @@ test("pausing memory fences delivery of already queued sources until it is resum
     sql`UPDATE workspace_memory_namespace SET enabled = true WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
   );
   expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
+});
+
+test("accepted replies use the same ownership, replay and immutable-file guarantees", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  const turn = { id: "settled-turn", sequence: 0 };
+  await claimSession(actor, sessionId);
+  const accepted = settledSessionSource({
+    session: { id: sessionId, turn, auth: { current: null, initiator: null } },
+    turn: { ...turn, input: [] },
+    operationId: randomUUID(),
+    messages: [{ role: "assistant", content: "Accepted Willowport reply." }],
+  });
+  expect(accepted).not.toBeNull();
+  await captureSessionSource(actor, accepted);
+  await captureSessionSource(actor, accepted);
+  await expect(
+    captureSessionSource(workspace.guestPersonal, accepted)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
+  await captureSessionSource(actor, accepted);
+  expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
+  const [receipt] = await query<{ namespaceId: string }>(sql`
+    SELECT namespace_id AS "namespaceId" FROM memory_session_sources WHERE event_id = ${accepted?.eventId}`);
+  const files = await Array.fromAsync(
+    glob(
+      join(directory, receipt?.namespaceId ?? "missing", "raw/eve/**/*.jsonl")
+    )
+  );
+  expect(files).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(files[0] ?? "missing", "utf8"))
+  ).toMatchObject({
+    kind: "message.settled",
+    settlement: "accepted",
+    occurredAt: null,
+    text: "Accepted Willowport reply.",
+  });
 });

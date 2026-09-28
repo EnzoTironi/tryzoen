@@ -10,13 +10,13 @@ const scope = { workspace: "zoen", project: "private" };
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
-/** This projection deliberately excludes assistant attempts until Eve can settle them. */
+/** Upstream 2.4.1's assistant hook protocol excludes generic/Eve clients. */
 export async function ingestSessionSource(
   engine: Awaited<ReturnType<typeof openSessionMemoryEngine>>,
   namespaceId: string,
   source: z.infer<typeof sessionSourceSchema>
 ) {
-  if (source.settlement === "unverified") return;
+  if (source.role === "assistant") return;
   const sessionId = uuidv5(
     JSON.stringify([source.sessionId, source.turnId]),
     z.uuid().parse(namespaceId)

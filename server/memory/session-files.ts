@@ -3,6 +3,7 @@ import { link, lstat, mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { HookEvent } from "eve/hooks";
+import type { MemoryTurnCompletedContext } from "eve/memory";
 import { redactSensitiveText } from "@shared/observability/redaction";
 
 export const sessionSourceSchema = z.object({
@@ -10,10 +11,11 @@ export const sessionSourceSchema = z.object({
   source: z.literal("eve"),
   sessionId: z.string().min(1).max(256),
   eventId: z.string().min(1).max(256),
-  occurredAt: z.iso.datetime(),
+  occurredAt: z.iso.datetime().nullable(),
   kind: z.enum([
     "message.received",
     "message.completed",
+    "message.settled",
     "turn.completed",
     "turn.cancelled",
     "turn.failed",
@@ -22,7 +24,7 @@ export const sessionSourceSchema = z.object({
   sequence: z.number().int().nonnegative().nullable(),
   stepIndex: z.number().int().nonnegative().nullable(),
   role: z.enum(["user", "assistant"]).nullable(),
-  settlement: z.literal("unverified").nullable(),
+  settlement: z.enum(["unverified", "accepted"]).nullable(),
   text: z
     .string()
     .max(1_048_576)
@@ -65,6 +67,41 @@ export function sessionSource(event: HookEvent, sessionId: string) {
     // coordinates. Preserve each event; only accepted history can settle them.
     settlement: event.type === "message.completed" ? "unverified" : null,
     text: message === null ? null : redactSensitiveText(message),
+  });
+}
+
+/** Eve's memory capture sees settled model history; stream hooks do not. */
+export function settledSessionSource(
+  context: Pick<
+    MemoryTurnCompletedContext,
+    "session" | "operationId" | "turn" | "messages"
+  >
+) {
+  const message = context.messages.at(-1);
+  if (message?.role !== "assistant") return null;
+  const text =
+    typeof message.content === "string"
+      ? message.content
+      : message.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
+  if (!text.trim()) return null;
+  return sessionSourceSchema.parse({
+    version: 2,
+    source: "eve",
+    sessionId: context.session.id,
+    eventId: `settled:${createHash("sha256").update(context.operationId).digest("hex")}`,
+    // This public callback has no source timestamp. Preserve that absence;
+    // the outbox capture sequence orders the receipt without inventing a time.
+    occurredAt: null,
+    kind: "message.settled",
+    turnId: context.turn.id,
+    sequence: context.turn.sequence,
+    stepIndex: null,
+    role: "assistant",
+    settlement: "accepted",
+    text: redactSensitiveText(text),
   });
 }
 

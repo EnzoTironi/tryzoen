@@ -12,9 +12,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import type { HookEvent } from "eve/hooks";
+import type { MemoryTurnCompletedContext } from "eve/memory";
 import {
   eraseSessionSources,
   sessionSource,
+  settledSessionSource,
   sessionSourceSegments,
   sessionSourceSchema,
   writeSessionSource,
@@ -24,6 +26,69 @@ const directories: string[] = [];
 afterEach(async () => {
   for (const directory of directories.splice(0))
     await rm(directory, { recursive: true, force: true });
+});
+
+test("archives only the accepted final visible reply with replay-stable identity and no invented timestamp", () => {
+  const turn = { id: "turn_settled", sequence: 3 };
+  const context = {
+    session: {
+      id: "session_settled",
+      auth: { current: null, initiator: null },
+      turn,
+    },
+    turn: { ...turn, input: [] },
+    operationId: "capture:turn_settled",
+    messages: [
+      { role: "assistant", content: "Earlier turn, not the final reply" },
+      { role: "user", content: "A synthetic request" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Private reasoning" },
+          {
+            type: "text",
+            text: "Accepted final reply. password=private-token",
+          },
+          { type: "text", text: "The next visible paragraph." },
+        ],
+      },
+    ],
+  } satisfies Pick<
+    MemoryTurnCompletedContext,
+    "session" | "operationId" | "turn" | "messages"
+  >;
+  const source = settledSessionSource(context);
+  expect(source).toMatchObject({
+    kind: "message.settled",
+    settlement: "accepted",
+    role: "assistant",
+    occurredAt: null,
+    turnId: turn.id,
+    sequence: 3,
+  });
+  expect(source?.text).toContain("Accepted final reply.");
+  expect(source?.text).toContain("The next visible paragraph.");
+  expect(JSON.stringify(source)).not.toMatch(
+    /Private reasoning|private-token|Earlier turn|synthetic request/
+  );
+  expect(settledSessionSource(context)).toEqual(source);
+  expect(
+    settledSessionSource({
+      ...context,
+      messages: [{ role: "user", content: "No new assistant reply" }],
+    })
+  ).toBeNull();
+  expect(
+    settledSessionSource({
+      ...context,
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "reasoning", text: "Only internal content" }],
+        },
+      ],
+    })
+  ).toBeNull();
 });
 async function temporary() {
   const path = await mkdtemp(join(tmpdir(), "zoen-session-files-"));

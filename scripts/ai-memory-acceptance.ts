@@ -266,6 +266,14 @@ const assistant = sessionSourceSchema.parse({
   settlement: "unverified",
   text: "Abandoned attempt claims Prismvale.",
 });
+const acceptedAssistant = sessionSourceSchema.parse({
+  ...assistant,
+  eventId: "evt-assistant-settled",
+  occurredAt: null,
+  kind: "message.settled",
+  settlement: "accepted",
+  text: "Accepted final reply names Cedarfield and Bluefern.",
+});
 const boundary = sessionSourceSchema.parse({
   ...source,
   eventId: "evt-end",
@@ -282,6 +290,12 @@ const memorySession = uuidv5(
 const sourcePath = await writeSessionSource(directory, owner, source, 1);
 await writeSessionSource(directory, owner, assistant, 2);
 await writeSessionSource(directory, owner, boundary, 3);
+const acceptedPath = await writeSessionSource(
+  directory,
+  owner,
+  acceptedAssistant,
+  4
+);
 {
   await using engine = await openSessionMemoryEngine(binary, directory, owner);
   const network = globalThis.fetch;
@@ -308,6 +322,7 @@ await writeSessionSource(directory, owner, boundary, 3);
   await using engine = await openSessionMemoryEngine(binary, directory, owner);
   await ingestSessionSource(engine, owner, source);
   await ingestSessionSource(engine, owner, assistant);
+  await ingestSessionSource(engine, owner, acceptedAssistant);
   await ingestSessionSource(engine, owner, boundary);
 }
 {
@@ -355,6 +370,7 @@ await writeSessionSource(directory, owner, boundary, 3);
   );
   assert.match(JSON.stringify(parsed), /LastwordOrchid/);
   assert.doesNotMatch(JSON.stringify(parsed), /Prismvale/);
+  assert.doesNotMatch(JSON.stringify(parsed), /Bluefern/);
   assert(parsed.observations.every((item) => item.extension === "eve"));
   const page = await call(engine.client, "memory_read_page", {
     ...memoryScope,
@@ -376,6 +392,7 @@ await writeSessionSource(directory, owner, boundary, 3);
     "Consolidated Markdown must be committed."
   );
 }
+assert.match(await readFile(acceptedPath, "utf8"), /Bluefern/);
 const otherOwner = randomUUID();
 {
   await using other = await openSessionMemoryEngine(
@@ -490,11 +507,12 @@ const report = {
     "partial-source-delivery-resumes",
     "session-to-versioned-markdown",
     "unsettled-assistant-excluded",
+    "accepted-assistant-archived-without-unsupported-ingestion",
     "source-and-derived-memory-erasure",
     "owner-crash-releases-writer-and-preserves-recall",
   ],
   pending: [
-    "accepted-assistant-history",
+    "accepted-intermediate-history-and-upstream-assistant-ingestion",
     "dream-consolidation",
     "Zoen-authorization",
     "capacity",
