@@ -4,7 +4,7 @@ import { open, opendir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
-import { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
+import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 import { privateMemoryDirectory } from "../session-files";
 import type { openMemoryEngine } from "./engine";
 import { deleteNote, listNotePaths, writeNote } from "./notes";

@@ -13,7 +13,10 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, expect, test } from "vitest";
 import { openMemoryEngine } from "../../server/memory/ai-memory/engine";
-import { readNotes } from "../../server/memory/ai-memory/notes";
+import {
+  readNotes,
+  readNoteHistory,
+} from "../../server/memory/ai-memory/notes";
 import {
   mutateNotes,
   FileMemoryError,
@@ -69,6 +72,25 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
       },
     });
     expect(JSON.stringify(history.content)).toContain("Cedarbay");
+    const audit = await readNoteHistory(engine, {
+      query: 'Cedarbay" OR (',
+      asOf,
+    });
+    expect(audit.semantics).toBe("ingestion-time");
+    expect(audit.hits).toHaveLength(1);
+    expect(audit.hits[0]).toMatchObject({ noteId: saved });
+    expect(audit.hits[0]?.versionId).not.toBe(saved);
+    expect(audit.hits[0]?.excerpt).toContain("Cedarbay");
+    expect(audit.hits[0]?.excerpt).not.toContain("Ambertrail");
+    expect(audit.hits[0]?.excerpt).not.toContain("<mark>");
+    expect(
+      (
+        await readNoteHistory(engine, {
+          query: "Ambertrail",
+          asOf,
+        })
+      ).hits
+    ).toEqual([]);
   }
   {
     await using engine = await openMemoryEngine(
@@ -106,6 +128,9 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
       },
     });
     expect(JSON.stringify(history.content)).not.toContain("Cedarbay");
+    expect(
+      (await readNoteHistory(engine, { query: "Cedarbay", asOf })).hits
+    ).toEqual([]);
   }
 });
 

@@ -10,7 +10,11 @@ import {
   listReminders,
   readReminderHistory,
 } from "../../server/schedules/queries";
-import { learnedMemorySnapshotSchema } from "@shared/companion/learned-memory";
+import {
+  learnedMemorySnapshotSchema,
+  learnedMemoryHistoryInputSchema,
+  learnedMemoryHistorySchema,
+} from "@zoen/companion-ui/memory";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
@@ -163,6 +167,12 @@ export const workspacesRouter = {
     withSignal(signal, async () => readWorkspaceCapabilities(ctx.actor))
   ),
   memory: {
+    history: workspaceProcedure
+      .input(learnedMemoryHistoryInputSchema)
+      .output(learnedMemoryHistorySchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () => LearnedMemory.history(ctx.actor, input))
+      ),
     recover: workspaceProcedure.mutation(({ ctx, signal }) =>
       withSignal(signal, async () => {
         return await LearnedMemory.recover(ctx.actor);

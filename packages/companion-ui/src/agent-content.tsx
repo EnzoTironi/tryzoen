@@ -2,7 +2,7 @@ import { useState, type ComponentProps, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
 import { View } from "react-native";
-import { LearnedNotes, type LearnedNotesData } from "./learned-notes";
+import { LearnedNotes, type LearnedNotesData } from "./learned/notes";
 import { PersonalMemory } from "./personal-memory";
 import { Upcoming, type UpcomingItem } from "./upcoming";
 import { ActionButton } from "./button";

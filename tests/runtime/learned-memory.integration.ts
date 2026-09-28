@@ -1,6 +1,8 @@
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
+import { ZodError } from "zod";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { rm } from "node:fs/promises";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { LearnedMemory } from "../../server/memory/learned";
@@ -39,6 +41,62 @@ const run = async (
   await using workspace = await workspaceFixture();
   await body({ ...workspace, memory: LearnedMemory });
 };
+
+test("historical excerpts preserve the old version and enforce owner, pause and mutation fences", () =>
+  run(async ({ actor, guest, personal, memory }) => {
+    const saved = await memory.write(actor, {
+      action: "remember",
+      operationId: randomUUID(),
+      text: "The book club meets in Cedarbay.",
+    });
+    const asOf = new Date().toISOString();
+    await delay(20);
+    await memory.write(actor, {
+      action: "update",
+      memoryId: saved.ids[0],
+      operationId: randomUUID(),
+      text: "The book club now meets in Ambertrail.",
+    });
+    const input = { query: "Cedarbay", asOf };
+    expect((await memory.history(actor, input)).hits[0]?.excerpt).toContain(
+      "Cedarbay"
+    );
+    expect((await memory.read(actor, "Cedarbay")).results).toEqual([]);
+    expect((await memory.history(guest, input)).hits).toEqual([]);
+    const audit = vi.spyOn(FileMemory, "history");
+    await expect(
+      memory.history({ ...guest, workspaceId: personal.workspaceId }, input)
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    expect(audit).not.toHaveBeenCalled();
+    await expect(
+      memory.history(actor, { ...input, asOf: "2026-09-28T10:00:00" })
+    ).rejects.toBeInstanceOf(ZodError);
+    const untrusted = { ...input, global: true };
+    await expect(memory.history(actor, untrusted)).rejects.toBeInstanceOf(
+      ZodError
+    );
+    expect(audit).not.toHaveBeenCalled();
+    await memory.setEnabled(actor, false);
+    await expect(memory.history(actor, input)).rejects.toMatchObject({
+      reason: "disabled",
+    });
+    await memory.setEnabled(actor, true);
+    vi.spyOn(FileMemory, "mutate").mockRejectedValueOnce(
+      new FileMemoryError("unavailable")
+    );
+    await expect(
+      memory.write(actor, {
+        action: "update",
+        memoryId: saved.ids[0],
+        text: "An unfinished correction.",
+        operationId: randomUUID(),
+      })
+    ).rejects.toBeInstanceOf(FileMemoryError);
+    await expect(memory.history(actor, input)).rejects.toMatchObject({
+      reason: "stale_recall",
+    });
+    expect(audit).not.toHaveBeenCalled();
+  }));
 
 test("partitions each person/workspace and rejects forged access before reaching the file engine", () =>
   run(async ({ actor, guest, personal, memory }) => {

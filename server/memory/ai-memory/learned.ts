@@ -1,8 +1,11 @@
 import { env } from "@shared/environment/env";
 import { z } from "zod";
-import type { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
+import type {
+  LearnedMemoryWriteSchema,
+  learnedMemoryHistoryInputSchema,
+} from "@zoen/companion-ui/memory";
 import { openMemoryEngine } from "./engine";
-import { readNotes } from "./notes";
+import { readNotes, readNoteHistory } from "./notes";
 import { FileMemoryError, mutateNotes } from "./mutations";
 
 async function withLearnedCorpus<Result>(
@@ -27,6 +30,14 @@ async function withLearnedCorpus<Result>(
 
 /** Call only under the authorized namespace's database lock. No client-supplied paths or scopes. */
 export const FileMemory = {
+  history(
+    namespace: string,
+    input: z.infer<typeof learnedMemoryHistoryInputSchema>
+  ) {
+    return withLearnedCorpus(namespace, (engine) =>
+      readNoteHistory(engine, input)
+    );
+  },
   read(namespace: string, query?: string) {
     return withLearnedCorpus(namespace, (engine) => readNotes(engine, query));
   },

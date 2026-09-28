@@ -1,5 +1,8 @@
 import type { z } from "zod";
-import { learnedMemorySnapshotSchema } from "./learned-memory";
+import {
+  learnedMemorySnapshotSchema,
+  learnedMemoryHistorySchema,
+} from "@zoen/companion-ui/memory";
 import type { scheduleTimingSchema } from "../schedules/timing";
 import type { AgentPanelData } from "@zoen/companion-ui";
 import { personalMemorySnapshotSchema } from "../personal-memory/schema";
@@ -23,6 +26,11 @@ export function companionAgentData(
   return {
     learned: {
       newOperationId,
+      async history(input) {
+        return learnedMemoryHistorySchema.parse(
+          await rpc.query("workspaces.memory.history", input)
+        );
+      },
       async read() {
         const snapshot = learnedMemorySnapshotSchema.parse(
           await rpc.query("workspaces.memory.list")

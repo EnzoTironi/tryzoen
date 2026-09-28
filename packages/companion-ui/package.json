@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./memory": {
+      "types": "./dist/learned/schema.d.ts",
+      "default": "./dist/learned/schema.js"
+    },
     "./chats": {
       "types": "./dist/chats/schema.d.ts",
       "default": "./dist/chats/schema.js"

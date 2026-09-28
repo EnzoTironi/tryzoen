@@ -183,3 +183,42 @@ structural quality report remains non-green: churn and wrapper-similarity findin
 were reviewed, while the new bounded filesystem discovery, mutation handling and
 note screen remain candidates for simplification. It is not a clean global
 quality or scale verdict.
+
+## Historical learned-note search — 2026-09-28
+
+The shared memory screen opens a desktop modal or mobile sheet for a topic and
+local date/time. Its validated instant calls Akita's `memory_query` with `as_of`,
+fixed private workspace/project scope and at most eight results. The native Eve
+`learned__search_memory_history` tool exposes the same operation only for an
+explicit historical question. These are ingestion-time versions: when Zoen
+recorded a fact, not when the fact became true in the world.
+
+Results retain the upstream version UUID and matching historical excerpt. They
+never read the current Markdown body to fill in a historical result. Akita 2.4.1
+does not expose a version selector on `memory_read_page`; its `as_of` hits also do
+not reliably carry a `superseded` flag, so neither complete historical documents
+nor that flag are invented. Upstream highlighting is removed and excerpts render
+as text. Current notes stay unchanged. Removed files, unexpected retrieval
+streams, raw/global search and foreign paths are excluded or rejected.
+
+Live membership, personal-memory policy, namespace ownership, pause and pending
+mutation fences apply before opening the engine. Eleven isolated PostgreSQL and
+real-engine cases cover correction followed by historical recall, current-result
+exclusion, deletion, foreign users, forged actors, invalid instants, unexpected
+fields, pause and unsettled writes. Historical ranking and restoration after
+index loss remain upstream limitations described above.
+
+Chrome verified the old Cedarbay excerpt without the later north-entrance
+correction in both responsive layouts. A fresh ordinary conversation invoked the
+native historical tool successfully. A pre-update local development conversation
+continued using its older tool catalog; Eve development runs select a compiled
+generation. A separate compiled-server regression creates a session, replaces a
+memory tool, recompiles without clearing its database, restarts and verifies that
+the same session receives the new tool and loses the old one. This passed; it is
+not a hosted rolling-deployment qualification.
+
+Final checkpoint checks passed: `pnpm check` (1,323 tests / 205 files),
+`pnpm build` and Expo web/iOS/Android exports. The structural delta has nine
+gating findings, including short delegation wrappers and test-fixture churn;
+the moved note screen is also reported as a new large component. These were
+reviewed without suppression and are not a clean structural-quality verdict.

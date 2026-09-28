@@ -1,13 +1,22 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CompanionPage, pageStyles } from "./page";
-import { ActionButton } from "./button";
-import { DocumentEditor } from "./document-editor";
-import { CompanionSheet } from "./sheet";
-import type { MemoryDocumentView } from "./personal-memory";
+import { CompanionPage, pageStyles } from "../page";
+import { ActionButton } from "../button";
+import { DocumentEditor } from "../document-editor";
+import { CompanionSheet } from "../sheet";
+import type { MemoryDocumentView } from "../personal-memory";
+import type { z } from "zod";
+import type {
+  learnedMemoryHistoryInputSchema,
+  learnedMemoryHistorySchema,
+} from "./schema";
+import { MemoryHistory } from "./history";
 
 export interface LearnedNotesData {
+  history: (
+    input: z.infer<typeof learnedMemoryHistoryInputSchema>
+  ) => Promise<z.infer<typeof learnedMemoryHistorySchema>>;
   read: () => Promise<{
     documents: readonly MemoryDocumentView[];
     enabled: boolean;
@@ -33,6 +42,7 @@ export function LearnedNotes({
   readonly data: LearnedNotesData;
   readonly cacheScope: string;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
   const memory = useQuery({
     queryKey: ["companion-learned-memory", cacheScope],
     queryFn: data.read,
@@ -73,6 +83,19 @@ export function LearnedNotes({
         note, or pause learning.
       </Text>
       <View style={styles.actions}>
+        <ActionButton
+          quiet
+          disabled={
+            !memory.data?.enabled ||
+            memory.data.needsAttention ||
+            mutation.isPending
+          }
+          onPress={() => {
+            setHistoryOpen(true);
+          }}
+        >
+          Search memory history
+        </ActionButton>
         <ActionButton
           disabled={
             !memory.data?.enabled ||
@@ -190,6 +213,14 @@ export function LearnedNotes({
             await mutation.mutateAsync(() =>
               data.save(editing.id, text, editing.operationId)
             );
+          }}
+        />
+      )}
+      {historyOpen && (
+        <MemoryHistory
+          load={data.history}
+          onClose={() => {
+            setHistoryOpen(false);
           }}
         />
       )}

@@ -12,10 +12,13 @@ import {
   requireWorkspaceAccess,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { LearnedMemoryItemSchema } from "@shared/companion/learned-memory";
+import {
+  LearnedMemoryItemSchema,
+  learnedMemoryHistoryInputSchema,
+} from "@zoen/companion-ui/memory";
 import { FileMemory } from "./ai-memory/learned";
-import { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
-export { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
+import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
+export { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 
 const namespaceSchema = z.object({
@@ -83,6 +86,20 @@ export const memoryNamespace = async function (
   };
 };
 export const LearnedMemory = {
+  history: async function (
+    actor: z.output<typeof WorkspaceActorSchema>,
+    raw: z.infer<typeof learnedMemoryHistoryInputSchema>
+  ) {
+    const input = learnedMemoryHistoryInputSchema.parse(raw);
+    return withDatabaseTransaction(async () => {
+      const partition = await memoryNamespace(actor);
+      if (!partition.enabled)
+        throw new LearnedMemoryError({ reason: "disabled" });
+      if (partition.pendingOperation !== null)
+        throw new LearnedMemoryError({ reason: "stale_recall" });
+      return FileMemory.history(partition.id, input);
+    });
+  },
   recall: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
     scopeKey: string,
