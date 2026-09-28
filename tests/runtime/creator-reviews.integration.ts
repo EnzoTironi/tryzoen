@@ -51,7 +51,10 @@ async function previewFor(
 test("human review is private, exported with the frozen result and leaves the source untouched", async () => {
   await using workspace = await workspaceFixture();
   const { draft, preview } = await previewFor(workspace.actor);
-  await claimCreatorPreview(workspace.actor, preview.id, "worker");
+  await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+    sessionId: randomUUID(),
+    turnId: "turn_0",
+  });
   await finishCreatorPreview(
     workspace.actor,
     preview.id,
@@ -101,7 +104,10 @@ test("human review is private, exported with the frozen result and leaves the so
 test("stale and simultaneous reviews cannot overwrite another human edit or resurrect an earlier version", async () => {
   await using workspace = await workspaceFixture();
   const { preview } = await previewFor(workspace.actor);
-  await claimCreatorPreview(workspace.actor, preview.id, "worker");
+  await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+    sessionId: randomUUID(),
+    turnId: "turn_0",
+  });
   await finishCreatorPreview(
     workspace.actor,
     preview.id,
@@ -152,7 +158,10 @@ test("incomplete previews and invalid review payloads cannot acquire a human ver
   await expect(
     saveCreatorPreviewReview(workspace.actor, input)
   ).rejects.toThrow("Only a completed preview");
-  await claimCreatorPreview(workspace.actor, preview.id, "worker");
+  await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+    sessionId: randomUUID(),
+    turnId: "turn_0",
+  });
   await expect(
     saveCreatorPreviewReview(workspace.actor, input)
   ).rejects.toThrow("Only a completed preview");
@@ -186,7 +195,10 @@ test("incomplete previews and invalid review payloads cannot acquire a human ver
 test("review writes require live authority and membership deletion removes the review with its preview", async () => {
   await using workspace = await workspaceFixture();
   const { preview } = await previewFor(workspace.actor);
-  await claimCreatorPreview(workspace.actor, preview.id, "worker");
+  await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+    sessionId: randomUUID(),
+    turnId: "turn_0",
+  });
   await finishCreatorPreview(
     workspace.actor,
     preview.id,

@@ -7,12 +7,14 @@ import {
   text,
   timestamp,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import type {
   creatorDraftContentSchema,
   creatorPreviewReviewContentSchema,
+  creatorPreviewModelSchema,
 } from "@zoen/companion-ui/creators";
 import { workspaceMemberships } from "./workspaces";
 import { creatorDrafts } from "./creator-drafts";
@@ -40,6 +42,14 @@ export const creatorPreviews = pgTable(
       >(),
     reviewRevision: uuid("review_revision"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true, precision: 3 }),
+    models: jsonb("models")
+      .$type<z.infer<typeof creatorPreviewModelSchema>[]>()
+      .notNull()
+      .default([]),
+    startedAt: timestamp("started_at", { withTimezone: true, precision: 3 }),
+    finishedAt: timestamp("finished_at", { withTimezone: true, precision: 3 }),
+    sourceSessionId: text("source_session_id"),
+    sourceTurnId: text("source_turn_id"),
     createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow(),
@@ -48,6 +58,14 @@ export const creatorPreviews = pgTable(
       .default(sql`now() + interval '5 minutes'`),
   },
   (table) => [
+    uniqueIndex("creator_previews_source_idx").on(
+      table.sourceSessionId,
+      table.sourceTurnId
+    ),
+    check(
+      "creator_previews_source_check",
+      sql`(${table.sourceSessionId} IS NULL) = (${table.sourceTurnId} IS NULL)`
+    ),
     foreignKey({
       columns: [table.workspaceId, table.userId],
       foreignColumns: [
@@ -77,6 +95,12 @@ export const creatorPreviews = pgTable(
         AND coalesce(jsonb_typeof(${table.review}->'criteria') = 'string' AND length(${table.review}->>'criteria') BETWEEN 1 AND 4000, false)
         AND coalesce(jsonb_typeof(${table.review}->'notes') = 'string' AND length(${table.review}->>'notes') BETWEEN 1 AND 8000, false)
         AND coalesce(${table.review}->>'verdict' IN ('useful', 'needs-revision', 'unsafe-or-unsupported'), false))`
+    ),
+    check(
+      "creator_previews_execution_check",
+      sql`jsonb_typeof(${table.models}) = 'array' AND jsonb_array_length(${table.models}) <= 8
+        AND octet_length(${table.models}::text) <= 16384
+        AND (${table.finishedAt} IS NULL OR (${table.startedAt} IS NOT NULL AND ${table.finishedAt} >= ${table.startedAt}))`
     ),
   ]
 );

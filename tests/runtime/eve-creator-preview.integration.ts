@@ -105,6 +105,13 @@ test("native Eve workflow runs only the authorized snapshot in a tool-free child
     `/probe/events/${child.childSessionId}`
   );
   expect(result.status, JSON.stringify(childEvents)).toBe("completed");
+  expect(result.models).toHaveLength(1);
+  expect(result.models[0]?.modelId).toBeTruthy();
+  expect(result.models[0]?.provider).toBeTruthy();
+  expect(result.startedAt).toBeGreaterThanOrEqual(preview.createdAt);
+  expect(result.finishedAt).toBeGreaterThanOrEqual(
+    result.startedAt ?? Infinity
+  );
   const receipt = z
     .object({ tools: z.array(z.string()), messages: z.unknown() })
     .parse(JSON.parse(result.response ?? "null"));

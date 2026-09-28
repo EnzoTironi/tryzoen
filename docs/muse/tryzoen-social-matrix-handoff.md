@@ -302,3 +302,53 @@ withdrawal, outcomes and native-device/production qualification.
 
 The desktop/mobile/editor and failure-state screenshots are attached with
 `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867136130).
+
+## Preview execution provenance — 2026-09-28
+
+Migrations 0073–0074 record server start/finish timestamps and the SDK provider and
+model identifiers selected by the private specialist. The UI displays the model
+and elapsed time from workflow claim to the first saved terminal result; export
+keeps both timestamps and provider/model pairs. This duration includes workflow
+and provider work after claim, excludes waiting for the coordinator to start, and
+is not pure inference latency. Expired or older previews without measurements
+remain unknown. There is no manufactured zero, retrospective model guess or
+backfill. A selected model identifier may be a provider alias; this is not proof
+of a vendor's served weight revision. Token counts and provider-reported cost are
+still missing and must not be represented as zero.
+
+The installed Eve model resolver's context omits parent lineage. An authored
+child hook therefore captures the public parent session/turn into a child-local
+`defineState` slot. The resolver reauthorizes the human and records its selected
+SDK model against that source before returning the configuration. This slot
+never enters model instructions. One preview can claim a coordinator turn,
+enforced by a unique database index. That prevents a late child from attributing
+its selection to a later preview. The existing UI already starts a fresh
+coordinator session for each preview. We do not parse Eve's opaque delegated call
+IDs, read its internal state tables or put routing credentials in the prompt.
+
+Only a running, unexpired preview owned by that person/workspace accepts model
+observations. Up to eight distinct SDK provider/model pairs may be recorded;
+repeated selections are idempotent, concurrent updates preserve that bound, and
+exceeding it prevents another model call. Completed previews reject later
+observations. No client mutation accepts model provenance, and the unchanged
+claim/finish invocation binding still prevents competing workflows from running
+or overwriting the same preview.
+
+Eleven isolated PostgreSQL/Eve cases pass, including actual child lineage,
+private-history/memory exclusion, provider failure, ownership, origin reuse,
+concurrent model selection, duplicate observations, the eight-model bound and
+late writes. In Chrome, a fresh fictional Cedarbay preview completed with the
+configured `gpt-5.6-luna` model through `codex.responses`; its server duration was
+2,910 ms. The two-sentence answer, immutable sources, model identifiers and
+timestamps were verified in the downloaded JSON. This single run is functional
+evidence, not a latency benchmark, capacity result or expert-quality evaluation.
+
+All nine workspace checks pass, including 1,323 tests in 205 files. The production
+build, migration-chain check and Expo web/iOS/Android export also pass. Both
+migrations were applied only to local review and isolated runtime databases. The
+structural pass still flags four gating findings: recent changes to claim/finish,
+preview card growth and the generated migration journal. No finding was
+suppressed; this is not a clean structural gate.
+
+The verified desktop modal and mobile sheet screenshots are attached with
+`gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867496760).

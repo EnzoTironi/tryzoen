@@ -9,6 +9,7 @@ import {
   creatorPreviewExportSchema,
 } from "@zoen/companion-ui/creators";
 import { CreatorDraftConflict, readCreatorDraft } from "./drafts";
+import { creatorPreviewOriginSchema } from "./execution";
 import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
@@ -16,7 +17,9 @@ import {
 
 const projection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
-  response, extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt",
+  response, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
+  extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",
+  extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt",
   CASE WHEN review IS NULL THEN NULL ELSE jsonb_build_object('revision', review_revision, 'content', review,
     'updatedAt', extract(epoch FROM reviewed_at)::float8 * 1000) END AS review`;
 
@@ -119,14 +122,16 @@ export function createCreatorPreview(
 export function claimCreatorPreview(
   actor: z.infer<typeof WorkspaceActorSchema>,
   id: string,
-  invocation: string
+  invocation: string,
+  source: z.infer<typeof creatorPreviewOriginSchema>
 ) {
+  const origin = creatorPreviewOriginSchema.parse(source);
   return transaction(async () => {
     await requirePreview(actor, id);
     // Only the workflow invocation that first claims this request may execute it.
     // A competing invocation cannot duplicate a provider call, even after a crash.
     const [claimed] =
-      await query(sql`UPDATE creator_previews SET status = 'running', invocation = ${invocation}
+      await query(sql`UPDATE creator_previews SET status = 'running', invocation = ${invocation}, started_at = clock_timestamp(), source_session_id = ${origin.sessionId}, source_turn_id = ${origin.turnId}
       WHERE id = ${id} AND status = 'pending' AND expires_at > now()
       RETURNING snapshot, question`);
     if (!claimed)
@@ -153,7 +158,7 @@ export function finishCreatorPreview(
     await requirePreview(actor, id);
     // Completion retries are safe. Late results never turn an expired request into a success.
     const updated =
-      await query(sql`UPDATE creator_previews SET status = ${answer === null ? "failed" : "completed"}, response = ${answer}
+      await query(sql`UPDATE creator_previews SET status = ${answer === null ? "failed" : "completed"}, response = ${answer}, finished_at = clock_timestamp()
       WHERE id = ${id} AND invocation = ${invocation} AND status = 'running' AND expires_at > now() RETURNING id`);
     return { recorded: updated.length > 0 };
   });

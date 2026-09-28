@@ -47,6 +47,18 @@ export function CreatorPreviewResult({
       <Text style={pageStyles.copy}>
         {new Date(preview.createdAt).toLocaleString()} · {version}
       </Text>
+      {preview.models.length > 0 && (
+        <Text style={pageStyles.copy}>
+          Model: {preview.models.map((model) => model.modelId).join(", ")}
+        </Text>
+      )}
+      {preview.startedAt !== null && preview.finishedAt !== null && (
+        <Text style={pageStyles.copy}>
+          Execution time:{" "}
+          {((preview.finishedAt - preview.startedAt) / 1000).toFixed(1)} s ·
+          from worker start to saved result
+        </Text>
+      )}
       {preview.response !== null && (
         <>
           <ActionButton

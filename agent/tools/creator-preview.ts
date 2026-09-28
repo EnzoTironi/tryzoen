@@ -42,7 +42,8 @@ async function claim(id: string, context: WorkflowStepToolContext) {
   return claimCreatorPreview(
     actor,
     id,
-    `${context.session.id}:${context.callId}`
+    `${context.session.id}:${context.callId}`,
+    { sessionId: context.session.id, turnId: context.session.turn.id }
   );
 }
 

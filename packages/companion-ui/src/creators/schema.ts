@@ -76,6 +76,11 @@ export const creatorPreviewReviewSaveSchema = z.strictObject({
   content: creatorPreviewReviewContentSchema,
 });
 
+export const creatorPreviewModelSchema = z.strictObject({
+  provider: z.string().min(1).max(200),
+  modelId: z.string().min(1).max(200),
+});
+
 export const creatorPreviewSchema = creatorPreviewRequestSchema.extend({
   title: z.string().min(1).max(80),
   status: z.enum(["pending", "running", "completed", "failed", "expired"]),
@@ -83,6 +88,9 @@ export const creatorPreviewSchema = creatorPreviewRequestSchema.extend({
   createdAt: z.number(),
   expiresAt: z.number(),
   review: creatorPreviewReviewSchema.nullable(),
+  models: z.array(creatorPreviewModelSchema).max(8),
+  startedAt: z.number().nullable(),
+  finishedAt: z.number().nullable(),
 });
 
 export const creatorPreviewListSchema = z.array(creatorPreviewSchema).max(20);

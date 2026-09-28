@@ -16,6 +16,7 @@ import {
 } from "../../server/creators/previews";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { workspaceFixture } from "./workspace-fixture";
+import { recordCreatorPreviewModel } from "../../server/creators/execution";
 
 const content = {
   title: "Synthetic preview coach",
@@ -55,7 +56,10 @@ test("preview snapshots are immutable, owner scoped and survive later edits and 
       exportCreatorPreview(actor, preview.id)
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     await expect(
-      claimCreatorPreview(actor, request.id, "foreign")
+      claimCreatorPreview(actor, request.id, "foreign", {
+        sessionId: randomUUID(),
+        turnId: "turn_0",
+      })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     await expect(
       finishCreatorPreview(actor, request.id, "worker", "foreign")
@@ -72,7 +76,10 @@ test("preview snapshots are immutable, owner scoped and survive later edits and 
     archived: true,
   });
   expect(
-    await claimCreatorPreview(workspace.actor, preview.id, "worker")
+    await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+      sessionId: randomUUID(),
+      turnId: "turn_0",
+    })
   ).toEqual({ snapshot: content, question: request.question });
   await finishCreatorPreview(
     workspace.actor,
@@ -86,14 +93,27 @@ test("preview snapshots are immutable, owner scoped and survive later edits and 
     "worker",
     "Cannot overwrite first answer"
   );
+  const completed = await exportCreatorPreview(workspace.actor, preview.id);
+  expect(completed.startedAt).toBeGreaterThanOrEqual(preview.createdAt);
+  expect(completed.finishedAt).toBeGreaterThanOrEqual(
+    completed.startedAt ?? Infinity
+  );
   expect(await listCreatorPreviews(workspace.actor, draft.id)).toEqual([
-    { ...preview, status: "completed", response: "An open question." },
+    {
+      ...preview,
+      status: "completed",
+      response: "An open question.",
+      startedAt: completed.startedAt,
+      finishedAt: completed.finishedAt,
+    },
   ]);
-  expect(await exportCreatorPreview(workspace.actor, preview.id)).toEqual({
+  expect(completed).toEqual({
     ...preview,
     snapshot: content,
     status: "completed",
     response: "An open question.",
+    startedAt: completed.startedAt,
+    finishedAt: completed.finishedAt,
   });
   await expect(
     createCreatorPreview(workspace.actor, { ...request, id: randomUUID() })
@@ -125,7 +145,10 @@ test("parallel requests admit one preview and competing workflows cannot duplica
   if (!preview) throw new Error("Expected the admitted preview");
   const claims = await Promise.allSettled(
     Array.from({ length: 5 }, (_, i) =>
-      claimCreatorPreview(workspace.personal, preview.id, `worker-${i}`)
+      claimCreatorPreview(workspace.personal, preview.id, `worker-${i}`, {
+        sessionId: randomUUID(),
+        turnId: "turn_0",
+      })
     )
   );
   expect(claims.filter((item) => item.status === "fulfilled")).toHaveLength(1);
@@ -154,7 +177,10 @@ test("parallel requests admit one preview and competing workflows cannot duplica
     (await listCreatorPreviews(workspace.personal, draft.id))[0]?.response
   ).toBeNull();
   await expect(
-    claimCreatorPreview(workspace.personal, preview.id, "new-worker")
+    claimCreatorPreview(workspace.personal, preview.id, "new-worker", {
+      sessionId: randomUUID(),
+      turnId: "turn_0",
+    })
   ).rejects.toThrow("already started or expired");
   await expect(
     createCreatorPreview(workspace.personal, { ...input, id: randomUUID() })
@@ -187,7 +213,10 @@ test("preview context is bounded without truncation and revoked sessions cannot 
     revision: draft.revision,
     question: "Test",
   });
-  await claimCreatorPreview(workspace.personal, preview.id, "worker");
+  await claimCreatorPreview(workspace.personal, preview.id, "worker", {
+    sessionId: randomUUID(),
+    turnId: "turn_0",
+  });
   await query(
     sql`DELETE FROM public.session WHERE id = ${workspace.personal.authSessionId}`
   );
@@ -221,7 +250,10 @@ test("preview failures are explicit and the rolling per-person limit is enforced
       revision: draft.revision,
       question: `Test ${i}`,
     });
-    await claimCreatorPreview(workspace.actor, preview.id, "worker");
+    await claimCreatorPreview(workspace.actor, preview.id, "worker", {
+      sessionId: randomUUID(),
+      turnId: "turn_0",
+    });
     await finishCreatorPreview(workspace.actor, preview.id, "worker", null);
   }
   const previews = await listCreatorPreviews(workspace.actor, draft.id);
@@ -248,4 +280,93 @@ test("preview failures are explicit and the rolling per-person limit is enforced
       question: "Independent person",
     })
   ).resolves.toMatchObject({ status: "pending" });
+});
+
+test("model selection binds to one coordinator turn, remains bounded and cannot arrive after completion", async () => {
+  await using workspace = await workspaceFixture();
+  const draft = await saveCreatorDraft(workspace.actor, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content,
+  });
+  const request = {
+    draftId: draft.id,
+    revision: draft.revision,
+    question: "Synthetic measured preview",
+  };
+  const preview = await createCreatorPreview(workspace.actor, {
+    ...request,
+    id: randomUUID(),
+  });
+  const origin = { sessionId: randomUUID(), turnId: "turn_0" };
+  const model = { provider: "synthetic-sdk", modelId: "synthetic-model" };
+  await claimCreatorPreview(workspace.actor, preview.id, "worker", origin);
+  for (const actor of [
+    workspace.guest,
+    workspace.personal,
+    { ...workspace.actor, authSessionId: undefined },
+  ]) {
+    await expect(
+      recordCreatorPreviewModel(actor, origin, model)
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  }
+  await expect(
+    recordCreatorPreviewModel(
+      workspace.actor,
+      { ...origin, turnId: "turn_1" },
+      model
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await Promise.all(
+    Array.from({ length: 4 }, () =>
+      recordCreatorPreviewModel(workspace.actor, origin, model)
+    )
+  );
+  expect(
+    (await exportCreatorPreview(workspace.actor, preview.id)).models
+  ).toEqual([model]);
+  const results = await Promise.allSettled(
+    Array.from({ length: 10 }, (_, i) =>
+      recordCreatorPreviewModel(workspace.actor, origin, {
+        ...model,
+        modelId: `synthetic-${i}`,
+      })
+    )
+  );
+  expect(
+    results.filter((result) => result.status === "fulfilled")
+  ).toHaveLength(7);
+  expect(
+    (await exportCreatorPreview(workspace.actor, preview.id)).models
+  ).toHaveLength(8);
+  await finishCreatorPreview(
+    workspace.actor,
+    preview.id,
+    "worker",
+    "Synthetic measured response"
+  );
+  await expect(
+    recordCreatorPreviewModel(workspace.actor, origin, model)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  const next = await createCreatorPreview(workspace.actor, {
+    ...request,
+    id: randomUUID(),
+  });
+  await expect(
+    claimCreatorPreview(workspace.actor, next.id, "worker-2", origin)
+  ).rejects.toMatchObject({
+    cause: {
+      cause: { code: "23505", constraint: "creator_previews_source_idx" },
+    },
+  });
+  await claimCreatorPreview(workspace.actor, next.id, "worker-2", {
+    ...origin,
+    turnId: "turn_1",
+  });
+  await expect(
+    recordCreatorPreviewModel(workspace.actor, origin, model)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect((await exportCreatorPreview(workspace.actor, next.id)).models).toEqual(
+    []
+  );
 });
