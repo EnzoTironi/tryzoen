@@ -25,7 +25,12 @@ import { companionDocumentHistory } from "../../../shared/companion/files";
 import { shareFile } from "./files/share";
 import { companionCreatorData } from "../../../shared/companion/creators";
 
-const mobileCreators = companionCreatorData(rpc, randomUUID, shareFile);
+const mobileCreators = companionCreatorData(
+  rpc,
+  randomUUID,
+  shareFile,
+  client.sessions
+);
 
 export function MobileSections({
   section,

@@ -10,6 +10,7 @@ import type { CreatorStudioData } from "./studio";
 import { CreatorExamples } from "./examples";
 import { CreatorDraftActions } from "./actions";
 import { CreatorDetails } from "./details";
+import { CreatorPreviews } from "./previews";
 import type { creatorDraftSchema } from "./schema";
 
 export function CreatorDraft({
@@ -29,6 +30,7 @@ export function CreatorDraft({
   const [playbook, setPlaybook] =
     useState<z.infer<typeof creatorDraftSchema>>();
   const [details, setDetails] = useState<z.infer<typeof creatorDraftSchema>>();
+  const [preview, setPreview] = useState(false);
   return (
     <CompanionSheet
       title={draft.data?.content.title ?? "Specialist draft"}
@@ -70,6 +72,14 @@ export function CreatorDraft({
               client.setQueryData(queryKey, updated);
             }}
           />
+          <ActionButton
+            quiet
+            onPress={() => {
+              setPreview(true);
+            }}
+          >
+            {draft.data.archivedAt ? "Saved previews" : "Try this specialist"}
+          </ActionButton>
           {!draft.data.archivedAt && (
             <ActionButton
               quiet
@@ -137,6 +147,16 @@ export function CreatorDraft({
           }}
           onClose={() => {
             setDetails(undefined);
+          }}
+        />
+      )}
+      {preview && draft.data && !draft.isError && (
+        <CreatorPreviews
+          draft={draft.data}
+          data={data}
+          cacheScope={cacheScope}
+          onClose={() => {
+            setPreview(false);
           }}
         />
       )}

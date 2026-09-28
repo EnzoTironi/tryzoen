@@ -160,3 +160,66 @@ and Expo exports for web/iOS/Android pass. Physical-device qualification,
 production deployment and marketplace execution are still outstanding.
 
 The final production build also passes after the session-loading correction.
+
+## Private specialist previews — 2026-09-28
+
+The creator studio can now submit a fictional question against an immutable copy
+of a saved playbook and its attributed examples. Migration 0071 stores each
+request, revision, snapshot, question, execution claim and terminal response in
+an owner-scoped record. Editing or archiving the draft later does not change that
+snapshot. Results reopen in the shared Markdown reader; individual JSON exports
+include the exact source snapshot and response. These exports are review artifacts,
+not an import contract or evaluation certificate.
+
+The existing Eve coordinator receives only the request UUID. Its native workflow
+authorizes that request, claims it once and passes the saved material directly to
+a declared specialist. The specialist disables optional default tools and has no
+authored memory, skills, connections or tools. Eve's `final_output` formatter is its
+only advertised tool. It cannot receive coordinator-supplied prose, personal memory
+or earlier conversation messages through this workflow. Its model selection checks
+live human-session/workspace authority; recording a response checks authority again.
+A second workflow cannot claim the request, and a late result cannot overwrite an
+expired or completed result. Failure produces a failed preview with no invented
+answer. A crash between the database claim and Eve's checkpoint can leave a request
+uncompleted until expiry; it is never automatically re-admitted as a new execution.
+
+Admission is one live request per person/workspace, ten in a rolling 24 hours and
+100 retained requests. The studio shows the latest twenty for a draft. Preview
+source material is limited to 48 KB of UTF-8 JSON without truncation, the question
+to 4,000 characters and a saved answer to 32,000 characters. Requests expire after
+five minutes. The child also uses the existing model deadline and Eve session and
+usage limits; Eve's token/cost limits are between-call accounting limits, not a
+hard cap on an individual provider response. The coordinator's existing model
+and tools remain unchanged. Dispatch uses the normal agent turn, so failure to
+invoke the preview tool can leave a request pending until it expires.
+
+Six isolated PostgreSQL/Eve cases cover private membership/session isolation,
+immutable snapshots and exports, stale input, simultaneous admission and claims,
+late completion, explicit failure, rolling quotas, deletion cascades, actual root
+memory/history exclusion and native workflow completion/provider failure. The
+pinned Eve 0.63 compiler requires the workflow tool to be compiled as an authored
+module; the fixture copies the actual tool source rather than re-exporting it.
+The tool and hidden child use distinct names because this installed compiler
+rejects their shared public name despite the documented `tool: false` exception.
+
+Still required: model/version provenance and measured latency/cost on evaluation
+receipts, held-out cases and human review, playbook synthesis, immutable publishing,
+discovery, entitlements, withdrawal and creator outcome measurement. These previews
+are not released marketplace bots. Partial personal-memory export/wipe explicitly
+excludes preview records; membership/account deletion still cascades them. Former-
+account archive export currently covers creator drafts, not their preview records.
+
+The final general check passes 1,323 tests in 205 files, plus all nine workspace
+checks. The production build, migration-chain check and Expo web/iOS/Android
+exports pass. In Chrome, the fictional Cedarbay specialist answered an actual
+question using the saved playbook; its immutable JSON export was downloaded and
+checked for the response, revision, original example and source attribution.
+Desktop modal, mobile sheet and read-only Markdown response views were inspected
+at desktop size and 390×844. No production database or deployment was changed.
+
+The structural report still has seven gating findings: separate typed export
+formats and small RPC wrappers, recent feature wiring and component/adapter
+length. The exports retain their distinct schemas and file formats instead of
+introducing a generic export factory. The unused-code check passes; the structural
+scanner's JSX/interface-method reachability findings are false positives. No
+structural findings were suppressed and this is not a clean structural gate.

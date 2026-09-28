@@ -19,6 +19,18 @@ export default defineAgent({
           } = request;
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
+          if (
+            lastUserMessage?.startsWith("preview ") &&
+            !toolResults.some((result) => result.name === "creator-preview")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-preview",
+                  input: { id: lastUserMessage.slice(8) },
+                },
+              ],
+            };
           if (lastUserMessage === "rebind-report-catalog")
             return JSON.stringify(tools.map((tool) => tool.name));
           if (lastUserMessage === "rebind-approval" && !toolResults.length)

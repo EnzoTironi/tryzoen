@@ -51,6 +51,26 @@ export const creatorDraftStateSchema = z
   })
   .strict();
 
+export const creatorPreviewRequestSchema = z.strictObject({
+  id: z.uuid(),
+  draftId: z.uuid(),
+  revision: z.uuid(),
+  question: z.string().trim().min(1).max(4000),
+});
+
+export const creatorPreviewSchema = creatorPreviewRequestSchema.extend({
+  title: z.string().min(1).max(80),
+  status: z.enum(["pending", "running", "completed", "failed", "expired"]),
+  response: z.string().max(32000).nullable(),
+  createdAt: z.number(),
+  expiresAt: z.number(),
+});
+
+export const creatorPreviewListSchema = z.array(creatorPreviewSchema).max(20);
+export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
+  snapshot: creatorDraftContentSchema,
+});
+
 export const creatorDraftListSchema = z
   .array(
     creatorDraftSchema.omit({ content: true }).extend({

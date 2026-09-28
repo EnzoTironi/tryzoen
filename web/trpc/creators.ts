@@ -5,6 +5,10 @@ import {
   creatorDraftSaveSchema,
   creatorDraftSchema,
   creatorDraftStateSchema,
+  creatorPreviewRequestSchema,
+  creatorPreviewSchema,
+  creatorPreviewListSchema,
+  creatorPreviewExportSchema,
 } from "@zoen/companion-ui/creators";
 import {
   CreatorDraftConflict,
@@ -15,8 +19,31 @@ import {
 } from "../../server/creators/drafts";
 import { withSignal } from "../../server/operations/async";
 import { workspaceProcedure } from "./workspace-procedure";
+import {
+  createCreatorPreview,
+  listCreatorPreviews,
+  exportCreatorPreview,
+} from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  exportPreview: workspaceProcedure
+    .input(z.strictObject({ id: z.uuid() }))
+    .output(creatorPreviewExportSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => exportCreatorPreview(ctx.actor, input.id))
+    ),
+  preview: workspaceProcedure
+    .input(creatorPreviewRequestSchema)
+    .output(creatorPreviewSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => createCreatorPreview(ctx.actor, input))
+    ),
+  previews: workspaceProcedure
+    .input(z.strictObject({ draftId: z.uuid() }))
+    .output(creatorPreviewListSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listCreatorPreviews(ctx.actor, input.draftId))
+    ),
   archive: workspaceProcedure
     .input(creatorDraftStateSchema)
     .output(creatorDraftSchema)

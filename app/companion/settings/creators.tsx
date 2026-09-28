@@ -7,6 +7,7 @@ import { companionCreatorData } from "@shared/companion/creators";
 import { api } from "@web/trpc/client";
 import { downloadBlob } from "@web/files/download";
 import { authClient } from "@web/auth/client";
+import { browserSessionClient } from "@web/eve/client";
 
 export function ConnectedCreatorStudio() {
   const { client } = api.useUtils();
@@ -22,7 +23,8 @@ export function ConnectedCreatorStudio() {
             new Blob([content], { type: options.mediaType }),
             options.filename
           );
-        }
+        },
+        browserSessionClient.sessions
       ),
     [client]
   );
