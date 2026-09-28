@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { z } from "zod";
+import type { MemoryCorpus } from "@db/services/memory-corpora";
 import { privateMemoryDirectory } from "../session-files";
 
 const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
@@ -42,7 +43,7 @@ child.once('exit', (code) => {
 });
 `;
 
-async function verifyMemoryIndex(data: string) {
+async function verifyMemoryIndex(data: string, requireExisting: boolean) {
   const [wiki, directory] = await Promise.all(
     ["wiki", "db"].map((name) =>
       lstat(join(data, name)).catch((error: unknown) => {
@@ -56,7 +57,7 @@ async function verifyMemoryIndex(data: string) {
       })
     )
   );
-  if (!wiki && !directory) return; // The first launch creates both together.
+  if (!wiki && !directory && !requireExisting) return;
   if (!wiki || !directory)
     throw new Error(
       "Memory requires both its source files and original index."
@@ -82,13 +83,17 @@ async function verifyMemoryIndex(data: string) {
 async function prepareSessionMemory(
   root: string,
   namespaceId: string,
-  corpus: "ai-memory" | "learned-memory"
+  corpus: MemoryCorpus,
+  requireExisting: boolean
 ) {
   const namespace = z.uuid().parse(namespaceId);
-  await privateMemoryDirectory(root);
   const owner = join(root, namespace);
-  await privateMemoryDirectory(owner);
   const data = join(owner, corpus);
+  // Check before creating even the parent directories or configuration. A lost
+  // accepted volume must never be silently replaced by a fresh native corpus.
+  await verifyMemoryIndex(data, requireExisting);
+  await privateMemoryDirectory(root);
+  await privateMemoryDirectory(owner);
   await privateMemoryDirectory(data);
   const config = join(data, "config.toml");
   try {
@@ -114,7 +119,7 @@ async function prepareSessionMemory(
         { cause: error }
       );
   }
-  await verifyMemoryIndex(data);
+  await verifyMemoryIndex(data, requireExisting);
   return data;
 }
 
@@ -284,9 +289,15 @@ export async function openMemoryEngine(
   binary: string,
   root: string,
   namespaceId: string,
-  corpus: "ai-memory" | "learned-memory"
+  corpus: MemoryCorpus,
+  options: { requireExisting: boolean }
 ) {
-  const data = await prepareSessionMemory(root, namespaceId, corpus);
+  const data = await prepareSessionMemory(
+    root,
+    namespaceId,
+    corpus,
+    options.requireExisting
+  );
   const runtime = await launchSessionMemory(binary, data);
   const client = new Client({ name: "zoen-file-memory", version: "1.0.0" });
   const headers = { Authorization: `Bearer ${runtime.token}` };

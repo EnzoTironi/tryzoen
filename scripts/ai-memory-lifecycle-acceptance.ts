@@ -52,7 +52,8 @@ let revision: string;
     binary,
     root,
     owner,
-    "learned-memory"
+    "learned-memory",
+    { requireExisting: false }
   );
   await noteTool(engine, "memory_write_page", {
     path,
@@ -161,7 +162,8 @@ execFileSync("chmod", ["-R", "go-rwx", restored]);
     binary,
     root,
     restoredOwner,
-    "learned-memory"
+    "learned-memory",
+    { requireExisting: true }
   );
   assert.match(
     (await readNotes(engine)).results[0]?.memory ?? "",
@@ -199,7 +201,8 @@ execFileSync(
     binary,
     root,
     rebuiltOwner,
-    "learned-memory"
+    "learned-memory",
+    { requireExisting: true }
   );
   assert.match(
     (await readNotes(engine)).results[0]?.memory ?? "",

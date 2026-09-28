@@ -289,9 +289,9 @@ production deployment, dreams, public marketplace releases or million-user load.
 The engine adapter now checks an existing corpus before launching the native
 writer. A missing wiki or database directory, missing/empty SQLite file, or
 non-private/symlinked index boundary fails without allowing native startup to
-recreate an empty replacement. Both directories absent is still the fresh-store
-case; this is not detection of total corpus/volume loss or a full consistency
-audit. The baseline isolated test demonstrated that native startup recreated the
+recreate an empty replacement. At this checkpoint both directories absent was still the fresh-store
+case. The accepted-corpus receipt below closes that total-loss gap for registered
+corpora; neither check is a full consistency audit. The baseline isolated test demonstrated that native startup recreated the
 missing database before the read/recovery failed. The treatment prevents that
 mutation. Four real-engine cases preserve the damaged fixture, reject recovery,
 then recover current and historical content after the original files are put back.
@@ -343,3 +343,57 @@ Chrome reopened the local companion after the build, loaded both existing
 fictional Cedarbay notes and retained the saved relationship. The screenshot
 records this normal read path; the damage/restore behavior is established by
 the isolated filesystem/runtime tests, not by that screenshot.
+
+## Accepted corpus receipts and total-loss protection, 2026-09-28
+
+Each person/workspace namespace now records two independent initialization receipts
+in PostgreSQL: learned notes and the native session corpus. Successful authorized
+reads/operations accept that corpus under the existing namespace lock. A first
+learned-note mutation accepts and verifies its initial corpus in the durable fence
+transaction before the mutation starts, so a failed first write cannot roll back
+the receipt and make a later total loss look like an unused memory.
+
+A registered corpus must have its original private wiki and SQLite index before
+any directories/configuration are created or the native process starts. Loss of the
+whole corpus, person namespace, or configured volume therefore fails closed. Clear
+keeps the receipt; explicit recovery requires existing files even without a receipt.
+Session delivery retains its queued sources when an accepted corpus disappears.
+Restoring the original test files allows retry with current and superseded content
+intact. No automatic empty replacement, reindex, or in-place restore is attempted.
+
+These receipts are metadata, not a second memory source. Migration 0080 defaults
+them to false; a healthy existing corpus becomes protected when first accepted by
+the new application. Previously lost, unregistered corpora cannot be distinguished
+from a fresh namespace. Raw JSONL has its existing export integrity checks, but this
+receipt does not independently detect loss of raw files while native memory is
+unconfigured, a valid-looking stale volume replacement, or simultaneous loss/rollback
+of PostgreSQL and storage. Coordinated backup, restore promotion and capacity remain
+unqualified.
+
+The shared memory view distinguishes load failures from unconfirmed changes,
+labels any previously loaded notes, and disables actions until access is verified.
+A failed load never shows the empty-memory invitation. Chrome verified the actual
+local application using one clearly named synthetic workspace: the original
+namespace was moved aside under its database lock, both desktop modal and mobile
+sheet showed the failure, and restoring those exact files followed by retry restored
+the note. No personal data or hosted records were changed.
+
+Validation: the baseline adapter silently returned an empty list after total loss;
+the new seven failure cases pass in a 37-test isolated real-engine run covering
+learned notes and session archives. The upstream acceptance and quarantined lifecycle
+harnesses pass (17 and 7 contracts). CI now builds the shared contracts before runtime
+tests, installs the checksum-verified pinned native engine from the production Docker
+stage, and runs those harnesses. The obsolete job targeting the removed Mem0 source
+was replaced while retaining PostgreSQL backup recovery. This does not authorize a
+hosted Mem0 data cutover or erase its outstanding retention/erasure obligations.
+
+Final local checks passed all nine workspace tasks (1,323 tests / 205 files), the
+production build, migration-chain validation, and Expo exports for web, iOS and
+Android. Six additional isolated checks passed for compiled Eve restart/session
+capture and save/removal/revocation races. Screenshots are attached using `gh --attach` in
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5870198438).
+The structural delta has ten unsuppressed gating findings: recent memory-engine
+churn, the existing learned-notes component growing from complexity 25 to 28 and
+264 to 274 lines, and the longer runtime CI job. No clean structural-quality claim
+is made. These migrations and simulations ran only on local isolated/review data;
+production rollout and fresh remote CI remain separate checks.

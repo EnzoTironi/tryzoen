@@ -71,6 +71,8 @@ export function LearnedNotes({
       await memory.refetch();
     },
   });
+  const actionsDisabled =
+    mutation.isPending || memory.isFetching || memory.isError;
   const edit = (id?: string, text = "") => {
     setEditing({ id, text, operationId: data.newOperationId() });
   };
@@ -79,9 +81,11 @@ export function LearnedNotes({
       title="Learned memories"
       loading={memory.isPending}
       error={
-        memory.error || mutation.error
-          ? "Your memories couldn’t be updated. Review them and try again."
-          : undefined
+        memory.error
+          ? "Your saved memories couldn’t be loaded. Try again when access is restored."
+          : mutation.error
+            ? "Your change couldn’t be confirmed. Review the saved notes before trying again."
+            : undefined
       }
       onRetry={() => {
         void memory.refetch();
@@ -97,7 +101,7 @@ export function LearnedNotes({
           disabled={
             !memory.data?.enabled ||
             memory.data.needsAttention ||
-            mutation.isPending
+            actionsDisabled
           }
           onPress={() => {
             setHistoryOpen(true);
@@ -108,7 +112,7 @@ export function LearnedNotes({
         <ActionButton
           disabled={
             !memory.data?.enabled ||
-            mutation.isPending ||
+            actionsDisabled ||
             memory.data.needsAttention
           }
           onPress={() => {
@@ -119,7 +123,7 @@ export function LearnedNotes({
         </ActionButton>
         <ActionButton
           quiet
-          disabled={!memory.data?.workspaceEnabled || mutation.isPending}
+          disabled={!memory.data?.workspaceEnabled || actionsDisabled}
           onPress={() => {
             mutation.mutate(() => data.setEnabled(!memory.data?.enabled));
           }}
@@ -141,7 +145,7 @@ export function LearnedNotes({
           </Text>
           <ActionButton
             quiet
-            disabled={mutation.isPending}
+            disabled={actionsDisabled}
             onPress={() => {
               mutation.mutate(data.recover);
             }}
@@ -149,6 +153,12 @@ export function LearnedNotes({
             Resume with these notes
           </ActionButton>
         </View>
+      )}
+      {memory.isError && !!memory.data?.documents.length && (
+        <Text style={pageStyles.copy}>
+          Showing the last loaded notes. Editing will resume after access is
+          restored.
+        </Text>
       )}
       {memory.data?.documents.map((note) => (
         <View key={note.id} style={pageStyles.section}>
@@ -161,7 +171,7 @@ export function LearnedNotes({
           <View style={styles.actions}>
             <ActionButton
               quiet
-              disabled={mutation.isPending || memory.data.needsAttention}
+              disabled={actionsDisabled || memory.data.needsAttention}
               onPress={() => {
                 setRelating(note.id);
               }}
@@ -170,7 +180,7 @@ export function LearnedNotes({
             </ActionButton>
             <ActionButton
               quiet
-              disabled={mutation.isPending || memory.data.needsAttention}
+              disabled={actionsDisabled || memory.data.needsAttention}
               onPress={() => {
                 edit(note.id, note.text);
               }}
@@ -179,7 +189,7 @@ export function LearnedNotes({
             </ActionButton>
             <ActionButton
               quiet
-              disabled={mutation.isPending}
+              disabled={actionsDisabled}
               onPress={() => {
                 setRemoving({
                   id: note.id,
@@ -192,7 +202,7 @@ export function LearnedNotes({
           </View>
         </View>
       ))}
-      {memory.data?.documents.length === 0 && (
+      {!memory.isError && memory.data?.documents.length === 0 && (
         <Text style={pageStyles.copy}>
           Things you ask Zoen to remember will appear here.
         </Text>
@@ -201,7 +211,7 @@ export function LearnedNotes({
         <View style={pageStyles.section}>
           <ActionButton
             quiet
-            disabled={mutation.isPending}
+            disabled={actionsDisabled}
             onPress={() => {
               setRemoving({ operationId: data.newOperationId() });
             }}
@@ -288,7 +298,7 @@ export function LearnedNotes({
                 Keep notes
               </ActionButton>
               <ActionButton
-                disabled={mutation.isPending}
+                disabled={actionsDisabled}
                 onPress={() => {
                   mutation.mutate(async () => {
                     if (removing.id)

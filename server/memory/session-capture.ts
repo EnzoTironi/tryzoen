@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import { query, transaction } from "@db/queries";
+import {
+  acceptMemoryCorpus,
+  memoryCorpusInitialized,
+} from "@db/services/memory-corpora";
 import { env } from "@shared/environment/env";
 import { openMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
@@ -77,7 +81,13 @@ export async function drainSessionSources() {
             env.ZOEN_AI_MEMORY_BINARY,
             root,
             namespaceId,
-            "ai-memory"
+            "ai-memory",
+            {
+              requireExisting: await memoryCorpusInitialized(
+                namespaceId,
+                "ai-memory"
+              ),
+            }
           )
         : null;
       for (const record of records) {
@@ -98,6 +108,7 @@ export async function drainSessionSources() {
           WHERE namespace_id = ${namespaceId} AND event_id = ${record.eventId}`);
         stored++;
       }
+      if (engine) await acceptMemoryCorpus(namespaceId, "ai-memory");
     }
     return { stored, configured: true };
   });

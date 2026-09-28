@@ -31,6 +31,12 @@ export const workspaceMemoryNamespaces = pgTable(
     userId: text("user_id").notNull(),
     namespaceId: uuid("namespace_id").notNull().defaultRandom().unique(),
     enabled: boolean("enabled").notNull().default(true),
+    learnedMemoryInitialized: boolean("learned_memory_initialized")
+      .notNull()
+      .default(false),
+    sessionMemoryInitialized: boolean("session_memory_initialized")
+      .notNull()
+      .default(false),
     eveScopeKey: text("eve_scope_key").unique(),
     pendingOperation: text("pending_operation"),
     pendingHash: text("pending_hash"),

@@ -44,7 +44,8 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
       binary,
       root,
       namespace,
-      "learned-memory"
+      "learned-memory",
+      { requireExisting: false }
     );
     expect(await readNotes(engine)).toEqual({ results: [] });
     saved = (await mutateNotes(engine, namespace, remember)).ids[0];
@@ -97,7 +98,8 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
       binary,
       root,
       namespace,
-      "learned-memory"
+      "learned-memory",
+      { requireExisting: true }
     );
     expect(await mutateNotes(engine, namespace, remember)).toEqual({
       ids: [saved],
@@ -140,7 +142,8 @@ test("lists more than the upstream recent-page cap and enforces the 200-note pro
     binary,
     root,
     namespace,
-    "learned-memory"
+    "learned-memory",
+    { requireExisting: false }
   );
   for (let index = 0; index < 200; index++) {
     await mutateNotes(engine, namespace, {
@@ -169,7 +172,8 @@ test("keeps namespaces private and a clear receipt cannot erase subsequently sav
       binary,
       root,
       namespace,
-      "learned-memory"
+      "learned-memory",
+      { requireExisting: false }
     );
     id = (
       await mutateNotes(engine, namespace, {
@@ -190,7 +194,8 @@ test("keeps namespaces private and a clear receipt cannot erase subsequently sav
       binary,
       root,
       namespace,
-      "learned-memory"
+      "learned-memory",
+      { requireExisting: true }
     );
     await mutateNotes(engine, namespace, clear);
     expect(
@@ -201,7 +206,8 @@ test("keeps namespaces private and a clear receipt cannot erase subsequently sav
       binary,
       root,
       other,
-      "learned-memory"
+      "learned-memory",
+      { requireExisting: false }
     );
     expect((await readNotes(privateEngine)).results).toEqual([]);
     await expect(
@@ -220,7 +226,8 @@ test("fails closed on an interrupted receipt and never serves the index after it
     binary,
     root,
     namespace,
-    "learned-memory"
+    "learned-memory",
+    { requireExisting: false }
   );
   const input = {
     action: "remember" as const,

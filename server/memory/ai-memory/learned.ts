@@ -1,4 +1,8 @@
 import { env } from "@shared/environment/env";
+import {
+  acceptMemoryCorpus,
+  memoryCorpusInitialized,
+} from "@db/services/memory-corpora";
 import { z } from "zod";
 import type {
   LearnedMemoryWriteSchema,
@@ -10,7 +14,10 @@ import { FileMemoryError, mutateNotes } from "./mutations";
 
 async function withLearnedCorpus<Result>(
   namespace: string,
-  run: (engine: Awaited<ReturnType<typeof openMemoryEngine>>) => Promise<Result>
+  run: (
+    engine: Awaited<ReturnType<typeof openMemoryEngine>>
+  ) => Promise<Result>,
+  requireExisting = false
 ) {
   if (!env.ZOEN_SESSION_ARCHIVE_DIR || !env.ZOEN_AI_MEMORY_BINARY)
     throw new FileMemoryError("unconfigured");
@@ -19,9 +26,16 @@ async function withLearnedCorpus<Result>(
       env.ZOEN_AI_MEMORY_BINARY,
       env.ZOEN_SESSION_ARCHIVE_DIR,
       z.uuid().parse(namespace),
-      "learned-memory"
+      "learned-memory",
+      {
+        requireExisting:
+          (await memoryCorpusInitialized(namespace, "learned-memory")) ||
+          requireExisting,
+      }
     );
-    return await run(engine);
+    const result = await run(engine);
+    await acceptMemoryCorpus(namespace, "learned-memory");
+    return result;
   } catch (error) {
     if (error instanceof FileMemoryError) throw error;
     throw new FileMemoryError("unavailable");
@@ -31,10 +45,14 @@ async function withLearnedCorpus<Result>(
 /** Call only under the authorized namespace's database lock. No client-supplied paths or scopes. */
 export const FileMemory = {
   recover(namespace: string) {
-    return withLearnedCorpus(namespace, async (engine) => {
-      await readNotes(engine);
-      await engine.checkpoint();
-    });
+    return withLearnedCorpus(
+      namespace,
+      async (engine) => {
+        await readNotes(engine);
+        await engine.checkpoint();
+      },
+      true
+    );
   },
   history(
     namespace: string,

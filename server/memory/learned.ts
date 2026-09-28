@@ -20,6 +20,7 @@ import { FileMemory } from "./ai-memory/learned";
 import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 export { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
+import { memoryCorpusInitialized } from "@db/services/memory-corpora";
 
 const namespaceSchema = z.object({
   id: z.uuid(),
@@ -210,6 +211,13 @@ export const LearnedMemory = {
             partition.pendingHash !== hash)
         )
           throw new LearnedMemoryError({ reason: "stale_recall" });
+        // Accept the initial corpus in this durable fence transaction, before
+        // any mutation can leave uncertain filesystem effects in the next one.
+        if (!(await memoryCorpusInitialized(partition.id, "learned-memory"))) {
+          if (partition.pendingOperation !== null)
+            await FileMemory.recover(partition.id);
+          else await FileMemory.read(partition.id);
+        }
         await dbQuery(
           sql`UPDATE workspace_memory_namespace SET pending_operation = ${input.operationId}, pending_hash = ${hash} WHERE namespace_id = ${partition.id}`
         );

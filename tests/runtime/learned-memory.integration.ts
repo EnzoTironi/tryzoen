@@ -44,6 +44,118 @@ const run = async (
   await body({ ...workspace, memory: LearnedMemory });
 };
 
+test.each(["corpus", "namespace", "volume"] as const)(
+  "loss of an accepted %s cannot silently initialize a new memory",
+  (missing) =>
+    run(async ({ actor, memory }) => {
+      const saved = await memory.write(actor, {
+        action: "remember",
+        operationId: randomUUID(),
+        text: "The club meets in Cedarbay.",
+      });
+      const asOf = new Date().toISOString();
+      await delay(20);
+      await memory.write(actor, {
+        action: "update",
+        operationId: randomUUID(),
+        memoryId: z.uuid().parse(saved.ids[0]),
+        text: "The club now meets in Ambertrail.",
+      });
+      const [owner] = await query<{ id: string; initialized: boolean }>(sql`
+      SELECT namespace_id AS id, learned_memory_initialized AS initialized FROM workspace_memory_namespace
+      WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
+      expect(owner?.initialized).toBe(true);
+      const target =
+        missing === "volume"
+          ? directory
+          : join(
+              directory,
+              z.uuid().parse(owner?.id),
+              ...(missing === "corpus" ? ["learned-memory"] : [])
+            );
+      const preserved = `${target}.preserved-${randomUUID()}`;
+      await rename(target, preserved);
+      const operationId = randomUUID();
+      try {
+        await expect(memory.read(actor)).rejects.toBeInstanceOf(
+          FileMemoryError
+        );
+        await expect(
+          memory.history(actor, { query: "Cedarbay", asOf })
+        ).rejects.toBeInstanceOf(FileMemoryError);
+        await expect(
+          memory.recall(actor, "lost-corpus", randomUUID(), "Cedarbay")
+        ).rejects.toBeInstanceOf(FileMemoryError);
+        await expect(memory.recover(actor)).rejects.toBeInstanceOf(
+          FileMemoryError
+        );
+        await expect(
+          memory.write(actor, { action: "clear", operationId })
+        ).rejects.toBeInstanceOf(FileMemoryError);
+        const [receipt] =
+          await query(sql`SELECT learned_memory_initialized AS initialized, pending_operation AS pending
+        FROM workspace_memory_namespace WHERE namespace_id = ${owner?.id}`);
+        expect(receipt).toEqual({ initialized: true, pending: operationId });
+        await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        // This suite's disposable files only; the untouched original is restored.
+        await rm(target, { recursive: true, force: true });
+        await rename(preserved, target);
+      }
+      await memory.recover(actor);
+      expect((await memory.read(actor)).results[0]?.memory).toContain(
+        "Ambertrail"
+      );
+      expect(
+        (await memory.history(actor, { query: "Cedarbay", asOf })).hits[0]
+          ?.excerpt
+      ).toContain("Cedarbay");
+    })
+);
+
+test("the initial corpus receipt survives a failed first mutation and clear keeps it protected", () =>
+  run(async ({ actor, memory }) => {
+    vi.spyOn(FileMemory, "mutate").mockRejectedValueOnce(
+      new FileMemoryError("unavailable")
+    );
+    await expect(
+      memory.write(actor, {
+        action: "remember",
+        operationId: randomUUID(),
+        text: "Synthetic uncertain first note.",
+      })
+    ).rejects.toBeInstanceOf(FileMemoryError);
+    const [owner] = await query<{
+      id: string;
+      initialized: boolean;
+      pending: string | null;
+    }>(sql`
+      SELECT namespace_id AS id, learned_memory_initialized AS initialized, pending_operation AS pending
+      FROM workspace_memory_namespace WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
+    expect(owner?.initialized).toBe(true);
+    expect(owner?.pending).toBeTruthy();
+    const corpus = join(directory, z.uuid().parse(owner?.id), "learned-memory");
+    const preserved = `${corpus}.preserved`;
+    await rename(corpus, preserved);
+    try {
+      await expect(memory.recover(actor)).rejects.toBeInstanceOf(
+        FileMemoryError
+      );
+      await expect(memory.read(actor)).rejects.toBeInstanceOf(FileMemoryError);
+      await expect(lstat(corpus)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(corpus, { recursive: true, force: true });
+      await rename(preserved, corpus);
+    }
+    await memory.write(actor, { action: "clear", operationId: randomUUID() });
+    expect((await memory.read(actor)).results).toEqual([]);
+    expect(
+      await query(
+        sql`SELECT learned_memory_initialized AS initialized FROM workspace_memory_namespace WHERE namespace_id = ${owner?.id}`
+      )
+    ).toEqual([{ initialized: true }]);
+  }));
+
 test.each([
   { missing: "db", empty: false },
   { missing: "wiki", empty: false },
@@ -390,10 +502,11 @@ test("partitions each person/workspace and rejects forged access before reaching
         ([namespace]) => !namespace.includes(actor.userId)
       )
     ).toBe(true);
+    reads.mockClear();
     await expect(
       memory.read({ ...guest, workspaceId: personal.workspaceId })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
-    expect(reads).toHaveBeenCalledTimes(3);
+    expect(reads).not.toHaveBeenCalled();
   }));
 
 test("replay is stable, deletion invalidates earlier recalls, and an Eve scope cannot be rebound", () =>

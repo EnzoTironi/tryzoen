@@ -301,7 +301,8 @@ const acceptedPath = await writeSessionSource(
     binary,
     directory,
     owner,
-    "ai-memory"
+    "ai-memory",
+    { requireExisting: false }
   );
   const network = globalThis.fetch;
   let deliveredBatches = 0;
@@ -328,7 +329,8 @@ const acceptedPath = await writeSessionSource(
     binary,
     directory,
     owner,
-    "ai-memory"
+    "ai-memory",
+    { requireExisting: true }
   );
   await ingestSessionSource(engine, owner, source);
   await ingestSessionSource(engine, owner, assistant);
@@ -340,7 +342,8 @@ const acceptedPath = await writeSessionSource(
     binary,
     directory,
     owner,
-    "ai-memory"
+    "ai-memory",
+    { requireExisting: true }
   );
   // Model the acknowledgement being lost after delivery: replay the same source
   // and close marker after a process restart, not just the same HTTP connection.
@@ -414,7 +417,8 @@ const otherOwner = randomUUID();
     binary,
     directory,
     otherOwner,
-    "ai-memory"
+    "ai-memory",
+    { requireExisting: false }
   );
   assert.equal(
     await search(other.client, { query: "Cedarfield", global: true }),
@@ -436,7 +440,7 @@ const crashedWorker = spawn(
     String.raw`
       const [module, binary, root, owner] = process.argv.slice(1);
       const { openMemoryEngine } = await import(module);
-      const engine = await openMemoryEngine(binary, root, owner, "ai-memory");
+      const engine = await openMemoryEngine(binary, root, owner, "ai-memory", { requireExisting: false });
       const result = await engine.client.callTool({
         name: 'memory_write_page',
         arguments: {
@@ -470,7 +474,9 @@ try {
   ]);
   assert.deepEqual(ready, [{ ready: true }, undefined]);
   await assert.rejects(
-    openMemoryEngine(binary, directory, crashOwner, "ai-memory"),
+    openMemoryEngine(binary, directory, crashOwner, "ai-memory", {
+      requireExisting: true,
+    }),
     /exited before readiness/,
     "A second writer must remain excluded before the crash."
   );
@@ -481,7 +487,8 @@ try {
     binary,
     directory,
     crashOwner,
-    "ai-memory"
+    "ai-memory",
+    { requireExisting: true }
   );
   assert.match(
     await search(resumed.client, { ...memoryScope, query: "Willowgate" }),
