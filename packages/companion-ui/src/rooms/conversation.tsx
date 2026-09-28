@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { ArrowLeft, Info, X } from "lucide-react-native";
 import type { z } from "zod";
 import { RoomComposer } from "./composer";
@@ -12,7 +18,12 @@ import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
 import { useRoomReactions } from "./reactions";
-import type { RoomData, roomMessageSchema, roomMemberSchema } from "./schema";
+import type {
+  RoomData,
+  roomMessageSchema,
+  roomMemberSchema,
+  roomSchema,
+} from "./schema";
 
 export function RoomConversation({
   data,
@@ -21,11 +32,13 @@ export function RoomConversation({
   onBack,
   avatarUri,
   onCopyText,
+  onOpenRoom,
 }: {
   readonly data: RoomData;
   readonly cacheScope: string;
   readonly roomId: string;
   readonly onBack: () => void;
+  readonly onOpenRoom?: (id: string) => void;
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
@@ -40,14 +53,21 @@ export function RoomConversation({
     queryKey: ["matrix-messages", cacheScope, roomId],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) => data.messages({ id: roomId, from: pageParam }),
-    getNextPageParam: (last, pages) =>
-      pages.length < 5 ? (last.nextCursor ?? undefined) : undefined,
+    getNextPageParam: (last, _pages, _cursor, cursors) =>
+      last.nextCursor && !cursors.includes(last.nextCursor)
+        ? last.nextCursor
+        : undefined,
     staleTime: 5_000,
     refetchInterval: 10_000,
     retry: 1,
   });
   const current = messages.isError ? undefined : messages.data;
   const room = current?.pages[0]?.room;
+  const showProfile = () => {
+    if (room?.kind === "direct")
+      setProfile(current?.pages[0]?.members.find((person) => !person.mine));
+    else setDetails(true);
+  };
   const timeline = Array.from(
     new Map(
       current?.pages
@@ -62,35 +82,12 @@ export function RoomConversation({
     <View style={styles.layout}>
       {(!root || wide || messages.isError) && (
         <View style={styles.main}>
-          <View style={styles.header}>
-            {compact && (
-              <IconButton
-                icon={ArrowLeft}
-                label="Voltar às conversas"
-                onPress={onBack}
-              />
-            )}
-            <ConversationAvatar name={room?.label ?? "Grupo"} group size={38} />
-            <View style={styles.headerCopy}>
-              <Text
-                accessibilityRole="header"
-                numberOfLines={1}
-                style={styles.title}
-              >
-                {room?.label ?? "Grupo"}
-              </Text>
-              <Text style={styles.caption}>
-                Pessoas e Zoen · espaço compartilhado
-              </Text>
-            </View>
-            <IconButton
-              icon={Info}
-              label="Detalhes do grupo"
-              onPress={() => {
-                setDetails(true);
-              }}
-            />
-          </View>
+          <RoomHeader
+            room={room}
+            compact={compact}
+            onBack={onBack}
+            onProfile={showProfile}
+          />
           <RoomMessages
             data={data}
             roomId={roomId}
@@ -114,11 +111,21 @@ export function RoomConversation({
             }}
             hasMore={messages.hasNextPage}
             loadingMore={messages.isFetchingNextPage}
+            fetching={messages.isFetching}
             onMore={() => {
-              void messages.fetchNextPage();
+              if (
+                messages.hasNextPage &&
+                !messages.isFetching &&
+                !messages.isError
+              )
+                void messages.fetchNextPage({ cancelRefetch: false });
             }}
           />
-          <RoomComposer draft={draft} disabled={!room || messages.isError} />
+          <RoomComposer
+            draft={draft}
+            disabled={!room || messages.isError}
+            direct={room?.kind === "direct"}
+          />
         </View>
       )}
       {root && !messages.isError && (
@@ -161,7 +168,7 @@ export function RoomConversation({
           />
         </View>
       )}
-      {details && current?.pages[0] && (
+      {details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
           page={current.pages[0]}
           onProfile={(person) => {
@@ -177,10 +184,15 @@ export function RoomConversation({
             setRoot(undefined);
           }}
         />
-      )}{" "}
+      )}
       {profile && room && (
         <ParticipantProfile
           person={profile}
+          data={data}
+          cacheScope={cacheScope}
+          onOpenRoom={onOpenRoom}
+          direct={room.kind === "direct"}
+          conversationAvatarUri={room.avatarUri ?? undefined}
           groupName={room.label}
           avatarUri={avatarUri}
           onClose={() => {
@@ -192,6 +204,66 @@ export function RoomConversation({
           }}
         />
       )}
+    </View>
+  );
+}
+
+function RoomHeader({
+  room,
+  compact,
+  onBack,
+  onProfile,
+}: {
+  readonly room?: z.infer<typeof roomSchema>;
+  readonly compact: boolean;
+  readonly onBack: () => void;
+  readonly onProfile: () => void;
+}) {
+  return (
+    <View style={styles.header}>
+      {compact && (
+        <IconButton
+          icon={ArrowLeft}
+          label="Voltar às conversas"
+          onPress={onBack}
+        />
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Ver perfil da conversa"
+        onPress={onProfile}
+      >
+        <ConversationAvatar
+          name={room?.label ?? "Conversa"}
+          uri={room?.avatarUri ?? undefined}
+          group={room?.kind === "group"}
+          size={38}
+        />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Detalhes de ${room?.label ?? "conversa"}`}
+        onPress={onProfile}
+        style={styles.headerCopy}
+      >
+        <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>
+          {room?.label ?? "Conversa"}
+        </Text>
+        <Text style={styles.caption}>
+          {room?.kind === "direct"
+            ? room.username
+              ? `@${room.username} · conversa direta`
+              : "Conversa direta"
+            : "Pessoas e Zoen · espaço compartilhado"}
+        </Text>
+      </Pressable>
+      <IconButton
+        icon={Info}
+        label={
+          room?.kind === "direct" ? "Perfil da pessoa" : "Detalhes do grupo"
+        }
+        onPress={onProfile}
+      />
     </View>
   );
 }
@@ -218,8 +290,10 @@ function RoomThread({
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       data.thread({ id: roomId, rootId: root.id, from: pageParam }),
-    getNextPageParam: (last, pages) =>
-      pages.length < 5 ? (last.nextCursor ?? undefined) : undefined,
+    getNextPageParam: (last, _pages, _cursor, cursors) =>
+      last.nextCursor && !cursors.includes(last.nextCursor)
+        ? last.nextCursor
+        : undefined,
     refetchInterval: 10_000,
     retry: 1,
   });
@@ -261,8 +335,10 @@ function RoomThread({
         }}
         hasMore={result.hasNextPage}
         loadingMore={result.isFetchingNextPage}
+        fetching={result.isFetching}
         onMore={() => {
-          void result.fetchNextPage();
+          if (result.hasNextPage && !result.isFetching && !result.isError)
+            void result.fetchNextPage({ cancelRefetch: false });
         }}
       />
       <RoomComposer

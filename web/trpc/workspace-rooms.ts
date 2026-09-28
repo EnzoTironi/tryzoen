@@ -1,7 +1,18 @@
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
+import {
+  searchDirectPeople,
+  openDirectRoom,
+  listDirectRooms,
+} from "../../server/matrix/direct";
 import { readMatrixMedia } from "../../server/matrix/media/read";
 import {
   roomCreateSchema,
+  roomSchema,
+  directPeopleSchema,
+  directPeopleSearchSchema,
+  directOpenSchema,
+  directListInputSchema,
+  directListSchema,
   roomMediaReadSchema,
   roomReactionsReadSchema,
   roomReactionsPageSchema,
@@ -30,6 +41,24 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  people: workspaceProcedure
+    .input(directPeopleSearchSchema)
+    .output(directPeopleSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => searchDirectPeople(ctx.actor, input.query))
+    ),
+  openDirect: workspaceProcedure
+    .input(directOpenSchema)
+    .output(roomSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => openDirectRoom(ctx.actor, input))
+    ),
+  directs: workspaceProcedure
+    .input(directListInputSchema)
+    .output(directListSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listDirectRooms(ctx.actor, input.before))
+    ),
   media: workspaceProcedure
     .input(roomMediaReadSchema)
     .output(inlineAttachmentSchema)

@@ -5,21 +5,37 @@ import { ConversationAvatar } from "../chats/avatar";
 import { IconButton } from "../icon-button";
 import { SheetSurface } from "../sheet";
 import { colors } from "../theme";
-import type { roomMemberSchema } from "./schema";
+import { ActionButton } from "../button";
+import { useDirectConversation } from "./direct";
+import type { RoomData, roomMemberSchema } from "./schema";
 
 export function ParticipantProfile({
   person,
+  data,
+  cacheScope,
+  direct = false,
+  conversationAvatarUri,
+  onOpenRoom,
   groupName,
   avatarUri,
   onClose,
   onConversation,
 }: {
+  readonly data: RoomData;
+  readonly cacheScope: string;
+  readonly direct?: boolean;
+  readonly conversationAvatarUri?: string;
+  readonly onOpenRoom?: (id: string) => void;
   readonly person: z.infer<typeof roomMemberSchema>;
   readonly groupName: string;
   readonly avatarUri?: string;
   readonly onClose: () => void;
   readonly onConversation: () => void;
 }) {
+  const open = useDirectConversation(data, cacheScope, (id) => {
+    onClose();
+    onOpenRoom?.(id);
+  });
   return (
     <SheetSurface
       title={`Perfil de ${person.name}`}
@@ -52,18 +68,47 @@ export function ParticipantProfile({
                 : "Membro do espaço"}
           </Text>
         </View>
+        {!person.bot &&
+          !person.mine &&
+          person.username &&
+          onOpenRoom &&
+          !direct && (
+            <View style={styles.section}>
+              <ActionButton
+                quiet
+                disabled={open.isPending}
+                onPress={() => {
+                  if (person.username) open.mutate(person.username);
+                }}
+              >
+                {open.isPending ? "Abrindo conversa…" : "Mensagem"}
+              </ActionButton>
+              {open.isError && (
+                <Text accessibilityRole="alert" style={styles.description}>
+                  Não foi possível abrir a conversa. Tente novamente.
+                </Text>
+              )}
+            </View>
+          )}
         <View style={styles.section}>
           <Text style={styles.label}>CONVERSA EM COMUM</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Voltar ao grupo ${groupName}`}
+            accessibilityLabel={`Voltar à conversa ${groupName}`}
             onPress={onConversation}
             style={({ pressed }) => [styles.group, pressed && styles.pressed]}
           >
-            <ConversationAvatar name={groupName} group size={44} />
+            <ConversationAvatar
+              name={groupName}
+              uri={direct ? conversationAvatarUri : undefined}
+              group={!direct}
+              size={44}
+            />
             <View style={styles.copy}>
               <Text style={styles.title}>{groupName}</Text>
-              <Text style={styles.subtitle}>Pessoas e Zoen</Text>
+              <Text style={styles.subtitle}>
+                {direct ? "Conversa direta" : "Pessoas e Zoen"}
+              </Text>
             </View>
             <MessageCircle size={22} color={colors.accent} />
           </Pressable>

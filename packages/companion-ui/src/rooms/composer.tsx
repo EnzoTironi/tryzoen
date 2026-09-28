@@ -6,10 +6,12 @@ export function RoomComposer({
   draft,
   disabled,
   thread = false,
+  direct = false,
 }: {
   readonly draft: ReturnType<typeof useRoomDraft>;
   readonly disabled: boolean;
   readonly thread?: boolean;
+  readonly direct?: boolean;
 }) {
   const reply = disabled ? undefined : draft.reply;
   return (
@@ -34,7 +36,13 @@ export function RoomComposer({
         selectedFiles={disabled ? [] : (draft.files ?? [])}
         onFilesChange={draft.changeFiles}
         maxLength={8000}
-        label={thread ? "Responder à thread" : "Mensagem ao grupo"}
+        label={
+          thread
+            ? "Responder à thread"
+            : direct
+              ? "Mensagem direta"
+              : "Mensagem ao grupo"
+        }
         placeholder={thread ? "Responder…" : "Mensagem…"}
         disabled={disabled}
         onSend={draft.send}

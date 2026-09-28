@@ -17,8 +17,8 @@ list and desktop rail, **not** a mobile bottom-bar tab. There is no replacement
 “My space” submenu hiding the original functions.
 
 The shared React Native client now renders a persistent desktop conversation
-list, existing pinned private chats, search and archive access, group/bot
-filters, real workspace groups and a conversation view. Mobile uses the same
+list, existing pinned private chats, search and archive access, person/group/bot
+filters, private pairs within a workspace, real groups and a conversation view. Mobile uses the same
 list and a back action. Group replies open in a right-hand desktop thread pane
 or a dedicated mobile view. Other sheets continue to use centered desktop
 modals. Existing chat rename, pin, archive, export, agent activity/memory and
@@ -39,8 +39,11 @@ boundary. Every read/send checks live authorization; the thread parent must
 belong to the selected room and cannot itself be a thread child. Stable
 transaction IDs deduplicate a response-loss retry. Agent answers, native
 message-tool output and approval/input cards inherit the requesting thread.
-Reads are bounded to 100 events per page and five loaded pages per open timeline;
-the list remains virtualized and only visible queries poll every ten seconds.
+Reads are bounded to 100 events per page. TanStack infinite queries load older
+pages near the top of group/direct conversations and threads, without a five-page
+cutoff. The list remains virtualized and foreground queries poll every ten seconds.
+Loaded pages remain in the query cache and TanStack refreshes them sequentially;
+long-history cache/polling costs still need a measured sync/windowing rollout.
 This is bounded HTTP polling, not yet a direct Matrix sync/E2EE client, and is
 not a million-user throughput qualification.
 
@@ -52,8 +55,8 @@ active pilot's selected teaching. It derives the actor from the session and
 rejects group/protocol actors. A draft is not publication or evidence that linked
 content was ingested. The existing visual editor remains available for review.
 
-Still unfinished: a public/paid marketplace, direct human-to-human invitations
-and conversation management in this shell, presence and voice/video hangouts,
+Still unfinished: a public/paid marketplace, cross-workspace human invitations
+and complete direct-conversation lifecycle management, presence and voice/video hangouts,
 resumable authorized YouTube/source ingestion, final bot identity routing,
 entitlements and published knowledge deployment. Mobile group workspace
 selection and physical-device transport/encryption recovery also need completion.
@@ -1065,3 +1068,79 @@ with `gh --attach`. The isolated PostgreSQL/Synapse messaging suite also covers
 media authorization and identical-retry event deduplication. The structural delta
 still reports 35 unsuppressed gating findings, including component growth, adapter
 patterns and edit churn; no clean structural or production-capacity claim is made.
+
+### Direct conversations between people — 2026-09-28
+
+The new-conversation sheet searches the names and claimed usernames of people in
+this shared workspace. A participant's group profile also offers **Mensagem**.
+Both paths open the same private conversation for that pair. The inbox adds a
+**Pessoas** filter; direct and group rows now use the existing virtualized list.
+The direct header opens the peer's profile by avatar, name or info button. Profiles
+remain mobile sheets / desktop modals and the original mobile bottom bar remains.
+
+Migration 0082 adds only transport ownership, with one ordered pair per workspace
+and composite membership foreign keys. Matrix owns all messages, attachments,
+replies and reactions. Rooms use `is_direct` and both participants' `m.direct`
+account data, in the existing application-service alias namespace. Pair locks
+serialize simultaneous creation; ordered user locks protect identity writes and
+account-data merges. Retried opens reuse the room and sends retain native Matrix
+transaction IDs. No new messaging engine or dependency was added.
+
+Access requires a live account session plus both participants' current workspace
+and organization memberships. A third workspace administrator cannot list, read,
+send to, react in or download media from the pair. No shared agent joins, and a
+mention of Zoen does not enqueue agent work. Direct rooms are not group bindings;
+private references remain explicit identifiers, not transferred files or grants.
+Removing a membership removes the local pair binding. This revokes application
+access; it does not claim to erase Matrix server history or copies already read.
+
+This is direct messaging **within an existing shared workspace**. Global contact
+invitations, blocking/reporting, direct-chat archive/delete/export, message previews,
+activity ordering/unread state, read receipts, presence, calls and E2EE remain open.
+Lists are bounded to twenty rows per cursor page and currently use stable room-ID
+ordering; they do not claim a last-message order. Expo shares these components and
+adapters, but native workspace selection and physical-device qualification remain
+release work. The existing four-file / 3 MiB media bound still applies.
+
+Verification: all nine `pnpm check` tasks pass, including 1,362 tests in 214 files;
+`pnpm build` and fresh Expo web/iOS/Android exports pass. Three isolated
+PostgreSQL/Synapse tests cover the existing group regression and new direct paths:
+simultaneous creation, both sender views, account-data registration, send retry,
+thread/reply/reaction/media delivery, third-admin denial, cross-room injection,
+no agent ingress and membership revocation. Chrome verified username search,
+profile-to-message reuse, direct/thread sends, reaction persistence after reload,
+and 390px / desktop layouts against the production build using synthetic accounts.
+The quality delta reports fifteen unsuppressed gating findings, primarily inbox and
+profile growth, adapter-shape matches and recent edit churn. It is not a clean
+structural, full-parity, E2EE or production-capacity qualification.
+
+### Automatic Matrix conversation history — 2026-09-28
+
+The previous-messages button is removed from group/direct timelines and threads.
+The inverted virtual list opens at the newest message and requests older cursor
+pages near its top. Older messages append at the far edge of the inverted data,
+so extending history preserves the reading position. Measured item separators
+replace container gaps so React Native Web's wheel bounds include row spacing.
+The latest-messages shortcut returns to the newest edge.
+
+TanStack Query owns page requests and cursors. Paging waits for background fetches
+and uses `cancelRefetch: false`; null/repeated cursors stop loading, including
+empty Matrix pages that only contained reactions or thread replies. The previous
+five-page cutoff is gone. Tests use a real InfiniteQueryObserver to load seven
+pages, stop at the end, coalesce simultaneous requests and reject cursor loops.
+The UI retains authorization error handling and scoped room/thread caches.
+
+The combined direct-conversation/pagination delta retains 20 unsuppressed
+structural findings (component growth, recent churn and adapter-pattern matches);
+the scan is not claimed clean.
+
+Verification: `pnpm check` passes all nine tasks (1,364 tests, 214 files),
+`pnpm build` passes, and fresh Expo web/iOS/Android exports pass. In the local
+production build, a synthetic Matrix conversation with 151 initial messages and
+110 thread replies was paged to its beginning on desktop; the thread loaded all
+110 replies. The mobile viewport also crossed page boundaries and kept its
+bottom navigation. After an additional incoming message, the three visible rows
+retained exactly the same measured vertical positions (187.5, 373.5 and 559.5px).
+The latest shortcut showed the new message. Web scroll anchoring supplies the
+behavior missing from React Native Web's maintainVisibleContentPosition; native
+uses the platform implementation. Physical-device scrolling remains unqualified.

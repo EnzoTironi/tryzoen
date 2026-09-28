@@ -14,6 +14,9 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  people: vi.fn<RoomData["people"]>(),
+  openDirect: vi.fn<RoomData["openDirect"]>(),
+  directs: vi.fn<RoomData["directs"]>(),
   media: vi.fn<RoomData["media"]>(),
   operationId: () => crypto.randomUUID(),
   send: vi.fn<RoomData["send"]>().mockResolvedValue(undefined),

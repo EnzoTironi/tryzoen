@@ -4,9 +4,13 @@ import { z } from "zod";
 import { env } from "@shared/environment";
 export class MatrixError extends Error {
   readonly _tag = "MatrixError";
-  declare readonly reason: "unavailable" | "forbidden" | "conflict";
+  declare readonly reason:
+    | "unavailable"
+    | "forbidden"
+    | "conflict"
+    | "not-found";
   constructor(input: {
-    readonly reason: "unavailable" | "forbidden" | "conflict";
+    readonly reason: "unavailable" | "forbidden" | "conflict" | "not-found";
   }) {
     super("MatrixError");
     this.name = "MatrixError";
@@ -65,13 +69,7 @@ export const matrixRequest = async function (
             })
             .parse(await response.json());
           throw new MatrixError({
-            reason:
-              error.errcode === "M_USER_IN_USE" ||
-              error.errcode === "M_ROOM_IN_USE"
-                ? "conflict"
-                : response.status === 403
-                  ? "forbidden"
-                  : "unavailable",
+            reason: matrixFailureReason(error.errcode, response.status),
           });
         }
         return z.json().parse(await response.json());
@@ -85,6 +83,16 @@ export const matrixRequest = async function (
     }
   }, 20000);
 };
+
+function matrixFailureReason(
+  code: string | undefined,
+  status: number
+): MatrixError["reason"] {
+  if (code === "M_USER_IN_USE" || code === "M_ROOM_IN_USE") return "conflict";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not-found";
+  return "unavailable";
+}
 
 /** Synapse admin erase. A missing user is already gone. Live admin stays optional. */
 export const deactivateMatrixUser = async function (matrixId: string) {

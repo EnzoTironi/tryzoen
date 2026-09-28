@@ -222,6 +222,7 @@ function MobileCompanion({
             <MobileRoom
               key={roomId}
               roomId={roomId}
+              onOpenRoom={setRoomId}
               onBack={() => {
                 setConversationOpen(false);
               }}

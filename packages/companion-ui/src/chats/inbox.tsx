@@ -1,5 +1,5 @@
 import { useDeferredValue, useState, type ComponentProps } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   FlatList,
@@ -17,10 +17,12 @@ import { ConversationRow } from "./row";
 import { ConversationAvatar } from "./avatar";
 import { useConversationLibrary } from "./library";
 import type { ChatData } from "./schema";
-import type { RoomData } from "../rooms/schema";
+import type { RoomData, roomSchema } from "../rooms/schema";
+import type { z } from "zod";
 import { CreateRoom } from "../rooms/create";
+import { CreateConversation } from "./create";
 
-const filters = ["Todas", "Grupos", "Bots"] as const;
+const filters = ["Todas", "Pessoas", "Grupos", "Bots"] as const;
 export function ConversationInbox({
   data,
   rooms,
@@ -51,6 +53,7 @@ export function ConversationInbox({
   const [filter, setFilter] = useState<(typeof filters)[number]>("Todas");
   const [archived, setArchived] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [composing, setComposing] = useState(false);
   const { chats, items, change } = useConversationLibrary(
     data,
     cacheScope,
@@ -62,17 +65,46 @@ export function ConversationInbox({
     queryFn: () => rooms.list(),
     staleTime: 30_000,
   });
+  const directs = useInfiniteQuery({
+    queryKey: ["matrix-directs", cacheScope],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => rooms.directs({ before: pageParam }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: groups.data?.configured === true,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+  });
+  const visibleDirects =
+    !archived &&
+    (filter === "Todas" || filter === "Pessoas") &&
+    !directs.isError
+      ? (directs.data?.pages
+          .flatMap((page) => page.items)
+          .filter((room) =>
+            `${room.label} ${room.username ?? ""}`
+              .toLocaleLowerCase()
+              .includes(search.toLocaleLowerCase())
+          ) ?? [])
+      : [];
   const visibleGroups =
-    !archived && filter !== "Bots"
+    !archived && (filter === "Todas" || filter === "Grupos")
       ? (groups.data?.rooms.filter((room) =>
           room.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())
         ) ?? [])
       : [];
-  const visibleChats = filter === "Grupos" ? [] : items;
+  const showBots = filter === "Todas" || filter === "Bots";
+  const visibleChats = showBots ? items : [];
   const pinned =
-    !search && !archived && filter !== "Grupos"
+    !search && !archived && showBots
       ? items.filter((chat) => chat.pinned).slice(0, 6)
       : [];
+  const rows = [
+    ...[...visibleDirects, ...visibleGroups].map((room) => ({
+      kind: "room" as const,
+      room,
+    })),
+    ...visibleChats.map((chat) => ({ kind: "agent" as const, chat })),
+  ];
   return (
     <View style={styles.inbox}>
       <View style={styles.heading}>
@@ -87,7 +119,13 @@ export function ConversationInbox({
             setArchived(!archived);
           }}
         />
-        <IconButton icon={SquarePen} label="Nova conversa" onPress={onCreate} />
+        <IconButton
+          icon={SquarePen}
+          label="Nova conversa"
+          onPress={() => {
+            setComposing(true);
+          }}
+        />
       </View>
       <View style={styles.search}>
         <Search size={17} color={colors.muted} />
@@ -120,8 +158,10 @@ export function ConversationInbox({
         ))}
       </View>
       <FlatList
-        data={visibleChats}
-        keyExtractor={(item) => item.sessionId}
+        data={rows}
+        keyExtractor={(item) =>
+          item.kind === "room" ? item.room.id : item.chat.sessionId
+        }
         style={styles.list}
         keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
@@ -133,28 +173,6 @@ export function ConversationInbox({
               avatarUri={avatarUri}
               onOpen={onOpen}
             />
-            {visibleGroups.map((room) => (
-              <Pressable
-                key={room.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: selectedRoom === room.id }}
-                onPress={() => {
-                  onOpenRoom(room.id);
-                }}
-                style={[
-                  styles.room,
-                  selectedRoom === room.id && styles.selected,
-                ]}
-              >
-                <ConversationAvatar name={room.label} group />
-                <View style={styles.copy}>
-                  <Text numberOfLines={1} style={styles.name}>
-                    {room.label}
-                  </Text>
-                  <Text style={styles.caption}>Grupo</Text>
-                </View>
-              </Pressable>
-            ))}
             {filter === "Grupos" &&
               groups.data?.mayManage &&
               groups.data.configured && (
@@ -169,22 +187,31 @@ export function ConversationInbox({
               )}
           </>
         }
-        renderItem={({ item }) => (
-          <ConversationRow
-            chat={item}
-            dense
-            avatarUri={avatarUri}
-            selected={item.sessionId === selectedId && !selectedRoom}
-            onOpen={onOpen}
-            onChange={change}
-            onExport={onExport}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.kind === "room" ? (
+            <RoomRow
+              room={item.room}
+              selected={selectedRoom === item.room.id}
+              onOpen={onOpenRoom}
+            />
+          ) : (
+            <ConversationRow
+              chat={item.chat}
+              dense
+              avatarUri={avatarUri}
+              selected={item.chat.sessionId === selectedId && !selectedRoom}
+              onOpen={onOpen}
+              onChange={change}
+              onExport={onExport}
+            />
+          )
+        }
         ListEmptyComponent={
-          !visibleGroups.length && !chats.isPending && !groups.isPending ? (
+          !chats.isPending && !groups.isPending && !directs.isLoading ? (
             <InboxEmpty
               search={search}
               groups={filter === "Grupos"}
+              people={filter === "Pessoas"}
               configured={groups.data?.configured ?? false}
             />
           ) : null
@@ -192,14 +219,28 @@ export function ConversationInbox({
         ListFooterComponent={
           <View style={styles.feedback}>
             <InboxFeedback
-              loading={chats.isPending || groups.isPending}
-              error={Boolean(chats.error ?? groups.error)}
+              loading={chats.isPending || groups.isPending || directs.isLoading}
+              error={Boolean(chats.error ?? groups.error ?? directs.error)}
               onRetry={() => {
                 void chats.refetch();
                 void groups.refetch();
+                if (groups.data?.configured) void directs.refetch();
               }}
             />
-            {chats.hasNextPage && filter !== "Grupos" && (
+            {directs.hasNextPage &&
+              (filter === "Todas" || filter === "Pessoas") &&
+              !archived && (
+                <ActionButton
+                  quiet
+                  disabled={directs.isFetchingNextPage}
+                  onPress={() => {
+                    void directs.fetchNextPage();
+                  }}
+                >
+                  Mais conversas com pessoas
+                </ActionButton>
+              )}
+            {chats.hasNextPage && showBots && (
               <ActionButton
                 quiet
                 disabled={chats.isFetchingNextPage}
@@ -244,16 +285,81 @@ export function ConversationInbox({
           }}
         />
       )}
+      {composing && (
+        <CreateConversation
+          data={rooms}
+          cacheScope={cacheScope}
+          configured={groups.data?.configured ?? false}
+          mayManage={groups.data?.mayManage ?? false}
+          avatarUri={avatarUri}
+          onClose={() => {
+            setComposing(false);
+          }}
+          onAgent={() => {
+            setComposing(false);
+            onCreate();
+          }}
+          onGroup={() => {
+            setComposing(false);
+            setCreating(true);
+          }}
+          onOpened={(id) => {
+            setComposing(false);
+            onOpenRoom(id);
+          }}
+        />
+      )}
     </View>
   );
 }
+function RoomRow({
+  room,
+  selected,
+  onOpen,
+}: {
+  readonly room: z.infer<typeof roomSchema>;
+  readonly selected: boolean;
+  readonly onOpen: (id: string) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: selected }}
+      onPress={() => {
+        onOpen(room.id);
+      }}
+      style={[styles.room, selected && styles.selected]}
+    >
+      <ConversationAvatar
+        name={room.label}
+        uri={room.avatarUri ?? undefined}
+        group={room.kind === "group"}
+      />
+      <View style={styles.copy}>
+        <Text numberOfLines={1} style={styles.name}>
+          {room.label}
+        </Text>
+        <Text style={styles.caption}>
+          {room.kind === "group"
+            ? "Grupo"
+            : room.username
+              ? `@${room.username}`
+              : "Conversa direta"}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function InboxEmpty({
   search,
   groups,
+  people,
   configured,
 }: {
   readonly search: string;
   readonly groups: boolean;
+  readonly people: boolean;
   readonly configured: boolean;
 }) {
   return (
@@ -263,14 +369,18 @@ function InboxEmpty({
           ? "Nenhuma conversa encontrada"
           : groups
             ? "Seus grupos aparecem aqui"
-            : "Vamos conversar?"}
+            : people
+              ? "Suas conversas aparecem aqui"
+              : "Vamos conversar?"}
       </Text>
       <Text style={styles.caption}>
         {groups
           ? configured
             ? "Crie um grupo no seu espaço compartilhado."
             : "O serviço de grupos ainda não está conectado neste ambiente."
-          : "Comece com o Zoen. Suas conversas ficam salvas aqui."}
+          : people
+            ? "Toque em nova conversa e busque alguém deste espaço pelo nome ou username."
+            : "Comece com o Zoen. Suas conversas ficam salvas aqui."}
       </Text>
     </View>
   );

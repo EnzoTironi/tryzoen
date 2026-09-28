@@ -18,6 +18,7 @@ vi.mock("@db/queries", () => ({
       id: "@member:matrix.test",
       roomId: "!room:matrix.test",
       label: "Team room",
+      kind: "group",
       epoch: "epoch",
       matrixId: "@member:matrix.test",
       name: "Member",
@@ -30,6 +31,7 @@ vi.mock("../workspaces/access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../workspaces/access")>()),
   requireWorkspaceAccess: mocks.access,
 }));
+vi.mock("./direct", () => ({ findDirectRoom: async () => null }));
 vi.mock("./identities", () => ({
   ensureMatrixIdentity: async () => "@member:matrix.test",
 }));

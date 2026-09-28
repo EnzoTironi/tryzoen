@@ -1,4 +1,5 @@
 import { uploadMatrixMedia } from "./media/upload";
+import { directRoomMembers, findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -38,10 +39,14 @@ export const requireMatrixRoom = async function (
   const access = await requireWorkspaceAccess(actor, manage);
   if (!actor.authSessionId || !access.organizationId)
     throw new WorkspaceAccessDenied();
+  if (!manage) {
+    const direct = await findDirectRoom(actor, id);
+    if (direct) return direct;
+  }
   const config = await matrixConfiguration();
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch FROM workspace_group_bindings
+    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND channel = 'matrix'
       AND installation_id = ${config.serverName} AND revoked_at IS NULL FOR SHARE`);
   if (rows.length !== 1) throw new WorkspaceAccessDenied();
@@ -61,7 +66,7 @@ export const listMatrixRooms = async function (
   });
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch FROM workspace_group_bindings
+    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
     WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL ORDER BY created_at LIMIT 20`);
   return {
     configured,
@@ -143,6 +148,7 @@ export const joinMatrixRoom = async function (
     await query(sql`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 5))`);
     const room = await requireMatrixRoom(actor, id);
     const matrixId = await ensureMatrixIdentity(actor);
+    if (room.kind === "direct") return { ...room, matrixId };
     const members = await query(
       sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${id} AND user_id = ${actor.userId}`
     );
@@ -211,8 +217,11 @@ export const readMatrixMessages = async function (
         next_batch: z.string().optional(),
       })
       .parseAsync(response);
-    const members = z.array(roomMemberSchema).parse(
-      await query(sql`
+    const members =
+      room.kind === "direct"
+        ? await directRoomMembers(actor, id)
+        : z.array(roomMemberSchema).parse(
+            await query(sql`
       SELECT i.matrix_id AS id, u.name AS name, d.username,
         i.user_id = ${actor.userId} AS mine, false AS bot, u.image AS "avatarUri"
       FROM matrix_identities i
@@ -222,23 +231,26 @@ export const readMatrixMessages = async function (
       JOIN workspace_memberships w ON w.user_id = i.user_id AND w.workspace_id = ${actor.workspaceId}
       WHERE m.binding_id = ${id} ORDER BY i.matrix_id LIMIT 100
     `)
-    );
+          );
     await requireMatrixRoom(actor, id);
     const config = await matrixConfiguration();
     const project = (event: z.infer<typeof MatrixEventSchema>) =>
       projectMatrixMessage(event, members, room.matrixId, config.botId);
     return {
       room,
-      members: [
-        ...members.slice(0, 99),
-        {
-          id: config.botId,
-          name: "Zoen",
-          username: "zoen",
-          mine: false,
-          bot: true,
-        },
-      ],
+      members:
+        room.kind === "direct"
+          ? members
+          : [
+              ...members.slice(0, 99),
+              {
+                id: config.botId,
+                name: "Zoen",
+                username: "zoen",
+                mine: false,
+                bot: true,
+              },
+            ],
       membersTruncated: members.length > 99,
       nextCursor: (rootId ? events.next_batch : events.end) ?? null,
       messages: events.chunk
@@ -300,7 +312,7 @@ export const sendMatrixMessage = async function (
         )
       );
     for (const [index, file] of (input.files ?? []).entries()) {
-      await requireWorkspaceAccess(actor);
+      await requireMatrixRoom(actor, input.id);
       const media = await uploadMatrixMedia(file, room.matrixId);
       const category = file.mediaType.split("/")[0] ?? "application";
       sent.push(

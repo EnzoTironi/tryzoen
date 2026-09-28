@@ -166,6 +166,9 @@ export function ConnectedCompanion({
                   <ConnectedRoom
                     key={`${draftScope}:${roomId}`}
                     roomId={roomId}
+                    onOpenRoom={(id) => {
+                      navigate(`/companion?room=${encodeURIComponent(id)}`);
+                    }}
                     cacheScope={draftScope}
                     onBack={() => {
                       navigate("/companion");

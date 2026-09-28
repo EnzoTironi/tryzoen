@@ -8,6 +8,27 @@ export const roomSchema = z.object({
   roomId: z.string(),
   label: z.string(),
   epoch: z.string(),
+  kind: z.enum(["group", "direct"]),
+  username: z.string().nullable().optional(),
+  avatarUri: z.string().nullable().optional(),
+});
+export const directPersonSchema = z.object({
+  name: z.string(),
+  username: z.string(),
+  avatarUri: z.string().nullable(),
+});
+export const directPeopleSchema = z.array(directPersonSchema).max(20);
+export const directPeopleSearchSchema = z.object({
+  query: z.string().trim().min(2).max(80),
+});
+export const directOpenSchema = z.object({
+  username: z.string().regex(/^[a-z][a-z0-9_]{2,29}$/u),
+  operationId: z.uuid(),
+});
+export const directListInputSchema = z.object({ before: z.uuid().optional() });
+export const directListSchema = z.object({
+  items: z.array(roomSchema).max(20),
+  nextCursor: z.string().nullable(),
 });
 export const roomListSchema = z.object({
   configured: z.boolean(),
@@ -112,6 +133,15 @@ export const roomMediaReadSchema = z.object({
 });
 
 export interface RoomData {
+  people: (
+    input: z.infer<typeof directPeopleSearchSchema>
+  ) => Promise<z.infer<typeof directPeopleSchema>>;
+  openDirect: (
+    input: z.infer<typeof directOpenSchema>
+  ) => Promise<z.infer<typeof roomSchema>>;
+  directs: (
+    input: z.infer<typeof directListInputSchema>
+  ) => Promise<z.infer<typeof directListSchema>>;
   media: (
     input: z.infer<typeof roomMediaReadSchema>
   ) => Promise<z.infer<typeof inlineAttachmentSchema>>;

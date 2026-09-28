@@ -23,7 +23,7 @@ export const registerVirtualUser = async function (localpart: string) {
 };
 
 export const ensureMatrixIdentity = async function (
-  actor: z.output<typeof WorkspaceActorSchema>
+  actor: Pick<z.output<typeof WorkspaceActorSchema>, "userId">
 ) {
   const config = await matrixConfiguration();
 

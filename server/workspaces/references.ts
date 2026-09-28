@@ -20,15 +20,16 @@ export async function searchComposerReferences(
   const room = input.roomId
     ? await joinMatrixRoom(actor, input.roomId)
     : undefined;
-  const scoped = room
-    ? {
-        userId: actor.userId,
-        workspaceId: actor.workspaceId,
-        groupBindingId: room.id,
-        groupEpoch: room.epoch,
-        matrixIdentityId: room.matrixId,
-      }
-    : actor;
+  const scoped =
+    room?.kind === "group"
+      ? {
+          userId: actor.userId,
+          workspaceId: actor.workspaceId,
+          groupBindingId: room.id,
+          groupEpoch: room.epoch,
+          matrixIdentityId: room.matrixId,
+        }
+      : actor;
   const needle = input.query.toLocaleLowerCase();
   if (input.trigger === "/") {
     const page = await listReminders(scoped);

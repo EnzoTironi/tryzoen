@@ -1,6 +1,8 @@
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 import {
   roomListSchema,
+  directPeopleSchema,
+  directListSchema,
   roomReactionsPageSchema,
   roomReactionSummarySchema,
   roomSchema,
@@ -17,6 +19,21 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async people(input) {
+      return directPeopleSchema.parse(
+        await rpc.query("workspaces.rooms.people", input)
+      );
+    },
+    async openDirect(input) {
+      return roomSchema.parse(
+        await rpc.mutation("workspaces.rooms.openDirect", input)
+      );
+    },
+    async directs(input) {
+      return directListSchema.parse(
+        await rpc.query("workspaces.rooms.directs", input)
+      );
+    },
     async media(input) {
       return inlineAttachmentSchema.parse(
         await rpc.query("workspaces.rooms.media", input)

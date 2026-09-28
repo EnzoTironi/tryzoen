@@ -575,6 +575,13 @@
       "when": 1790610157482,
       "tag": "0081_account_usernames",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1790620767053,
+      "tag": "0082_matrix_direct_rooms",
+      "breakpoints": true
     }
   ]
 }

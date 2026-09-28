@@ -1,10 +1,17 @@
 import { MessageLinks } from "../cards/link";
 import { RoomAttachment } from "./attachment";
 import type { RoomData } from "./schema";
-import { useRef, useEffect, useState, type ComponentProps } from "react";
+import {
+  useRef,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentProps,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -32,6 +39,7 @@ export function RoomMessages({
   onRetry,
   hasMore,
   loadingMore,
+  fetching,
   onMore,
   avatarUri,
   onCopy,
@@ -60,10 +68,22 @@ export function RoomMessages({
   readonly onRetry: () => void;
   readonly hasMore: boolean;
   readonly loadingMore: boolean;
+  readonly fetching: boolean;
   readonly onMore: () => void;
 }) {
   const list = useRef<FlatList<z.infer<typeof roomMessageSchema>>>(null);
   const nearBottom = useRef(true);
+  const restoreWebAnchor = useRef<(() => void) | undefined>(undefined);
+  const [atHistoryEdge, setAtHistoryEdge] = useState<number>();
+  // Keep the newest edge stable: older pages append to the inverted list.
+  const newestFirst = useMemo(() => {
+    // oxlint-disable-next-line unicorn/no-array-reverse -- ES2022 native target; reverse a fresh copy.
+    return [...messages].reverse();
+  }, [messages]);
+  useEffect(() => {
+    if (atHistoryEdge === messages.length && hasMore && !fetching && !error)
+      onMore();
+  }, [atHistoryEdge, messages.length, hasMore, fetching, error, onMore]);
   const [atBottom, setAtBottom] = useState(true);
   const [lastSeen, setLastSeen] = useState(messages.at(-1)?.id);
   const seenIndex = messages.findIndex((message) => message.id === lastSeen);
@@ -86,35 +106,48 @@ export function RoomMessages({
     <View style={styles.list}>
       <FlatList
         ref={list}
-        data={messages}
+        data={newestFirst}
+        inverted
         onViewableItemsChanged={onViewableItemsChanged}
         keyExtractor={(item) => item.id}
         style={styles.list}
         contentContainerStyle={styles.content}
+        ItemSeparatorComponent={MessageSeparator}
         initialNumToRender={20}
         windowSize={5}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onScroll={({
           nativeEvent: { layoutMeasurement, contentOffset, contentSize },
         }) => {
-          nearBottom.current =
-            layoutMeasurement.height + contentOffset.y >=
-            contentSize.height - 100;
+          nearBottom.current = contentOffset.y < 100;
+          setAtHistoryEdge(
+            contentSize.height - layoutMeasurement.height - contentOffset.y <
+              layoutMeasurement.height * 0.5
+              ? messages.length
+              : undefined
+          );
           setAtBottom(nearBottom.current);
+          restoreWebAnchor.current = nearBottom.current
+            ? undefined
+            : captureMessageAnchor(list.current);
           if (nearBottom.current) setLastSeen(messages.at(-1)?.id);
         }}
         scrollEventThrottle={100}
+        onEndReached={() => {
+          setAtHistoryEdge(messages.length);
+        }}
+        onEndReachedThreshold={0.5}
         onContentSizeChange={() => {
           if (nearBottom.current && !loadingMore) {
-            list.current?.scrollToEnd({ animated: false });
+            list.current?.scrollToOffset({ offset: 0, animated: false });
             setLastSeen(messages.at(-1)?.id);
+          } else {
+            restoreWebAnchor.current?.();
           }
         }}
-        ListHeaderComponent={
-          hasMore ? (
-            <ActionButton quiet disabled={loadingMore} onPress={onMore}>
-              Mensagens anteriores
-            </ActionButton>
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator accessibilityLabel="Carregando mensagens anteriores" />
           ) : null
         }
         ListEmptyComponent={
@@ -122,7 +155,7 @@ export function RoomMessages({
             <Text style={styles.empty}>A conversa começa aqui.</Text>
           ) : null
         }
-        ListFooterComponent={
+        ListHeaderComponent={
           <>
             {loading && (
               <ActivityIndicator accessibilityLabel="Carregando mensagens" />
@@ -140,10 +173,11 @@ export function RoomMessages({
           </>
         }
         renderItem={({ item, index }) => (
-          <>
+          <View testID="room-message">
             {!!item.timestamp &&
-              new Date(messages[index - 1]?.timestamp ?? 0).toDateString() !==
-                new Date(item.timestamp).toDateString() && (
+              new Date(
+                newestFirst[index + 1]?.timestamp ?? 0
+              ).toDateString() !== new Date(item.timestamp).toDateString() && (
                 <Text style={styles.day}>
                   {new Date(item.timestamp).toLocaleDateString([], {
                     weekday: "long",
@@ -172,7 +206,7 @@ export function RoomMessages({
                 )}
               />
             </View>
-          </>
+          </View>
         )}
       />
       <LatestMessagesButton
@@ -182,12 +216,41 @@ export function RoomMessages({
           nearBottom.current = true;
           setAtBottom(true);
           setLastSeen(messages.at(-1)?.id);
-          list.current?.scrollToEnd({ animated: false });
+          list.current?.scrollToOffset({ offset: 0, animated: false });
         }}
       />
     </View>
   );
 }
+// React Native Web does not implement maintainVisibleContentPosition. Hold a
+// visible row when live messages or media change the inverted list's height.
+function captureMessageAnchor(
+  list: FlatList<z.infer<typeof roomMessageSchema>> | null
+) {
+  if (Platform.OS !== "web") return undefined;
+  const node: unknown = list?.getScrollableNode();
+  if (!(node instanceof HTMLElement)) return undefined;
+  const viewport = node.getBoundingClientRect();
+  const row = Array.from(
+    node.querySelectorAll('[data-testid="room-message"]')
+  ).find((item) => {
+    const bounds = item.getBoundingClientRect();
+    return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
+  });
+  if (!row) return undefined;
+  const offset = row.getBoundingClientRect().top - viewport.top;
+  return () => {
+    if (!row.isConnected) return;
+    const current =
+      row.getBoundingClientRect().top - node.getBoundingClientRect().top;
+    node.scrollTop += offset - current;
+  };
+}
+
+function MessageSeparator() {
+  return <View style={styles.separator} />;
+}
+
 function LatestMessagesButton({
   visible,
   newer,
@@ -404,7 +467,8 @@ const styles = StyleSheet.create({
     boxShadow: "0 3px 14px rgba(0,0,0,0.10)",
   },
   latestText: { fontSize: 13, fontWeight: "600", color: colors.accent },
-  content: { paddingHorizontal: 24, paddingVertical: 24, gap: 20 },
+  content: { paddingHorizontal: 24, paddingVertical: 24 },
+  separator: { height: 20 },
   messageLine: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   outgoingLine: { justifyContent: "flex-end" },
   day: {
