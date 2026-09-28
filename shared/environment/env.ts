@@ -148,6 +148,10 @@ export const env = createEnv({
     BLOB_STORE_ID: requiredValue.optional(),
     ZOEN_EVAL_REPORT: requiredValue.optional(),
     ZOEN_MEM0_URL: z.url().optional(),
+    ZOEN_SESSION_ARCHIVE_DIR: z
+      .string()
+      .regex(/^(?:\/|[A-Za-z]:[\\/])/)
+      .optional(),
     ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
     ZOEN_ERASURE_JOURNAL_ENDPOINT: z
       .url()

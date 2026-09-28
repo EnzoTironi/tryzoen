@@ -54,7 +54,7 @@ export class LearnedMemoryError extends Error {
 }
 
 const mem0 = Mem0;
-const namespace = async function (
+export const memoryNamespace = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   scopeKey?: string
 ) {
@@ -95,7 +95,7 @@ export const LearnedMemory = {
   ) {
     try {
       return await withDatabaseTransaction(async () => {
-        const partition = await namespace(actor, scopeKey);
+        const partition = await memoryNamespace(actor, scopeKey);
         if (partition.enabled && partition.pendingOperation !== null)
           throw new LearnedMemoryError({ reason: "stale_recall" });
         const previous = await dbQuery<{
@@ -132,7 +132,7 @@ export const LearnedMemory = {
   ) {
     try {
       return await withDatabaseTransaction(async () => {
-        const partition = await namespace(actor);
+        const partition = await memoryNamespace(actor);
         if (!partition.enabled && !includePaused)
           return {
             enabled: false,
@@ -183,7 +183,7 @@ export const LearnedMemory = {
       // Fence recall durably BEFORE crossing the service boundary. A timeout or
       // database rollback after Mem0 accepts a deletion cannot expose old notes.
       await withDatabaseTransaction(async () => {
-        const partition = await namespace(actor);
+        const partition = await memoryNamespace(actor);
         if (!partition.enabled && input.action === "remember")
           throw new LearnedMemoryError({ reason: "disabled" });
         if (
@@ -202,7 +202,7 @@ export const LearnedMemory = {
         return undefined;
       });
       return await withDatabaseTransaction(async () => {
-        const partition = await namespace(actor);
+        const partition = await memoryNamespace(actor);
         if (
           partition.pendingOperation !== input.operationId ||
           partition.pendingHash !== hash
@@ -233,7 +233,7 @@ export const LearnedMemory = {
   },
   recover: async function (actor: z.output<typeof WorkspaceActorSchema>) {
     return await withDatabaseTransaction(async () => {
-      const partition = await namespace(actor);
+      const partition = await memoryNamespace(actor);
       // A fresh, successful service read completes before recall is unfenced.
       // Old operation receipts remain tombstoned; recovery never replays writes.
       await mem0.read(partition.id);
@@ -252,7 +252,7 @@ export const LearnedMemory = {
   ) {
     try {
       return await withDatabaseTransaction(async () => {
-        const partition = await namespace(actor);
+        const partition = await memoryNamespace(actor);
         await dbQuery(sql`UPDATE workspace_memory_namespace SET enabled = ${enabled}
           WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
         await dbQuery(
