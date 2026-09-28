@@ -1,0 +1,2 @@
+ALTER TABLE "memory_session_sources" DROP CONSTRAINT "memory_session_source_size";--> statement-breakpoint
+ALTER TABLE "memory_session_sources" ADD CONSTRAINT "memory_session_source_size" CHECK (octet_length("memory_session_sources"."payload"::text) <= 8388608);

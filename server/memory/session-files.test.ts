@@ -15,6 +15,8 @@ import type { HookEvent } from "eve/hooks";
 import {
   eraseSessionSources,
   sessionSource,
+  sessionSourceSegments,
+  sessionSourceSchema,
   writeSessionSource,
 } from "./session-files";
 
@@ -57,7 +59,6 @@ test("archives only visible text and boundary coordinates, with explicit unsettl
     turnId: "turn_0",
     stepIndex: 1,
     sequence: 2,
-    truncated: false,
   });
   expect(source?.text).toContain("Cedarfield");
   expect(JSON.stringify(source)).not.toMatch(
@@ -94,9 +95,12 @@ test("archives only visible text and boundary coordinates, with explicit unsettl
     )
   ).toBeNull();
   expect(sessionSource(message(null), "session_1")).toBeNull();
-  expect(sessionSource(message("a".repeat(65_000)), "session_1")).toMatchObject(
-    { truncated: true, text: "a".repeat(64_000) }
+  expect(sessionSource(message("a".repeat(65_000)), "session_1")?.text).toBe(
+    "a".repeat(65_000)
   );
+  expect(() =>
+    sessionSource(message("a".repeat(1_048_577)), "session_1")
+  ).toThrow(/Too big|1 MiB/);
 });
 
 test("publishes private immutable files, deduplicates concurrent replay, and preserves separate attempts and accounts", async () => {
@@ -117,6 +121,7 @@ test("publishes private immutable files, deduplicates concurrent replay, and pre
   expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
   expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
     ...source,
+    segment: { index: 0, count: 1 },
     captureSequence: 1,
   });
   expect(await readdir(dirname(path))).toHaveLength(1);
@@ -160,4 +165,29 @@ test("rejects namespace traversal and directory symlinks without touching their 
     writeSessionSource(root, "../outside", source, 1)
   ).rejects.toThrow(/Invalid UUID/);
   expect(await readFile(join(outside, "keep.txt"), "utf8")).toBe("keep");
+});
+
+test("segments the full redacted transcript without splitting Unicode or secrets, including JSON control characters", async () => {
+  const text = `${"a".repeat(2047)}😀${"z".repeat(63_000)}password=synthetic-private-value ${"😀\u0001\n".repeat(20_000)}`;
+  const source = sessionSource(message(text), "session_long");
+  if (!source) throw new Error("Expected source");
+  const segments = sessionSourceSegments(source);
+  expect(segments.length).toBeGreaterThan(1);
+  expect(segments.map((part) => part.text).join("")).toBe(source.text);
+  expect(source.text).not.toContain("synthetic-private-value");
+  expect(source.text?.endsWith("😀\u0001\n")).toBe(true);
+  for (const [index, part] of segments.entries()) {
+    expect(part.segment).toEqual({ index, count: segments.length });
+    expect(part.text?.isWellFormed()).toBe(true);
+    expect(Buffer.byteLength(part.text ?? "")).toBeLessThanOrEqual(8192);
+  }
+  const root = await temporary();
+  const path = await writeSessionSource(root, randomUUID(), source, 1);
+  const lines = (await readFile(path, "utf8")).trimEnd().split("\n");
+  expect(
+    lines
+      .map((line: string) => sessionSourceSchema.parse(JSON.parse(line)).text)
+      .join("")
+  ).toBe(source.text);
+  expect(lines).toHaveLength(segments.length);
 });

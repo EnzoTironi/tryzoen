@@ -1,0 +1,217 @@
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { lstat, open, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify, stripVTControlCharacters } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { z } from "zod";
+import { privateMemoryDirectory } from "../session-files";
+
+const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
+
+async function prepareSessionMemory(root: string, namespaceId: string) {
+  const namespace = z.uuid().parse(namespaceId);
+  await privateMemoryDirectory(root);
+  const owner = join(root, namespace);
+  await privateMemoryDirectory(owner);
+  const data = join(owner, "ai-memory");
+  await privateMemoryDirectory(data);
+  const config = join(data, "config.toml");
+  try {
+    await using file = await open(config, "wx", 0o600);
+    await file.writeFile(configuration);
+    await file.sync();
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      error.code !== "EEXIST"
+    )
+      throw error;
+    const info = await lstat(config);
+    if (
+      !info.isFile() ||
+      info.isSymbolicLink() ||
+      (info.mode & 0o077) !== 0 ||
+      (await readFile(config, "utf8")) !== configuration
+    )
+      throw new Error(
+        "Session memory requires its qualified private configuration.",
+        { cause: error }
+      );
+  }
+  return data;
+}
+
+async function launchSessionMemory(binary: string, data: string) {
+  // Do not inherit application credentials or upstream provider/dream settings.
+  const processEnv = {
+    PATH: "/usr/bin:/bin",
+    HOME: data,
+    RUST_LOG: "info",
+    NODE_ENV: "production",
+  } satisfies NodeJS.ProcessEnv;
+  const version = await promisify(execFile)(binary, ["--version"], {
+    env: processEnv,
+    timeout: 10_000,
+  });
+  if (version.stdout.trim() !== "ai-memory 2.4.1")
+    throw new Error("Requalify ai-memory before changing the engine version.");
+  const token = randomBytes(32).toString("hex");
+  const child = spawn(
+    binary,
+    [
+      "--data-dir",
+      data,
+      "--config",
+      join(data, "config.toml"),
+      "serve",
+      "--transport",
+      "http",
+      "--bind",
+      "127.0.0.1:0",
+    ],
+    {
+      env: { ...processEnv, AI_MEMORY_AUTH_TOKEN: token },
+      cwd: data,
+      stdio: ["ignore", "ignore", "pipe"],
+    }
+  );
+  const exited = new Promise<void>((resolve) => {
+    child.once("exit", () => {
+      resolve();
+    });
+    child.once("error", () => {
+      resolve();
+    });
+  });
+  const stop = async () => {
+    child.kill("SIGTERM");
+    await Promise.race([exited, delay(2_000)]);
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill("SIGKILL");
+    await exited;
+  };
+  try {
+    const address = await sessionMemoryAddress(child);
+    return { address, token, stop };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+}
+
+function sessionMemoryAddress(child: ChildProcess) {
+  return new Promise<URL>((resolve, reject) => {
+    let output = "";
+    const timer = setTimeout(() => {
+      reject(new Error("Session memory did not become ready."));
+    }, 15_000);
+    const cleanup = () => {
+      clearTimeout(timer);
+    };
+    child.once("error", () => {
+      cleanup();
+      reject(new Error("Session memory could not start."));
+    });
+    child.once("exit", () => {
+      cleanup();
+      reject(new Error("Session memory exited before readiness."));
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      output = (output + stripVTControlCharacters(chunk.toString())).slice(
+        -8192
+      );
+      const match =
+        /MCP HTTP server ready[^\n]*local_addr=127\.0\.0\.1:(\d+)/.exec(output);
+      if (match?.[1]) {
+        cleanup();
+        resolve(new URL(`http://127.0.0.1:${match[1]}`));
+      }
+    });
+  });
+}
+
+async function deliverSessionBatch(
+  address: URL,
+  headers: Record<string, string>,
+  items: readonly { url: string; body: Record<string, unknown> }[]
+) {
+  const response = await fetch(new URL("/hook/batch", address), {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (response.status !== 200 && response.status !== 429)
+    throw new Error("Session memory delivery failed.");
+  const receipt = z
+    .object({
+      accepted: z.number().int().nonnegative().max(items.length),
+      accepted_indices: z
+        .array(
+          z
+            .number()
+            .int()
+            .nonnegative()
+            .max(items.length - 1)
+        )
+        .max(items.length)
+        .optional(),
+      failed_index: z.number().int().nonnegative().optional(),
+    })
+    .parse(await response.json());
+  const accepted =
+    receipt.accepted_indices ??
+    Array.from({ length: receipt.accepted }, (_, index) => index);
+  if (
+    receipt.failed_index !== undefined ||
+    new Set(accepted).size !== items.length ||
+    accepted.some((index) => index >= items.length)
+  )
+    throw new Error(
+      "Session memory delivery is incomplete; sources remain queued."
+    );
+}
+
+/** Operator-owned local worker. Never expose its URL, token, or generic MCP to a client/model. */
+export async function openSessionMemoryEngine(
+  binary: string,
+  root: string,
+  namespaceId: string
+) {
+  const data = await prepareSessionMemory(root, namespaceId);
+  const runtime = await launchSessionMemory(binary, data);
+  const client = new Client({ name: "zoen-session-memory", version: "1.0.0" });
+  const headers = { Authorization: `Bearer ${runtime.token}` };
+  try {
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL("/mcp", runtime.address), {
+        requestInit: { headers, redirect: "error" },
+      }),
+      { timeout: 15_000 }
+    );
+    return {
+      client,
+      deliver: (items: Parameters<typeof deliverSessionBatch>[2]) =>
+        deliverSessionBatch(runtime.address, headers, items),
+      async [Symbol.asyncDispose]() {
+        try {
+          await client.close();
+        } finally {
+          await runtime.stop();
+        }
+      },
+    };
+  } catch (error) {
+    try {
+      await client.close();
+    } finally {
+      await runtime.stop();
+    }
+    throw error;
+  }
+}

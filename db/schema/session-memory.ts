@@ -36,7 +36,7 @@ export const memorySessionSources = pgTable(
     primaryKey({ columns: [table.namespaceId, table.eventId] }),
     check(
       "memory_session_source_size",
-      sql`octet_length(${table.payload}::text) <= 262144`
+      sql`octet_length(${table.payload}::text) <= 8388608`
     ),
     check(
       "memory_session_source_delivery",

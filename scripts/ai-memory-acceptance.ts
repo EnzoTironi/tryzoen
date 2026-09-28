@@ -1,4 +1,14 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { v5 as uuidv5 } from "uuid";
+import { openSessionMemoryEngine } from "../server/memory/ai-memory/engine";
+import { ingestSessionSource } from "../server/memory/ai-memory/session-ingestion";
+import {
+  sessionSourceSchema,
+  sessionSourceSegments,
+  writeSessionSource,
+  eraseSessionSources,
+} from "../server/memory/session-files";
 import { execFileSync } from "node:child_process";
 import { glob, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -228,6 +238,167 @@ let asOf: string;
     "[]"
   );
 }
+const owner = randomUUID();
+const source = sessionSourceSchema.parse({
+  version: 2,
+  source: "eve",
+  sessionId: "synthetic-eve-session",
+  eventId: "evt-user",
+  occurredAt: "2026-09-28T12:00:00.000Z",
+  kind: "message.received",
+  turnId: "turn-1",
+  sequence: 0,
+  stepIndex: null,
+  role: "user",
+  settlement: null,
+  text: `The synthetic club meets at Cedarfield. ${"More synthetic transcript context. ".repeat(4500)} LastwordOrchid.`,
+});
+const assistant = sessionSourceSchema.parse({
+  ...source,
+  eventId: "evt-assistant",
+  kind: "message.completed",
+  sequence: 1,
+  stepIndex: 0,
+  role: "assistant",
+  settlement: "unverified",
+  text: "Abandoned attempt claims Prismvale.",
+});
+const boundary = sessionSourceSchema.parse({
+  ...source,
+  eventId: "evt-end",
+  kind: "turn.completed",
+  sequence: null,
+  role: null,
+  text: null,
+});
+const memoryScope = { workspace: "zoen", project: "private" };
+const memorySession = uuidv5(
+  JSON.stringify([source.sessionId, source.turnId]),
+  owner
+);
+const sourcePath = await writeSessionSource(directory, owner, source, 1);
+await writeSessionSource(directory, owner, assistant, 2);
+await writeSessionSource(directory, owner, boundary, 3);
+{
+  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  const network = globalThis.fetch;
+  let deliveredBatches = 0;
+  globalThis.fetch = async (input, init) => {
+    const response = await network(input, init);
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.endsWith("/hook/batch") && ++deliveredBatches === 2)
+      throw new TypeError(
+        "Synthetic acknowledgement loss after a partial source delivery."
+      );
+    return response;
+  };
+  try {
+    await assert.rejects(
+      ingestSessionSource(engine, owner, source),
+      /Synthetic acknowledgement loss/
+    );
+  } finally {
+    globalThis.fetch = network;
+  }
+}
+{
+  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  await ingestSessionSource(engine, owner, source);
+  await ingestSessionSource(engine, owner, assistant);
+  await ingestSessionSource(engine, owner, boundary);
+}
+{
+  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  // Model the acknowledgement being lost after delivery: replay the same source
+  // and close marker after a process restart, not just the same HTTP connection.
+  await ingestSessionSource(engine, owner, source);
+  await ingestSessionSource(engine, owner, boundary);
+  const observations = await call(
+    engine.client,
+    "memory_read_session_observations",
+    {
+      ...memoryScope,
+      session_id: memorySession,
+      limit: 200,
+      body_max_chars: 16384,
+    }
+  );
+  const parsed = z
+    .object({
+      total: z.number(),
+      session: z.object({
+        started_at: z.iso.datetime({ offset: true }),
+        ended_at: z.iso.datetime({ offset: true }),
+      }),
+      observations: z.array(
+        z.object({
+          kind: z.string(),
+          extension: z.string().nullable(),
+          source_event: z.string().nullable(),
+          body: z.string(),
+        })
+      ),
+    })
+    .parse(observations);
+  assert(
+    Date.parse(parsed.session.started_at) <=
+      Date.parse(parsed.session.ended_at),
+    "Source session times must preserve event order, not delivery time."
+  );
+  assert.equal(
+    parsed.total,
+    sessionSourceSegments(source).length + 2,
+    "Replay must not duplicate start, source segments or end."
+  );
+  assert.match(JSON.stringify(parsed), /LastwordOrchid/);
+  assert.doesNotMatch(JSON.stringify(parsed), /Prismvale/);
+  assert(parsed.observations.every((item) => item.extension === "eve"));
+  const page = await call(engine.client, "memory_read_page", {
+    ...memoryScope,
+    path: `sessions/${memorySession}.md`,
+  });
+  assert.match(JSON.stringify(page), /Cedarfield/);
+  const wiki = join(directory, owner, "ai-memory/wiki");
+  const files = await Array.fromAsync(
+    glob(`**/sessions/${memorySession}.md`, { cwd: wiki })
+  );
+  assert.equal(files.length, 1);
+  const [file] = files;
+  assert(file);
+  assert.match(await readFile(join(wiki, file), "utf8"), /message.received/);
+  assert(
+    execFileSync("git", ["-C", wiki, "log", "-1", "--format=%H", "--", file], {
+      encoding: "utf8",
+    }).trim(),
+    "Consolidated Markdown must be committed."
+  );
+}
+const otherOwner = randomUUID();
+{
+  await using other = await openSessionMemoryEngine(
+    binary,
+    directory,
+    otherOwner
+  );
+  assert.equal(
+    await search(other.client, { query: "Cedarfield", global: true }),
+    "[]"
+  );
+}
+const raw = (await readFile(sourcePath, "utf8")).trimEnd().split("\n");
+assert.equal(
+  raw.map((line) => sessionSourceSchema.parse(JSON.parse(line)).text).join(""),
+  source.text
+);
+await eraseSessionSources(directory, owner);
+await assert.rejects(readFile(sourcePath), { code: "ENOENT" });
+await assert.rejects(
+  readFile(join(directory, owner, "ai-memory/config.toml")),
+  { code: "ENOENT" }
+);
+assert(
+  await readFile(join(directory, otherOwner, "ai-memory/config.toml"), "utf8")
+);
 const report = {
   version,
   directory,
@@ -240,9 +411,16 @@ const report = {
     "as-of-excludes-current-graph",
     "restart-recall",
     "separate-data-directory-isolation",
+    "Eve-source-segmentation",
+    "generic-batch-ingestion-provenance",
+    "restart-and-lost-acknowledgement-deduplication",
+    "partial-source-delivery-resumes",
+    "session-to-versioned-markdown",
+    "unsettled-assistant-excluded",
+    "source-and-derived-memory-erasure",
   ],
   pending: [
-    "Eve-session-capture",
+    "accepted-assistant-history",
     "dream-consolidation",
     "Zoen-authorization",
     "capacity",

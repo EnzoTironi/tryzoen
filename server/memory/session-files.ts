@@ -3,10 +3,10 @@ import { link, lstat, mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { HookEvent } from "eve/hooks";
-import { parseDiagnostic } from "@shared/observability/redaction";
+import { redactSensitiveText } from "@shared/observability/redaction";
 
 export const sessionSourceSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   source: z.literal("eve"),
   sessionId: z.string().min(1).max(256),
   eventId: z.string().min(1).max(256),
@@ -23,8 +23,14 @@ export const sessionSourceSchema = z.object({
   stepIndex: z.number().int().nonnegative().nullable(),
   role: z.enum(["user", "assistant"]).nullable(),
   settlement: z.literal("unverified").nullable(),
-  text: z.string().max(64_000).nullable(),
-  truncated: z.boolean(),
+  text: z
+    .string()
+    .max(1_048_576)
+    .refine(
+      (value) => Buffer.byteLength(value, "utf8") <= 1_048_576,
+      "Session messages must fit within 1 MiB."
+    )
+    .nullable(),
 });
 
 /** A source transcript is evidence, never an instruction or a confirmed fact. */
@@ -40,7 +46,7 @@ export function sessionSource(event: HookEvent, sessionId: string) {
   if (!boundary && message === null) return null;
   const data = "data" in event ? event.data : {};
   return sessionSourceSchema.parse({
-    version: 1,
+    version: 2,
     source: "eve",
     sessionId,
     eventId: event.meta.id,
@@ -58,15 +64,38 @@ export function sessionSource(event: HookEvent, sessionId: string) {
     // Eve can emit different completed blocks for retried attempts at the same
     // coordinates. Preserve each event; only accepted history can settle them.
     settlement: event.type === "message.completed" ? "unverified" : null,
-    text:
-      message === null
-        ? null
-        : z.string().parse(parseDiagnostic(JSON.stringify(message))),
-    truncated: message !== null && message.length > 64_000,
+    text: message === null ? null : redactSensitiveText(message),
   });
 }
 
-async function privateDirectory(path: string) {
+/** Split only after redaction, so credentials crossing a boundary stay redacted. */
+export function sessionSourceSegments(
+  source: z.infer<typeof sessionSourceSchema>
+) {
+  const parts: (string | null)[] = [];
+  const text = source.text;
+  if (text === null || text === "") parts.push(text);
+  else {
+    for (let start = 0; start < text.length;) {
+      let end = Math.min(start + 2048, text.length);
+      const last = text.charCodeAt(end - 1);
+      if (end < text.length && last >= 0xd800 && last <= 0xdbff) end--;
+      parts.push(text.slice(start, end));
+      start = end;
+    }
+  }
+  const segments = [];
+  for (const [index, part] of parts.entries()) {
+    segments.push({
+      ...source,
+      text: part,
+      segment: { index, count: parts.length },
+    });
+  }
+  return segments;
+}
+
+export async function privateMemoryDirectory(path: string) {
   const created = await mkdir(path, { recursive: true, mode: 0o700 });
   const info = await lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0)
@@ -96,17 +125,22 @@ export async function writeSessionSource(
     .positive()
     .max(Number.MAX_SAFE_INTEGER)
     .parse(captureSequence);
-  await privateDirectory(root);
+  await privateMemoryDirectory(root);
   const owner = join(root, namespace);
-  await privateDirectory(owner);
+  await privateMemoryDirectory(owner);
   const raw = join(owner, "raw");
-  await privateDirectory(raw);
+  await privateMemoryDirectory(raw);
   const eve = join(raw, "eve");
-  await privateDirectory(eve);
+  await privateMemoryDirectory(eve);
   const session = join(eve, digest(source.sessionId));
-  await privateDirectory(session);
+  await privateMemoryDirectory(session);
   const path = join(session, `${digest(source.eventId)}.jsonl`);
-  const content = `${JSON.stringify({ ...source, captureSequence: sequence })}\n`;
+  const content = sessionSourceSegments(source)
+    .map(
+      (segment) =>
+        `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`
+    )
+    .join("");
   const temporary = join(session, `.${randomUUID()}.tmp`);
   try {
     await using file = await open(temporary, "wx", 0o600);
@@ -148,8 +182,13 @@ export async function writeSessionSource(
 /** The caller must hold the namespace's erasure receipt or authorization lock. */
 export async function eraseSessionSources(root: string, namespaceId: string) {
   const namespace = z.uuid().parse(namespaceId);
+  await erasePrivateSubtree(root, [namespace, "raw", "eve"]);
+  await erasePrivateSubtree(root, [namespace, "ai-memory"]);
+}
+
+async function erasePrivateSubtree(root: string, components: string[]) {
   let path = root;
-  for (const component of ["", namespace, "raw", "eve"]) {
+  for (const component of ["", ...components]) {
     path = join(path, component);
     try {
       const info = await lstat(path);

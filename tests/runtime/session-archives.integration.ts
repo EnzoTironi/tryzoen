@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
 import type { HookEvent } from "eve/hooks";
 import { workspaceFixture } from "./workspace-fixture";
+import { sessionSourceSchema } from "../../server/memory/session-files";
 import { claimSession } from "../../db/services/sessions";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import {
@@ -198,4 +199,73 @@ test("replays the same file when acknowledgement rolls back after filesystem del
   const before = await readFile(files[0] ?? "missing", "utf8");
   expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
   expect(await readFile(files[0] ?? "missing", "utf8")).toBe(before);
+});
+
+test("preserves long escaped text and rejects excess queued bytes atomically", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  const text = "\u0001".repeat(1_000_000);
+  const event = source(randomUUID(), text);
+  await captureSessionSource(actor, sessionId, event);
+  await expect(
+    captureSessionSource(actor, sessionId, source(randomUUID(), text))
+  ).rejects.toThrow("archive is full");
+  const receipts = await query<{ namespaceId: string }>(sql`
+    SELECT namespace_id AS "namespaceId" FROM memory_session_sources WHERE payload->>'sessionId' = ${sessionId}`);
+  expect(receipts).toHaveLength(1);
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
+  const files = await Array.fromAsync(
+    glob(
+      join(
+        directory,
+        receipts[0]?.namespaceId ?? "missing",
+        "raw/eve/**/*.jsonl"
+      )
+    )
+  );
+  expect(files).toHaveLength(1);
+  const lines = (await readFile(files[0] ?? "missing", "utf8"))
+    .trimEnd()
+    .split("\n");
+  expect(
+    lines
+      .map((line) => sessionSourceSchema.parse(JSON.parse(line)).text)
+      .join("")
+  ).toBe(text);
+});
+
+test("refuses to acknowledge a modified outbox payload", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  const event = source();
+  await claimSession(actor, sessionId);
+  await captureSessionSource(actor, sessionId, event);
+  await query(
+    sql`UPDATE memory_session_sources SET payload = jsonb_set(payload, '{text}', '"Modified without receipt"') WHERE event_id = ${event.meta.id}`
+  );
+  await expect(drainSessionSources()).rejects.toThrow("integrity verification");
+  const [pending] = await query<{ storedAt: string | null }>(
+    sql`SELECT stored_at AS "storedAt" FROM memory_session_sources WHERE event_id = ${event.meta.id}`
+  );
+  expect(pending?.storedAt).toBeNull();
+});
+
+test("pausing memory fences delivery of already queued sources until it is resumed", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  const event = source();
+  await claimSession(actor, sessionId);
+  await captureSessionSource(actor, sessionId, event);
+  await query(
+    sql`UPDATE workspace_memory_namespace SET enabled = false WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
+  );
+  expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
+  await query(
+    sql`UPDATE workspace_memory_namespace SET enabled = true WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`
+  );
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
 });

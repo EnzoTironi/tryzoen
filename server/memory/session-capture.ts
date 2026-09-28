@@ -4,6 +4,8 @@ import type { z } from "zod";
 import type { HookEvent } from "eve/hooks";
 import { query, transaction } from "@db/queries";
 import { env } from "@shared/environment/env";
+import { openSessionMemoryEngine } from "./ai-memory/engine";
+import { ingestSessionSource } from "./ai-memory/session-ingestion";
 import { memoryNamespace } from "./learned";
 import {
   sessionSource,
@@ -30,9 +32,8 @@ export async function captureSessionSource(
       WHERE session_id = ${sessionId} AND workspace_id = ${actor.workspaceId}
       AND created_by_user_id = ${actor.userId} FOR SHARE`);
     if (!owner.length) throw new WorkspaceAccessDenied();
-    const digest = createHash("sha256")
-      .update(JSON.stringify(source))
-      .digest("hex");
+    const payload = JSON.stringify(source);
+    const digest = createHash("sha256").update(payload).digest("hex");
     const prior = await query<{
       digest: string;
     }>(sql`SELECT digest FROM memory_session_sources
@@ -42,14 +43,15 @@ export async function captureSessionSource(
         throw new Error("Session source identity conflict.");
       return;
     }
-    const pending = await query(sql`SELECT event_id FROM memory_session_sources
-      WHERE namespace_id = ${partition.id} AND stored_at IS NULL LIMIT 1000`);
-    if (pending.length === 1000)
+    const [pending] = await query<{ count: string; bytes: string }>(sql`
+      SELECT count(*)::text AS count, (COALESCE(sum(octet_length(payload::text)), 0) + octet_length(${payload}::jsonb::text))::text AS bytes
+      FROM memory_session_sources WHERE namespace_id = ${partition.id} AND stored_at IS NULL`);
+    if (Number(pending?.count) >= 1000 || Number(pending?.bytes) > 8_388_608)
       throw new Error(
         "Session archive is full. Restore archive delivery before continuing."
       );
     await query(sql`INSERT INTO memory_session_sources (namespace_id, event_id, digest, payload)
-      VALUES (${partition.id}, ${source.eventId}, ${digest}, ${JSON.stringify(source)}::jsonb)`);
+      VALUES (${partition.id}, ${source.eventId}, ${digest}, ${payload}::jsonb)`);
   });
 }
 
@@ -63,22 +65,46 @@ export async function drainSessionSources() {
       eventId: string;
       captureSequence: string;
       payload: unknown;
+      digest: string;
     }>(sql`
-      SELECT s.namespace_id AS "namespaceId", s.event_id AS "eventId", s.capture_sequence::text AS "captureSequence", s.payload
+      SELECT s.namespace_id AS "namespaceId", s.event_id AS "eventId", s.capture_sequence::text AS "captureSequence", s.payload, s.digest
       FROM memory_session_sources s JOIN workspace_memory_namespace n ON n.namespace_id = s.namespace_id
       JOIN workspace_memberships m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
-      WHERE s.stored_at IS NULL ORDER BY s.capture_sequence LIMIT 25
-      FOR SHARE OF n, m SKIP LOCKED FOR UPDATE OF s SKIP LOCKED`);
-    for (const record of batch) {
-      await writeSessionSource(
-        root,
-        record.namespaceId,
-        sessionSourceSchema.parse(record.payload),
-        Number(record.captureSequence)
-      );
-      await query(sql`UPDATE memory_session_sources SET payload = NULL, stored_at = now()
-        WHERE namespace_id = ${record.namespaceId} AND event_id = ${record.eventId}`);
+      WHERE s.stored_at IS NULL AND n.enabled ORDER BY s.capture_sequence LIMIT 25
+      FOR SHARE OF m SKIP LOCKED FOR UPDATE OF n, s SKIP LOCKED`);
+    let stored = 0;
+    for (const [namespaceId, records] of Map.groupBy(
+      batch,
+      (record) => record.namespaceId
+    )) {
+      // Own one engine at a time; the namespace lock serializes other workers
+      // and prevents revocation/erasure from racing a live private engine.
+      await using engine = env.ZOEN_AI_MEMORY_BINARY
+        ? await openSessionMemoryEngine(
+            env.ZOEN_AI_MEMORY_BINARY,
+            root,
+            namespaceId
+          )
+        : null;
+      for (const record of records) {
+        const source = sessionSourceSchema.parse(record.payload);
+        if (
+          createHash("sha256").update(JSON.stringify(source)).digest("hex") !==
+          record.digest
+        )
+          throw new Error("Session source failed integrity verification.");
+        await writeSessionSource(
+          root,
+          namespaceId,
+          source,
+          Number(record.captureSequence)
+        );
+        if (engine) await ingestSessionSource(engine, namespaceId, source);
+        await query(sql`UPDATE memory_session_sources SET payload = NULL, stored_at = now()
+          WHERE namespace_id = ${namespaceId} AND event_id = ${record.eventId}`);
+        stored++;
+      }
     }
-    return { stored: batch.length, configured: true };
+    return { stored, configured: true };
   });
 }
