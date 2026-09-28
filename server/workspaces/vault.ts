@@ -134,8 +134,9 @@ export const inspectVaultDelegations = async function (
 ) {
   const access = await requireWorkspaceAccess(actor);
   const rows =
-    await query(sql`SELECT d.id, d.item_id AS "itemId", d.expires_at::text AS "expiresAt"
+    await query(sql`SELECT d.id, d.item_id AS "itemId", v.label, d.expires_at::text AS "expiresAt"
       FROM vault_item_delegations d JOIN vault_agent_identities a ON a.id = d.identity_id
+      LEFT JOIN vault_items v ON v.id = d.item_id AND v.workspace_id = d.workspace_id
       WHERE d.workspace_id = ${actor.workspaceId} AND a.workspace_id = d.workspace_id
         AND d.revoked_at IS NULL AND a.revoked_at IS NULL AND d.expires_at > now()`);
   return {
@@ -148,6 +149,7 @@ export const inspectVaultDelegations = async function (
         z.object({
           id: z.string(),
           itemId: z.string(),
+          label: z.string().nullable(),
           expiresAt: z.string(),
         })
       )

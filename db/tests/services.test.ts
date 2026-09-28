@@ -329,6 +329,55 @@ describe("database services", () => {
       await vault.readVaultItem(bob, aliceVaultItem?.id ?? "vault-alice")
     ).toBeUndefined();
     expect(await vault.listVaultItems(alice)).toHaveLength(1);
+    const reviewedVault = await vault.readVaultPage(alice, { kind: "login" });
+    expect(reviewedVault.items).toEqual([
+      expect.objectContaining({
+        id: aliceVaultItem?.id,
+        label: "Alice",
+        hasSecret: true,
+      }),
+    ]);
+    expect(JSON.stringify(reviewedVault)).not.toContain("correct horse");
+    expect((await vault.readVaultPage(bob, { kind: "login" })).items).toEqual(
+      []
+    );
+    const timestamp = new Date("2026-01-01T00:00:00.000Z");
+    await pgliteDatabase.insert(schema.vaultItems).values(
+      Array.from({ length: 23 }, (_, i) => ({
+        id: `vault-page-${String(i).padStart(2, "0")}`,
+        workspaceId: alice.workspaceId,
+        kind: "payment" as const,
+        label: `Synthetic card ${i}`,
+        account: "",
+        updatedAt: timestamp,
+      }))
+    );
+    const firstVaultPage = await vault.readVaultPage(alice, {
+      kind: "payment",
+    });
+    expect(firstVaultPage.items).toHaveLength(20);
+    expect(firstVaultPage.nextCursor).not.toBeNull();
+    const secondVaultPage = await vault.readVaultPage(alice, {
+      kind: "payment",
+      cursor: firstVaultPage.nextCursor,
+    });
+    expect(secondVaultPage.items).toHaveLength(3);
+    expect(secondVaultPage.nextCursor).toBeNull();
+    expect(
+      new Set(
+        [...firstVaultPage.items, ...secondVaultPage.items].map(
+          (item) => item.id
+        )
+      ).size
+    ).toBe(23);
+    expect(
+      (
+        await vault.readVaultPage(bob, {
+          kind: "payment",
+          cursor: firstVaultPage.nextCursor,
+        })
+      ).items
+    ).toEqual([]);
     expect(
       await vault.deleteVaultItem(bob, aliceVaultItem?.id ?? "vault-alice")
     ).toBe(false);

@@ -34,6 +34,7 @@ import { ConnectedSearch } from "./search";
 import { BrowserConversationLayout } from "./conversations/frame";
 import { useConversationPanelPreference } from "./conversations/preference";
 import { ConnectedSections } from "./sections";
+import { ConnectedSettings } from "./settings";
 import {
   ConnectedAgentPanel,
   ConnectedAgentHeader,
@@ -54,7 +55,6 @@ const sections: readonly CompanionSection[] = [
   "ideas",
   "goals",
   "library",
-  "settings",
 ];
 
 function renderMarkdownEditor(props: MarkdownEditorProps) {
@@ -92,6 +92,7 @@ export function ConnectedCompanion({
     [draftScope, token]
   );
   const [draftError, setDraftError] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => {
     forgetConversationDraft(draftScope, token);
   }, [draftScope, token]);
@@ -166,6 +167,10 @@ export function ConnectedCompanion({
                 />
               )}
               onNavigate={(nextSection) => {
+                if (nextSection === "settings") {
+                  setSettingsOpen(true);
+                  return;
+                }
                 navigate(
                   `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
                 );
@@ -211,6 +216,14 @@ export function ConnectedCompanion({
                 />
               )}
             </CompanionShell>
+            {settingsOpen && (
+              <ConnectedSettings
+                onClose={() => {
+                  setSettingsOpen(false);
+                }}
+                onPrompt={stagePrompt}
+              />
+            )}
           </AttachmentProvider>
         </MarkdownEditorProvider>
       </CompanionOverlayProvider>

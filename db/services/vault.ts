@@ -4,8 +4,9 @@ import {
   randomBytes,
   randomUUID,
 } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import { z } from "zod";
+import type { vaultPageInputSchema } from "@shared/vault/schema";
 import {
   loginAccountHint,
   parsePaymentCardSecret,
@@ -77,6 +78,47 @@ export async function readVaultItems(scope: AccessScope) {
       })
     )
   );
+}
+
+export async function readVaultPage(
+  scope: AccessScope,
+  input: z.infer<typeof vaultPageInputSchema>
+) {
+  const records = await db
+    .select(selection)
+    .from(vaultItems)
+    .where(
+      and(
+        eq(vaultItems.workspaceId, scope.workspaceId),
+        input.kind ? eq(vaultItems.kind, input.kind) : undefined,
+        input.cursor
+          ? or(
+              lt(vaultItems.updatedAt, new Date(input.cursor.updatedAt)),
+              and(
+                eq(vaultItems.updatedAt, new Date(input.cursor.updatedAt)),
+                lt(vaultItems.id, input.cursor.id)
+              )
+            )
+          : undefined
+      )
+    )
+    .orderBy(desc(vaultItems.updatedAt), desc(vaultItems.id))
+    .limit(21);
+  const items = await Promise.all(
+    records.slice(0, 20).map(async (record) =>
+      Object.assign(serializeVaultRecord(record), {
+        hasSecret: await hasVaultSecret(scope, record.id),
+      })
+    )
+  );
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor:
+      records.length > 20 && last
+        ? { updatedAt: last.updatedAt, id: last.id }
+        : null,
+  };
 }
 
 export async function readVaultItem(scope: AccessScope, id: string) {

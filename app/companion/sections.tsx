@@ -10,7 +10,6 @@ import {
   FeedCollection,
   Library,
   CompanionPage,
-  ActionButton,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
@@ -18,9 +17,6 @@ import { companionFeedData } from "@shared/companion/feed";
 import { companionIdeasData } from "@shared/companion/ideas";
 import { browserSessionClient } from "@web/eve/client";
 import { FileEditor } from "@app/(authenticated)/space/(overview)/_components/file-editor";
-import { ModelConnections } from "@app/(authenticated)/_components/model-connections";
-import { WorkspaceSwitcher } from "@app/(authenticated)/_components/workspace-switcher";
-import { ConnectedMemory } from "./agent-panel";
 
 export function ConnectedSections({
   section,
@@ -40,43 +36,7 @@ export function ConnectedSections({
     return <ConnectedSearch onConversation={onConversation} />;
   if (section === "library") return <ConnectedLibrary onPrompt={onPrompt} />;
   if (section === "feed") return <ConnectedFeed onPrompt={onPrompt} />;
-  return <ConnectedSettings onPrompt={onPrompt} />;
-}
-
-function ConnectedSettings({
-  onPrompt,
-}: {
-  readonly onPrompt: (prompt: string) => void;
-}) {
-  const [memory, setMemory] = useState(false);
-  if (memory)
-    return (
-      <>
-        <ActionButton
-          quiet
-          onPress={() => {
-            setMemory(false);
-          }}
-        >
-          Back to settings
-        </ActionButton>
-        <ConnectedMemory onPrompt={onPrompt} />
-      </>
-    );
-  return (
-    <CompanionPage title="Settings">
-      <WorkspaceSwitcher />
-      <ModelConnections />
-      <ActionButton
-        quiet
-        onPress={() => {
-          setMemory(true);
-        }}
-      >
-        Personal memory
-      </ActionButton>
-    </CompanionPage>
-  );
+  return null;
 }
 
 function ConnectedIdeas({
