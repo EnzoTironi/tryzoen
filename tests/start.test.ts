@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { freePort } from "./helpers/ports";
 import {
@@ -56,7 +57,7 @@ async function fixture(mode = "ready", args: string[] = []) {
       join(directory, "scripts/server-ports.ts")
     ),
     symlink(
-      new URL("../node_modules/zod", import.meta.url).pathname,
+      fileURLToPath(new URL("../node_modules/zod", import.meta.url)),
       join(directory, "node_modules/zod")
     ),
     writeFile(join(directory, "package.json"), '{"type":"module"}'),

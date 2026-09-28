@@ -1,4 +1,5 @@
 "use client";
+import { browserSessionClient } from "@web/eve/client";
 
 import { useState } from "react";
 import type { ChatUsage } from "@shared/chat/schema";
@@ -6,7 +7,7 @@ import type { TraceView } from "../_lib/trace-view";
 import { SubagentPanel } from "./activity";
 import { ChatConversation } from "./conversation";
 import { ChatInput } from "./input";
-import { useSessionAgent } from "./use-session-agent";
+import { useSessionAgent } from "@zoen/companion-ui/session";
 
 export function ChatSession({
   initialUsage,
@@ -16,7 +17,7 @@ export function ChatSession({
   readonly sessionId: string;
 }) {
   const [traceView, setTraceView] = useState<TraceView>("imessage");
-  const agent = useSessionAgent(sessionId);
+  const agent = useSessionAgent(sessionId, browserSessionClient);
 
   return (
     <div className="relative flex h-full min-h-0 overflow-hidden bg-background text-foreground">

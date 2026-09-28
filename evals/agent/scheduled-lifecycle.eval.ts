@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals";
 import { equals, satisfies } from "eve/evals/expect";
-import { sendMessageOutputSchema } from "@shared/chat/message-delivery";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 import { agentEvalTags } from "@evals/agent/shared";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 

@@ -1,13 +1,13 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { MessageStreamEvent } from "eve/client";
-import type { PromptInputMessage } from "@web/components/ai-elements/prompt-input";
+import type { ConversationDraft } from "@zoen/companion-ui/messages";
 import { renderToEnglishMarkup } from "@tests/helpers/i18n";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { ChatAgent } from "../chat-agent";
+import type { ChatAgent } from "@zoen/companion-ui/session";
 
 const mocks = vi.hoisted(() => ({
   submit:
-    vi.fn<(callback: (message: PromptInputMessage) => Promise<void>) => void>(),
+    vi.fn<(callback: (message: ConversationDraft) => Promise<void>) => void>(),
   save: vi.fn<(input: { sessionId: string }) => void>(),
 }));
 
@@ -23,7 +23,7 @@ vi.mock("@web/components/ai-elements/prompt-input", () => ({
     onSubmit,
   }: {
     children: ReactNode;
-    onSubmit: (message: PromptInputMessage) => Promise<void>;
+    onSubmit: (message: ConversationDraft) => Promise<void>;
   }) => {
     mocks.submit(onSubmit);
     return <form>{children}</form>;

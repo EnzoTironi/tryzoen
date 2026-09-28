@@ -19,6 +19,11 @@ import { applicationOrigin } from "../../shared/environment/origin";
 import { ChannelAccounts, type Identity } from "../../server/accounts";
 import { PersonalMemory } from "../../server/personal-memory";
 import { inspectPersonalMemory } from "../../server/personal-memory/export";
+import {
+  updatePersonalNote,
+  PersonalNoteChanged,
+} from "../../server/personal-memory/notes";
+import { personalNoteText } from "../../shared/personal-memory/document";
 import { createMemoryDocumentBackend } from "../../agent/lib/memory-document-backend";
 import { personalMemoryProvider } from "../../server/tools/memory/personal-memory-provider";
 import { channelPrincipal } from "../../server/channels/principal";
@@ -327,6 +332,41 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       401
     );
     const createNativeTools = personalMemoryProvider.tools;
+    const originalNote = snapshot.notes.documents[0];
+    assert.ok(originalNote);
+    await assert.rejects(
+      updatePersonalNote(otherHeaders, {
+        expectedVersion: originalNote.version,
+        content: "Foreign write",
+      }),
+      PersonalNoteChanged
+    );
+    const edited = await updatePersonalNote(ownerHeaders, {
+      expectedVersion: originalNote.version,
+      content: "Owner-only note.\nPrefers morning reading.",
+    });
+    assert.notEqual(edited.version, originalNote.version);
+    assert.equal(
+      personalNoteText(edited.content),
+      "Owner-only note.\nPrefers morning reading."
+    );
+    await assert.rejects(
+      updatePersonalNote(ownerHeaders, {
+        expectedVersion: originalNote.version,
+        content: "Stale write",
+      }),
+      PersonalNoteChanged
+    );
+    // The real public Eve provider must recall and maintain the edited format.
+    assert.match(
+      (await personalMemoryProvider.recall["turn.started"](ownerContext))
+        ?.messages[0]?.content ?? "",
+      /Prefers morning reading/
+    );
+    assert.match(
+      JSON.stringify(await fromProcess(owner.cookie)),
+      /Prefers morning reading/
+    );
     assert.ok(createNativeTools);
     const nativeTools = await createNativeTools(ownerContext);
     const save = nativeTools?.save_memory;
@@ -411,6 +451,13 @@ test("actual account auth, profile store, Eve provider, private tool and export 
       })
     );
     assert.equal(revokedWeb.status, 200);
+    await assert.rejects(
+      updatePersonalNote(ownerHeaders, {
+        expectedVersion: edited.version,
+        content: "Revoked write",
+      }),
+      { reason: "unauthenticated" }
+    );
     assert.equal(
       (
         await auth.api.getSession({

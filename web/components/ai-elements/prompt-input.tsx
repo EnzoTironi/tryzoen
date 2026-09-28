@@ -1,5 +1,9 @@
 "use client";
 
+import type { ConversationDraft } from "@zoen/companion-ui/messages";
+
+import { readFileDataUrl } from "@web/files/attachments";
+
 import { useI18n } from "@web/i18n/context";
 
 import {
@@ -94,25 +98,7 @@ const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.addEventListener(
-        "loadend",
-        () => {
-          const result = reader.result;
-          resolve(result instanceof ArrayBuffer ? null : result);
-        },
-        { once: true }
-      );
-      reader.addEventListener(
-        "error",
-        () => {
-          resolve(null);
-        },
-        { once: true }
-      );
-      reader.readAsDataURL(blob);
-    });
+    return await readFileDataUrl(blob);
   } catch {
     return null;
   }
@@ -538,11 +524,6 @@ export const PromptInputActionAddScreenshot = ({
   );
 };
 
-export interface PromptInputMessage {
-  text: string;
-  files: FileUIPart[];
-}
-
 export type PromptInputProps = Omit<
   HTMLAttributes<HTMLFormElement>,
   "onSubmit" | "onError"
@@ -565,7 +546,7 @@ export type PromptInputProps = Omit<
     message: string;
   }) => void;
   onSubmit: (
-    message: PromptInputMessage,
+    message: ConversationDraft,
     event: SubmitEvent<HTMLFormElement>
   ) => void | Promise<void>;
 };

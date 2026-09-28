@@ -23,7 +23,7 @@ export const registerVirtualUser = async function (localpart: string) {
 };
 
 export const ensureMatrixIdentity = async function (
-  actor: z.output<typeof WorkspaceActorSchema>
+  actor: Pick<z.output<typeof WorkspaceActorSchema>, "userId">
 ) {
   const config = await matrixConfiguration();
 
@@ -43,7 +43,7 @@ export const ensureMatrixIdentity = async function (
   const names = await query<{
     name: string;
   }>(
-    sql`SELECT COALESCE(d.username, u.name) AS name FROM public.user u LEFT JOIN user_directory d ON d.user_id = u.id WHERE ('better-auth:' || u.id) = ${actor.userId}`
+    sql`SELECT u.name AS name FROM public.user u WHERE ('better-auth:' || u.id) = ${actor.userId}`
   );
   if (names[0] && names[0].name !== existing[0]?.displayName) {
     await matrixRequest(

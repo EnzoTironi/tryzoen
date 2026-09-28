@@ -47,7 +47,7 @@ const externalPending = [
   "vaultwarden",
   "whatsapp",
   "matrix",
-  "mem0",
+  "file_memory",
   "backups",
 ] as const;
 const resultSchema = z.object({
@@ -59,7 +59,7 @@ const resultSchema = z.object({
 
 /**
  * Durable personal-account deletion. Zoen-controlled rows are erased or kept
- * as company property. Live Mem0 and backups stay pending. Vaultwarden,
+ * as company property. File erasure and backups stay pending. Vaultwarden,
  * mautrix and Synapse are attempted after commit and stay pending_external
  * when the provider is down. The erasure journal survives restoration.
  */
@@ -397,6 +397,21 @@ const persistCompletedRequest = async function (
   userId: string,
   pending: readonly string[]
 ) {
+  const queuedMemory = await query(
+    sql`SELECT 1 FROM workspace_memory_erasure WHERE owner_user_id = ${userId} LIMIT 1`
+  );
+  // A historical provider obligation is never declared erased by replacing its
+  // runtime. Retain existing receipts until the operator verifies that cleanup.
+  const historicalMemory =
+    await query(sql`SELECT 1 FROM account_deletion_ledger l
+    JOIN account_deletion_requests r ON r.id = l.request_id
+    WHERE r.user_id = ${userId} AND l.surface = 'mem0' AND l.status = 'pending_external' LIMIT 1`);
+  const remaining = [
+    ...pending.filter(
+      (surface) => surface !== "file_memory" || queuedMemory.length > 0
+    ),
+    ...(historicalMemory.length ? ["mem0"] : []),
+  ];
   const backupExpiresAt = new Date(new Date().getTime() + 30 * 86400000);
   const rows = await query<{
     id: string;
@@ -431,7 +446,8 @@ const persistCompletedRequest = async function (
     ["company_workspace", "retained_company"],
     ["company_git", "retained_company"],
     ["backups", "backup_held"],
-    ...pending
+    ...(!queuedMemory.length ? [["file_memory", "erased"] as const] : []),
+    ...remaining
       .filter((surface) => surface !== "backups")
       .map((surface) => [surface, "pending_external"] as const),
   ];
@@ -441,7 +457,7 @@ const persistCompletedRequest = async function (
   }
   return await resultSchema.parseAsync({
     backupExpiresAt: backupExpiresAt.toISOString(),
-    pending,
+    pending: remaining,
     retainedCompany: ["company_workspace", "company_git", "audit_receipts"],
     status: "pending_external",
   });

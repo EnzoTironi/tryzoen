@@ -1,11 +1,20 @@
+import { uploadMatrixMedia } from "./media/upload";
+import { directRoomMembers, findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import {
-  addReactionToMessageOutputSchema,
-  reactionTextFor,
-} from "@shared/chat/reaction";
+  roomSchema,
+  roomMemberSchema,
+  type roomCreateSchema,
+  type roomSendSchema,
+} from "@zoen/companion-ui/rooms";
+import {
+  projectMatrixMessage,
+  readMatrixText,
+  readRoomMessage,
+} from "./messages";
 
 import {
   requireWorkspaceAccess,
@@ -22,34 +31,7 @@ import {
 import { ensureMatrixIdentity, registerVirtualUser } from "./identities";
 
 const roomResult = z.object({ room_id: z.string() });
-const roomSchema = z.object({
-  id: z.string(),
-  roomId: z.string(),
-  label: z.string(),
-  epoch: z.string(),
-});
-export const MatrixRoomInput = z.object({
-  id: z.uuid(),
-});
-export const MatrixCreateInput = z.object({
-  operationId: z.uuid(),
-  name: z
-    .string()
-    .min(1)
-    .refine((value) => value === value.trim(), "Expected trimmed text")
-    .max(80),
-});
-export const MatrixMessageInput = z.object({
-  id: z.uuid(),
-  operationId: z.uuid(),
-  text: z
-    .string()
-    .min(1)
-    .refine((value) => value === value.trim(), "Expected trimmed text")
-    .max(8000),
-});
-
-const requireMatrixRoom = async function (
+export const requireMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   id: string,
   manage = false
@@ -57,10 +39,14 @@ const requireMatrixRoom = async function (
   const access = await requireWorkspaceAccess(actor, manage);
   if (!actor.authSessionId || !access.organizationId)
     throw new WorkspaceAccessDenied();
+  if (!manage) {
+    const direct = await findDirectRoom(actor, id);
+    if (direct) return direct;
+  }
   const config = await matrixConfiguration();
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch FROM workspace_group_bindings
+    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND channel = 'matrix'
       AND installation_id = ${config.serverName} AND revoked_at IS NULL FOR SHARE`);
   if (rows.length !== 1) throw new WorkspaceAccessDenied();
@@ -80,8 +66,8 @@ export const listMatrixRooms = async function (
   });
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch FROM workspace_group_bindings
-    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL ORDER BY created_at`);
+    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
+    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL ORDER BY created_at LIMIT 20`);
   return {
     configured,
     mayManage: !!access.organizationId && access.role !== "member",
@@ -91,7 +77,7 @@ export const listMatrixRooms = async function (
 
 export const createMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  input: z.output<typeof MatrixCreateInput>
+  input: z.output<typeof roomCreateSchema>
 ) {
   const access = await requireWorkspaceAccess(actor, true);
   if (!actor.authSessionId || !access.organizationId)
@@ -154,7 +140,7 @@ export const createMatrixRoom = async function (
 };
 
 /** Access is checked again before every read/send. Virtual users receive no bearer tokens. */
-const joinMatrixRoom = async function (
+export const joinMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
@@ -162,6 +148,7 @@ const joinMatrixRoom = async function (
     await query(sql`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 5))`);
     const room = await requireMatrixRoom(actor, id);
     const matrixId = await ensureMatrixIdentity(actor);
+    if (room.kind === "direct") return { ...room, matrixId };
     const members = await query(
       sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${id} AND user_id = ${actor.userId}`
     );
@@ -202,81 +189,150 @@ const joinMatrixRoom = async function (
 
 export const readMatrixMessages = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  id: string
+  id: string,
+  from?: string,
+  rootId?: string
 ) {
   return await withDatabaseTransaction(async () => {
     const room = await joinMatrixRoom(actor, id);
     await requireWorkspaceAccess(actor);
+    const base = `rooms/${encodeURIComponent(room.roomId)}`;
+    const parent = rootId ? await readRoomMessage(room, rootId) : undefined;
+    if (parent?.content["m.relates_to"]?.rel_type === "m.thread")
+      throw new WorkspaceAccessDenied();
+    const endpoint = rootId
+      ? `${base}/relations/${encodeURIComponent(rootId)}/m.thread/m.room.message?dir=b&limit=100`
+      : `${base}/messages?dir=b&limit=100&filter=${encodeURIComponent(JSON.stringify({ types: ["m.room.message", "m.reaction"] }))}`;
     const response = await matrixRequest(
       "GET",
-      `rooms/${encodeURIComponent(room.roomId)}/messages?dir=b&limit=100&filter=${encodeURIComponent(JSON.stringify({ types: ["m.room.message", "m.reaction"] }))}`,
+      endpoint + (from ? `&from=${encodeURIComponent(from)}` : ""),
       undefined,
-      room.matrixId
+      room.matrixId,
+      rootId ? "v1" : "v3"
     );
     const events = await z
-      .object({ chunk: z.array(MatrixEventSchema) })
+      .object({
+        chunk: z.array(MatrixEventSchema).max(100),
+        end: z.string().optional(),
+        next_batch: z.string().optional(),
+      })
       .parseAsync(response);
-    const people = await query<{
-      matrixId: string;
-      name: string;
-    }>(
-      sql`SELECT i.matrix_id AS "matrixId", COALESCE(d.username, u.name) AS name FROM matrix_identities i JOIN public.user u ON ('better-auth:' || u.id) = i.user_id LEFT JOIN user_directory d ON d.user_id = u.id JOIN matrix_room_members m ON m.user_id = i.user_id WHERE m.binding_id = ${id}`
-    );
+    const members =
+      room.kind === "direct"
+        ? await directRoomMembers(actor, id)
+        : z.array(roomMemberSchema).parse(
+            await query(sql`
+      SELECT i.matrix_id AS id, u.name AS name, d.username,
+        i.user_id = ${actor.userId} AS mine, false AS bot, u.image AS "avatarUri"
+      FROM matrix_identities i
+      JOIN public.user u ON ('better-auth:' || u.id) = i.user_id
+      LEFT JOIN user_directory d ON d.user_id = u.id
+      JOIN matrix_room_members m ON m.user_id = i.user_id
+      JOIN workspace_memberships w ON w.user_id = i.user_id AND w.workspace_id = ${actor.workspaceId}
+      WHERE m.binding_id = ${id} ORDER BY i.matrix_id LIMIT 100
+    `)
+          );
     await requireMatrixRoom(actor, id);
     const config = await matrixConfiguration();
+    const project = (event: z.infer<typeof MatrixEventSchema>) =>
+      projectMatrixMessage(event, members, room.matrixId, config.botId);
     return {
       room,
+      members:
+        room.kind === "direct"
+          ? members
+          : [
+              ...members.slice(0, 99),
+              {
+                id: config.botId,
+                name: "Zoen",
+                username: "zoen",
+                mine: false,
+                bot: true,
+              },
+            ],
+      membersTruncated: members.length > 99,
+      nextCursor: (rootId ? events.next_batch : events.end) ?? null,
       messages: events.chunk
         .filter((event) => event.type === "m.room.message")
-        .slice(0, 40)
         .toReversed()
-        .map((event) => ({
-          id: event.event_id,
-          text: event.content.body ?? "",
-          sender:
-            event.sender === config.botId
-              ? "Zoen"
-              : (people.find((p) => p.matrixId === event.sender)?.name ??
-                "Matrix"),
-          mine: event.sender === room.matrixId,
-          timestamp: event.origin_server_ts ?? 0,
-          reactions: addReactionToMessageOutputSchema.shape.type.options
-            .map((type) => ({
-              type,
-              count: new Set(
-                events.chunk
-                  .filter((candidate) => {
-                    const relation = candidate.content["m.relates_to"];
-                    return (
-                      candidate.type === "m.reaction" &&
-                      relation?.rel_type === "m.annotation" &&
-                      relation.event_id === event.event_id &&
-                      relation.key === reactionTextFor(type)
-                    );
-                  })
-                  .map((reaction) => reaction.sender)
-              ).size,
-            }))
-            .filter((reaction) => reaction.count > 0),
-        })),
+        .map(project),
+      ...(parent ? { parent: project(parent) } : {}),
     };
   });
 };
 
 export const sendMatrixMessage = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  input: z.output<typeof MatrixMessageInput>
+  input: z.output<typeof roomSendSchema>
 ) {
   return await withDatabaseTransaction(async () => {
     const room = await joinMatrixRoom(actor, input.id);
     await requireWorkspaceAccess(actor);
-    const sent = await matrixRequest(
-      "PUT",
-      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
-      { msgtype: "m.text", body: input.text },
-      room.matrixId
-    );
-    return await z.object({ event_id: z.string() }).parseAsync(sent);
+    if (input.rootId) {
+      const parent = await readRoomMessage(room, input.rootId);
+      if (parent.content["m.relates_to"]?.rel_type === "m.thread")
+        throw new WorkspaceAccessDenied();
+    }
+    const reply = input.replyTo
+      ? await readRoomMessage(room, input.replyTo)
+      : undefined;
+    const replyThread = reply?.content["m.relates_to"];
+    if (reply && reply.event_id !== input.rootId) {
+      const threadId =
+        replyThread?.rel_type === "m.thread" ? replyThread.event_id : undefined;
+      if (threadId !== input.rootId) throw new WorkspaceAccessDenied();
+    }
+    const replyTarget = reply?.event_id ?? input.rootId;
+    const relation = {
+      ...(input.rootId
+        ? {
+            rel_type: "m.thread",
+            event_id: input.rootId,
+            is_falling_back: !reply,
+          }
+        : {}),
+      ...(replyTarget ? { "m.in_reply_to": { event_id: replyTarget } } : {}),
+    };
+    const body = reply
+      ? `> <${reply.sender}> ${readMatrixText(reply.content).text.slice(0, 4000).replaceAll("\n", "\n> ")}\n\n${input.text}`
+      : input.text;
+    const sent = [];
+    if (input.text)
+      sent.push(
+        await matrixRequest(
+          "PUT",
+          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
+          {
+            msgtype: "m.text",
+            body,
+            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
+          },
+          room.matrixId
+        )
+      );
+    for (const [index, file] of (input.files ?? []).entries()) {
+      await requireMatrixRoom(actor, input.id);
+      const media = await uploadMatrixMedia(file, room.matrixId);
+      const category = file.mediaType.split("/")[0] ?? "application";
+      sent.push(
+        await matrixRequest(
+          "PUT",
+          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}.file.${index}`,
+          {
+            ...media,
+            msgtype: ["image", "audio", "video"].includes(category)
+              ? `m.${category}`
+              : "m.file",
+            body: file.filename ?? "Attachment",
+            filename: file.filename ?? "Attachment",
+            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
+          },
+          room.matrixId
+        )
+      );
+    }
+    return await z.object({ event_id: z.string() }).parseAsync(sent[0]);
   });
 };
 

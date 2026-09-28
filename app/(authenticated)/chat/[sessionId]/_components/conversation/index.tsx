@@ -1,14 +1,15 @@
 "use client";
 
+import { sentMessages } from "@zoen/companion-ui/messages";
+import { isTerminalSession } from "@zoen/companion-ui/session";
+
 import { useI18n } from "@web/i18n/context";
 import { AlertCircleIcon, BrainIcon, LoaderCircleIcon } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import type { EveMessage } from "eve/react";
 import {
   imessageTimestamps,
-  isTerminalSession,
   messageTimestamps,
-  sentMessages,
 } from "../../_lib/message-events";
 import { messagesForTraceView, type TraceView } from "../../_lib/trace-view";
 import { getLatestTurnFailure } from "../../_lib/turn-failure";
@@ -22,7 +23,7 @@ import { Shimmer } from "@web/components/ai-elements/shimmer";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";
 import { AgentMessage } from "./message";
-import type { ChatAgent } from "../chat-agent";
+import type { ChatAgent } from "@zoen/companion-ui/session";
 
 export function ChatConversation({
   agent,

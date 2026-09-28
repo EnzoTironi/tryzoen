@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { chatTitleSchema } from "@zoen/companion-ui/chats";
 
 const chatUsageSchema = z.object({
   costUsd: z.number().nonnegative().nullable(),
@@ -19,7 +20,7 @@ export const chatListSchema = z.array(chatSummarySchema);
 
 export const saveChatSchema = z.object({
   sessionId: z.string().min(1),
-  title: z.string().trim().min(1).max(240).optional(),
+  title: chatTitleSchema.optional(),
   usage: chatUsageSchema.optional(),
 });
 

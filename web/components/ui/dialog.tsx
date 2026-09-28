@@ -60,19 +60,21 @@ const dialogContentVariants = cva(
 
 function DialogContent({
   className,
+  backdropClassName,
   children,
   animated = true,
   showCloseButton = true,
   variant,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  backdropClassName?: string;
   animated?: boolean;
   showCloseButton?: boolean;
 } & VariantProps<typeof dialogContentVariants>) {
   const { t } = useI18n();
   return (
     <DialogPortal>
-      <DialogOverlay animated={animated} />
+      <DialogOverlay animated={animated} className={backdropClassName} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(

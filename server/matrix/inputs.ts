@@ -1,3 +1,4 @@
+import { matrixReplyRelation } from "./replies";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -64,7 +65,7 @@ export async function publishMatrixInputs(
       {
         msgtype: "m.text",
         body: renderChannelInput(request) + instructions,
-        "m.relates_to": { "m.in_reply_to": { event_id: eventId } },
+        "m.relates_to": await matrixReplyRelation(room.roomId, eventId),
         "dev.zoen.input": reference,
       }
     );

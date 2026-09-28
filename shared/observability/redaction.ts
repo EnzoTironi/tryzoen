@@ -4,7 +4,7 @@ import { z } from "zod";
 const protectedKey =
   /authorization|cookie|password|secret|credential|api.?key|totp|otp_secret|(?:access|refresh|id|session|continuation)[_-]?token|device.?code|user.?code/i;
 
-function redactDiagnosticText(text: string) {
+export function redactSensitiveText(text: string) {
   return text
     .replace(
       /("(?:authorization|cookie|password|secret|credential|api.?key|totp|otp_secret|(?:access|refresh|id|session|continuation)[_-]?token|device.?code|user.?code)"\s*:\s*")[^"]*/gi,
@@ -33,7 +33,7 @@ export function parseDiagnostic(serialized: string): z.core.util.JSONType {
   const encoded = JSON.stringify(value, (key, item: z.core.util.JSONType) => {
     if (protectedKey.test(key)) return "[redacted]";
     if (isValid(z.string(), item))
-      return redactDiagnosticText(item).slice(0, 64_000);
+      return redactSensitiveText(item).slice(0, 64_000);
     return item;
   });
   if (!encoded) return null;

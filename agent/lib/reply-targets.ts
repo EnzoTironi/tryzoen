@@ -1,7 +1,7 @@
 import { defineState, type SessionAuth } from "eve/context";
 import { z } from "zod";
 import { scheduledReportIdentity } from "@agent/lib/schedules/identity";
-import type { ReplyReference } from "@shared/chat/message-delivery";
+import type { ReplyReference } from "@zoen/companion-ui/messages";
 
 const linqReplyTargetSchema = z.strictObject({
   conversationId: z.string().startsWith("linq:"),

@@ -200,8 +200,8 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
     const row = await pool.query<{
       id: string;
     }>(
-      'SELECT id FROM account WHERE "userId" = $1 AND issuer = $2 AND "accountId" = $3',
-      [session.user.id, "https://accounts.google.com", subject]
+      'SELECT id FROM account WHERE "userId" = $1 AND "providerId" = $2 AND "accountId" = $3',
+      [session.user.id, "google", subject]
     );
     expect(row.rows).toHaveLength(1);
     const id = row.rows[0]?.id;
@@ -271,14 +271,8 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
     ).toHaveLength(1);
     const additionalId = randomUUID();
     await pool.query(
-      'INSERT INTO account (id, issuer, "accountId", "providerId", "userId", scope, "updatedAt") VALUES ($1, $2, $1, $3, $4, $5, now())',
-      [
-        additionalId,
-        "https://accounts.google.com",
-        "google",
-        session.user.id,
-        "openid email profile",
-      ]
+      'INSERT INTO account (id, "accountId", "providerId", "userId", scope, "updatedAt") VALUES ($1, $1, $2, $3, $4, now())',
+      [additionalId, "google", session.user.id, "openid email profile"]
     );
     expect(await readGoogleWorkspaceConnection(scope)).toEqual({
       state: "connected",
@@ -307,13 +301,13 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
     expect(
       (
         await pool.query(
-          'SELECT issuer, "accountId", "userId", "accessToken", "refreshToken", scope FROM account WHERE id = $1',
+          'SELECT "providerId", "accountId", "userId", "accessToken", "refreshToken", scope FROM account WHERE id = $1',
           [id]
         )
       ).rows
     ).toEqual([
       {
-        issuer: "https://accounts.google.com",
+        providerId: "google",
         accountId: subject,
         userId: session.user.id,
         accessToken: null,
@@ -365,8 +359,8 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
         expect(
           (
             await pool.query(
-              'SELECT id FROM account WHERE issuer = $1 AND "accountId" = $2',
-              ["https://accounts.google.com", denied.sub]
+              'SELECT id FROM account WHERE "providerId" = $1 AND "accountId" = $2',
+              ["google", denied.sub]
             )
           ).rows
         ).toHaveLength(0);

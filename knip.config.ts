@@ -39,6 +39,11 @@ export default {
         "scripts/reconcile-account-erasures.ts",
       ],
       ignoreDependencies: [
+        // Next resolves React Native imports to this web renderer.
+        "react-native-web",
+        "react-native-svg",
+        // Eve evaluates shared reaction schemas from root-authored module bundles.
+        "unicode-emoji-json",
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
         // Imported through the owning Tailwind stylesheet rather than TypeScript.
@@ -51,6 +56,11 @@ export default {
       ],
       project: ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}", "!infrastructure/**"],
     },
+    "apps/mobile": {
+      entry: ["index.ts", "metro.config.mjs"],
+    },
+    "apps/desktop": { entry: ["src/main.ts"] },
+    "packages/companion-ui": { entry: ["src/index.ts"] },
     infrastructure: {
       entry: [
         "alchemy.run.ts",

@@ -1,9 +1,9 @@
+import { WorkspacePathSchema } from "@shared/workspaces/files";
 import { ZodError as SchemaError } from "zod";
 import { jsonString, isValid } from "@shared/validation";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
-import { WorkspacePathSchema } from "./git";
 
 export const ToolSlug = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/u);
 export const ToolProposalPath = WorkspacePathSchema.regex(

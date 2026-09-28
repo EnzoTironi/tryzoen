@@ -1,7 +1,7 @@
 import { defineEval, type EveEvalContext } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
-import { sendMessageOutputSchema } from "@shared/chat/message-delivery";
-import { reactToMessageOutputSchema } from "@shared/chat/reaction";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
+import { reactToMessageOutputSchema } from "@zoen/companion-ui/messages";
 import {
   agentEvalTags,
   assertPlainTextDelivery,

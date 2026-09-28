@@ -1,3 +1,4 @@
+import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { account, db, session, user, verification } from "@db";
@@ -33,6 +34,7 @@ const initializeAuth = async function () {
     return betterAuth({
       appName: "Zoen",
       baseURL: betterAuthBaseURL(),
+      trustedOrigins: ["zoen://"],
       advanced: { disableOriginCheck: false, disableCSRFCheck: false },
       database: drizzleAdapter(db, {
         provider: "pg",
@@ -90,7 +92,7 @@ const initializeAuth = async function () {
         "/sign-up/email",
         "/verify-email",
       ],
-      plugins: [channelAuthPlugin(), ...vaultwardenAuthPlugins()],
+      plugins: [expo(), channelAuthPlugin(), ...vaultwardenAuthPlugins()],
       secret: betterAuthSecret,
     });
   } catch {

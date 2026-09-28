@@ -37,6 +37,70 @@ beforeEach(() => {
 });
 
 describe("Eve channel authentication", () => {
+  it.each([
+    ["/eve/v1/session", "/eve/v1/session"],
+    ["/eve/v1/session/:sessionId", "/eve/v1/session/owned-session"],
+  ])(
+    "bounds the actual message stream at %s and cancels it on overflow",
+    async (pattern, path) => {
+      isSessionOwnedMock.mockResolvedValue(true);
+      const cancel = vi.fn<() => void>();
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(1_000_000));
+        },
+        cancel,
+      });
+      const request = new Request(`https://assistant.example${path}`, {
+        method: "POST",
+        body,
+        duplex: "half",
+        headers: { "Content-Length": "2" },
+      } as RequestInit);
+      const response = await findRoute("POST", pattern).handler(
+        request,
+        unexpectedRouteContext()
+      );
+      expect(response.status).toBe(413);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+      expect(await response.text()).toContain("3 MiB");
+    }
+  );
+
+  it("rejects an unowned session before consuming its upload", async () => {
+    const request = new Request(
+      "https://assistant.example/eve/v1/session/unowned",
+      { method: "POST", body: "x".repeat(4_400_001) }
+    );
+    const response = await findRoute(
+      "POST",
+      "/eve/v1/session/:sessionId"
+    ).handler(request, unexpectedRouteContext());
+    expect(response.status).toBe(403);
+    expect(request.bodyUsed).toBe(false);
+  });
+
+  it("passes a bounded body from a proxied request to Eve's existing validation", async () => {
+    const original = new Request("https://assistant.example/eve/v1/session", {
+      method: "POST",
+      body: JSON.stringify({ message: { invalid: true } }),
+      headers: { "Content-Type": "application/json" },
+    });
+    // The runtime passes a facade; Undici cannot clone its private slots.
+    const request = new Proxy(original, {
+      get(target, key) {
+        const value: unknown = Reflect.get(target, key, target);
+        return value;
+      },
+    });
+    const response = await findRoute("POST", "/eve/v1/session").handler(
+      request,
+      unexpectedRouteContext()
+    );
+    expect(response.status).toBe(400);
+  });
+
   it("checks decoded session route ids against workspace ownership", async () => {
     const route = eveChannel.routes.find(
       (candidate) =>

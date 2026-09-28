@@ -147,7 +147,14 @@ export const env = createEnv({
     BLOB_READ_WRITE_TOKEN: requiredValue.optional(),
     BLOB_STORE_ID: requiredValue.optional(),
     ZOEN_EVAL_REPORT: requiredValue.optional(),
-    ZOEN_MEM0_URL: z.url().optional(),
+    ZOEN_AI_MEMORY_BINARY: z
+      .string()
+      .regex(/^(?:\/|[A-Za-z]:[\\/])/)
+      .optional(),
+    ZOEN_SESSION_ARCHIVE_DIR: z
+      .string()
+      .regex(/^(?:\/|[A-Za-z]:[\\/])/)
+      .optional(),
     ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
     ZOEN_ERASURE_JOURNAL_ENDPOINT: z
       .url()
@@ -208,12 +215,6 @@ export const env = createEnv({
         .transform((value) => new Secret(value))
     ),
     ZOEN_WHATSAPP_HS_TOKEN: z.optional(
-      z
-        .string()
-        .min(32)
-        .transform((value) => new Secret(value))
-    ),
-    ZOEN_MEM0_API_KEY: z.optional(
       z
         .string()
         .min(32)

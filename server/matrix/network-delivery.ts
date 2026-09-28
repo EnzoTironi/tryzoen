@@ -1,3 +1,4 @@
+import { matrixReplyRelation } from "./replies";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { WorkspaceAccessDenied } from "../workspaces/access";
@@ -141,7 +142,11 @@ export const publishMatrixProtocolAnswer = async function (taskId: string) {
         {
           msgtype: "m.text",
           body: task.output,
-          "m.relates_to": { "m.in_reply_to": { event_id: row.event_id } },
+          "m.relates_to": await matrixReplyRelation(
+            c.roomId,
+            row.event_id,
+            c.botId
+          ),
         },
         c.botId
       )

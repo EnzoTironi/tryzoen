@@ -1,3 +1,4 @@
+import { GitRevisionSchema } from "@shared/workspaces/files";
 import { withSignal } from "../../../../server/operations/async";
 import { WorkspaceRepositoryError } from "../../../../server/workspaces/repository";
 import { WorkspaceImportError } from "../../../../server/workspaces/import";
@@ -11,7 +12,6 @@ import {
   workspaceImportBytes,
 } from "../../../../server/workspaces/import";
 import { isSameOrigin } from "@web/trpc/same-origin";
-import { GitRevisionSchema } from "../../../../server/workspaces/git";
 
 const importMetadata = z.object({
   operationId: z.uuid(),

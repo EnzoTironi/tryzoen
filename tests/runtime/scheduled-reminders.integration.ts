@@ -3,7 +3,10 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 import type { AccessScope } from "../../shared/identity/access-scope";
-import { listReminders } from "../../server/schedules/queries";
+import {
+  listReminders,
+  readReminderHistory,
+} from "../../server/schedules/queries";
 
 const fixture = async function (
   body: (
@@ -32,6 +35,42 @@ const fixture = async function (
   });
 };
 const run = (body: Parameters<typeof fixture>[0]) => fixture(body);
+
+test("pages durable run history and prevents access across owner and workspace boundaries", () =>
+  run(async ({ owner, neighbor, elsewhere }) => {
+    const id = await insertJob(owner, "history");
+    await query(sql`INSERT INTO scheduled_agent_runs (job_id, scheduled_for, status, report_status, outcome)
+      SELECT ${id}, '2030-01-01T12:00:00Z'::timestamptz + n * interval '1 minute', 'completed', 'delivered',
+        '{"kind":"result","summary":"Synthetic review complete","urgency":"normal"}'::jsonb
+      FROM generate_series(1, 35) AS n`);
+    const first = await readReminderHistory(owner, { id });
+    expect(first.items).toHaveLength(30);
+    expect(first.items[0]?.outcome).toMatchObject({
+      summary: "Synthetic review complete",
+    });
+    expect(first.nextCursor).not.toBeNull();
+    const second = await readReminderHistory(owner, {
+      id,
+      cursor: first.nextCursor ?? undefined,
+    });
+    expect(second.items).toHaveLength(5);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      new Set([...first.items, ...second.items].map((item) => item.id)).size
+    ).toBe(35);
+    for (const scope of [neighbor, elsewhere])
+      expect(await readReminderHistory(scope, { id })).toEqual({
+        items: [],
+        nextCursor: null,
+      });
+    await query(
+      sql`UPDATE scheduled_agent_jobs SET status = 'deleted' WHERE id = ${id}`
+    );
+    expect(await readReminderHistory(owner, { id })).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  }));
 
 const insertJob = async function (
   scope: AccessScope,

@@ -14,6 +14,23 @@ const workstreamStatusSchema = z.enum([
 ]);
 
 const workstreamContentSchema = z.strictObject({
+  kind: z
+    .enum(["goal", "tracking"])
+    .optional()
+    .describe(
+      "A goal works toward a defined outcome; tracking follows an ongoing situation. Omit for a goal. Neither kind enables background execution."
+    ),
+  parentId: workstreamIdSchema
+    .nullish()
+    .describe(
+      "Null or omitted for a top-level goal; otherwise the ID of an existing top-level parent. Never use the goal’s own ID or a placeholder such as root."
+    ),
+  progress: z
+    .strictObject({
+      title: z.string().trim().min(1).max(120),
+      description: z.string().trim().min(1).max(800),
+    })
+    .optional(),
   title: z.string().trim().min(1).max(100),
   objective: z.string().trim().min(1).max(500),
   status: workstreamStatusSchema,

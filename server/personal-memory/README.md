@@ -46,7 +46,7 @@ fact; this operation deletes stored notes, not conversation history.
 notes. Group scope uses its own conversation identity. Personal wipe never erases
 shared-group keys.
 
-Learned facts use the separate, private Mem0 service with person/workspace scope.
+Learned facts use the private Akita file corpus with person/workspace scope.
 This does not replace the authored profile documents or their Eve provider.
 
 ## Verification

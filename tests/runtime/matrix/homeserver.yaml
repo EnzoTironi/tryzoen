@@ -23,7 +23,9 @@ trusted_key_servers: []
 suppress_key_server_warning: true
 federation_domain_whitelist: []
 enable_registration: false
-enable_media_repo: false
+enable_media_repo: true
+media_store_path: /data/media_store
+max_upload_size: 3M
 rc_message:
   per_second: 1000
   burst_count: 10000

@@ -3,7 +3,7 @@ import type { EveMessage } from "eve/react";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";
 import { describe, expect, it } from "vitest";
 import { ChatConversation } from ".";
-import type { ChatAgent } from "../chat-agent";
+import type { ChatAgent } from "@zoen/companion-ui/session";
 
 describe("chat conversation", () => {
   it("shows send_message output instead of assistant stream text", () => {

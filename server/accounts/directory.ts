@@ -28,7 +28,7 @@ const reserved = new Set([
   "api",
   "root",
 ]);
-class DirectoryError extends Error {
+export class DirectoryError extends Error {
   readonly _tag = "DirectoryError";
   declare readonly reason: "unavailable" | "reserved" | "invalid";
   constructor(input: {
@@ -38,6 +38,12 @@ class DirectoryError extends Error {
     this.name = "DirectoryError";
     Object.assign(this, input);
   }
+}
+
+export function validateUsername(username: string) {
+  const value = UsernameSchema.parse(username);
+  if (reserved.has(value)) throw new DirectoryError({ reason: "reserved" });
+  return value;
 }
 
 export const readDirectoryProfile = async function (
@@ -56,8 +62,7 @@ export const saveDirectoryProfile = async function (
   raw: z.output<typeof DirectoryProfileSchema>
 ) {
   const profile = await DirectoryProfileSchema.parseAsync(raw);
-  if (reserved.has(profile.username))
-    throw new DirectoryError({ reason: "reserved" });
+  validateUsername(profile.username);
 
   try {
     return await withDatabaseTransaction(async () => {
@@ -86,7 +91,7 @@ export const searchDirectory = async function (
   if (!/^[a-z][a-z0-9_]{1,29}$/.test(prefix)) return [];
 
   const rows = await dbQuery(
-    sql`SELECT username FROM user_directory WHERE discoverable = true AND starts_with(username, ${prefix}) ORDER BY username LIMIT 12`
+    sql`SELECT username FROM user_directory WHERE kind = 'person' AND discoverable = true AND starts_with(username, ${prefix}) ORDER BY username LIMIT 12`
   );
   return await z.array(z.object({ username: UsernameSchema })).parseAsync(rows);
 };

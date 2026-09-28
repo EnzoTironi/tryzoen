@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeftIcon, ArrowUpIcon, HashIcon, PlusIcon } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeftIcon, HashIcon, PlusIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
-import { Badge } from "@web/components/ui/badge";
-import { reactionTextFor } from "@shared/chat/reaction";
+import { ConnectedRoom } from "@app/companion/inbox";
+import { authClient } from "@web/auth/client";
+import { useSearchParams } from "next/navigation";
 import { PanelIntro } from "../../_components/panel-intro";
 import panel from "../../_components/panel.module.css";
 import shared from "../space.module.css";
@@ -130,19 +131,15 @@ function RoomConversation({
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const query = api.workspaces.rooms.messages.useQuery(
-    { id },
-    { refetchInterval: 3000, retry: false }
-  );
-  const send = api.workspaces.rooms.send.useMutation();
   const close = api.workspaces.rooms.close.useMutation();
-  const [text, setText] = useState("");
-  const [operationId, setOperationId] = useState(() => crypto.randomUUID());
-  const end = useRef<HTMLDivElement>(null);
-  const messages = query.error ? undefined : query.data?.messages;
-  useEffect(() => {
-    if (messages?.length) end.current?.scrollIntoView({ block: "nearest" });
-  }, [messages?.length]);
+  const account = authClient.useSession();
+  const params = useSearchParams();
+  const userId = account.data?.user.id;
+  if (!userId) return <output>{t("Carregando…")}</output>;
+  const cacheScope = JSON.stringify([
+    userId,
+    params.get("space") ?? "personal",
+  ]);
   return (
     <div className={styles.conversation}>
       <div className={styles.header}>
@@ -154,86 +151,13 @@ function RoomConversation({
         >
           <ArrowLeftIcon />
         </Button>
-        <h1 className="type-heading-sm">
-          {query.data?.room.label ?? t("Sala da equipe")}
-        </h1>
       </div>
-      <div
-        className={styles.messages}
-        role="log"
-        aria-live="polite"
-        aria-label={t("Mensagens da equipe")}
-      >
-        {query.isPending && <output>{t("Carregando…")}</output>}
-        {!query.isPending && !query.error && !messages?.length && (
-          <div className={styles.empty}>
-            <HashIcon />
-            <p>{t("A conversa começa aqui.")}</p>
-            <small>{t("Mencione Zoen quando precisar de ajuda.")}</small>
-          </div>
-        )}
-        {messages?.map((message) => (
-          <article
-            key={message.id}
-            className={styles.message}
-            data-mine={message.mine}
-          >
-            <small>{message.sender}</small>
-            <p>{message.text}</p>
-            {message.reactions.length > 0 && (
-              <div className={styles.reactions}>
-                {message.reactions.map((reaction) => (
-                  <Badge key={reaction.type} variant="outline">
-                    {reactionTextFor(reaction.type)} {reaction.count}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </article>
-        ))}
-        <div ref={end} />
-      </div>
-      {query.error && (
-        <p role="alert">{t("Esta sala não está mais disponível para você.")}</p>
-      )}
-      {send.error && (
-        <p role="alert">{t("Não foi possível enviar. Tente novamente.")}</p>
-      )}
-      <form
-        className={styles.composer}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send
-            .mutateAsync({ id, text: text.trim(), operationId })
-            .then(async () => {
-              setText("");
-              setOperationId(crypto.randomUUID());
-              await query.refetch();
-              return undefined;
-            })
-            .catch(() => undefined);
-        }}
-      >
-        <Input
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-            setOperationId(crypto.randomUUID());
-          }}
-          placeholder={t("Mensagem · @Zoen")}
-          aria-label={t("Mensagem")}
-          maxLength={8000}
-          disabled={!!query.error || send.isPending}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!text.trim() || send.isPending || !!query.error}
-          aria-label={t("Enviar mensagem")}
-        >
-          <ArrowUpIcon />
-        </Button>
-      </form>
+      <ConnectedRoom
+        key={`${cacheScope}:${id}`}
+        roomId={id}
+        cacheScope={cacheScope}
+        onBack={onClose}
+      />
       {mayManage && (
         <details>
           <summary className={shared.row}>{t("Encerrar sala")}</summary>

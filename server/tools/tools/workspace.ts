@@ -1,3 +1,7 @@
+import {
+  WorkspacePathSchema,
+  GitRevisionSchema,
+} from "@shared/workspaces/files";
 import { withSignal } from "../../operations/async";
 import { z } from "zod";
 
@@ -8,7 +12,7 @@ import {
 } from "../../workspaces/access";
 import { readWorkspaceCapabilities } from "../../workspaces/capabilities";
 import { WorkspaceRepository } from "../../workspaces/repository";
-import { WorkspacePathSchema, GitRevisionSchema } from "../../workspaces/git";
+
 import { workspaceOperationId } from "../../../agent/lib/workspace-operation";
 
 export default defineDynamic({

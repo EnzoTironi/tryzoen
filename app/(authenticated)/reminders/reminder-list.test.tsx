@@ -36,6 +36,7 @@ test("opening an existing reminder conversation retains its workspace", () => {
             revision: 0,
             mayManage: true,
             prompt: "Review synthetic notes",
+            timing: { kind: "once", at: "2030-01-01T12:00:00Z" },
             status: "active",
             nextRunAt: new Date("2030-01-01T12:00:00Z"),
             conversationChannel: "eve",

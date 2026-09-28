@@ -1,5 +1,9 @@
 # Build / install artifacts
 node_modules
+**/node_modules
+**/.expo
+**/dist
+apps/desktop/release
 **/.venv
 **/__pycache__
 **/.pytest_cache

@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   check,
+  boolean,
   foreignKey,
   index,
   integer,
@@ -18,6 +19,8 @@ export const chats = pgTable(
     workspaceId: text("workspace_id").notNull(),
     channel: text("channel"),
     title: text("title").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
+    archived: boolean("archived").notNull().default(false),
     createdAt: timestamp("created_at", {
       mode: "date",
       precision: 3,
@@ -55,6 +58,13 @@ export const chats = pgTable(
     index("chats_workspace_updated_idx").on(
       table.workspaceId,
       table.updatedAt.desc().nullsFirst()
+    ),
+    index("chats_library_page_idx").on(
+      table.workspaceId,
+      table.archived,
+      table.pinned.desc(),
+      table.updatedAt.desc(),
+      table.sessionId.desc()
     ),
   ]
 );

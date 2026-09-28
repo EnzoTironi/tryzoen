@@ -1,0 +1,91 @@
+{
+  "name": "@zoen/companion-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./rooms": {
+      "types": "./dist/rooms/schema.d.ts",
+      "default": "./dist/rooms/schema.js"
+    },
+    "./creators": {
+      "types": "./dist/creators/schema.d.ts",
+      "default": "./dist/creators/schema.js"
+    },
+    "./memory": {
+      "types": "./dist/learned/schema.d.ts",
+      "default": "./dist/learned/schema.js"
+    },
+    "./chats": {
+      "types": "./dist/chats/schema.d.ts",
+      "default": "./dist/chats/schema.js"
+    },
+    "./reactions": {
+      "types": "./dist/reactions/schema.d.ts",
+      "default": "./dist/reactions/schema.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "default": "./dist/session/index.js"
+    },
+    "./markdown": {
+      "types": "./dist/editor/markdown.d.ts",
+      "default": "./dist/editor/markdown.js"
+    },
+    "./feed": {
+      "types": "./dist/feed/schema.d.ts",
+      "default": "./dist/feed/schema.js"
+    },
+    "./ideas": {
+      "types": "./dist/ideas/schema.d.ts",
+      "default": "./dist/ideas/schema.js"
+    },
+    "./goals": {
+      "types": "./dist/goals/preferences.d.ts",
+      "default": "./dist/goals/preferences.js"
+    },
+    "./messages": {
+      "types": "./dist/session/messages.d.ts",
+      "default": "./dist/session/messages.js"
+    },
+    "./references": {
+      "types": "./dist/references/schema.d.ts",
+      "default": "./dist/references/schema.js"
+    },
+    "./previews": {
+      "types": "./dist/cards/schema.d.ts",
+      "default": "./dist/cards/schema.js"
+    },
+    "./composer": {
+      "types": "./dist/composer/document.d.ts",
+      "default": "./dist/composer/document.js"
+    }
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.102.6",
+    "@tiptap/core": "3.31.3",
+    "@tiptap/markdown": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
+    "linkifyjs": "4.3.3",
+    "lucide-react-native": "1.48.0",
+    "react-native-marked": "8.3.2",
+    "react-native-svg": "15.15.4",
+    "unicode-emoji-json": "0.9.0",
+    "zod": "4.5.4"
+  },
+  "peerDependencies": {
+    "ai": "^7.0.107",
+    "eve": "^0.63.0",
+    "react": "^19.2.3",
+    "react-native": ">=0.86.3"
+  },
+  "scripts": {
+    "build:ui": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  }
+}

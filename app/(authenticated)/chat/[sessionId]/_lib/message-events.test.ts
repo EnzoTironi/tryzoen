@@ -1,11 +1,8 @@
+import { sentMessages } from "@zoen/companion-ui/messages";
+import { conversationStreamEvents } from "@zoen/companion-ui/session";
 import { defaultMessageReducer, type MessageStreamEvent } from "eve/client";
 import { describe, expect, it } from "vitest";
-import {
-  conversationStreamEvents,
-  imessageTimestamps,
-  messageTimestamps,
-  sentMessages,
-} from "./message-events";
+import { imessageTimestamps, messageTimestamps } from "./message-events";
 
 type ToolResultOutput = Extract<
   Extract<MessageStreamEvent, { type: "action.result" }>["data"]["result"],

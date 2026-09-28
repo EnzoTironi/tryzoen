@@ -6,7 +6,7 @@ import messaging from "../../tools/messaging";
 import {
   addReactionToMessageOutputSchema,
   reactToMessageOutputSchema,
-} from "../../../shared/chat/reaction";
+} from "@zoen/companion-ui/messages";
 import {
   isToolSchema,
   serializeInputSchema,

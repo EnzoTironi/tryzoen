@@ -11,12 +11,15 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
-  type PromptInputMessage,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "@web/components/ai-elements/prompt-input";
-import { chatTitle, messageContent } from "../../_lib/message-input";
+import {
+  chatTitle,
+  messageContent,
+  type ConversationDraft,
+} from "@zoen/companion-ui/messages";
 import { api } from "@web/trpc/client";
 
 export function NewChat({
@@ -62,7 +65,7 @@ export function NewChat({
     },
   });
 
-  const handleSubmit = async (message: PromptInputMessage) => {
+  const handleSubmit = async (message: ConversationDraft) => {
     const text = message.text.trim();
     if (
       (text.length === 0 && message.files.length === 0) ||

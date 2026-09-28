@@ -1,0 +1,2 @@
+ALTER TABLE "workspace_memory_namespace" ADD COLUMN "learned_memory_initialized" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_memory_namespace" ADD COLUMN "session_memory_initialized" boolean DEFAULT false NOT NULL;

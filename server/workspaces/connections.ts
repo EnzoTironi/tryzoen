@@ -74,7 +74,7 @@ export const shareGoogleConnection = async function (
   ).reveal();
   const rows =
     await query(sql`SELECT a.id, a."accountId", a."refreshToken", a.scope FROM account a JOIN public.user u ON u.id = a."userId"
-    WHERE ('better-auth:' || u.id) = ${actor.userId} AND a."providerId" = 'google' AND a.issuer = 'https://accounts.google.com' LIMIT 2`);
+    WHERE ('better-auth:' || u.id) = ${actor.userId} AND a."providerId" = 'google' LIMIT 2`);
   if (rows.length !== 1)
     throw new GoogleWorkspaceError({
       reason: "authorization_required",

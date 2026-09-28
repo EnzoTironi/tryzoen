@@ -100,6 +100,8 @@ export const archiveChannelAccount = async function (input: {
       AND (target_user_id = ${input.sourceUserId} OR intended_identity_id IN (SELECT id FROM channel_identity WHERE user_id = ${input.sourceUserId}))`);
   await query(sql`UPDATE scheduled_agent_jobs SET status = 'paused', updated_at = clock_timestamp()
       WHERE created_by_user_id = ${source.principalId} AND status = 'active'`);
+  await query(sql`UPDATE creator_pilots SET status = 'withdrawn'
+      WHERE (creator_user_id = ${source.principalId} OR recipient_user_id = ${source.principalId}) AND status IN ('pending', 'active')`);
   await query(sql`UPDATE workspace_agent_grants SET revoked_at = clock_timestamp()
       WHERE issued_by = ${source.principalId} AND revoked_at IS NULL`);
   await query(

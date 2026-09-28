@@ -148,14 +148,7 @@
   gap: 10px;
   margin-bottom: 16px;
 }
-.filename {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  font-size: 16px;
-}
+
 .document {
   min-height: 42dvh;
   field-sizing: fixed;
@@ -167,13 +160,7 @@
     14px/1.8 ui-monospace,
     monospace;
 }
-.saveBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-top: 20px;
-}
+
 .caption {
   color: var(--muted-foreground);
   font-size: 12px;

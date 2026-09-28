@@ -1,3 +1,9 @@
+import { readMatrixMedia } from "../../server/matrix/media/read";
+import { searchComposerReferences } from "../../server/workspaces/references";
+import {
+  readMatrixReactions,
+  setMatrixReaction,
+} from "../../server/matrix/reactions";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { sleep } from "../../server/operations/async";
@@ -6,7 +12,10 @@ import { matrixReceiver } from "./matrix-fixture";
 
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { requireWorkspaceAccess } from "../../server/workspaces/access";
+import {
+  requireWorkspaceAccess,
+  WorkspaceAccessDenied,
+} from "../../server/workspaces/access";
 import { acceptMatrixTransaction } from "../../server/matrix/inbound";
 import {
   createMatrixRoom,
@@ -126,6 +135,165 @@ test(
         )
       ).ok
     ).toBe(true);
+    const parent = await sendMatrixMessage(actor, {
+      id: room.id,
+      operationId: randomUUID(),
+      text: "Synthetic thread: release plan",
+    });
+    const reactionInput = {
+      id: room.id,
+      messageId: parent.event_id,
+      operationId: randomUUID(),
+      emoji: "❤️",
+    };
+    const reaction = await setMatrixReaction(guest, reactionInput);
+    expect(reaction).toMatchObject({
+      mine: "❤️",
+      reactions: [{ emoji: "❤️", count: 1 }],
+    });
+    expect(await setMatrixReaction(guest, reactionInput)).toEqual(reaction);
+    await setMatrixReaction(actor, {
+      ...reactionInput,
+      operationId: randomUUID(),
+    });
+    const changed = await setMatrixReaction(guest, {
+      ...reactionInput,
+      operationId: randomUUID(),
+      previousEventId: reaction.mineEventId ?? undefined,
+      emoji: "🎉",
+    });
+    expect(changed.reactions).toContainEqual({ emoji: "❤️", count: 1 });
+    expect(changed.reactions).toContainEqual({ emoji: "🎉", count: 1 });
+    const removed = await setMatrixReaction(guest, {
+      ...reactionInput,
+      operationId: randomUUID(),
+      previousEventId: changed.mineEventId ?? undefined,
+      emoji: null,
+    });
+    expect(removed.mine).toBeNull();
+    expect(removed.reactions).toEqual([{ emoji: "❤️", count: 1 }]);
+    expect(
+      (
+        await readMatrixReactions(actor, {
+          id: room.id,
+          messageIds: [parent.event_id],
+        })
+      )[0]?.mine
+    ).toBe("❤️");
+    await expect(
+      readMatrixReactions(personal, {
+        id: room.id,
+        messageIds: [parent.event_id],
+      })
+    ).rejects.toThrow(WorkspaceAccessDenied);
+    await expect(setMatrixReaction(personal, reactionInput)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
+    const quoted = await sendMatrixMessage(guest, {
+      id: room.id,
+      text: "Quoted reply",
+      replyTo: parent.event_id,
+      operationId: randomUUID(),
+    });
+    const quotedView = (await readMatrixMessages(actor, room.id)).messages.find(
+      (message) => message.id === quoted.event_id
+    );
+    expect(quotedView).toMatchObject({
+      text: "Quoted reply",
+      reply: {
+        id: parent.event_id,
+        text: "Synthetic thread: release plan",
+        sender: "Synthetic owner",
+      },
+    });
+    const nested = await sendMatrixMessage(actor, {
+      id: room.id,
+      text: "Reply to the quoted response",
+      replyTo: quoted.event_id,
+      operationId: randomUUID(),
+    });
+    expect(
+      (await readMatrixMessages(actor, room.id)).messages.find(
+        (message) => message.id === nested.event_id
+      )
+    ).toMatchObject({
+      text: "Reply to the quoted response",
+      reply: { id: quoted.event_id, text: "Quoted reply" },
+    });
+    const files = [
+      {
+        type: "file" as const,
+        filename: "synthetic-note.txt",
+        mediaType: "text/plain",
+        url: "data:text/plain;base64,U3ludGhldGljIGZpbGU=",
+      },
+    ];
+    const upload = { id: room.id, operationId: randomUUID(), text: "", files };
+    const media = await sendMatrixMessage(actor, upload);
+    expect(await sendMatrixMessage(actor, upload)).toEqual(media);
+    expect(
+      await readMatrixMedia(guest, { id: room.id, messageId: media.event_id })
+    ).toEqual(files[0]);
+    expect(
+      (await readMatrixMessages(guest, room.id)).messages.filter(
+        (item) => item.id === media.event_id
+      )
+    ).toHaveLength(1);
+    await expect(
+      readMatrixMedia(personal, { id: room.id, messageId: media.event_id })
+    ).rejects.toThrow(WorkspaceAccessDenied);
+    const privateWrite = await workspace.repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: null,
+      path: "agent/MEMORY.md",
+      content: "Private shared-workspace owner memory",
+    });
+    await workspace.repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: privateWrite.revision,
+      path: "knowledge/visible.md",
+      content: "Shared reference",
+    });
+    const references = await searchComposerReferences(guest, {
+      trigger: "@",
+      query: ".md",
+      roomId: room.id,
+    });
+    expect(references.map((item) => item.id)).toContain("knowledge/visible.md");
+    expect(references.map((item) => item.id)).not.toContain("agent/MEMORY.md");
+    await expect(
+      searchComposerReferences(personal, {
+        trigger: "@",
+        query: "",
+        roomId: room.id,
+      })
+    ).rejects.toThrow(WorkspaceAccessDenied);
+    const replyId = randomUUID();
+    await sendMatrixMessage(guest, {
+      id: room.id,
+      operationId: replyId,
+      text: "Ready for review",
+      rootId: parent.event_id,
+    });
+    await sendMatrixMessage(guest, {
+      id: room.id,
+      operationId: replyId,
+      text: "Ready for review",
+      rootId: parent.event_id,
+    });
+    const thread = await readMatrixMessages(
+      actor,
+      room.id,
+      undefined,
+      parent.event_id
+    );
+    expect(thread.parent?.text).toBe("Synthetic thread: release plan");
+    expect(thread.messages).toHaveLength(1);
+    expect(thread.messages[0]?.text).toBe("Ready for review");
+    expect(thread.messages[0]?.rootId).toBe(parent.event_id);
+    await expect(
+      readMatrixMessages(personal, room.id, undefined, parent.event_id)
+    ).rejects.toThrow(WorkspaceAccessDenied);
     await query(
       sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
     );

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type * as RuntimeModel from "../node_modules/eve/dist/src/runtime/agent/resolve-model.js";
 import type * as RuntimeContext from "../node_modules/eve/dist/src/context/container.js";
 import type { DynamicResolveContext } from "eve";
@@ -47,11 +48,12 @@ if (!resolveBrowserModel)
 const { resolveRuntimeModelSelection } = await vi.importActual<
   typeof RuntimeModel
 >(
-  new URL("./runtime/agent/resolve-model.js", import.meta.resolve("eve"))
-    .pathname
+  fileURLToPath(
+    new URL("./runtime/agent/resolve-model.js", import.meta.resolve("eve"))
+  )
 );
 const { ContextContainer } = await vi.importActual<typeof RuntimeContext>(
-  new URL("./context/container.js", import.meta.resolve("eve")).pathname
+  fileURLToPath(new URL("./context/container.js", import.meta.resolve("eve")))
 );
 
 describe("worker input bubbling", () => {

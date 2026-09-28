@@ -1,0 +1,128 @@
+import { useState } from "react";
+import type { z } from "zod";
+import { Ellipsis, Heart, MessageCircle } from "lucide-react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { AssistantMarkdown } from "../markdown";
+import { IconButton } from "../icon-button";
+import { pageStyles } from "../page";
+import { colors } from "../theme";
+import type { feedPostSchema } from "./schema";
+
+export function FeedCard({
+  post,
+  pending,
+  onLike,
+  onDiscuss,
+  onOptions,
+}: {
+  readonly post: z.infer<typeof feedPostSchema>;
+  readonly pending: boolean;
+  readonly onLike: () => void;
+  readonly onDiscuss: () => void;
+  readonly onOptions: () => void;
+}) {
+  const [linkError, setLinkError] = useState(false);
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={styles.title}>
+          {post.title}
+        </Text>
+        <Text style={styles.date}>
+          {new Date(post.createdAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </Text>
+        <IconButton
+          label={`Options for ${post.title}`}
+          icon={Ellipsis}
+          onPress={onOptions}
+        />
+      </View>
+      <AssistantMarkdown text={post.content} />
+      {post.sources.length > 0 && (
+        <View style={styles.sources}>
+          <Text style={pageStyles.rowTitle}>Sources</Text>
+          {post.sources.map((source) => (
+            <Pressable
+              key={source.url}
+              accessibilityRole="link"
+              onPress={() => {
+                setLinkError(false);
+                void Linking.openURL(source.url).catch(() => {
+                  setLinkError(true);
+                });
+              }}
+            >
+              <Text style={styles.source}>{source.title}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {linkError && (
+        <Text accessibilityRole="alert" style={{ color: colors.danger }}>
+          Couldn’t open the source. Try again.
+        </Text>
+      )}
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${post.liked ? "Unlike" : "Like"} ${post.title}`}
+          accessibilityState={{ selected: post.liked, disabled: pending }}
+          disabled={pending}
+          onPress={onLike}
+          style={styles.action}
+        >
+          <Heart
+            size={21}
+            color={post.liked ? colors.danger : colors.ink}
+            fill={post.liked ? colors.danger : "transparent"}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Discuss ${post.title}`}
+          onPress={onDiscuss}
+          style={styles.action}
+        >
+          <MessageCircle size={21} color={colors.ink} />
+          <Text style={styles.discuss}>Discuss</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+const styles = StyleSheet.create({
+  card: {
+    gap: 8,
+    marginBottom: 32,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: "500",
+    flex: 1,
+  },
+  date: { color: colors.muted, fontSize: 12, lineHeight: 26 },
+  discuss: { color: colors.ink, fontSize: 13, lineHeight: 20 },
+  sources: { gap: 10 },
+  source: { color: colors.accent, fontSize: 14, lineHeight: 22 },
+  actions: { flexDirection: "row", gap: 12, alignItems: "center" },
+  action: {
+    minHeight: 44,
+    minWidth: 44,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+});

@@ -371,6 +371,21 @@
   },
   "overrides": [
     {
+      // eslint-plugin-turbo 2.10 does not associate root //# tasks with root files.
+      // Keep these declarations scoped in turbo.json instead of exposing secrets globally.
+      "files": ["shared/environment/env.ts", "shared/environment/env/**/*.ts"],
+      "rules": {
+        "turbo/no-undeclared-env-vars": [
+          "warn",
+          {
+            "allowList": [
+              "^(NODE_ENV|VERCEL_ENV|BETTER_AUTH_SECRET|SECRET_ENCRYPTION_KEY|OPEN_INSTINCT_LOW_MEM_BUILD)$"
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": [
         "**/env.{js,cjs,mjs,ts,cts,mts}",
         "**/env/**/*.{js,cjs,mjs,ts,cts,mts}"

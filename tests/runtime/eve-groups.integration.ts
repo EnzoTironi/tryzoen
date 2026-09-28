@@ -1,3 +1,4 @@
+import { readMatrixReactions } from "../../server/matrix/reactions";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -187,6 +188,7 @@ test("real group conversation executes workspace tools, retains shared context a
       id: room.id,
       operationId: randomUUID(),
       text: "@Zoen group-message",
+      rootId: chatter.event_id,
     });
     await waitForMatrixState(nativeMessage.event_id, "completed");
     const nativeMessages = (await readMatrixMessages(actor, room.id)).messages;
@@ -206,9 +208,24 @@ test("real group conversation executes workspace tools, retains shared context a
       )
     ).toBe(false);
     expect(
-      nativeMessages.find((message) => message.id === nativeMessage.event_id)
-        ?.reactions
-    ).toContainEqual({ type: "heart", count: 1 });
+      (
+        await readMatrixReactions(actor, {
+          id: room.id,
+          messageIds: [nativeMessage.event_id],
+        })
+      )[0]?.reactions
+    ).toContainEqual({ emoji: "❤️", count: 1 });
+    const threaded = await readMatrixMessages(
+      actor,
+      room.id,
+      undefined,
+      chatter.event_id
+    );
+    expect(
+      threaded.messages.find(
+        (message) => message.text === "Native group message."
+      )
+    ).toMatchObject({ bot: true, rootId: chatter.event_id });
     const reactions = z
       .object({
         chunk: z.array(
@@ -252,9 +269,13 @@ test("real group conversation executes workspace tools, retains shared context a
       afterReaction.filter((message) => message.sender === "Zoen")
     ).toHaveLength(botMessagesBeforeReaction);
     expect(
-      afterReaction.find((message) => message.id === reactionOnly.event_id)
-        ?.reactions
-    ).toContainEqual({ type: "heart", count: 1 });
+      (
+        await readMatrixReactions(actor, {
+          id: room.id,
+          messageIds: [reactionOnly.event_id],
+        })
+      )[0]?.reactions
+    ).toContainEqual({ emoji: "❤️", count: 1 });
 
     const question = await sendMatrixMessage(guest, {
       id: room.id,
@@ -476,8 +497,13 @@ test("delivered group reactions tolerate an empty model follow-up while actual f
             : []
       );
       expect(
-        messages.find((message) => message.id === sent.event_id)?.reactions
-      ).toEqual(scenario.reaction ? [{ type: "heart", count: 1 }] : []);
+        (
+          await readMatrixReactions(actor, {
+            id: room.id,
+            messageIds: [sent.event_id],
+          })
+        )[0]?.reactions
+      ).toEqual(scenario.reaction ? [{ emoji: "❤️", count: 1 }] : []);
     }
   } finally {
     await closeMatrixRoom(actor, room.id);

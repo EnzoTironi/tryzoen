@@ -1,5 +1,5 @@
 import { sleep } from "../../../server/operations/async";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxToolInvoker } from "../core";
 import { makeQuickJsExecutor } from "./index";
@@ -45,9 +45,13 @@ describe("quickjs executor", () => {
           if (signal?.aborted) abort();
         }),
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(result.error).toContain("timed out");
-    expect(ended).toBe(true);
+    await vi.waitFor(
+      () => {
+        expect(ended).toBe(true);
+      },
+      { timeout: 1000, interval: 10 }
+    );
   });
 
   it("bounds time waiting for a host call which never resolves", async () => {

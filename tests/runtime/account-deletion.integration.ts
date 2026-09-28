@@ -80,7 +80,7 @@ test("a company member's deletion keeps company git and never delivers to live p
   const deleted = await requestAccountDeletion(guest);
   expect(deleted.status).toBe("pending_external");
   expect(deleted.pending).toEqual(
-    expect.arrayContaining(["vaultwarden", "whatsapp", "matrix", "mem0"])
+    expect.arrayContaining(["vaultwarden", "whatsapp", "matrix"])
   );
   expect(deleted.backupExpiresAt).toMatch(/T/);
   expect(

@@ -4,7 +4,7 @@ import {
   reactionTextFor,
   reactToMessageOutputSchema,
   reactToMessageToolResultSchema,
-} from "./reaction";
+} from "@zoen/companion-ui/messages";
 
 const reactions = [
   ["thumbs_up", "👍"],

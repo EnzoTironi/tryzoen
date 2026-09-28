@@ -6,6 +6,12 @@ providers. PostgreSQL is self-hosted; no managed Postgres product is provisioned
 
 ## Production layout
 
+The file-memory replacement is implemented locally and has **not been deployed**.
+The table below records the previous installation; the old memory machine/database
+must be preserved until existing records and erasure obligations are reconciled.
+See [file-memory deployment](file-memory/README.md) before applying this branch.
+The active hosted definition now uses a retained web/Eve memory volume and no Mem0 API.
+
 | Resource                 | Configuration                                                                                                                                                                                                  |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Web + Eve                | companion-tironi, gru, 2 shared CPUs / 2 GB                                                                                                                                                                    |

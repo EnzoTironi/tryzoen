@@ -1,0 +1,533 @@
+import { MessageCircle, Puzzle, ShieldCheck } from "lucide-react-native";
+import { ResourceCard } from "./cards/resource";
+import { LinkCard, MessageLinks } from "./cards/link";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewToken,
+} from "react-native";
+import type {
+  EveMessage,
+  EveMessageInputRequest,
+  EveMessagePart,
+  UseEveAgentStatus,
+} from "eve/react";
+import type { InputResponse } from "eve/client";
+import { AssistantMarkdown } from "./markdown";
+import { ActionButton } from "./button";
+import { Composer } from "./composer";
+import { colors } from "./theme";
+import { MessageActions } from "./message-actions";
+import { AttachmentCard } from "./attachments/card";
+import { messageContent, type ConversationDraft } from "./session/input";
+import type { ChatAgent } from "./session/types";
+import {
+  messageText,
+  readReplyMessage,
+  replyMessage,
+  type MessageReply,
+} from "./session/reply";
+
+export function Conversation({
+  messages,
+  status,
+  error,
+  onSend,
+  onRespond,
+  onCancel,
+  onLoadOlder,
+  loadingOlder = false,
+  onCopyText,
+  initialDraft,
+  reactions,
+  onReact,
+  onVisibleMessagesChange,
+}: {
+  readonly messages: readonly EveMessage[];
+  readonly status: UseEveAgentStatus;
+  readonly error?: string;
+  readonly onSend: ChatAgent["send"];
+  readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
+  readonly onCancel: () => void;
+  readonly onLoadOlder?: () => void;
+  readonly loadingOlder?: boolean;
+  readonly onCopyText?: (text: string) => Promise<void>;
+  readonly initialDraft?: ConversationDraft;
+  readonly reactions?: ReadonlyMap<string, string | null>;
+  readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
+  readonly onVisibleMessagesChange?: (ids: string[]) => void;
+}) {
+  const staged = readReplyMessage(initialDraft?.text ?? "");
+  const [reply, setReply] = useState<MessageReply | undefined>(() =>
+    staged
+      ? { id: staged.id, role: staged.role, text: staged.quote }
+      : undefined
+  );
+  const scroll = useRef<FlatList<EveMessage>>(null);
+  const nearBottom = useRef(true);
+  const positioned = useRef(false);
+  const busy = status === "streaming" || status === "submitted";
+  const canRespond = status === "ready" || status === "error";
+  const reportVisible = useRef(onVisibleMessagesChange);
+  useEffect(() => {
+    reportVisible.current = onVisibleMessagesChange;
+  }, [onVisibleMessagesChange]);
+  // FlatList requires this callback's identity to survive renders and refreshes.
+  const [onViewableItemsChanged] = useState(
+    () =>
+      ({ viewableItems }: { viewableItems: ViewToken<EveMessage>[] }) => {
+        reportVisible.current?.(viewableItems.map(({ item }) => item.id));
+      }
+  );
+  useEffect(() => {
+    if (messages.length === 0 || positioned.current) return undefined;
+    const frame = requestAnimationFrame(() => {
+      scroll.current?.scrollToEnd({ animated: false });
+      positioned.current = true;
+      nearBottom.current = true;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [messages.length]);
+  return (
+    <View style={styles.root}>
+      <FlatList
+        ref={scroll}
+        data={messages}
+        keyExtractor={(message) => message.id}
+        contentContainerStyle={[styles.messages, styles.column]}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        windowSize={7}
+        onViewableItemsChanged={onViewableItemsChanged}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        scrollEventThrottle={100}
+        onLayout={() => {
+          if (nearBottom.current && messages.length > 0)
+            scroll.current?.scrollToEnd({ animated: false });
+        }}
+        onScrollBeginDrag={() => {
+          positioned.current = true;
+        }}
+        onScroll={({ nativeEvent }) => {
+          const atBottom =
+            nativeEvent.contentSize.height -
+              nativeEvent.contentOffset.y -
+              nativeEvent.layoutMeasurement.height <
+            100;
+          // Initial list measurements can report the top before history is positioned.
+          if (atBottom && nativeEvent.contentOffset.y > 0)
+            positioned.current = true;
+          if (positioned.current) nearBottom.current = atBottom;
+        }}
+        onContentSizeChange={() => {
+          if (nearBottom.current)
+            scroll.current?.scrollToEnd({ animated: false });
+        }}
+        ListHeaderComponent={
+          onLoadOlder ? (
+            <ActionButton
+              quiet
+              disabled={loadingOlder}
+              onPress={() => {
+                nearBottom.current = false;
+                onLoadOlder();
+              }}
+            >
+              {loadingOlder ? "Loading…" : "Earlier messages"}
+            </ActionButton>
+          ) : null
+        }
+        renderItem={({ item: message }) => (
+          <View
+            style={
+              message.role === "user" ? styles.userGroup : styles.assistantGroup
+            }
+          >
+            <View style={{ gap: 6, maxWidth: "100%" }}>
+              {message.parts.map((part, index) => (
+                <MessagePart
+                  // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
+                  key={`${message.id}:${index}`}
+                  part={part}
+                  isUser={message.role === "user"}
+                  canRespond={canRespond}
+                  onRespond={onRespond}
+                />
+              ))}
+              {message.metadata?.status === "failed" && (
+                <Text style={styles.error}>Message not delivered.</Text>
+              )}
+            </View>
+            <MessageActions
+              text={messageText(message)}
+              outgoing={message.role === "user"}
+              onCopy={onCopyText}
+              onReply={() => {
+                setReply({
+                  id: message.id,
+                  role: message.role,
+                  text: messageText(message),
+                });
+              }}
+              reaction={reactions?.get(message.id)}
+              onReact={
+                onReact ? (emoji) => onReact(message.id, emoji) : undefined
+              }
+            />
+          </View>
+        )}
+        ListFooterComponent={
+          <View>
+            {(busy || status === "resuming") && (
+              <View
+                accessibilityRole="progressbar"
+                accessibilityLabel={
+                  status === "resuming" ? "Reconnecting" : "Working"
+                }
+                style={styles.progress}
+              >
+                <ActivityIndicator size="small" color={colors.muted} />
+                <Text style={styles.caption}>
+                  {status === "resuming"
+                    ? "Reconnecting to your conversation…"
+                    : "Working on it…"}
+                </Text>
+              </View>
+            )}
+            {error && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error}
+              </Text>
+            )}
+          </View>
+        }
+      />
+      <View style={styles.composer}>
+        <View style={styles.column}>
+          <Composer
+            initialDraft={{
+              text: staged?.text ?? initialDraft?.text ?? "",
+              files: initialDraft?.files ?? [],
+            }}
+            onSend={async (message) => {
+              await onSend(
+                messageContent({
+                  ...message,
+                  text: replyMessage(message.text, reply),
+                })
+              );
+              setReply((current) =>
+                current?.id === reply?.id ? undefined : current
+              );
+            }}
+            reply={reply}
+            onRemoveReply={() => {
+              setReply(undefined);
+            }}
+            onCancel={onCancel}
+            busy={busy}
+            disabled={status === "resuming"}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function UserMessage({ text }: { readonly text: string }) {
+  const quoted = readReplyMessage(text);
+  if (!quoted) return <AssistantMarkdown text={text} />;
+  return (
+    <View style={styles.quotedMessage}>
+      <View style={styles.quote}>
+        <Text style={styles.caption}>
+          {quoted.id.startsWith("feed:")
+            ? "Discussing a Feed post"
+            : quoted.role === "assistant"
+              ? "Replying to Zoen"
+              : "Replying to you"}
+        </Text>
+        <Text selectable numberOfLines={4} style={styles.caption}>
+          {quoted.quote}
+        </Text>
+      </View>
+      <AssistantMarkdown text={quoted.text} />
+    </View>
+  );
+}
+
+export function MessagePart({
+  part,
+  isUser,
+  canRespond,
+  onRespond,
+}: {
+  readonly part: EveMessagePart;
+  readonly isUser: boolean;
+  readonly canRespond: boolean;
+  readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
+}) {
+  if (part.type === "text") {
+    return (
+      <>
+        <View style={[styles.message, isUser ? styles.user : styles.assistant]}>
+          {isUser ? (
+            <UserMessage text={part.text} />
+          ) : (
+            <AssistantMarkdown text={part.text} />
+          )}
+        </View>
+        <MessageLinks text={readReplyMessage(part.text)?.text ?? part.text} />
+      </>
+    );
+  }
+  if (part.type === "dynamic-tool") {
+    const request = part.toolMetadata?.eve?.inputRequest;
+    const response = part.toolMetadata?.eve?.inputResponse;
+    if (request && !response)
+      return (
+        <InputRequest
+          key={request.requestId}
+          request={request}
+          enabled={canRespond}
+          onRespond={onRespond}
+        />
+      );
+    if (request && response)
+      return (
+        <ResourceCard
+          title={
+            request.kind === "tool-approval" ? "Your decision" : "Your answer"
+          }
+          icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
+          tint="#4c9984"
+        >
+          <Text selectable style={styles.text}>
+            {request.prompt}
+          </Text>
+          <Text selectable style={styles.caption}>
+            {request.options?.find((option) => option.id === response.optionId)
+              ?.label ??
+              response.text ??
+              response.optionId}
+          </Text>
+          {part.state === "output-error" && (
+            <Text style={styles.error}>
+              The action failed after your response.
+            </Text>
+          )}
+        </ResourceCard>
+      );
+    return (
+      <ResourceCard
+        title={part.toolName.replaceAll("_", " ")}
+        icon={Puzzle}
+        tint="#8673c8"
+        detail={
+          part.state === "output-error"
+            ? "Falhou"
+            : part.state === "output-available"
+              ? "Concluído"
+              : part.state === "output-denied"
+                ? "Não autorizado"
+                : "Em andamento"
+        }
+      />
+    );
+  }
+
+  if (part.type === "authorization") {
+    const url = part.authorization?.url;
+    return (
+      <ResourceCard
+        title={part.displayName}
+        icon={ShieldCheck}
+        tint="#4c9984"
+        detail={part.state === "completed" ? part.outcome : part.description}
+      >
+        {part.authorization?.userCode && (
+          <Text selectable style={styles.text}>
+            {part.authorization.userCode}
+          </Text>
+        )}
+        {part.state === "required" && url && (
+          <LinkCard url={url} title="Connect account" />
+        )}
+      </ResourceCard>
+    );
+  }
+  if (part.type === "file")
+    return part.url?.startsWith("data:") ? (
+      <AttachmentCard
+        file={{
+          type: "file",
+          url: part.url,
+          filename: part.filename,
+          mediaType: part.mediaType,
+        }}
+      />
+    ) : part.url ? (
+      <LinkCard url={part.url} title={part.filename ?? "Attachment"} />
+    ) : (
+      <Text style={styles.caption}>{part.filename ?? "Attachment"}</Text>
+    );
+  return null;
+}
+
+function InputRequest({
+  request,
+  enabled,
+  onRespond,
+}: {
+  readonly request: EveMessageInputRequest;
+  readonly enabled: boolean;
+  readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
+}) {
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const inFlight = useRef(false);
+  async function respond(response: InputResponse) {
+    if (!enabled || inFlight.current) return;
+    inFlight.current = true;
+    setPending(true);
+    setFailed(false);
+    try {
+      await onRespond([response]);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending(false);
+      inFlight.current = false;
+    }
+  }
+  return (
+    <ResourceCard
+      title={
+        request.kind === "tool-approval"
+          ? "Your permission is needed"
+          : "A quick question"
+      }
+      icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
+      tint="#4c9984"
+    >
+      <Text style={styles.text}>{request.prompt}</Text>
+      <View style={styles.options}>
+        {request.options?.map((option) => (
+          <ActionButton
+            key={option.id}
+            quiet={option.style !== "danger"}
+            disabled={!enabled || pending}
+            onPress={() => {
+              void respond({
+                requestId: request.requestId,
+                optionId: option.id,
+              });
+            }}
+          >
+            {option.label}
+          </ActionButton>
+        ))}
+      </View>
+      {((request.allowFreeform ?? false) || !request.options?.length) && (
+        <View style={styles.request}>
+          <TextInput
+            accessibilityLabel="Your answer"
+            placeholder="Your answer"
+            value={text}
+            onChangeText={setText}
+            editable={enabled && !pending}
+            style={styles.answer}
+          />
+          <ActionButton
+            disabled={!enabled || pending || !text.trim()}
+            onPress={() => {
+              void respond({ requestId: request.requestId, text: text.trim() });
+            }}
+          >
+            Send answer
+          </ActionButton>
+        </View>
+      )}
+      {failed && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          Your answer wasn’t accepted. Please try again.
+        </Text>
+      )}
+    </ResourceCard>
+  );
+}
+
+const styles = StyleSheet.create({
+  quotedMessage: { gap: 12 },
+  quote: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.muted,
+    paddingLeft: 12,
+    gap: 4,
+  },
+  root: { flex: 1, minHeight: 0 },
+  messages: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 30,
+  },
+  column: { width: "100%", maxWidth: 900, alignSelf: "center" },
+  message: {
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 3,
+    borderRadius: 24,
+  },
+  assistant: {
+    backgroundColor: "#e9e9eb",
+  },
+  user: {
+    backgroundColor: "#cbe5ff",
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    marginVertical: 10,
+  },
+  userGroup: {
+    alignSelf: "flex-end",
+    maxWidth: "88%",
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  assistantGroup: {
+    alignSelf: "flex-start",
+    maxWidth: "90%",
+    marginBottom: 12,
+  },
+  author: { fontSize: 13, fontWeight: "600", color: colors.ink },
+  text: { fontSize: 16, lineHeight: 25, color: colors.ink },
+  caption: { fontSize: 13, lineHeight: 21, color: colors.muted },
+  request: { gap: 12, paddingVertical: 8 },
+  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  answer: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 14,
+    padding: 12,
+    color: colors.ink,
+  },
+  progress: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 21 },
+  composer: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
+});

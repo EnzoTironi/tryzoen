@@ -6,28 +6,47 @@ import { listBrowserTraces } from "@db/services/browser-traces";
 import { saveChat } from "@db/services/chats";
 import { replacePersonalProfile } from "../../server/personal-memory/profile";
 import { selectGatewayModel } from "@db/services/settings";
-import { deleteVaultItem, saveVaultItem } from "@db/services/vault";
+import {
+  deleteVaultItem,
+  saveVaultItem,
+  readVaultPage,
+} from "@db/services/vault";
 import { saveChatSchema } from "@shared/chat/schema";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
 import { disconnectGoogleWorkspace } from "../../server/google-workspace";
-import { activatePersonalGoogle } from "../../server/google-workspace/settings";
+import {
+  activatePersonalGoogle,
+  readPersonalGoogleSettings,
+} from "../../server/google-workspace/settings";
 import { resolveWorkspaceActor } from "../../server/workspaces/session";
 import { IdentitySchema } from "../../server/accounts";
-import { revokeLinkedChannelIdentity } from "../../server/accounts/controls";
+import {
+  revokeLinkedChannelIdentity,
+  readLinkedChannelIdentities,
+} from "../../server/accounts/controls";
 import { userProfileSchema } from "@shared/user-profile/schema";
 import {
   vaultCreateItemSchema,
   vaultImportItemsSchema,
+  vaultPageInputSchema,
+  vaultItemSchema,
 } from "@shared/vault/schema";
 import { createTRPCRouter, protectedProcedure } from "./init";
 import { workspacesRouter } from "./workspaces";
 import { modelsRouter } from "./models";
 import { insightsRouter } from "./insights";
+import { companionRouter } from "./companion";
+import { personalMemoryRouter } from "./personal-memory";
 export const appRouter = createTRPCRouter({
+  companion: companionRouter,
+  personalMemory: personalMemoryRouter,
   modelConnections: modelsRouter,
   insights: insightsRouter,
   workspaces: workspacesRouter,
   accountChannels: {
+    list: protectedProcedure.query(({ ctx }) =>
+      readLinkedChannelIdentities(ctx.requestHeaders)
+    ),
     revoke: protectedProcedure
       .input(
         z.object({
@@ -57,6 +76,11 @@ export const appRouter = createTRPCRouter({
       .mutation(({ ctx, input }) => saveChat(ctx.scope, input)),
   },
   googleWorkspace: {
+    read: protectedProcedure.query(async ({ ctx }) =>
+      readPersonalGoogleSettings(
+        await resolveWorkspaceActor(ctx.requestHeaders)
+      )
+    ),
     update: protectedProcedure
       .input(
         z.object({
@@ -131,6 +155,15 @@ export const appRouter = createTRPCRouter({
       ),
   },
   vault: {
+    list: protectedProcedure
+      .input(vaultPageInputSchema)
+      .output(
+        z.object({
+          items: z.array(vaultItemSchema),
+          nextCursor: vaultPageInputSchema.shape.cursor,
+        })
+      )
+      .query(({ ctx, input }) => readVaultPage(ctx.scope, input)),
     create: protectedProcedure
       .input(vaultCreateItemSchema)
       .mutation(({ ctx, input }) => saveVaultItem(ctx.scope, input)),

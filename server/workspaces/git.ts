@@ -1,3 +1,7 @@
+import {
+  GitRevisionSchema,
+  WorkspacePathSchema,
+} from "@shared/workspaces/files";
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,13 +16,6 @@ export const workspaceGitLimits = {
   bundleBytes: 25_165_824,
   files: 200,
 } as const;
-export const WorkspacePathSchema = z
-  .string()
-  .regex(
-    /^(?:(?:knowledge|skills|agent|proposals\/skills)\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.md|(?:plugins|ontology)\/workspace\.json|(?:tools|proposals\/tools)\/[a-z][a-z0-9-]{0,39}\.json)$/
-  )
-  .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
-export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);
 
 export class WorkspaceGitError extends Error {
   readonly _tag = "WorkspaceGitError";

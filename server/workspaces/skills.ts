@@ -1,3 +1,4 @@
+import { GitRevisionSchema } from "@shared/workspaces/files";
 import { isValid } from "@shared/validation";
 import { z } from "zod";
 import {
@@ -5,7 +6,7 @@ import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "./access";
-import { GitRevisionSchema } from "./git";
+
 import {
   parseSkillDocument,
   PublishedSkillPath,

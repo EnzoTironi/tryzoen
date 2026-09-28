@@ -6,7 +6,7 @@ import type { AdapterPostableMessage } from "chat";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Blob from "@vercel/blob";
 import type * as EnvModule from "@shared/environment";
-import { sendMessageOutputSchema } from "@shared/chat/message-delivery";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 import type { AccessScope } from "@shared/identity/access-scope";
 import type {
   finalizeScheduledReport,

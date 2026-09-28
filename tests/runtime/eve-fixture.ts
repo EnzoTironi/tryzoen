@@ -18,11 +18,15 @@ const eventsSchema = z.array(
 );
 export async function buildEveFixture() {
   await clearFixtureWorkflows();
+  await compileEveFixture();
+}
+
+export async function compileEveFixture(fixtureDirectory = directory) {
   await promisify(execFile)(
     process.execPath,
     ["../../../node_modules/eve/bin/eve.js", "build"],
     {
-      cwd: directory,
+      cwd: fixtureDirectory,
       timeout: 60_000,
       maxBuffer: 4 * 1024 * 1024,
     }
@@ -51,10 +55,14 @@ export async function clearFixtureWorkflows() {
     await pool.end();
   }
 }
-export async function runtime(port: number, host = "127.0.0.1") {
+export async function runtime(
+  port: number,
+  host = "127.0.0.1",
+  fixtureDirectory = directory
+) {
   const origin = `http://127.0.0.1:${String(port)}`;
   const child = spawn(process.execPath, [".output/server/index.mjs"], {
-    cwd: directory,
+    cwd: fixtureDirectory,
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,

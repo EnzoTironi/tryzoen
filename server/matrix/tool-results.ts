@@ -1,13 +1,14 @@
+import { matrixReplyRelation } from "./replies";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { ChannelEvents } from "eve/channels";
 import { z } from "zod";
 import { query } from "@db/queries";
-import { sendMessageToolResultSchema } from "@shared/chat/message-delivery";
+import { sendMessageToolResultSchema } from "@zoen/companion-ui/messages";
 import {
   reactToMessageToolResultSchema,
   reactionTextFor,
-} from "@shared/chat/reaction";
+} from "@zoen/companion-ui/messages";
 import { matrixDeliveryActor } from "./authority";
 import { matrixRequest, MatrixError } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
@@ -64,9 +65,7 @@ export async function publishMatrixToolResult(
       {
         msgtype: "m.text",
         body,
-        ...(output.replyTo
-          ? { "m.relates_to": { "m.in_reply_to": { event_id: eventId } } }
-          : {}),
+        "m.relates_to": await matrixReplyRelation(room.roomId, eventId),
       }
     );
   } else if (reaction.success) {

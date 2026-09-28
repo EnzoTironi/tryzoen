@@ -70,6 +70,31 @@ export default async function AccountArchivesPage({
                 <span>{t("Baixar arquivos e versões")}</span>
               </a>
             )}
+            {archive.creatorDrafts.map((draft) => (
+              <a
+                key={draft.id}
+                href={`/api/account/archives/${archive.id}?section=creator&attachment=${draft.id}`}
+              >
+                <DownloadIcon aria-hidden="true" />
+                <span>{draft.title} (.json)</span>
+              </a>
+            ))}
+            {archive.creatorReleases.map((version) => (
+              <a
+                key={version.id}
+                href={`/api/account/archives/${archive.id}?section=creator-release&attachment=${version.id}`}
+              >
+                <DownloadIcon aria-hidden="true" />
+                <span>
+                  {version.title} ·{" "}
+                  {new Intl.DateTimeFormat(locale, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }).format(new Date(version.createdAt))}{" "}
+                  (.json)
+                </span>
+              </a>
+            ))}
             {archive.attachments.map((file) => (
               <a
                 key={file.id}

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { EveEvalContext, EveEvalTurn } from "eve/evals";
 import { equals, satisfies } from "eve/evals/expect";
 
-import { sendMessageOutputSchema } from "@shared/chat/message-delivery";
+import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 
 export const agentEvalTags = ["agent", "behavior"] as const;
 

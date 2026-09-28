@@ -4,9 +4,13 @@ import { z } from "zod";
 import { env } from "@shared/environment";
 export class MatrixError extends Error {
   readonly _tag = "MatrixError";
-  declare readonly reason: "unavailable" | "forbidden" | "conflict";
+  declare readonly reason:
+    | "unavailable"
+    | "forbidden"
+    | "conflict"
+    | "not-found";
   constructor(input: {
-    readonly reason: "unavailable" | "forbidden" | "conflict";
+    readonly reason: "unavailable" | "forbidden" | "conflict" | "not-found";
   }) {
     super("MatrixError");
     this.name = "MatrixError";
@@ -37,10 +41,11 @@ export const matrixRequest = async function (
   method: "GET" | "POST" | "PUT",
   path: string,
   body?: z.core.util.JSONType,
-  userId?: string
+  userId?: string,
+  version: "v1" | "v3" = "v3"
 ) {
   const config = await matrixConfiguration();
-  const url = new URL(`/_matrix/client/v3/${path}`, config.url);
+  const url = new URL(`/_matrix/client/${version}/${path}`, config.url);
   if (userId) url.searchParams.set("user_id", userId);
   return await withTimeout(async () => {
     try {
@@ -64,13 +69,7 @@ export const matrixRequest = async function (
             })
             .parse(await response.json());
           throw new MatrixError({
-            reason:
-              error.errcode === "M_USER_IN_USE" ||
-              error.errcode === "M_ROOM_IN_USE"
-                ? "conflict"
-                : response.status === 403
-                  ? "forbidden"
-                  : "unavailable",
+            reason: matrixFailureReason(error.errcode, response.status),
           });
         }
         return z.json().parse(await response.json());
@@ -84,6 +83,16 @@ export const matrixRequest = async function (
     }
   }, 20000);
 };
+
+function matrixFailureReason(
+  code: string | undefined,
+  status: number
+): MatrixError["reason"] {
+  if (code === "M_USER_IN_USE" || code === "M_ROOM_IN_USE") return "conflict";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not-found";
+  return "unavailable";
+}
 
 /** Synapse admin erase. A missing user is already gone. Live admin stays optional. */
 export const deactivateMatrixUser = async function (matrixId: string) {
@@ -137,9 +146,26 @@ export const MatrixEventSchema = z.object({
   type: z.string(),
   sender: z.string(),
   state_key: z.optional(z.string()),
+  "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
   origin_server_ts: z.optional(z.number()),
+  unsigned: z
+    .object({
+      "m.relations": z
+        .object({
+          "m.thread": z
+            .object({ count: z.number().int().nonnegative() })
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   content: z.object({
     body: z.optional(z.string()),
+    url: z.string().optional(),
+    filename: z.string().optional(),
+    info: z
+      .object({ mimetype: z.string().optional(), size: z.number().optional() })
+      .optional(),
     msgtype: z.optional(z.string()),
     membership: z.optional(z.string()),
     "m.relates_to": z.optional(
@@ -147,6 +173,7 @@ export const MatrixEventSchema = z.object({
         rel_type: z.optional(z.string()),
         event_id: z.optional(z.string()),
         key: z.optional(z.string()),
+        "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
       })
     ),
   }),

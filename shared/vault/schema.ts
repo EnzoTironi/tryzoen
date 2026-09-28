@@ -20,7 +20,7 @@ const vaultCreateItemKindSchema = vaultItemKindSchema.extract([
   "contact",
 ]);
 
-const vaultItemSchema = z.object({
+export const vaultItemSchema = z.object({
   account: z.string(),
   createdAt: z.string(),
   hasSecret: z.boolean(),
@@ -28,6 +28,13 @@ const vaultItemSchema = z.object({
   kind: vaultItemKindSchema,
   label: z.string(),
   updatedAt: z.string(),
+});
+
+export const vaultPageInputSchema = z.object({
+  kind: vaultItemKindSchema.optional(),
+  cursor: z
+    .object({ updatedAt: z.iso.datetime(), id: z.string().min(1).max(160) })
+    .nullish(),
 });
 
 const boundedValue = z.string().trim().min(1).max(20_000);

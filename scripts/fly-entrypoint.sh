@@ -8,6 +8,13 @@ umask 077
 # Workspace Git bundles and authority use the application's durable Postgres.
 : "${DATABASE_URL:?DATABASE_URL is required}"
 
+if [ "${ZOEN_SESSION_ARCHIVE_DIR:-}" = /var/lib/zoen/memory ]; then
+  if ! mountpoint -q /var/lib/zoen; then
+    echo 'The persistent file-memory volume is not mounted.' >&2
+    exit 1
+  fi
+fi
+
 if [ -n "${CODEX_AUTH_JSON:-}" ]; then
   : "${CODEX_HOME:?CODEX_HOME must point at the retained model-auth volume}"
   printf %s "$CODEX_AUTH_JSON" | sh /app/scripts/seed-credential.sh "$CODEX_HOME/auth.json"

@@ -1,3 +1,6 @@
+packages:
+  - apps/*
+  - packages/*
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
@@ -21,17 +24,24 @@ allowBuilds:
   cbor-extract: false
   core-js: false
   esbuild: true
+  electron: true
+  electron-winstaller: false
   msgpackr-extract: false
   node-liblzma: false
   protobufjs: false
   sharp: true
 overrides:
+  # TenTap's native host shares Expo's React 19 renderer; its bundled WebView is isolated.
+  "@10play/tentap-editor>react-dom": 19.2.3
+  # xcode only uses uuid.v4(); 11 is the patched CommonJS-compatible release.
+  "xcode>uuid": 11.1.1
   # Security fixes within the existing parser majors.
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "qs@<6.16.0": 6.16.0
   # Drizzle's legacy loader only uses transform; do not retain its vulnerable dev server.
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:
+  "@10play/tentap-editor@1.0.1": patches/@10play__tentap-editor@1.0.1.patch
   "@linqapp/chat-sdk-adapter@0.5.1": patches/@linqapp__chat-sdk-adapter@0.5.1.patch
   "@workflow/world-postgres@5.0.0-beta.44": patches/@workflow__world-postgres@5.0.0-beta.44.patch
   eve@0.63.0: patches/eve@0.63.0.patch

@@ -40,8 +40,9 @@ suspended to address abuse, security incidents or provider limits.
 
 Disconnect integrations you no longer want. The Account UI memory export/wipe
 is `partial_online_wipe`, not full account deletion. Durable Zoen-controlled
-erasure (`POST /api/account/erasure`) still leaves live Mem0, Matrix,
-Vaultwarden, mautrix and backups as pending external work, and does not delete
+erasure (`POST /api/account/erasure`) tracks file-memory removal, Matrix,
+Vaultwarden, mautrix and backups until the relevant cleanup succeeds. Historical
+provider obligations remain pending until verified. It does not delete
 company workspaces. Contact the administrator who invited you for that request.
 Backups and third-party copies may have separate lifecycles; see the privacy
 notice.

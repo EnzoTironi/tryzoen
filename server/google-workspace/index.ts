@@ -90,7 +90,6 @@ const findAccount = async function (scope: AccessScope) {
     FROM account a
     INNER JOIN workspace_memberships m ON m.user_id = ${scope.userId} AND m.workspace_id = ${scope.workspaceId}
     WHERE a."userId" = ${userId} AND a."providerId" = 'google'
-      AND a.issuer = 'https://accounts.google.com'
       AND a.scope ~ '(^|[ ,])https://www.googleapis.com/auth/'
       ORDER BY a."createdAt", a.id LIMIT 2`);
     const accounts = await z.array(accountSchema).parseAsync(rows);
@@ -284,7 +283,7 @@ export const disconnectGoogleWorkspace = async function (headers: Headers) {
       );
       if (!account) return;
       const rows = await query(
-        sql`SELECT COALESCE("refreshToken", "accessToken") AS token FROM account WHERE id = ${account.id} AND "userId" = ${session.user.id} AND "providerId" = 'google' AND issuer = 'https://accounts.google.com'`
+        sql`SELECT COALESCE("refreshToken", "accessToken") AS token FROM account WHERE id = ${account.id} AND "userId" = ${session.user.id} AND "providerId" = 'google'`
       );
       const tokens = await z
         .array(
@@ -317,7 +316,7 @@ export const disconnectGoogleWorkspace = async function (headers: Headers) {
             });
         }
       }
-      // Keep issuer + subject: this identity may be the person's only sign-in.
+      // Keep provider + subject: this identity may be the person's only sign-in.
       // A newer grant created during revocation must not be silently cleared.
       const cleared = await query(sql`
       UPDATE account SET "accessToken" = NULL, "refreshToken" = NULL,

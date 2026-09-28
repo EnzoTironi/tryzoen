@@ -8,7 +8,10 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { WorkspaceRepository } from "../workspaces/repository";
-import { WorkspacePathSchema, GitRevisionSchema } from "../workspaces/git";
+import {
+  WorkspacePathSchema,
+  GitRevisionSchema,
+} from "@shared/workspaces/files";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { LearnedMemory } from "../memory/learned";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";
@@ -133,7 +136,9 @@ export const readWorkspaceToolCatalog = async function (
           capabilities.enabled.includes(tool.plugin) &&
           granted.includes(tool.plugin) &&
           (tool.plugin !== "memory" ||
-            Boolean(env.ZOEN_MEM0_URL && env.ZOEN_MEM0_API_KEY)) &&
+            Boolean(
+              env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
+            )) &&
           (!actor.agentGrantId ||
             tool.path !== "workspace_tools_connections") &&
           (!(actor.agentGrantId ?? actor.groupBindingId) ||

@@ -1,0 +1,240 @@
+import { randomUUID } from "node:crypto";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { ZodError } from "zod";
+import { expect, test } from "vitest";
+import { creatorDraftContentSchema } from "@zoen/companion-ui/creators";
+import {
+  CreatorDraftConflict,
+  listCreatorDrafts,
+  readCreatorDraft,
+  saveCreatorDraft,
+  setCreatorDraftArchived,
+} from "../../server/creators/drafts";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
+import { workspaceFixture } from "./workspace-fixture";
+
+const content = creatorDraftContentSchema.parse({
+  title: "Fictional book-club coach",
+  description: "Practice choosing a reading discussion strategy.",
+  playbook: "# Strategies\n\nAsk an open question before giving a suggestion.",
+  examples: [
+    {
+      id: randomUUID(),
+      title: "A quiet group",
+      content: "# Situation\n\nInvite each person to choose one passage.",
+      source: "Original synthetic example created for this test.",
+      rights: "original",
+    },
+  ],
+});
+
+test("creator drafts stay private within a workspace, reject forged authority and disappear with membership", async () => {
+  await using workspace = await workspaceFixture();
+  const input = { id: randomUUID(), expectedRevision: null, content };
+  const saved = await saveCreatorDraft(workspace.actor, input);
+  expect(await readCreatorDraft(workspace.actor, saved.id)).toEqual(saved);
+  expect(await listCreatorDrafts(workspace.guest)).toEqual([]);
+  expect(await listCreatorDrafts(workspace.personal)).toEqual([]);
+  for (const actor of [
+    workspace.guest,
+    workspace.personal,
+    { ...workspace.guest, authSessionId: workspace.actor.authSessionId },
+  ]) {
+    await expect(readCreatorDraft(actor, saved.id)).rejects.toBeInstanceOf(
+      WorkspaceAccessDenied
+    );
+    await expect(saveCreatorDraft(actor, input)).rejects.toBeInstanceOf(
+      WorkspaceAccessDenied
+    );
+  }
+  await expect(
+    readCreatorDraft(
+      {
+        ...workspace.actor,
+        authSessionId: undefined,
+        agentGrantId: randomUUID(),
+      },
+      saved.id
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await query(
+    sql`DELETE FROM workspace_memberships WHERE workspace_id = ${workspace.actor.workspaceId} AND user_id = ${workspace.actor.userId}`
+  );
+  expect(
+    await query(sql`SELECT id FROM creator_drafts WHERE id = ${saved.id}`)
+  ).toEqual([]);
+  await expect(
+    readCreatorDraft(workspace.actor, saved.id)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("revision conflicts cannot replace newer work and exact response-loss retries are idempotent", async () => {
+  await using workspace = await workspaceFixture();
+  const input = { id: randomUUID(), expectedRevision: null, content };
+  const saved = await saveCreatorDraft(workspace.personal, input);
+  expect(await saveCreatorDraft(workspace.personal, input)).toEqual(saved);
+  const attempts = await Promise.allSettled(
+    ["First", "Second"].map((title) =>
+      saveCreatorDraft(workspace.personal, {
+        ...input,
+        expectedRevision: saved.revision,
+        content: { ...content, title },
+      })
+    )
+  );
+  expect(
+    attempts.filter((result) => result.status === "fulfilled")
+  ).toHaveLength(1);
+  const failure = attempts.find((result) => result.status === "rejected");
+  expect(failure?.reason).toBeInstanceOf(CreatorDraftConflict);
+  await expect(
+    saveCreatorDraft(workspace.personal, input)
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  expect(
+    (await readCreatorDraft(workspace.personal, saved.id)).revision
+  ).not.toBe(saved.revision);
+});
+
+test("concurrent draft creation enforces the per-person bound without truncating another person's list", async () => {
+  await using workspace = await workspaceFixture();
+  const results = await Promise.allSettled(
+    Array.from({ length: 25 }, (_, index) =>
+      saveCreatorDraft(workspace.actor, {
+        id: randomUUID(),
+        expectedRevision: null,
+        content: { ...content, title: `Synthetic ${index}` },
+      })
+    )
+  );
+  expect(
+    results.filter((result) => result.status === "fulfilled")
+  ).toHaveLength(20);
+  expect(results.filter((result) => result.status === "rejected")).toHaveLength(
+    5
+  );
+  expect(await listCreatorDrafts(workspace.actor)).toHaveLength(20);
+  const guest = await saveCreatorDraft(workspace.guest, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content,
+  });
+  expect(
+    (await listCreatorDrafts(workspace.guest)).map((item) => item.id)
+  ).toEqual([guest.id]);
+});
+
+test("authored examples require bounded source attribution, declared rights and distinct IDs", async () => {
+  await using workspace = await workspaceFixture();
+  const example = content.examples[0];
+  if (!example) throw new Error("Missing synthetic example");
+  for (const examples of [
+    [{ ...example, source: "" }],
+    [{ ...example, rights: "unknown" }],
+    [example, example],
+    [{ ...example, content: "x".repeat(24001) }],
+  ]) {
+    await expect(
+      Promise.resolve().then(() =>
+        saveCreatorDraft(workspace.personal, {
+          id: randomUUID(),
+          expectedRevision: null,
+          content: creatorDraftContentSchema.parse({ ...content, examples }),
+        })
+      )
+    ).rejects.toBeInstanceOf(ZodError);
+  }
+  expect(await listCreatorDrafts(workspace.personal)).toEqual([]);
+});
+
+test("archiving is private, response-loss safe, read-only and revision checked across restore", async () => {
+  await using workspace = await workspaceFixture();
+  const draft = await saveCreatorDraft(workspace.personal, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content,
+  });
+  const input = {
+    id: draft.id,
+    expectedRevision: draft.revision,
+    archived: true,
+  };
+  await expect(
+    setCreatorDraftArchived(workspace.guestPersonal, input)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  const archived = await setCreatorDraftArchived(workspace.personal, input);
+  expect(archived.archivedAt).not.toBeNull();
+  expect(await setCreatorDraftArchived(workspace.personal, input)).toEqual(
+    archived
+  );
+  expect(archived.content).toEqual(content);
+  await expect(
+    saveCreatorDraft(workspace.personal, {
+      id: draft.id,
+      expectedRevision: draft.revision,
+      content: { ...content, title: "Stale edit" },
+    })
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  await expect(
+    setCreatorDraftArchived(workspace.personal, { ...input, archived: false })
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  const restored = await setCreatorDraftArchived(workspace.personal, {
+    ...input,
+    expectedRevision: archived.revision,
+    archived: false,
+  });
+  expect(restored.archivedAt).toBeNull();
+  expect(restored.content).toEqual(content);
+  await expect(
+    setCreatorDraftArchived(workspace.personal, input)
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  expect(await listCreatorDrafts(workspace.personal)).toMatchObject([
+    { id: draft.id, archivedAt: null },
+  ]);
+});
+
+test("archive and restore honor both active and retained quotas under concurrent writes", async () => {
+  await using workspace = await workspaceFixture();
+  // Retained archives contain real bounded draft payloads, scoped to this synthetic owner.
+  await query(sql`INSERT INTO creator_drafts (id, workspace_id, user_id, content, archived_at)
+    SELECT gen_random_uuid(), ${workspace.personal.workspaceId}, ${workspace.personal.userId}, ${JSON.stringify(content)}::jsonb, now()
+    FROM generate_series(1, 98)`);
+  const creates = await Promise.allSettled(
+    Array.from({ length: 5 }, () =>
+      saveCreatorDraft(workspace.personal, {
+        id: randomUUID(),
+        expectedRevision: null,
+        content,
+      })
+    )
+  );
+  expect(
+    creates.filter((result) => result.status === "fulfilled")
+  ).toHaveLength(2);
+  expect(creates.filter((result) => result.status === "rejected")).toHaveLength(
+    3
+  );
+  const drafts = await listCreatorDrafts(workspace.personal);
+  expect(drafts).toHaveLength(100);
+  const archived = drafts.filter((item) => item.archivedAt);
+  const restores = await Promise.allSettled(
+    archived.slice(0, 25).map((item) =>
+      setCreatorDraftArchived(workspace.personal, {
+        id: item.id,
+        expectedRevision: item.revision,
+        archived: false,
+      })
+    )
+  );
+  expect(
+    restores.filter((result) => result.status === "fulfilled")
+  ).toHaveLength(18);
+  expect(
+    restores.filter((result) => result.status === "rejected")
+  ).toHaveLength(7);
+  expect(
+    (await listCreatorDrafts(workspace.personal)).filter(
+      (item) => !item.archivedAt
+    )
+  ).toHaveLength(20);
+});

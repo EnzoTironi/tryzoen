@@ -38,7 +38,7 @@ reads only the pending principal's owned Google account. No custom completion ro
 OAuth database, refresh loop, or token cache is introduced.
 
 Account lookup requires current personal-workspace membership and canonical
-Google issuer. It fails closed on ambiguous multiple Google accounts. After
+Google provider. It fails closed on ambiguous multiple Google accounts. After
 Better Auth token retrieval/refresh, ownership, membership, account ID, token
 presence and business scopes are reread before returning a redacted bearer.
 A deletion after that final read, or provider revocation during an already-running

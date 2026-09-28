@@ -108,8 +108,10 @@ supplies a user ID. Missing, expired or revoked credentials fail closed as
   It erases the personal workspace, sessions, jobs, grants, connections and
   channel identities, keeps company workspaces, and writes a tombstone that
   a restore must reapply. After commit it attempts Vaultwarden, mautrix and
-  Synapse wipes; those ledger rows become `erased` only on success. Mem0,
-  backups and any unreachable provider stay `pending_external`. The last
+  Synapse wipes; those ledger rows become `erased` only on success. The memory
+  worker removes each private corpus and marks `file_memory` erased after the
+  final namespace is removed. Backups, historical Mem0 obligations and any
+  unreachable provider remain pending. The last
   company admin must transfer or close company workspaces first. See
   `docs/decisions/adr-account-deletion.md`.
 

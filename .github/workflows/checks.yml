@@ -45,6 +45,11 @@ jobs:
         # Each compiler/linter/test process also uses its own CPU pool.
         run: pnpm check --concurrency=1
 
+      - name: Verify Expo compatibility and export all shared client targets
+        run: |
+          pnpm --filter @zoen/mobile exec expo install --check
+          pnpm --filter @zoen/mobile exec expo export --platform all --max-workers 2
+
       - name: List native evaluations without provider credentials
         run: node --import tsx scripts/run-agent-evals.ts --list
 
@@ -53,6 +58,32 @@ jobs:
           pnpm --dir infrastructure peers check
           pnpm --dir infrastructure types:check
           pnpm --dir infrastructure test:providers
+
+  desktop:
+    name: Desktop package (${{ matrix.os }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build an unsigned desktop package without publishing
+        run: pnpm package:desktop
 
   runtime-storage:
     name: Runtime storage and build
@@ -78,12 +109,30 @@ jobs:
             -o Dir::Etc::sourceparts="-" \
             -o APT::Get::List-Cleanup="0"
           sudo apt-get install -y ffmpeg
+      - name: Qualify and install the pinned file memory engine
+        run: |
+          set -euo pipefail
+          docker build --target memory-engine --platform linux/amd64 -t zoen-memory-proof:2.4.1 .
+          docker run --rm --network none --tmpfs /data:mode=0700 \
+            --mount type=bind,source="$PWD/infrastructure/file-memory/verify.sh",target=/verify.sh,readonly \
+            zoen-memory-proof:2.4.1 sh /verify.sh
+          container=$(docker create zoen-memory-proof:2.4.1 true)
+          trap 'docker rm "$container"' EXIT
+          docker cp "$container:/usr/local/bin/ai-memory" "$RUNNER_TEMP/ai-memory"
+          chmod 755 "$RUNNER_TEMP/ai-memory"
+          "$RUNNER_TEMP/ai-memory" --version
+          printf 'ZOEN_AI_MEMORY_BINARY=%s\n' "$RUNNER_TEMP/ai-memory" >> "$GITHUB_ENV"
       - name: Create isolated services and verify migration idempotence
         run: |
           pnpm test:runtime:setup
           pnpm test:runtime:setup
       - name: Verify PostgreSQL, Matrix and compiled Eve restart behavior
         run: pnpm test:runtime
+      - name: Verify file memory ingestion, isolated restore and dream contracts
+        run: |
+          pnpm test:memory:upstream "$ZOEN_AI_MEMORY_BINARY"
+          pnpm test:memory:lifecycle "$ZOEN_AI_MEMORY_BINARY"
+          pnpm test:memory:dream "$ZOEN_AI_MEMORY_BINARY"
       - name: Build web app and agent
         run: |
           set -a
@@ -114,44 +163,15 @@ jobs:
         if: always()
         run: docker compose -p zoen-runtime-tests -f tests/runtime/compose.yaml down --volumes
 
-  memory:
-    name: Private Mem0 service
+  postgres-recovery:
+    name: PostgreSQL backup recovery
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    env:
-      ZOEN_MEMORY_DATABASE_URL: postgresql://zoen_memory:ci-memory-password@127.0.0.1:5432/zoen_memory
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Install pinned package manager
-        run: python -m pip install uv==0.12.13
       - name: Build the production PostgreSQL image and prove recovery
         run: |
           docker build -t zoen-postgres-proof:pg17-backup infrastructure/postgres
           bash infrastructure/postgres/test-recovery.sh
-      - name: Start pgvector for memory integration tests
-        run: |
-          docker run -d --name memory-postgres -p 127.0.0.1:5432:5432 \
-            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-            -e ZOEN_MEMORY_DATABASE_PASSWORD=ci-memory-password \
-            -e POSTGRES_DB=companion_runtime_test zoen-postgres-proof:pg17-backup
-          for attempt in {1..60}; do
-            if [ "$(docker inspect --format '{{.State.Running}}' memory-postgres)" != true ]; then
-              docker logs memory-postgres
-              exit 1
-            fi
-            docker exec memory-postgres pg_isready -h 127.0.0.1 -U postgres && break
-            sleep 1
-          done
-          docker exec memory-postgres pg_isready -h 127.0.0.1 -U postgres
-          docker exec memory-postgres /usr/local/bin/bootstrap-memory.sh
-      - name: Verify the real memory adapter with isolated model fixtures
-        working-directory: infrastructure/memory
-        run: |
-          uv sync --frozen
-          uv run pytest

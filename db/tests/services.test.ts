@@ -20,15 +20,19 @@ describe("database services", () => {
   it("preserves workspace ownership across application domains", async () => {
     const client = new PGlite();
     databases.push(client);
-    await applyInitialMigration(client);
-    await applyBrowserImageMigration(client);
-    await applyBrowserTraceMigration(client);
-    await applyBrowserTraceEventMigration(client);
-    await applySchemaAdoptionMigration(client);
-    await applyNativeTypesMigration(client);
-    await applyChatChannelMigration(client);
-    await applyOrgWorkspaceRbacMigration(client);
-    await applyOrgSsoAuditErasureMigration(client);
+    for (const migration of [
+      "0000_fluffy_the_spike.sql",
+      "0003_unusual_fabian_cortez.sql",
+      "0004_kind_manta.sql",
+      "0005_brave_kang.sql",
+      "0006_illegal_tattoo.sql",
+      "0008_black_sandman.sql",
+      "0011_faulty_unicorn.sql",
+      "0029_org-workspace-rbac.sql",
+      "0030_org-sso-audit-erasure.sql",
+      "0064_chat-library.sql",
+    ])
+      await applyMigration(client, migration);
     await client.exec("ALTER TABLE workspaces ADD COLUMN display_name text");
     const pgliteDatabase = drizzle(client, {
       schema,
@@ -325,6 +329,55 @@ describe("database services", () => {
       await vault.readVaultItem(bob, aliceVaultItem?.id ?? "vault-alice")
     ).toBeUndefined();
     expect(await vault.listVaultItems(alice)).toHaveLength(1);
+    const reviewedVault = await vault.readVaultPage(alice, { kind: "login" });
+    expect(reviewedVault.items).toEqual([
+      expect.objectContaining({
+        id: aliceVaultItem?.id,
+        label: "Alice",
+        hasSecret: true,
+      }),
+    ]);
+    expect(JSON.stringify(reviewedVault)).not.toContain("correct horse");
+    expect((await vault.readVaultPage(bob, { kind: "login" })).items).toEqual(
+      []
+    );
+    const timestamp = new Date("2026-01-01T00:00:00.000Z");
+    await pgliteDatabase.insert(schema.vaultItems).values(
+      Array.from({ length: 23 }, (_, i) => ({
+        id: `vault-page-${String(i).padStart(2, "0")}`,
+        workspaceId: alice.workspaceId,
+        kind: "payment" as const,
+        label: `Synthetic card ${i}`,
+        account: "",
+        updatedAt: timestamp,
+      }))
+    );
+    const firstVaultPage = await vault.readVaultPage(alice, {
+      kind: "payment",
+    });
+    expect(firstVaultPage.items).toHaveLength(20);
+    expect(firstVaultPage.nextCursor).not.toBeNull();
+    const secondVaultPage = await vault.readVaultPage(alice, {
+      kind: "payment",
+      cursor: firstVaultPage.nextCursor,
+    });
+    expect(secondVaultPage.items).toHaveLength(3);
+    expect(secondVaultPage.nextCursor).toBeNull();
+    expect(
+      new Set(
+        [...firstVaultPage.items, ...secondVaultPage.items].map(
+          (item) => item.id
+        )
+      ).size
+    ).toBe(23);
+    expect(
+      (
+        await vault.readVaultPage(bob, {
+          kind: "payment",
+          cursor: firstVaultPage.nextCursor,
+        })
+      ).items
+    ).toEqual([]);
     expect(
       await vault.deleteVaultItem(bob, aliceVaultItem?.id ?? "vault-alice")
     ).toBe(false);
@@ -353,91 +406,11 @@ describe("database services", () => {
     expect(await settings.getGatewayModel(bob)).toBe("openai/gpt-5.6-sol-fast");
   }, 15_000);
 });
-async function applyInitialMigration(database: PGlite) {
+async function applyMigration(database: PGlite, file: string) {
   const migration = await readFile(
-    new URL("../migrations/0000_fluffy_the_spike.sql", import.meta.url),
+    new URL(`../migrations/${file}`, import.meta.url),
     "utf8"
   );
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyBrowserImageMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0003_unusual_fabian_cortez.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyBrowserTraceMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0004_kind_manta.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyBrowserTraceEventMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0005_brave_kang.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applySchemaAdoptionMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0006_illegal_tattoo.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyNativeTypesMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0008_black_sandman.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyChatChannelMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0011_faulty_unicorn.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyOrgWorkspaceRbacMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0029_org-workspace-rbac.sql", import.meta.url),
-    "utf8"
-  );
-
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-async function applyOrgSsoAuditErasureMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../migrations/0030_org-sso-audit-erasure.sql", import.meta.url),
-    "utf8"
-  );
-
   for (const statement of migration.split("--> statement-breakpoint")) {
     if (statement.trim()) await database.exec(statement);
   }

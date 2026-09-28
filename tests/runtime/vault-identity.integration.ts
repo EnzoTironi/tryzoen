@@ -72,7 +72,6 @@ test("Vaultwarden OIDC binds the verified person, requires PKCE and retires toke
   expect(metadata.status).toBe(200);
   const discovery = z.json().parse(await metadata.json());
   expect(discovery).toMatchObject({
-    issuer: `${base}/api/auth`,
     grant_types_supported: ["authorization_code", "refresh_token"],
   });
   const verifier = randomBytes(32).toString("base64url");

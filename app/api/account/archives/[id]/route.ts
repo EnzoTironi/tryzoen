@@ -1,6 +1,6 @@
 import { withSignal } from "../../../../../server/operations/async";
 import { SqlError } from "../../../../../db/queries";
-import { Mem0Error } from "../../../../../server/memory/mem0";
+import { FileMemoryError } from "../../../../../server/memory/ai-memory/mutations";
 import { AuthUnavailable } from "../../../../../db/services/auth/index";
 import { ZodError as SchemaError } from "zod";
 import { AccountArchiveMissing } from "../../../../../server/accounts/archives";
@@ -19,7 +19,14 @@ export async function GET(
       try {
         try {
           const section = await z
-            .enum(["memory", "files", "attachment", "source"])
+            .enum([
+              "memory",
+              "files",
+              "attachment",
+              "source",
+              "creator",
+              "creator-release",
+            ])
             .parseAsync(query.get("section"));
           return await downloadAccountArchive(
             request.headers,
@@ -49,7 +56,7 @@ export async function GET(
     } catch (error) {
       if (
         error instanceof AuthUnavailable ||
-        error instanceof Mem0Error ||
+        error instanceof FileMemoryError ||
         error instanceof SqlError
       )
         return new Response("Archive unavailable", {

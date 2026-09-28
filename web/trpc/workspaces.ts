@@ -1,3 +1,30 @@
+import {
+  linkPreviewInputSchema,
+  linkPreviewSchema,
+} from "@zoen/companion-ui/previews";
+import { readLinkPreview } from "../../server/links/preview";
+import {
+  referenceSearchSchema,
+  referenceResultsSchema,
+} from "@zoen/companion-ui/references";
+import { searchComposerReferences } from "../../server/workspaces/references";
+import {
+  GitRevisionSchema,
+  WorkspacePathSchema,
+} from "@shared/workspaces/files";
+import {
+  reminderStatusSchema,
+  reminderHistoryInputSchema,
+} from "@shared/schedules/reminders";
+import {
+  listReminders,
+  readReminderHistory,
+} from "../../server/schedules/queries";
+import {
+  learnedMemorySnapshotSchema,
+  learnedMemoryHistoryInputSchema,
+  learnedMemoryHistorySchema,
+} from "@zoen/companion-ui/memory";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
@@ -19,19 +46,14 @@ import {
   rollbackSkill,
   RollbackSkillSchema,
 } from "../../server/workspaces/skills";
-import {
-  GitRevisionSchema,
-  WorkspacePathSchema,
-} from "../../server/workspaces/git";
+
 import { workspaceProcedure } from "./workspace-procedure";
 import { workspaceRoomsRouter } from "./workspace-rooms";
 import { workspaceToolsRouter } from "./workspace-tools";
 import { workspaceAgentsRouter } from "./workspace-agents";
+import { creatorsRouter } from "./creators";
 import { readWorkspaceCapabilities } from "../../server/workspaces/capabilities";
-import {
-  ReminderStatusSchema,
-  setReminderStatus,
-} from "../../server/schedules/manage";
+import { setReminderStatus } from "../../server/schedules/manage";
 import {
   DirectoryProfileSchema,
   UsernameSchema,
@@ -52,12 +74,33 @@ import {
   LearnedMemoryWriteSchema,
 } from "../../server/memory/learned";
 export const workspacesRouter = {
+  linkPreview: workspaceProcedure
+    .input(linkPreviewInputSchema)
+    .output(linkPreviewSchema)
+    .query(({ ctx, input, signal }) =>
+      readLinkPreview(ctx.actor, input.url, signal)
+    ),
+  references: workspaceProcedure
+    .input(referenceSearchSchema)
+    .output(referenceResultsSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => searchComposerReferences(ctx.actor, input))
+    ),
+  creators: creatorsRouter,
   tools: workspaceToolsRouter,
   rooms: workspaceRoomsRouter,
   ...workspaceAgentsRouter,
   schedules: {
+    history: workspaceProcedure
+      .input(reminderHistoryInputSchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () => readReminderHistory(ctx.scope, input))
+      ),
+    list: workspaceProcedure.query(({ ctx, signal }) =>
+      withSignal(signal, () => listReminders(ctx.scope))
+    ),
     setStatus: workspaceProcedure
-      .input(ReminderStatusSchema)
+      .input(reminderStatusSchema)
       .mutation(({ ctx, input, signal }) =>
         withSignal(signal, async () => {
           try {
@@ -148,21 +191,29 @@ export const workspacesRouter = {
     withSignal(signal, async () => readWorkspaceCapabilities(ctx.actor))
   ),
   memory: {
+    history: workspaceProcedure
+      .input(learnedMemoryHistoryInputSchema)
+      .output(learnedMemoryHistorySchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () => LearnedMemory.history(ctx.actor, input))
+      ),
     recover: workspaceProcedure.mutation(({ ctx, signal }) =>
       withSignal(signal, async () => {
         return await LearnedMemory.recover(ctx.actor);
       })
     ),
-    list: workspaceProcedure.query(({ ctx, signal }) =>
-      withSignal(signal, async () => {
-        return await LearnedMemory.read(ctx.actor, undefined, true);
-      })
-    ),
+    list: workspaceProcedure
+      .output(learnedMemorySnapshotSchema)
+      .query(({ ctx, signal }) =>
+        withSignal(signal, async () => {
+          return await LearnedMemory.read(ctx.actor, undefined, true);
+        })
+      ),
     write: workspaceProcedure
       .input(LearnedMemoryWriteSchema)
       .mutation(({ ctx, input, signal }) =>
         withSignal(signal, async () => {
-          return await LearnedMemory.write(ctx.actor, input, false);
+          return await LearnedMemory.write(ctx.actor, input);
         })
       ),
     setEnabled: workspaceProcedure
@@ -202,11 +253,22 @@ export const workspacesRouter = {
     )
     .query(({ ctx, input, signal }) =>
       withSignal(signal, async () => {
-        return await WorkspaceRepository.read(
+        const result = await WorkspaceRepository.read(
           ctx.actor,
           input.path,
           input.revision
         );
+        return {
+          ...result,
+          canEdit:
+            ctx.actor.role !== "member" ||
+            Boolean(
+              input.path &&
+              (input.path.startsWith("knowledge/") ||
+                input.path.startsWith("proposals/skills/") ||
+                input.path.startsWith("proposals/tools/"))
+            ),
+        };
       })
     ),
   history: workspaceProcedure
