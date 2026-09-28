@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { ArrowLeft, Info, X } from "lucide-react-native";
 import type { z } from "zod";
-import { Composer } from "../composer";
+import { RoomComposer } from "./composer";
+import { useRoomDraft } from "./draft";
 import { IconButton } from "../icon-button";
 import { ConversationAvatar } from "../chats/avatar";
 import { colors } from "../theme";
@@ -30,7 +31,7 @@ export function RoomConversation({
 }) {
   const [root, setRoot] = useState<z.infer<typeof roomMessageSchema>>();
   const [details, setDetails] = useState(false);
-  const [reply, setReply] = useState<z.infer<typeof roomMessageSchema>>();
+  const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const reactions = useRoomReactions(data, cacheScope, roomId);
   const wide = useWindowDimensions().width >= 1100;
@@ -91,9 +92,12 @@ export function RoomConversation({
             />
           </View>
           <RoomMessages
+            data={data}
+            roomId={roomId}
+            cacheScope={cacheScope}
             avatarUri={avatarUri}
             onCopy={onCopyText}
-            onReply={setReply}
+            onReply={draft.replyTo}
             onProfile={setProfile}
             members={current?.pages[0]?.members ?? []}
             reactions={
@@ -114,17 +118,7 @@ export function RoomConversation({
               void messages.fetchNextPage();
             }}
           />
-          <RoomComposer
-            key={roomId}
-            data={data}
-            cacheScope={cacheScope}
-            roomId={roomId}
-            reply={reply}
-            onClearReply={() => {
-              setReply(undefined);
-            }}
-            disabled={!room || messages.isError}
-          />
+          <RoomComposer draft={draft} disabled={!room || messages.isError} />
         </View>
       )}
       {root && !messages.isError && (
@@ -217,7 +211,7 @@ function RoomThread({
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
 }) {
-  const [reply, setReply] = useState<z.infer<typeof roomMessageSchema>>();
+  const draft = useRoomDraft(data, cacheScope, roomId, root.id);
   const reactions = useRoomReactions(data, cacheScope, roomId);
   const result = useInfiniteQuery({
     queryKey: ["matrix-thread", cacheScope, roomId, root.id],
@@ -242,9 +236,12 @@ function RoomThread({
   return (
     <>
       <RoomMessages
+        data={data}
+        roomId={roomId}
+        cacheScope={cacheScope}
         avatarUri={avatarUri}
         onCopy={onCopyText}
-        onReply={setReply}
+        onReply={draft.replyTo}
         onProfile={onProfile}
         members={result.isError ? [] : (result.data?.pages[0]?.members ?? [])}
         reactions={
@@ -269,92 +266,14 @@ function RoomThread({
         }}
       />
       <RoomComposer
-        data={data}
-        cacheScope={cacheScope}
-        roomId={roomId}
-        rootId={root.id}
-        reply={reply}
-        onClearReply={() => {
-          setReply(undefined);
-        }}
+        draft={draft}
+        thread
         disabled={!result.data || result.isError}
       />
     </>
   );
 }
 
-function RoomComposer({
-  data,
-  cacheScope,
-  roomId,
-  rootId,
-  disabled,
-  reply,
-  onClearReply,
-}: Pick<
-  Parameters<typeof RoomConversation>[0],
-  "data" | "cacheScope" | "roomId"
-> & {
-  readonly rootId?: string;
-  readonly disabled: boolean;
-  readonly reply?: z.infer<typeof roomMessageSchema>;
-  readonly onClearReply: () => void;
-}) {
-  const client = useQueryClient();
-  const pending = useRef<
-    { text: string; id: string; replyTo?: string } | undefined
-  >(undefined);
-  return (
-    <View style={styles.composer}>
-      <Composer
-        reply={
-          reply
-            ? {
-                id: reply.id,
-                text: reply.text,
-                role: reply.bot ? "assistant" : "user",
-                sender: reply.mine ? "você" : reply.sender,
-              }
-            : undefined
-        }
-        onRemoveReply={onClearReply}
-        attachments={false}
-        maxLength={8000}
-        label={rootId ? "Responder à thread" : "Mensagem ao grupo"}
-        placeholder={rootId ? "Responder…" : "Mensagem…"}
-        disabled={disabled}
-        onSend={async ({ text }) => {
-          if (
-            !pending.current ||
-            pending.current.text !== text ||
-            pending.current.replyTo !== reply?.id
-          )
-            pending.current = {
-              text,
-              id: data.operationId(),
-              replyTo: reply?.id,
-            };
-          await data.send({
-            id: roomId,
-            operationId: pending.current.id,
-            text,
-            rootId,
-            replyTo: reply?.id,
-          });
-          pending.current = undefined;
-          onClearReply();
-          void client.invalidateQueries({
-            queryKey: ["matrix-messages", cacheScope, roomId],
-          });
-          if (rootId)
-            void client.invalidateQueries({
-              queryKey: ["matrix-thread", cacheScope, roomId, rootId],
-            });
-        }}
-      />
-    </View>
-  );
-}
 const styles = StyleSheet.create({
   layout: {
     flex: 1,
@@ -377,5 +296,4 @@ const styles = StyleSheet.create({
   caption: { fontSize: 12, color: colors.muted, lineHeight: 18 },
   thread: { width: 320, borderLeftWidth: 1, borderLeftColor: "#ededf0" },
   fullThread: { width: "100%", borderLeftWidth: 0 },
-  composer: { padding: 16 },
 });

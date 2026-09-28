@@ -1,3 +1,5 @@
+import { readMatrixMedia } from "../../server/matrix/media/read";
+import { searchComposerReferences } from "../../server/workspaces/references";
 import {
   readMatrixReactions,
   setMatrixReaction,
@@ -204,6 +206,68 @@ test(
         sender: "Synthetic owner",
       },
     });
+    const nested = await sendMatrixMessage(actor, {
+      id: room.id,
+      text: "Reply to the quoted response",
+      replyTo: quoted.event_id,
+      operationId: randomUUID(),
+    });
+    expect(
+      (await readMatrixMessages(actor, room.id)).messages.find(
+        (message) => message.id === nested.event_id
+      )
+    ).toMatchObject({
+      text: "Reply to the quoted response",
+      reply: { id: quoted.event_id, text: "Quoted reply" },
+    });
+    const files = [
+      {
+        type: "file" as const,
+        filename: "synthetic-note.txt",
+        mediaType: "text/plain",
+        url: "data:text/plain;base64,U3ludGhldGljIGZpbGU=",
+      },
+    ];
+    const upload = { id: room.id, operationId: randomUUID(), text: "", files };
+    const media = await sendMatrixMessage(actor, upload);
+    expect(await sendMatrixMessage(actor, upload)).toEqual(media);
+    expect(
+      await readMatrixMedia(guest, { id: room.id, messageId: media.event_id })
+    ).toEqual(files[0]);
+    expect(
+      (await readMatrixMessages(guest, room.id)).messages.filter(
+        (item) => item.id === media.event_id
+      )
+    ).toHaveLength(1);
+    await expect(
+      readMatrixMedia(personal, { id: room.id, messageId: media.event_id })
+    ).rejects.toThrow(WorkspaceAccessDenied);
+    const privateWrite = await workspace.repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: null,
+      path: "agent/MEMORY.md",
+      content: "Private shared-workspace owner memory",
+    });
+    await workspace.repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: privateWrite.revision,
+      path: "knowledge/visible.md",
+      content: "Shared reference",
+    });
+    const references = await searchComposerReferences(guest, {
+      trigger: "@",
+      query: ".md",
+      roomId: room.id,
+    });
+    expect(references.map((item) => item.id)).toContain("knowledge/visible.md");
+    expect(references.map((item) => item.id)).not.toContain("agent/MEMORY.md");
+    await expect(
+      searchComposerReferences(personal, {
+        trigger: "@",
+        query: "",
+        roomId: room.id,
+      })
+    ).rejects.toThrow(WorkspaceAccessDenied);
     const replyId = randomUUID();
     await sendMatrixMessage(guest, {
       id: room.id,

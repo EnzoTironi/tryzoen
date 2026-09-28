@@ -956,3 +956,112 @@ persistent reactions/quotes, actual copy/paste and desktop/mobile profiles.
 Structural quality still reports 26 unsuppressed gating findings, dominated by
 recent edit churn, adapter similarities and component growth. This is not a
 clean structural-quality gate or complete production qualification.
+
+## Conversation continuity — 2026-09-28
+
+Opening a mobile thread previously unmounted the group composer and discarded its
+unsent text. Room and thread composers now keep separate text, quote, pending-send
+and retry state in the existing account/workspace-scoped query client. Reopening
+a conversation restores that state; successful delivery clears only its own draft.
+A failed send retains the original Matrix transaction until its text or quote
+changes. Navigating during a send does not permit another concurrent submission.
+A late success or failure cannot recreate data after the account cache is cleared.
+
+This is navigation continuity within the running app, with thirty-minute inactive
+cache retention. It is not durable offline storage, cross-device draft sync or
+recovery after reloading/closing the app. Those remain explicit release work.
+Draft text and quoted content are hidden while conversation access is unavailable.
+
+The timeline preserves the reading position when older messages are prepended and
+offers a compact button to return to recent messages. New messages received while
+reading earlier content are counted on that button; this is a local viewport cue,
+not a Matrix read receipt or an unread count shared across devices.
+
+### Composer context and media — 2026-09-28
+
+- The add menu is an anchored sheet immediately above the composer on both
+  mobile and desktop. This is the explicit exception to the general desktop-modal
+  rule. It keeps the text field usable, provides 44-point close and add targets,
+  keyboard selection and dismissal, scrolling results, and no automatic motion.
+- `@` searches room participants or discoverable usernames/bots and workspace
+  files/artifacts; `$` searches published workspace skill paths; `/` lists visible
+  saved routines. Suggestions are capped at 24 and scoped to the account,
+  workspace and room. Choosing one inserts an identifier into the draft; it does
+  not execute anything, share file contents, grant access or notify a person.
+  Selected references appear inline with a blue highlight in the visual composer.
+  The message carries the textual identifier, without Matrix notifications.
+- Room searches use the existing shared-execution repository visibility rules,
+  excluding private agent memory and other private paths. The existing personal
+  directory discovery policy remains in force outside rooms.
+- Group and thread drafts now include attachments. Matrix stores native `m.file`,
+  `m.image`, `m.audio` and `m.video` events. Media downloads resolve a visible event
+  on the server and recheck live membership, never a client-supplied URL. Files
+  load on request rather than downloading an entire timeline.
+- Web/Electron audio and video use browser controls. Expo uses the SDK-compatible
+  `expo-audio` and `expo-video` 57.0.5 line, with local temporary playback files.
+  No microphone or background-playback permission is added by this playback
+  feature. Unsupported formats remain downloadable; arbitrary uploads do not
+  acquire invented captions or transcripts.
+- Current transport remains limited to four files totaling 3 MiB per composer
+  submission. Large/resumable uploads, recording in the composer, generated
+  captions and Matrix agent ingestion of binary attachments remain outstanding.
+  Failed batches preserve their original event transaction identifiers; retries
+  do not duplicate timeline events, but can create unused Matrix uploads before
+  the homeserver returns an already-completed event transaction.
+
+### Native conversation cards — 2026-09-28
+
+- Agent conversations, groups and threads share rounded document/link cards.
+  Native Matrix media expands on request. Loaded images, audio and video have
+  no filename footer; the compact filename appears only before loading or as a
+  fallback when an inline format is unavailable. Save controls remain adjacent.
+  Images open an enlarged mobile sheet / desktop modal; text remains a separate
+  bubble. Browser audio/video controls preserve playback and downloads.
+- Public link cards show their domain immediately, with an explicit preview action
+  for real HTML/Open Graph metadata. Previews are bounded to two URLs per message,
+  deduplicated, and exclude inline/fenced code. The existing public HTTPS transport
+  pins validated DNS, blocks private destinations and redirects, strips cookies and
+  bounds each response to 512 KiB. Images use the same transport and only inert
+  raster data is returned. Access is checked before and after retrieval; account
+  cache retention is five minutes. There is no page execution or ambient login.
+- Tool/app activity and authorization use the same card styling and existing states.
+  This is presentation of existing Eve capabilities, not an interactive MCP Apps
+  iframe host. Generic artifact browsing and large remote media still need their
+  explicit authenticated platform adapters.
+- Selected composer references are inline highlighted labels with type cues.
+  Shared Tiptap/ProseMirror serialization replaces their internal label markup with
+  the original identifier when sending; it does not send private file contents.
+  Draft formatting and identifiers survive navigation. The highlighted label's
+  presentation metadata is currently editor-local and becomes its textual identifier
+  after the composer is remounted.
+- Reused `linkifyjs` 4.3.3 (already in the dependency tree) and `htmlparser2` 12.0.0;
+  these were the current stable registry versions at implementation time.
+
+### Visual prompt editor — 2026-09-28
+
+The connected web/Electron and Expo composers reuse Tiptap/TenTap, with a compact
+retractable formatting toolbar for bold, italic, lists, quotes, code and links
+(web also offers strike). References are inserted at editor positions, including
+inside formatted paragraphs and after soft line breaks. The existing suggestion
+sheet stays above the composer. Enter submits on web; Shift+Enter inserts a line
+break, and IME composition never submits. Mobile keeps its native keyboard's line
+break and explicit send button. Shared message rendering now displays Markdown
+formatting for people as well as agents. Sending reads the editor's latest content;
+failed delivery keeps it editable, and successful delivery clears its own draft.
+
+Native adapters compile and export but still require physical-device verification,
+including IME, selection, link insertion and long content. Native reference insertion
+currently replaces the document through the TenTap bridge and restores selection;
+undo continuity for that operation is not qualified. No new editor library or
+collaboration engine was introduced.
+
+Checkpoint verification: `pnpm check` passes all nine tasks, including 1,361 tests
+in 214 files. The production build and fresh Expo web/iOS/Android exports pass.
+Chrome verified formatted group/thread delivery, inline reference insertion after
+a soft break, media upload through the real file chooser, playback, image opening
+and a real Open Graph image/title preview. Desktop and mobile screenshots are
+[attached to PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5875874232)
+with `gh --attach`. The isolated PostgreSQL/Synapse messaging suite also covers
+media authorization and identical-retry event deduplication. The structural delta
+still reports 35 unsuppressed gating findings, including component growth, adapter
+patterns and edit churn; no clean structural or production-capacity claim is made.

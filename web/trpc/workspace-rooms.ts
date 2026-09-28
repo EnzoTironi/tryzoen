@@ -1,5 +1,8 @@
+import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
+import { readMatrixMedia } from "../../server/matrix/media/read";
 import {
   roomCreateSchema,
+  roomMediaReadSchema,
   roomReactionsReadSchema,
   roomReactionsPageSchema,
   roomReactionWriteSchema,
@@ -27,6 +30,12 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  media: workspaceProcedure
+    .input(roomMediaReadSchema)
+    .output(inlineAttachmentSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readMatrixMedia(ctx.actor, input))
+    ),
   reactions: workspaceProcedure
     .input(roomReactionsReadSchema)
     .output(roomReactionsPageSchema)

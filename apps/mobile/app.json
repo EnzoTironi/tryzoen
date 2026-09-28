@@ -25,6 +25,19 @@
     },
     "platforms": ["ios", "android", "web"],
     "icon": "../../packages/companion-ui/assets/icon.png",
-    "plugins": ["expo-secure-store", "expo-web-browser", "expo-sharing"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-video"
+    ]
   }
 }

@@ -1,4 +1,6 @@
 "use client";
+import { renderBrowserMedia } from "@web/files/media";
+import { api } from "@web/trpc/client";
 import { useState } from "react";
 import { writeConversationDraft } from "./drafts";
 
@@ -6,6 +8,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   CompanionShell,
   AttachmentProvider,
+  LinkPreviewProvider,
+  ComposerReferenceProvider,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { ConnectedConversation } from "./conversation";
@@ -44,6 +48,7 @@ export function ConnectedCompanion({
   readonly title?: string;
   readonly draftScope: string;
 }) {
+  const { client } = api.useUtils();
   const router = useRouter();
   const params = useSearchParams();
   const workspaceId = params.get("space");
@@ -91,86 +96,98 @@ export function ConnectedCompanion({
         <AttachmentProvider
           pick={pickBrowserAttachments}
           save={saveBrowserAttachment}
+          renderMedia={renderBrowserMedia}
         >
-          <CompanionShell
-            section={section}
-            conversationOpen={conversationOpen}
-            onShowInbox={() => {
-              navigate("/companion");
-            }}
-            hideConversationHeader={Boolean(roomId)}
-            title={title ?? "Zoen"}
-            avatarUri="/marketing/zoen-avatar.webp"
-            agentName={<ConnectedAgentName />}
-            renderAgentHeader={(onEdit) => (
-              <ConnectedAgentHeader onEdit={onEdit} />
-            )}
-            renderAgentPanel={(tab, close) => (
-              <ConnectedAgentPanel
-                tab={tab}
-                onPrompt={(prompt) => {
-                  close();
-                  stagePrompt(prompt);
-                }}
-                onConversation={(id) => {
-                  close();
-                  openConversation(id);
-                }}
-              />
-            )}
-            renderConversations={() => (
-              <ConnectedInbox
-                cacheScope={draftScope}
-                workspaceId={workspaceId}
-                selectedId={sessionId}
-                selectedRoom={roomId ?? undefined}
-                onOpen={openConversation}
-                onCreate={() => {
-                  openConversation();
-                }}
-                onOpenRoom={(id) => {
-                  navigate(`/companion?room=${encodeURIComponent(id)}`);
-                }}
-                onDiscover={() => {
-                  navigate("/companion?view=discover");
-                }}
-              />
-            )}
-            onNavigate={navigateSection}
-            onNewConversation={() => {
-              openConversation();
-            }}
+          <LinkPreviewProvider
+            cacheScope={draftScope}
+            load={(url) => client.workspaces.linkPreview.query({ url })}
           >
-            {section !== "chat" ? (
-              <ConnectedSections
+            <ComposerReferenceProvider
+              cacheScope={draftScope}
+              roomId={roomId ?? undefined}
+              search={(input) => client.workspaces.references.query(input)}
+            >
+              <CompanionShell
                 section={section}
-                onPrompt={stagePrompt}
-                onConversation={openConversation}
-              />
-            ) : roomId ? (
-              <ConnectedRoom
-                key={`${draftScope}:${roomId}`}
-                roomId={roomId}
-                cacheScope={draftScope}
-                onBack={() => {
+                conversationOpen={conversationOpen}
+                onShowInbox={() => {
                   navigate("/companion");
                 }}
-              />
-            ) : (
-              <ConnectedConversation
-                sessionId={sessionId}
-                draftScope={draftScope}
-              />
-            )}
-          </CompanionShell>
-          {settingsOpen && (
-            <ConnectedSettings
-              onClose={() => {
-                setSettingsOpen(false);
-              }}
-              onPrompt={stagePrompt}
-            />
-          )}
+                hideConversationHeader={Boolean(roomId)}
+                title={title ?? "Zoen"}
+                avatarUri="/marketing/zoen-avatar.webp"
+                agentName={<ConnectedAgentName />}
+                renderAgentHeader={(onEdit) => (
+                  <ConnectedAgentHeader onEdit={onEdit} />
+                )}
+                renderAgentPanel={(tab, close) => (
+                  <ConnectedAgentPanel
+                    tab={tab}
+                    onPrompt={(prompt) => {
+                      close();
+                      stagePrompt(prompt);
+                    }}
+                    onConversation={(id) => {
+                      close();
+                      openConversation(id);
+                    }}
+                  />
+                )}
+                renderConversations={() => (
+                  <ConnectedInbox
+                    cacheScope={draftScope}
+                    workspaceId={workspaceId}
+                    selectedId={sessionId}
+                    selectedRoom={roomId ?? undefined}
+                    onOpen={openConversation}
+                    onCreate={() => {
+                      openConversation();
+                    }}
+                    onOpenRoom={(id) => {
+                      navigate(`/companion?room=${encodeURIComponent(id)}`);
+                    }}
+                    onDiscover={() => {
+                      navigate("/companion?view=discover");
+                    }}
+                  />
+                )}
+                onNavigate={navigateSection}
+                onNewConversation={() => {
+                  openConversation();
+                }}
+              >
+                {section !== "chat" ? (
+                  <ConnectedSections
+                    section={section}
+                    onPrompt={stagePrompt}
+                    onConversation={openConversation}
+                  />
+                ) : roomId ? (
+                  <ConnectedRoom
+                    key={`${draftScope}:${roomId}`}
+                    roomId={roomId}
+                    cacheScope={draftScope}
+                    onBack={() => {
+                      navigate("/companion");
+                    }}
+                  />
+                ) : (
+                  <ConnectedConversation
+                    sessionId={sessionId}
+                    draftScope={draftScope}
+                  />
+                )}
+              </CompanionShell>
+              {settingsOpen && (
+                <ConnectedSettings
+                  onClose={() => {
+                    setSettingsOpen(false);
+                  }}
+                  onPrompt={stagePrompt}
+                />
+              )}
+            </ComposerReferenceProvider>
+          </LinkPreviewProvider>
         </AttachmentProvider>
       </CompanionEditingProvider>
     </div>

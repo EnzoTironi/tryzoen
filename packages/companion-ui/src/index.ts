@@ -44,3 +44,13 @@ export type { DocumentHistoryData } from "./document-history";
 export { ConversationInbox } from "./chats/inbox";
 export { RoomConversation } from "./rooms/conversation";
 export { DiscoverBots } from "./creators/discover";
+
+export { ComposerReferenceProvider } from "./references/provider";
+
+export { LinkPreviewProvider } from "./cards/provider";
+
+export {
+  ComposerEditorProvider,
+  type ComposerEditorProps,
+  type ComposerEditorHandle,
+} from "./composer/editor";

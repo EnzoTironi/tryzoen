@@ -1,3 +1,8 @@
+import { renderComposerEditor } from "./composer";
+import { linkPreviewSchema } from "@zoen/companion-ui/previews";
+import { renderMedia } from "./media";
+import { referenceResultsSchema } from "@zoen/companion-ui/references";
+import { rpc } from "./api";
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -7,7 +12,10 @@ import {
   ActionButton,
   CompanionShell,
   MarkdownEditorProvider,
+  ComposerEditorProvider,
   AttachmentProvider,
+  LinkPreviewProvider,
+  ComposerReferenceProvider,
   type CompanionSection,
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
@@ -28,6 +36,8 @@ import { pickAttachments, saveAttachment } from "./attachments";
 function renderMarkdownEditor(props: MarkdownEditorProps) {
   return <MobileEditor {...props} />;
 }
+
+const composerAdapter = { Input: renderComposerEditor };
 
 export function App() {
   const session = auth.useSession();
@@ -98,16 +108,24 @@ function AccountCompanion() {
   return (
     <QueryClientProvider client={client}>
       <MarkdownEditorProvider value={renderMarkdownEditor}>
-        <AttachmentProvider pick={pickAttachments} save={saveAttachment}>
-          <MobileCompanion
-            onSignOut={async () => {
-              const result = await auth.signOut();
-              if (result.error)
-                throw new Error(result.error.message ?? "Could not sign out.");
-              client.clear();
-            }}
-          />
-        </AttachmentProvider>
+        <ComposerEditorProvider value={composerAdapter}>
+          <AttachmentProvider
+            pick={pickAttachments}
+            save={saveAttachment}
+            renderMedia={renderMedia}
+          >
+            <MobileCompanion
+              onSignOut={async () => {
+                const result = await auth.signOut();
+                if (result.error)
+                  throw new Error(
+                    result.error.message ?? "Could not sign out."
+                  );
+                client.clear();
+              }}
+            />
+          </AttachmentProvider>
+        </ComposerEditorProvider>
       </MarkdownEditorProvider>
     </QueryClientProvider>
   );
@@ -118,6 +136,7 @@ function MobileCompanion({
 }: {
   readonly onSignOut: () => Promise<void>;
 }) {
+  const account = auth.useSession();
   const [section, setSection] = useState<CompanionSection>("chat");
   const [roomId, setRoomId] = useState<string>();
   const [conversationOpen, setConversationOpen] = useState(false);
@@ -137,81 +156,100 @@ function MobileCompanion({
     setSection("chat");
   };
   return (
-    <CompanionShell
-      section={section}
-      conversationOpen={conversationOpen}
-      onShowInbox={() => {
-        setConversationOpen(false);
-      }}
-      hideConversationHeader={Boolean(roomId)}
-      avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
-      agentName={<MobileAgentName />}
-      renderAgentHeader={(onEdit) => <MobileAgentHeader onEdit={onEdit} />}
-      renderAgentPanel={(tab, close) => (
-        <MobileAgentPanel
-          tab={tab}
-          onPrompt={(prompt) => {
-            close();
-            openConversation(undefined, prompt);
-          }}
-          onConversation={(id) => {
-            close();
-            openConversation(id);
-          }}
-        />
-      )}
-      renderConversations={() => (
-        <MobileInbox
-          selectedId={conversation.id}
-          selectedRoom={roomId}
-          onOpen={openConversation}
-          onCreate={() => {
-            openConversation();
-          }}
-          onOpenRoom={(id) => {
-            setRoomId(id);
-            setConversationOpen(true);
-          }}
-          onDiscover={() => {
-            setSection("discover");
-          }}
-        />
-      )}
-      onNavigate={setSection}
-      onNewConversation={() => {
-        openConversation();
-      }}
+    <LinkPreviewProvider
+      cacheScope={account.data?.user.id ?? "anonymous"}
+      load={async (url) =>
+        linkPreviewSchema.parse(
+          await rpc.query("workspaces.linkPreview", { url })
+        )
+      }
     >
-      {section === "chat" && roomId ? (
-        <MobileRoom
-          key={roomId}
-          roomId={roomId}
-          onBack={() => {
+      <ComposerReferenceProvider
+        cacheScope={account.data?.user.id ?? "anonymous"}
+        roomId={roomId}
+        search={async (input) =>
+          referenceResultsSchema.parse(
+            await rpc.query("workspaces.references", input)
+          )
+        }
+      >
+        <CompanionShell
+          section={section}
+          conversationOpen={conversationOpen}
+          onShowInbox={() => {
             setConversationOpen(false);
           }}
-        />
-      ) : section === "chat" ? (
-        <MobileConversation
-          key={conversation.key}
-          sessionId={conversation.id}
-          initialDraft={conversation.draft}
-          onCreated={(id, draft) => {
-            setConversation((current) => ({ ...current, id, draft }));
+          hideConversationHeader={Boolean(roomId)}
+          avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
+          agentName={<MobileAgentName />}
+          renderAgentHeader={(onEdit) => <MobileAgentHeader onEdit={onEdit} />}
+          renderAgentPanel={(tab, close) => (
+            <MobileAgentPanel
+              tab={tab}
+              onPrompt={(prompt) => {
+                close();
+                openConversation(undefined, prompt);
+              }}
+              onConversation={(id) => {
+                close();
+                openConversation(id);
+              }}
+            />
+          )}
+          renderConversations={() => (
+            <MobileInbox
+              selectedId={conversation.id}
+              selectedRoom={roomId}
+              onOpen={openConversation}
+              onCreate={() => {
+                openConversation();
+              }}
+              onOpenRoom={(id) => {
+                setRoomId(id);
+                setConversationOpen(true);
+              }}
+              onDiscover={() => {
+                setSection("discover");
+              }}
+            />
+          )}
+          onNavigate={setSection}
+          onNewConversation={() => {
+            openConversation();
           }}
-        />
-      ) : (
-        <MobileSections
-          section={section}
-          onConversation={(id) => {
-            openConversation(id);
-          }}
-          onPrompt={(draft) => {
-            openConversation(undefined, draft);
-          }}
-          onSignOut={onSignOut}
-        />
-      )}
-    </CompanionShell>
+        >
+          {section === "chat" && roomId ? (
+            <MobileRoom
+              key={roomId}
+              roomId={roomId}
+              onBack={() => {
+                setConversationOpen(false);
+              }}
+            />
+          ) : section === "chat" ? (
+            <MobileConversation
+              key={conversation.key}
+              sessionId={conversation.id}
+              initialDraft={conversation.draft}
+              onCreated={(id, draft) => {
+                setConversation((current) => ({ ...current, id, draft }));
+              }}
+            />
+          ) : (
+            <MobileSections
+              section={section}
+              onConversation={(id) => {
+                openConversation(id);
+              }}
+              onPrompt={(draft) => {
+                openConversation(undefined, draft);
+              }}
+              onSignOut={onSignOut}
+            />
+          )}
+        </CompanionShell>
+      </ComposerReferenceProvider>
+    </LinkPreviewProvider>
   );
 }
 const styles = StyleSheet.create({

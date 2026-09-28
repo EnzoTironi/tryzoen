@@ -1,3 +1,5 @@
+import type { inlineAttachmentSchema } from "../attachments/schema";
+import { conversationDraftSchema } from "../session/input";
 import { z } from "zod";
 import { messageReactionSchema } from "../reactions/schema";
 
@@ -23,15 +25,32 @@ export const roomCreateSchema = z.object({
   operationId: z.uuid(),
   name: z.string().trim().min(1).max(80),
 });
-export const roomSendSchema = z.object({
-  id: z.uuid(),
-  operationId: z.uuid(),
-  text: z.string().trim().min(1).max(8000),
-  rootId: roomThreadSchema.shape.rootId.optional(),
-  replyTo: roomThreadSchema.shape.rootId.optional(),
-});
+export const roomSendSchema = z
+  .object({
+    id: z.uuid(),
+    operationId: z.uuid(),
+    text: z.string().trim().max(8000),
+    files: conversationDraftSchema.shape.files.optional(),
+    rootId: roomThreadSchema.shape.rootId.optional(),
+    replyTo: roomThreadSchema.shape.rootId.optional(),
+  })
+  .refine(
+    (input) =>
+      (!!input.text || !!input.files?.length) &&
+      conversationDraftSchema.safeParse({
+        text: input.text,
+        files: input.files ?? [],
+      }).success
+  );
 export const roomMessageSchema = z.object({
   id: z.string(),
+  media: z
+    .object({
+      filename: z.string(),
+      mediaType: z.string(),
+      size: z.number().optional(),
+    })
+    .optional(),
   text: z.string(),
   sender: z.string(),
   mine: z.boolean(),
@@ -87,7 +106,15 @@ export const roomReactionsPageSchema = z
   .array(roomReactionSummarySchema)
   .max(12);
 
+export const roomMediaReadSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageId: roomThreadSchema.shape.rootId,
+});
+
 export interface RoomData {
+  media: (
+    input: z.infer<typeof roomMediaReadSchema>
+  ) => Promise<z.infer<typeof inlineAttachmentSchema>>;
   reactions: (
     input: z.infer<typeof roomReactionsReadSchema>
   ) => Promise<z.infer<typeof roomReactionsPageSchema>>;

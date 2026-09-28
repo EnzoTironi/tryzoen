@@ -1,3 +1,6 @@
+import { MessageLinks } from "../cards/link";
+import { RoomAttachment } from "./attachment";
+import type { RoomData } from "./schema";
 import { useRef, useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
@@ -8,7 +11,7 @@ import {
   View,
   type ViewToken,
 } from "react-native";
-import { MessageCircle } from "lucide-react-native";
+import { ArrowDown, MessageCircle } from "lucide-react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { colors } from "../theme";
@@ -19,6 +22,9 @@ import type { roomReactionSummarySchema, roomMemberSchema } from "./schema";
 import type { roomMessageSchema } from "./schema";
 
 export function RoomMessages({
+  data,
+  roomId,
+  cacheScope,
   messages,
   onThread,
   loading,
@@ -36,6 +42,9 @@ export function RoomMessages({
   onReact,
   onVisibleMessagesChange,
 }: {
+  readonly data: RoomData;
+  readonly roomId: string;
+  readonly cacheScope: string;
   readonly onCopy?: (text: string) => Promise<void>;
   readonly onReply: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
@@ -55,6 +64,10 @@ export function RoomMessages({
 }) {
   const list = useRef<FlatList<z.infer<typeof roomMessageSchema>>>(null);
   const nearBottom = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const [lastSeen, setLastSeen] = useState(messages.at(-1)?.id);
+  const seenIndex = messages.findIndex((message) => message.id === lastSeen);
+  const newer = seenIndex < 0 ? 0 : messages.length - seenIndex - 1;
   const visible = useRef(onVisibleMessagesChange);
   useEffect(() => {
     visible.current = onVisibleMessagesChange;
@@ -70,90 +83,143 @@ export function RoomMessages({
       }
   );
   return (
-    <FlatList
-      ref={list}
-      data={messages}
-      onViewableItemsChanged={onViewableItemsChanged}
-      keyExtractor={(item) => item.id}
-      style={styles.list}
-      contentContainerStyle={styles.content}
-      initialNumToRender={20}
-      windowSize={5}
-      onScroll={({
-        nativeEvent: { layoutMeasurement, contentOffset, contentSize },
-      }) => {
-        nearBottom.current =
-          layoutMeasurement.height + contentOffset.y >=
-          contentSize.height - 100;
-      }}
-      scrollEventThrottle={100}
-      onContentSizeChange={() => {
-        if (nearBottom.current && !loadingMore)
-          list.current?.scrollToEnd({ animated: false });
-      }}
-      ListHeaderComponent={
-        hasMore ? (
-          <ActionButton quiet disabled={loadingMore} onPress={onMore}>
-            Mensagens anteriores
-          </ActionButton>
-        ) : null
-      }
-      ListEmptyComponent={
-        !loading && !error ? (
-          <Text style={styles.empty}>A conversa começa aqui.</Text>
-        ) : null
-      }
-      ListFooterComponent={
-        <>
-          {loading && (
-            <ActivityIndicator accessibilityLabel="Carregando mensagens" />
-          )}
-          {error && (
-            <View style={styles.error}>
-              <Text accessibilityRole="alert" style={styles.caption}>
-                Não foi possível atualizar a conversa.
-              </Text>
-              <ActionButton quiet onPress={onRetry}>
-                Tentar novamente
-              </ActionButton>
-            </View>
-          )}
-        </>
-      }
-      renderItem={({ item, index }) => (
-        <>
-          {!!item.timestamp &&
-            new Date(messages[index - 1]?.timestamp ?? 0).toDateString() !==
-              new Date(item.timestamp).toDateString() && (
-              <Text style={styles.day}>
-                {new Date(item.timestamp).toLocaleDateString([], {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "short",
-                })}
-              </Text>
+    <View style={styles.list}>
+      <FlatList
+        ref={list}
+        data={messages}
+        onViewableItemsChanged={onViewableItemsChanged}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        contentContainerStyle={styles.content}
+        initialNumToRender={20}
+        windowSize={5}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        onScroll={({
+          nativeEvent: { layoutMeasurement, contentOffset, contentSize },
+        }) => {
+          nearBottom.current =
+            layoutMeasurement.height + contentOffset.y >=
+            contentSize.height - 100;
+          setAtBottom(nearBottom.current);
+          if (nearBottom.current) setLastSeen(messages.at(-1)?.id);
+        }}
+        scrollEventThrottle={100}
+        onContentSizeChange={() => {
+          if (nearBottom.current && !loadingMore) {
+            list.current?.scrollToEnd({ animated: false });
+            setLastSeen(messages.at(-1)?.id);
+          }
+        }}
+        ListHeaderComponent={
+          hasMore ? (
+            <ActionButton quiet disabled={loadingMore} onPress={onMore}>
+              Mensagens anteriores
+            </ActionButton>
+          ) : null
+        }
+        ListEmptyComponent={
+          !loading && !error ? (
+            <Text style={styles.empty}>A conversa começa aqui.</Text>
+          ) : null
+        }
+        ListFooterComponent={
+          <>
+            {loading && (
+              <ActivityIndicator accessibilityLabel="Carregando mensagens" />
             )}
-          <View style={[styles.messageLine, item.mine && styles.outgoingLine]}>
-            <RoomMessage
-              item={item}
-              onThread={onThread}
-              avatarUri={avatarUri}
-              onCopy={onCopy}
-              onReply={onReply}
-              onProfile={onProfile}
-              members={members}
-              onReact={onReact}
-              reaction={reactions.find(
-                (reaction) => reaction.messageId === item.id
+            {error && (
+              <View style={styles.error}>
+                <Text accessibilityRole="alert" style={styles.caption}>
+                  Não foi possível atualizar a conversa.
+                </Text>
+                <ActionButton quiet onPress={onRetry}>
+                  Tentar novamente
+                </ActionButton>
+              </View>
+            )}
+          </>
+        }
+        renderItem={({ item, index }) => (
+          <>
+            {!!item.timestamp &&
+              new Date(messages[index - 1]?.timestamp ?? 0).toDateString() !==
+                new Date(item.timestamp).toDateString() && (
+                <Text style={styles.day}>
+                  {new Date(item.timestamp).toLocaleDateString([], {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </Text>
               )}
-            />
-          </View>
-        </>
-      )}
-    />
+            <View
+              style={[styles.messageLine, item.mine && styles.outgoingLine]}
+            >
+              <RoomMessage
+                data={data}
+                roomId={roomId}
+                cacheScope={cacheScope}
+                item={item}
+                onThread={onThread}
+                avatarUri={avatarUri}
+                onCopy={onCopy}
+                onReply={onReply}
+                onProfile={onProfile}
+                members={members}
+                onReact={onReact}
+                reaction={reactions.find(
+                  (reaction) => reaction.messageId === item.id
+                )}
+              />
+            </View>
+          </>
+        )}
+      />
+      <LatestMessagesButton
+        visible={!atBottom && !error && messages.length > 0}
+        newer={newer}
+        onPress={() => {
+          nearBottom.current = true;
+          setAtBottom(true);
+          setLastSeen(messages.at(-1)?.id);
+          list.current?.scrollToEnd({ animated: false });
+        }}
+      />
+    </View>
   );
 }
+function LatestMessagesButton({
+  visible,
+  newer,
+  onPress,
+}: {
+  readonly visible: boolean;
+  readonly newer: number;
+  readonly onPress: () => void;
+}) {
+  if (!visible) return null;
+  const label = newer
+    ? `${newer} ${newer === 1 ? "nova mensagem" : "novas mensagens"}`
+    : "Mais recentes";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. Ir para o fim da conversa`}
+      onPress={onPress}
+      style={styles.latest}
+    >
+      <ArrowDown size={16} color={colors.accent} />
+      <Text style={styles.latestText} accessibilityLiveRegion="polite">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function RoomMessage({
+  data,
+  roomId,
+  cacheScope,
   item,
   onThread,
   avatarUri,
@@ -165,6 +231,9 @@ function RoomMessage({
   onReact,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
+  | "data"
+  | "roomId"
+  | "cacheScope"
   | "onThread"
   | "avatarUri"
   | "onCopy"
@@ -221,7 +290,13 @@ function RoomMessage({
               : ""}
           </Text>
         </View>
-        <View style={[styles.bubble, item.mine && styles.blue]}>
+        <View
+          style={
+            item.media
+              ? { maxWidth: "100%" }
+              : [styles.bubble, item.mine && styles.blue]
+          }
+        >
           {item.reply && (
             <View style={styles.quote}>
               <Text style={styles.sender}>{item.reply.sender}</Text>
@@ -230,14 +305,18 @@ function RoomMessage({
               </Text>
             </View>
           )}
-          {item.bot ? (
-            <AssistantMarkdown text={item.text} />
+          {item.media ? (
+            <RoomAttachment
+              item={item}
+              data={data}
+              roomId={roomId}
+              cacheScope={cacheScope}
+            />
           ) : (
-            <Text selectable style={styles.text}>
-              {item.text}
-            </Text>
+            <AssistantMarkdown text={item.text} />
           )}
         </View>
+        {!item.media && <MessageLinks text={item.text} />}
         {reaction && reaction.reactions.length > 0 && (
           <View style={styles.reactions}>
             {reaction.reactions
@@ -309,6 +388,22 @@ const styles = StyleSheet.create({
   },
   reactionText: { fontSize: 13, color: colors.ink },
   list: { flex: 1, minHeight: 0 },
+  latest: {
+    position: "absolute",
+    alignSelf: "center",
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 16,
+    minHeight: 40,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    boxShadow: "0 3px 14px rgba(0,0,0,0.10)",
+  },
+  latestText: { fontSize: 13, fontWeight: "600", color: colors.accent },
   content: { paddingHorizontal: 24, paddingVertical: 24, gap: 20 },
   messageLine: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   outgoingLine: { justifyContent: "flex-end" },

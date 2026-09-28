@@ -27,8 +27,12 @@ vi.mock("@trpc/client", async (importOriginal) => ({
 }));
 vi.mock("@zoen/companion-ui", () => ({
   CompanionShell: ({ children }: { children: ReactNode }) => children,
+  ComposerReferenceProvider: ({ children }: { children: ReactNode }) =>
+    children,
   AttachmentProvider: ({ children }: { children: ReactNode }) => children,
   MarkdownEditorProvider: ({ children }: { children: ReactNode }) => children,
+  ComposerEditorProvider: ({ children }: { children: ReactNode }) => children,
+  LinkPreviewProvider: ({ children }: { children: ReactNode }) => children,
   CompanionOverlayProvider: ({ children }: { children: ReactNode }) => children,
   NewConversation: (props: ComponentProps<typeof NewConversation>) => {
     mocks.conversation = props;

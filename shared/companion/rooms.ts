@@ -1,3 +1,4 @@
+import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 import {
   roomListSchema,
   roomReactionsPageSchema,
@@ -16,6 +17,11 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async media(input) {
+      return inlineAttachmentSchema.parse(
+        await rpc.query("workspaces.rooms.media", input)
+      );
+    },
     async reactions(input) {
       return roomReactionsPageSchema.parse(
         await rpc.query("workspaces.rooms.reactions", input)

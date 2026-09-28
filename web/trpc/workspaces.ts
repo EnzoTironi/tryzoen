@@ -1,4 +1,14 @@
 import {
+  linkPreviewInputSchema,
+  linkPreviewSchema,
+} from "@zoen/companion-ui/previews";
+import { readLinkPreview } from "../../server/links/preview";
+import {
+  referenceSearchSchema,
+  referenceResultsSchema,
+} from "@zoen/companion-ui/references";
+import { searchComposerReferences } from "../../server/workspaces/references";
+import {
   GitRevisionSchema,
   WorkspacePathSchema,
 } from "@shared/workspaces/files";
@@ -64,6 +74,18 @@ import {
   LearnedMemoryWriteSchema,
 } from "../../server/memory/learned";
 export const workspacesRouter = {
+  linkPreview: workspaceProcedure
+    .input(linkPreviewInputSchema)
+    .output(linkPreviewSchema)
+    .query(({ ctx, input, signal }) =>
+      readLinkPreview(ctx.actor, input.url, signal)
+    ),
+  references: workspaceProcedure
+    .input(referenceSearchSchema)
+    .output(referenceResultsSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => searchComposerReferences(ctx.actor, input))
+    ),
   creators: creatorsRouter,
   tools: workspaceToolsRouter,
   rooms: workspaceRoomsRouter,

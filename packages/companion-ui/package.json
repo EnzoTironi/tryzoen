@@ -51,6 +51,18 @@
     "./messages": {
       "types": "./dist/session/messages.d.ts",
       "default": "./dist/session/messages.js"
+    },
+    "./references": {
+      "types": "./dist/references/schema.d.ts",
+      "default": "./dist/references/schema.js"
+    },
+    "./previews": {
+      "types": "./dist/cards/schema.d.ts",
+      "default": "./dist/cards/schema.js"
+    },
+    "./composer": {
+      "types": "./dist/composer/document.d.ts",
+      "default": "./dist/composer/document.js"
     }
   },
   "dependencies": {
@@ -59,6 +71,7 @@
     "@tiptap/markdown": "3.31.3",
     "@tiptap/pm": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
+    "linkifyjs": "4.3.3",
     "lucide-react-native": "1.48.0",
     "react-native-marked": "8.3.2",
     "react-native-svg": "15.15.4",

@@ -153,6 +153,11 @@ export const MatrixEventSchema = z.object({
     .optional(),
   content: z.object({
     body: z.optional(z.string()),
+    url: z.string().optional(),
+    filename: z.string().optional(),
+    info: z
+      .object({ mimetype: z.string().optional(), size: z.number().optional() })
+      .optional(),
     msgtype: z.optional(z.string()),
     membership: z.optional(z.string()),
     "m.relates_to": z.optional(

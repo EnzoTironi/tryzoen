@@ -1,7 +1,9 @@
+import { MessageCircle, Puzzle, ShieldCheck } from "lucide-react-native";
+import { ResourceCard } from "./cards/resource";
+import { LinkCard, MessageLinks } from "./cards/link";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   FlatList,
   StyleSheet,
   Text,
@@ -20,7 +22,6 @@ import { AssistantMarkdown } from "./markdown";
 import { ActionButton } from "./button";
 import { Composer } from "./composer";
 import { colors } from "./theme";
-import { isSafeWebLink } from "./links";
 import { MessageActions } from "./message-actions";
 import { AttachmentCard } from "./attachments/card";
 import { messageContent, type ConversationDraft } from "./session/input";
@@ -149,12 +150,7 @@ export function Conversation({
               message.role === "user" ? styles.userGroup : styles.assistantGroup
             }
           >
-            <View
-              style={[
-                styles.message,
-                message.role === "user" ? styles.user : styles.assistant,
-              ]}
-            >
+            <View style={{ gap: 6, maxWidth: "100%" }}>
               {message.parts.map((part, index) => (
                 <MessagePart
                   // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
@@ -247,12 +243,7 @@ export function Conversation({
 
 function UserMessage({ text }: { readonly text: string }) {
   const quoted = readReplyMessage(text);
-  if (!quoted)
-    return (
-      <Text selectable style={styles.text}>
-        {text}
-      </Text>
-    );
+  if (!quoted) return <AssistantMarkdown text={text} />;
   return (
     <View style={styles.quotedMessage}>
       <View style={styles.quote}>
@@ -267,9 +258,7 @@ function UserMessage({ text }: { readonly text: string }) {
           {quoted.quote}
         </Text>
       </View>
-      <Text selectable style={styles.text}>
-        {quoted.text}
-      </Text>
+      <AssistantMarkdown text={quoted.text} />
     </View>
   );
 }
@@ -286,10 +275,17 @@ export function MessagePart({
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
   if (part.type === "text") {
-    return isUser ? (
-      <UserMessage text={part.text} />
-    ) : (
-      <AssistantMarkdown text={part.text} />
+    return (
+      <>
+        <View style={[styles.message, isUser ? styles.user : styles.assistant]}>
+          {isUser ? (
+            <UserMessage text={part.text} />
+          ) : (
+            <AssistantMarkdown text={part.text} />
+          )}
+        </View>
+        <MessageLinks text={readReplyMessage(part.text)?.text ?? part.text} />
+      </>
     );
   }
   if (part.type === "dynamic-tool") {
@@ -306,10 +302,13 @@ export function MessagePart({
       );
     if (request && response)
       return (
-        <View style={styles.request}>
-          <Text style={styles.author}>
-            {request.kind === "tool-approval" ? "Your decision" : "Your answer"}
-          </Text>
+        <ResourceCard
+          title={
+            request.kind === "tool-approval" ? "Your decision" : "Your answer"
+          }
+          icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
+          tint="#4c9984"
+        >
           <Text selectable style={styles.text}>
             {request.prompt}
           </Text>
@@ -324,38 +323,44 @@ export function MessagePart({
               The action failed after your response.
             </Text>
           )}
-        </View>
+        </ResourceCard>
       );
     return (
-      <Text style={styles.caption}>
-        {part.toolName.replaceAll("_", " ")} ·{" "}
-        {part.state === "output-error"
-          ? "Failed"
-          : part.state === "output-available"
-            ? "Complete"
-            : part.state === "output-denied"
-              ? "Declined"
-              : "In progress"}
-      </Text>
+      <ResourceCard
+        title={part.toolName.replaceAll("_", " ")}
+        icon={Puzzle}
+        tint="#8673c8"
+        detail={
+          part.state === "output-error"
+            ? "Falhou"
+            : part.state === "output-available"
+              ? "Concluído"
+              : part.state === "output-denied"
+                ? "Não autorizado"
+                : "Em andamento"
+        }
+      />
     );
   }
+
   if (part.type === "authorization") {
     const url = part.authorization?.url;
     return (
-      <View style={styles.request}>
-        <Text style={styles.text}>{part.displayName}</Text>
-        <Text style={styles.caption}>
-          {part.state === "completed" ? part.outcome : part.description}
-        </Text>
+      <ResourceCard
+        title={part.displayName}
+        icon={ShieldCheck}
+        tint="#4c9984"
+        detail={part.state === "completed" ? part.outcome : part.description}
+      >
         {part.authorization?.userCode && (
           <Text selectable style={styles.text}>
             {part.authorization.userCode}
           </Text>
         )}
         {part.state === "required" && url && (
-          <WebLink url={url} label="Connect account" />
+          <LinkCard url={url} title="Connect account" />
         )}
-      </View>
+      </ResourceCard>
     );
   }
   if (part.type === "file")
@@ -369,40 +374,11 @@ export function MessagePart({
         }}
       />
     ) : part.url ? (
-      <WebLink url={part.url} label={part.filename ?? "Attachment"} />
+      <LinkCard url={part.url} title={part.filename ?? "Attachment"} />
     ) : (
       <Text style={styles.caption}>{part.filename ?? "Attachment"}</Text>
     );
   return null;
-}
-
-function WebLink({
-  url,
-  label,
-}: {
-  readonly url: string;
-  readonly label: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (!isSafeWebLink(url)) return <Text style={styles.caption}>{label}</Text>;
-  return (
-    <View style={styles.request}>
-      <ActionButton
-        quiet
-        onPress={() => {
-          setFailed(false);
-          void Linking.openURL(url).catch(() => {
-            setFailed(true);
-          });
-        }}
-      >
-        {label}
-      </ActionButton>
-      {failed && (
-        <Text style={styles.error}>This link couldn’t be opened.</Text>
-      )}
-    </View>
-  );
 }
 
 function InputRequest({
@@ -433,12 +409,15 @@ function InputRequest({
     }
   }
   return (
-    <View style={styles.request}>
-      <Text style={styles.author}>
-        {request.kind === "tool-approval"
+    <ResourceCard
+      title={
+        request.kind === "tool-approval"
           ? "Your permission is needed"
-          : "A quick question"}
-      </Text>
+          : "A quick question"
+      }
+      icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
+      tint="#4c9984"
+    >
       <Text style={styles.text}>{request.prompt}</Text>
       <View style={styles.options}>
         {request.options?.map((option) => (
@@ -482,7 +461,7 @@ function InputRequest({
           Your answer wasn’t accepted. Please try again.
         </Text>
       )}
-    </View>
+    </ResourceCard>
   );
 }
 

@@ -1,0 +1,116 @@
+.root {
+  flex: 1;
+  min-width: 0;
+  color: #111112;
+}
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tools button {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: #6c7075;
+}
+.tools button[aria-pressed="true"] {
+  color: #0866c9;
+  background: #e8f1ff;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+}
+.input :global(.tiptap) {
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 44px;
+  max-height: 192px;
+  overflow-y: auto;
+  outline: none;
+  padding: 6px 4px 12px;
+  overflow-wrap: anywhere;
+}
+.input p {
+  margin: 0 0 4px;
+}
+.input ul,
+.input ol {
+  margin: 4px 0;
+  padding-left: 24px;
+}
+.input blockquote {
+  border-left: 3px solid #b9c0c8;
+  padding-left: 12px;
+  margin: 6px 0;
+}
+.input code {
+  font:
+    0.9em ui-monospace,
+    monospace;
+  background: #f0f0f2;
+  border-radius: 5px;
+  padding: 1px 4px;
+}
+.input :global(.tiptap):has(> p:only-child > br:only-child)::before {
+  content: attr(data-placeholder);
+  color: #92969b;
+  pointer-events: none;
+  position: absolute;
+}
+.input a {
+  color: #0866c9;
+}
+.input a[href^="zoen-reference:"] {
+  text-decoration: none;
+  background: #e8f1ff;
+  border-radius: 6px;
+  padding: 2px 5px;
+  box-decoration-break: clone;
+  font-weight: 500;
+}
+.input a[href^="zoen-reference:/file/"]::before,
+.input a[href^="zoen-reference:/artifact/"]::before {
+  content: "▤ ";
+}
+.input a[href^="zoen-reference:/person/"]::before,
+.input a[href^="zoen-reference:/bot/"]::before {
+  content: "@ ";
+}
+.input a[href^="zoen-reference:/skill/"]::before {
+  content: "✦ ";
+}
+.input a[href^="zoen-reference:/routine/"]::before {
+  content: "↻ ";
+}
+.error {
+  color: #a34437;
+  font-size: 12px;
+}
+
+@media (pointer: coarse) {
+  .tools button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.linkForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+}
+.linkForm input {
+  min-width: 100px;
+  flex: 1;
+  border: 1px solid #e2e2e2;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 16px;
+}

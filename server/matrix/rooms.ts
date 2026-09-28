@@ -1,3 +1,4 @@
+import { uploadMatrixMedia } from "./media/upload";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -8,7 +9,11 @@ import {
   type roomCreateSchema,
   type roomSendSchema,
 } from "@zoen/companion-ui/rooms";
-import { projectMatrixMessage, readRoomMessage } from "./messages";
+import {
+  projectMatrixMessage,
+  readMatrixText,
+  readRoomMessage,
+} from "./messages";
 
 import {
   requireWorkspaceAccess,
@@ -278,19 +283,44 @@ export const sendMatrixMessage = async function (
       ...(replyTarget ? { "m.in_reply_to": { event_id: replyTarget } } : {}),
     };
     const body = reply
-      ? `> <${reply.sender}> ${(reply.content.body ?? "").slice(0, 4000).replaceAll("\n", "\n> ")}\n\n${input.text}`
+      ? `> <${reply.sender}> ${readMatrixText(reply.content).text.slice(0, 4000).replaceAll("\n", "\n> ")}\n\n${input.text}`
       : input.text;
-    const sent = await matrixRequest(
-      "PUT",
-      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
-      {
-        msgtype: "m.text",
-        body,
-        ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
-      },
-      room.matrixId
-    );
-    return await z.object({ event_id: z.string() }).parseAsync(sent);
+    const sent = [];
+    if (input.text)
+      sent.push(
+        await matrixRequest(
+          "PUT",
+          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
+          {
+            msgtype: "m.text",
+            body,
+            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
+          },
+          room.matrixId
+        )
+      );
+    for (const [index, file] of (input.files ?? []).entries()) {
+      await requireWorkspaceAccess(actor);
+      const media = await uploadMatrixMedia(file, room.matrixId);
+      const category = file.mediaType.split("/")[0] ?? "application";
+      sent.push(
+        await matrixRequest(
+          "PUT",
+          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}.file.${index}`,
+          {
+            ...media,
+            msgtype: ["image", "audio", "video"].includes(category)
+              ? `m.${category}`
+              : "m.file",
+            body: file.filename ?? "Attachment",
+            filename: file.filename ?? "Attachment",
+            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
+          },
+          room.matrixId
+        )
+      );
+    }
+    return await z.object({ event_id: z.string() }).parseAsync(sent[0]);
   });
 };
 

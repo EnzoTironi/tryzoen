@@ -27,6 +27,27 @@ export async function readRoomMessage(
   return message;
 }
 
+export function readMatrixText(
+  content: z.infer<typeof MatrixEventSchema>["content"]
+) {
+  const body = content.body ?? "Mensagem removida";
+  const replyId = content["m.relates_to"]?.["m.in_reply_to"]?.event_id;
+  const quote = replyId
+    ? /^> <([^>]+)> ([\s\S]*?)\n\n([\s\S]*)$/u.exec(body)
+    : null;
+  return {
+    text: quote?.[3] ?? body,
+    reply:
+      quote?.[1] && quote[2] !== undefined && replyId
+        ? {
+            id: replyId,
+            sender: quote[1],
+            text: quote[2].replaceAll("\n> ", "\n"),
+          }
+        : null,
+  };
+}
+
 export function projectMatrixMessage(
   event: z.infer<typeof MatrixEventSchema>,
   people: z.infer<typeof roomMemberSchema>[],
@@ -34,24 +55,30 @@ export function projectMatrixMessage(
   botId: string
 ) {
   const relation = event.content["m.relates_to"];
-  const body = event.content.body ?? "Mensagem removida";
-  const replyId = relation?.["m.in_reply_to"]?.event_id;
-  const quote = replyId
-    ? /^> <([^>]+)> ([\s\S]*?)\n\n([\s\S]*)$/u.exec(body)
-    : null;
+  const { text, reply } = readMatrixText(event.content);
   return {
+    ...(event.content.url &&
+    /^m\.(file|image|video|audio)$/u.test(event.content.msgtype ?? "")
+      ? {
+          media: {
+            filename: event.content.filename ?? text,
+            mediaType:
+              event.content.info?.mimetype ?? "application/octet-stream",
+            size: event.content.info?.size,
+          },
+        }
+      : {}),
     senderId: event.sender,
-    reply:
-      quote?.[1] && quote[2] !== undefined && replyId
-        ? {
-            id: replyId,
-            sender:
-              people.find((person) => person.id === quote[1])?.name ?? quote[1],
-            text: quote[2].replaceAll("\n> ", "\n"),
-          }
-        : null,
+    reply: reply
+      ? {
+          ...reply,
+          sender:
+            people.find((person) => person.id === reply.sender)?.name ??
+            reply.sender,
+        }
+      : null,
     id: event.event_id,
-    text: quote?.[3] ?? body,
+    text,
     sender:
       event.sender === botId
         ? "Zoen"
