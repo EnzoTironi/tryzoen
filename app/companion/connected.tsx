@@ -20,6 +20,8 @@ import {
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
+import { getUntypedClient } from "@trpc/client";
+import { companionReactionData } from "@shared/companion/reactions";
 import { workspaceHref } from "@web/workspaces/navigation";
 import styles from "./companion.module.css";
 import {
@@ -65,6 +67,11 @@ export function ConnectedCompanion({
   readonly draftScope: string;
 }) {
   const router = useRouter();
+  const { client } = api.useUtils();
+  const reactions = useMemo(
+    () => companionReactionData(getUntypedClient(client)),
+    [client]
+  );
   const { mutateAsync: saveChat } = api.chats.save.useMutation();
   const params = useSearchParams();
   const workspaceId = params.get("space");
@@ -149,6 +156,9 @@ export function ConnectedCompanion({
                 />
               ) : sessionId ? (
                 <SessionConversation
+                  key={`${draftScope}:${sessionId}`}
+                  reactions={reactions}
+                  cacheScope={draftScope}
                   sessionId={sessionId}
                   initialDraft={draft}
                   client={browserSessionClient}

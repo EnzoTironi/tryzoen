@@ -4,19 +4,26 @@ import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
 import { visibleConversationMessages } from "./session/delivered";
 import type { ConversationDraft } from "./session/input";
+import { useMessageReactions } from "./reactions/use-message-reactions";
+import type { ReactionData } from "./reactions/schema";
 
 export function SessionConversation({
   sessionId,
   client,
   onCopyText,
   initialDraft,
+  reactions,
+  cacheScope,
 }: {
   readonly sessionId: string;
   readonly client: Client;
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: ConversationDraft;
+  readonly reactions: ReactionData;
+  readonly cacheScope: string;
 }) {
   const agent = useSessionAgent(sessionId, client);
+  const feedback = useMessageReactions(reactions, cacheScope, sessionId);
   const messages = useMemo(
     () => visibleConversationMessages(agent.data.messages, agent.events),
     [agent.data.messages, agent.events]
@@ -29,8 +36,21 @@ export function SessionConversation({
       messages={messages}
       initialDraft={initialDraft}
       onCopyText={onCopyText}
+      onVisibleMessagesChange={feedback.showMessages}
+      reactions={
+        new Map(
+          feedback.query.data?.map((item) => [item.messageId, item.emoji])
+        )
+      }
+      onReact={feedback.setReaction}
       status={agent.status}
-      error={actionError ?? agent.error?.message}
+      error={
+        actionError ??
+        agent.error?.message ??
+        (feedback.query.isError
+          ? "Couldn’t load reactions. Reopen the conversation to try again."
+          : undefined)
+      }
       onSend={(text) =>
         agent.send(text, busy ? { turnPolicy: "steer" } : undefined)
       }

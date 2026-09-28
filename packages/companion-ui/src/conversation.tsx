@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View,
+  type ViewToken,
 } from "react-native";
 import type {
   EveMessage,
@@ -41,6 +42,9 @@ export function Conversation({
   loadingOlder = false,
   onCopyText,
   initialDraft,
+  reactions,
+  onReact,
+  onVisibleMessagesChange,
 }: {
   readonly messages: readonly EveMessage[];
   readonly status: UseEveAgentStatus;
@@ -52,6 +56,9 @@ export function Conversation({
   readonly loadingOlder?: boolean;
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: ConversationDraft;
+  readonly reactions?: ReadonlyMap<string, string | null>;
+  readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
+  readonly onVisibleMessagesChange?: (ids: string[]) => void;
 }) {
   const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
@@ -64,6 +71,17 @@ export function Conversation({
   const positioned = useRef(false);
   const busy = status === "streaming" || status === "submitted";
   const canRespond = status === "ready" || status === "error";
+  const reportVisible = useRef(onVisibleMessagesChange);
+  useEffect(() => {
+    reportVisible.current = onVisibleMessagesChange;
+  }, [onVisibleMessagesChange]);
+  // FlatList requires this callback's identity to survive renders and refreshes.
+  const [onViewableItemsChanged] = useState(
+    () =>
+      ({ viewableItems }: { viewableItems: ViewToken<EveMessage>[] }) => {
+        reportVisible.current?.(viewableItems.map(({ item }) => item.id));
+      }
+  );
   useEffect(() => {
     if (messages.length === 0 || positioned.current) return undefined;
     const frame = requestAnimationFrame(() => {
@@ -85,6 +103,7 @@ export function Conversation({
         keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
         windowSize={7}
+        onViewableItemsChanged={onViewableItemsChanged}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         scrollEventThrottle={100}
         onLayout={() => {
@@ -153,6 +172,10 @@ export function Conversation({
               message={message}
               onCopy={onCopyText}
               onReply={setReply}
+              reaction={reactions?.get(message.id)}
+              onReact={
+                onReact ? (emoji) => onReact(message.id, emoji) : undefined
+              }
             />
           </View>
         )}

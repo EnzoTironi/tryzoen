@@ -195,3 +195,13 @@ Inline attachment input is bounded to four files / 3 MiB decoded in the client. 
 The real browser text regression verified creation, a subsequent turn and retained drafts after rejection. Full attachment upload/model/reload and native-device tests remain pending. The original text/file composition helper was removed from the web route; the shared SDK-shaped draft is now the single owner for both chat surfaces.
 
 Attachment checkpoint validation: `pnpm check` passed 1,313 tests across 201 files, lint, types, formatting, unused-code checks and desktop compilation. `pnpm build` passed; Expo exported web, iOS and Android. The browser text conversation survived reload. The structural quality delta is not clean (24 gating findings, dominated by churn plus Composer/MessagePart complexity/size); it is not evidence of release readiness.
+
+## Persistent message reactions
+
+Conversation reactions use the existing Eve session ownership boundary, with one row per session/message. Migration 0063 cascades annotations when the session or its owning membership is removed. A write locks the owned session before setting or deleting the emoji; repeating a value is idempotent. Reads join the ownership record, accept at most fifty requested IDs and never scan the complete conversation. The client requests the visible window and keys its short-lived cache by account, workspace and session. It cancels stale reads after a successful write.
+
+The menu reuses copy/reply and adds six quick reactions plus eight emoji categories. [unicode-emoji-json](https://github.com/muan/unicode-emoji-json) 0.9.0 supplies licensed Unicode data. The expanded catalog loads on demand, rendering one category through a virtualized grid with columns sized to the available width. Errors retain the menu for retry. Reactions annotate the UI; they do not authorize a new model turn or external action.
+
+Browser verification covered persistence, replacement, removal, reload, copy/reply and failed-save recovery in synthetic conversations, with 320- and 390-pixel layouts. The shared implementation is available to web, Electron and Expo; signed builds and physical-device verification remain release gates. These changes do not establish full Muse parity, production load capacity or complete account exports.
+
+Reaction checkpoint validation: `pnpm check` passed 1,314 tests in 202 files; `pnpm build`, Expo exports for web/iOS/Android, migration-chain validation and three isolated PostgreSQL tests passed. The structural quality delta still has 10 gating findings (including JSX size/churn and SQL-shape duplication across distinct owners); this checkpoint is not a clean structural-quality or production-readiness claim.

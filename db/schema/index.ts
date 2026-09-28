@@ -14,6 +14,7 @@ export * from "./organizations";
 export * from "./organization-audit";
 export * from "./schedules";
 export * from "./sessions";
+export * from "./message-reactions";
 export * from "./vault";
 export * from "./whatsapp";
 export * from "./workspaces";

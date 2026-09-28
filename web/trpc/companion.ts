@@ -4,6 +4,16 @@ import {
   feedInstructionsSchema,
 } from "@zoen/companion-ui/feed";
 import {
+  reactionReadSchema,
+  reactionWriteSchema,
+  reactionPageSchema,
+  messageReactionSchema,
+} from "@zoen/companion-ui/reactions";
+import {
+  readMessageReactions,
+  setMessageReaction,
+} from "@db/services/message-reactions";
+import {
   listFeedPosts,
   likeFeedPost,
   deleteFeedPost,
@@ -50,6 +60,14 @@ import {
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  reactions: workspaceProcedure
+    .input(reactionReadSchema)
+    .output(reactionPageSchema)
+    .query(({ ctx, input }) => readMessageReactions(ctx.scope, input)),
+  setReaction: workspaceProcedure
+    .input(reactionWriteSchema)
+    .output(messageReactionSchema)
+    .mutation(({ ctx, input }) => setMessageReaction(ctx.scope, input)),
   feedInstructions: workspaceProcedure
     .output(feedInstructionsSchema)
     .query(({ ctx }) => readFeedInstructions(ctx.actor)),

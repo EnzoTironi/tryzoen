@@ -14,8 +14,16 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@web/trpc/client", () => ({
   api: {
+    useUtils: () => ({ client: {} }),
     chats: { save: { useMutation: () => ({ mutateAsync: mocks.save }) } },
   },
+}));
+vi.mock("@trpc/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@trpc/client")>()),
+  getUntypedClient: () => ({
+    query: vi.fn<() => Promise<unknown>>(),
+    mutation: vi.fn<() => Promise<unknown>>(),
+  }),
 }));
 vi.mock("@zoen/companion-ui", () => ({
   CompanionShell: ({ children }: { children: ReactNode }) => children,
