@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
   index,
@@ -50,6 +51,11 @@ export const telemetryEvents = pgTable(
       t.workspaceId,
       t.createdAt
     ),
+    index("telemetry_events_activity_idx")
+      .on(t.workspaceId, t.userId, t.createdAt.desc(), t.id.desc())
+      .where(
+        sql`${t.kind} IN ('turn.completed', 'turn.failed', 'turn.cancelled', 'session.failed', 'approval.candidate', 'approval.settled')`
+      ),
     index("telemetry_events_session_idx").on(t.sessionId, t.createdAt),
     index("telemetry_events_created_idx").on(t.createdAt),
   ]

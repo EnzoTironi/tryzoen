@@ -1,3 +1,4 @@
+import { roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 import {
   roomListSchema,
@@ -21,6 +22,11 @@ export function companionRoomData(
     operationId,
     async markRead(input) {
       await rpc.mutation("workspaces.rooms.markRead", input);
+    },
+    async editMessage(input) {
+      return roomEditResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.editMessage", input)
+      );
     },
     async deleteMessage(input) {
       await rpc.mutation("workspaces.rooms.deleteMessage", input);

@@ -1,0 +1,1 @@
+CREATE INDEX telemetry_events_activity_idx ON telemetry_events (workspace_id, user_id, created_at DESC, id DESC) WHERE kind IN ('turn.completed', 'turn.failed', 'turn.cancelled', 'session.failed', 'approval.candidate', 'approval.settled');

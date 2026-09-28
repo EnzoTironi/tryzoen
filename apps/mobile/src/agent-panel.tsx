@@ -8,7 +8,6 @@ import {
 import { randomUUID } from "expo-crypto";
 import { apiOrigin } from "./environment";
 import { companionAgentData } from "../../../shared/companion/agent-data";
-import { SearchSection } from "./search";
 import { client } from "./conversation";
 import { rpc } from "./api";
 
@@ -38,7 +37,6 @@ export function MobileAgentPanel(props: {
       data={data}
       cacheScope="personal"
       client={client}
-      renderConversations={(options) => <SearchSection {...options} />}
     />
   );
 }

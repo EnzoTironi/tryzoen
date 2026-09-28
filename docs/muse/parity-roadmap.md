@@ -164,6 +164,20 @@ No Chrome com build final e conta sintética, uma mensagem recebida em outro gru
 
 Revisão estrutural desta rodada: 23 observações, 17 gating, sem supressões. Permanecem o tamanho/complexidade do ciclo de sync e da inbox, padrões repetidos nos adapters e testes, e churn do cliente Matrix. Os testes de regressão validam o comportamento; não tornam essa dívida inexistente nem comprovam capacidade de produção.
 
+### Quarta rodada — edição, atividade e fontes — 28/09/2026
+
+- **COMM-06:** editar texto próprio em DMs, grupos e threads usa substituição nativa Matrix, preservando o evento original, respostas e reações. O editor visual abre como modal desktop e sheet mobile; rascunho do compositor, erro/retry e conflito são preservados. Reusar uma operação com texto/alvo diferentes não retorna sucesso falso. Escritores externos Matrix não participam do lock da aplicação; não há promessa de CAS global.
+- **MUSE-01:** Atividade e Aprovações agora listam registros recentes das conversas do próprio usuário, com cursor por data/ID, páginas de 30 e rolagem infinita. A lista usa metadados já retidos pelo observador Eve e abre os detalhes no stream original. Não lê payloads privados, não inventa aprovação/negação e não representa um histórico durável completo: captura é best-effort e metadados expiram após 90 dias. Conta/workspace/aba delimitam cache e seleção.
+- **MUSE-09/10:** Expo permite inspecionar e revogar delegações existentes de credenciais. Revalida conta e acesso ao abrir/retornar ao app; consulta e autorização compartilham transação. Confirmação aparece junto à credencial, cancelamento preserva acesso e revogação mantém o item no cofre. Não equivale a permissões gerais de navegador/dispositivo nem CRUD completo do cofre nativo.
+- **CREATOR-02:** aquisição conversacional de arquivos Markdown autorizados, snapshot imutável com revisão Git e digest, revisão humana de direitos, uso no preview existente e retirada dos rascunhos futuros. Preserva bytes exatos e não permite colisões com exemplos autorais de outra conta/rascunho. Não importa YouTube nem cria ainda o corpus Akita por release.
+- Migrações aditivas 0085–0086 aplicadas somente aos bancos local e isolado. Nenhuma alteração de dados em produção.
+
+Validação integrada: `pnpm check` passou com 235 arquivos e 1.477 testes; `pnpm build`, `pnpm db:check` e exports Expo para iOS, Android e web passaram. Testes isolados incluem 22 cenários de fontes/drafts/previews/releases, quatro de permissões do cofre, dois de atividade e um cenário Matrix abrangente de edição com autorização, threads, concorrência e replay. O teste visual usou Next e Eve juntos: uma conversa sintética respondeu de verdade e gerou a entrada de atividade.
+
+Chrome no build corrente: edição desktop atualizou mensagem e inbox sem perder o rascunho; recarregar preservou a edição. Cancelar no viewport 390 × 844 manteve a mensagem anterior e a barra mobile. Expo web com API real confirmou cancelar/revogar, e a inspeção posterior encontrou uma credencial preservada, uma delegação revogada e nenhuma ativa para a fixture. Aparelhos físicos continuam não qualificados.
+
+Revisão estrutural comparada ao commit `e23b3ea`: 61 observações, 30 gating, sem supressões. O scanner encontra churn, repetição de adapters/testes e componentes novos extensos. A revisão cruzada corrigiu replay incorreto, colisões de identidade de fontes, normalização silenciosa de conteúdo e a leitura de permissões fora da transação. Esses testes não comprovam escala nem paridade total. O backdrop dos modais ainda aparece como um alvo acessível de fechamento além do X; uma correção coesa do primitive precisa preservar um controle acessível em todos os breakpoints.
+
 ### Critérios para cada rodada
 
 - Testes específicos cobrem usuário correto/incorreto, revogação concorrente, falha/retry e persistência.

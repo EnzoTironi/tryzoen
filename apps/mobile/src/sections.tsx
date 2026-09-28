@@ -1,4 +1,5 @@
 import { SearchSection } from "./search";
+import { PermissionSettingsButton } from "./settings/permissions";
 import { SessionSettingsButton } from "./settings/sessions";
 import { randomUUID } from "expo-crypto";
 import { useRef, useState } from "react";
@@ -264,6 +265,7 @@ function SettingsSection({
         >
           Connections and preferences
         </ActionButton>
+        <PermissionSettingsButton />
         <SessionSettingsButton />
         <ActionButton
           quiet

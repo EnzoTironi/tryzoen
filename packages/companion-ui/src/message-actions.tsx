@@ -22,7 +22,9 @@ export function MessageActions({
   reactionCount,
   onReact,
   onDelete,
+  onEdit,
 }: {
+  readonly onEdit?: () => void;
   readonly onDelete?: () => void;
   readonly text: string;
   readonly outgoing: boolean;
@@ -83,17 +85,11 @@ export function MessageActions({
               expanded
               onDone={close}
             />
-            {onDelete && (
-              <ActionButton
-                quiet
-                onPress={() => {
-                  close();
-                  onDelete();
-                }}
-              >
-                Excluir mensagem
-              </ActionButton>
-            )}
+            <MessageMutationActions
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onDone={close}
+            />
           </ReactionPicker>
         </Suspense>
       )}
@@ -189,3 +185,38 @@ const styles = StyleSheet.create({
   },
   emoji: { fontSize: 22 },
 });
+
+function MessageMutationActions({
+  onEdit,
+  onDelete,
+  onDone,
+}: Pick<ComponentProps<typeof MessageActions>, "onEdit" | "onDelete"> & {
+  readonly onDone: () => void;
+}) {
+  return (
+    <>
+      {onEdit && (
+        <ActionButton
+          quiet
+          onPress={() => {
+            onDone();
+            onEdit();
+          }}
+        >
+          Editar mensagem
+        </ActionButton>
+      )}
+      {onDelete && (
+        <ActionButton
+          quiet
+          onPress={() => {
+            onDone();
+            onDelete();
+          }}
+        >
+          Excluir mensagem
+        </ActionButton>
+      )}
+    </>
+  );
+}

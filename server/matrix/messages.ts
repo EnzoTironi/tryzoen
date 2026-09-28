@@ -57,11 +57,19 @@ export function projectMatrixMessage(
   viewerId: string,
   botId: string
 ) {
+  const originalReply = readMatrixText(event.content).reply;
+  const replacement = currentReplacement(event);
   const relation = event.content["m.relates_to"];
   const redacted = !!event.unsigned?.redacted_because;
-  const { text, reply } = readMatrixText(redacted ? {} : event.content);
+  const { text } = readMatrixText(
+    redacted ? {} : (replacement?.content["m.new_content"] ?? event.content)
+  );
+  const reply = redacted ? null : originalReply;
   return {
     ...(redacted ? { redacted: true } : {}),
+    ...(replacement
+      ? { editId: replacement.event_id, editedAt: replacement.origin_server_ts }
+      : {}),
     ...(!redacted &&
     event.content.url &&
     /^m\.(file|image|video|audio)$/u.test(event.content.msgtype ?? "")
@@ -97,4 +105,27 @@ export function projectMatrixMessage(
       relation?.rel_type === "m.thread" ? (relation.event_id ?? null) : null,
     replies: event.unsigned?.["m.relations"]?.["m.thread"]?.count ?? 0,
   };
+}
+
+/** Use only the homeserver's latest valid bundle; never change the original identity/relations. */
+export function currentReplacement(event: z.infer<typeof MatrixEventSchema>) {
+  const edit = event.unsigned?.["m.relations"]?.["m.replace"];
+  if (
+    !edit ||
+    event.unsigned?.redacted_because ||
+    edit.unsigned?.redacted_because ||
+    event.state_key !== undefined ||
+    edit.state_key !== undefined ||
+    edit.sender !== event.sender ||
+    edit.type !== event.type ||
+    (edit.room_id && edit.room_id !== event.room_id) ||
+    event.content["m.relates_to"]?.rel_type === "m.replace" ||
+    edit.content["m.relates_to"]?.rel_type !== "m.replace" ||
+    edit.content["m.relates_to"].event_id !== event.event_id ||
+    event.content.msgtype !== "m.text" ||
+    edit.content["m.new_content"]?.msgtype !== "m.text" ||
+    typeof edit.content["m.new_content"].body !== "string"
+  )
+    return undefined;
+  return edit;
 }

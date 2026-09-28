@@ -4,7 +4,14 @@ export const creatorExampleSchema = z
   .object({
     id: z.uuid(),
     title: z.string().trim().min(1).max(120),
-    content: z.string().trim().min(1).max(24000),
+    content: z
+      .string()
+      .min(1)
+      .max(24000)
+      .refine(
+        (value) => value.trim().length > 0,
+        "Example content cannot be blank."
+      ),
     source: z.string().trim().min(1).max(1000),
     rights: z.enum(["original", "permission", "public-domain"]),
   })

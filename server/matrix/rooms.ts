@@ -257,7 +257,11 @@ export const readMatrixMessages = async function (
       membersTruncated: members.length > 99,
       nextCursor: (rootId ? events.next_batch : events.end) ?? null,
       messages: events.chunk
-        .filter((event) => event.type === "m.room.message")
+        .filter(
+          (event) =>
+            event.type === "m.room.message" &&
+            event.content["m.relates_to"]?.rel_type !== "m.replace"
+        )
         .toReversed()
         .map(project),
       ...(parent ? { parent: project(parent) } : {}),

@@ -69,6 +69,7 @@ vi.mock("@tanstack/react-query", async (original) => ({
 }));
 const data: RoomData = {
   markRead: vi.fn<RoomData["markRead"]>(),
+  editMessage: vi.fn<RoomData["editMessage"]>(),
   deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
   people: vi.fn<RoomData["people"]>(),
   openDirect: vi.fn<RoomData["openDirect"]>(),

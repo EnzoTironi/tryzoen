@@ -68,6 +68,10 @@ export const roomDeleteSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
   operationId: z.uuid(),
 });
+export const roomEditSchema = roomDeleteSchema.extend({
+  text: z.string().trim().min(1).max(8000),
+  expectedRevision: roomThreadSchema.shape.rootId,
+});
 export const roomReadPositionSchema = z.object({
   id: roomReadSchema.shape.id,
   messageId: roomThreadSchema.shape.rootId,
@@ -75,6 +79,8 @@ export const roomReadPositionSchema = z.object({
 });
 export const roomMessageSchema = z.object({
   redacted: z.boolean().optional(),
+  editId: z.string().optional(),
+  editedAt: z.number().optional(),
   id: z.string(),
   media: z
     .object({
@@ -94,6 +100,10 @@ export const roomMessageSchema = z.object({
   reply: z
     .object({ id: z.string(), text: z.string(), sender: z.string() })
     .nullable(),
+});
+export const roomEditResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  message: roomMessageSchema,
 });
 export const roomMemberSchema = z.object({
   id: z.string(),
@@ -144,6 +154,9 @@ export const roomMediaReadSchema = z.object({
 });
 
 export interface RoomData {
+  editMessage: (
+    input: z.infer<typeof roomEditSchema>
+  ) => Promise<z.infer<typeof roomEditResultSchema>>;
   markRead: (input: z.infer<typeof roomReadPositionSchema>) => Promise<void>;
   deleteMessage: (input: z.infer<typeof roomDeleteSchema>) => Promise<void>;
   people: (

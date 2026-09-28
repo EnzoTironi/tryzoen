@@ -344,6 +344,9 @@ function RoomMessage({
             </Text>
           </Pressable>
           {item.bot && <Text style={styles.badge}>IA</Text>}
+          {item.editId && !item.redacted && (
+            <Text style={styles.time}>Editada</Text>
+          )}
           <Text style={styles.time}>
             {item.timestamp
               ? new Date(item.timestamp).toLocaleTimeString([], {

@@ -12,7 +12,6 @@ import {
 import { companionAgentData } from "@shared/companion/agent-data";
 import { api } from "@web/trpc/client";
 import { browserSessionClient } from "@web/eve/client";
-import { ConnectedSearch } from "./search";
 
 function useAgentData() {
   const { client } = api.useUtils();
@@ -43,6 +42,7 @@ export function ConnectedAgentHeader({
   );
 }
 export function ConnectedAgentPanel(props: {
+  readonly cacheScope: string;
   readonly tab: AgentPanelTab;
   readonly onPrompt: (text: string) => void;
   readonly onConversation: (id: string) => void;
@@ -50,10 +50,9 @@ export function ConnectedAgentPanel(props: {
   const connection = useAgentData();
   return (
     <AgentPanelContent
-      {...props}
       {...connection}
+      {...props}
       client={browserSessionClient}
-      renderConversations={(options) => <ConnectedSearch {...options} />}
     />
   );
 }

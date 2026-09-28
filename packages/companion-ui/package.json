@@ -75,6 +75,10 @@
     "./inbox": {
       "types": "./dist/chats/inbox-schema.d.ts",
       "default": "./dist/chats/inbox-schema.js"
+    },
+    "./activity": {
+      "types": "./dist/activity/schema.d.ts",
+      "default": "./dist/activity/schema.js"
     }
   },
   "dependencies": {

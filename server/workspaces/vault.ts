@@ -1,3 +1,4 @@
+import { credentialPermissionsSchema } from "@shared/vault/permissions";
 import { Secret } from "@shared/environment/secret";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -132,29 +133,22 @@ export const listDelegatedVaultItems = async function (scope: AccessScope) {
 export const inspectVaultDelegations = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const access = await requireWorkspaceAccess(actor);
-  const rows =
-    await query(sql`SELECT d.id, d.item_id AS "itemId", v.label, d.expires_at::text AS "expiresAt"
+  return withDatabaseTransaction(async () => {
+    const access = await requireWorkspaceAccess(actor);
+    const rows =
+      await query(sql`SELECT d.id, d.item_id AS "itemId", v.label, d.expires_at::text AS "expiresAt"
       FROM vault_item_delegations d JOIN vault_agent_identities a ON a.id = d.identity_id
       LEFT JOIN vault_items v ON v.id = d.item_id AND v.workspace_id = d.workspace_id
       WHERE d.workspace_id = ${actor.workspaceId} AND a.workspace_id = d.workspace_id
         AND d.revoked_at IS NULL AND a.revoked_at IS NULL AND d.expires_at > now()`);
-  return {
-    mayManage:
-      access.role !== "member" &&
-      !!actor.authSessionId &&
-      !actor.groupBindingId,
-    items: await z
-      .array(
-        z.object({
-          id: z.string(),
-          itemId: z.string(),
-          label: z.string().nullable(),
-          expiresAt: z.string(),
-        })
-      )
-      .parseAsync(rows),
-  };
+    return credentialPermissionsSchema.parse({
+      mayManage:
+        access.role !== "member" &&
+        !!actor.authSessionId &&
+        !actor.groupBindingId,
+      items: rows,
+    });
+  });
 };
 export const delegateVaultItem = async function (
   actor: z.output<typeof WorkspaceActorSchema>,

@@ -14,7 +14,7 @@ import {
   MatrixError,
 } from "./client";
 import { ensureMatrixIdentity } from "./identities";
-import { readMatrixText } from "./messages";
+import { currentReplacement, readMatrixText } from "./messages";
 import { mapAsync } from "../operations/async";
 
 /** SQL ownership boundary for the unified inbox; never paginate this fragment alone. */
@@ -130,6 +130,11 @@ function messagePreview(
   edited: boolean
 ) {
   if (event.unsigned?.redacted_because) return "Mensagem removida";
+  const replacement = currentReplacement(event);
+  if (replacement?.content["m.new_content"])
+    return readMatrixText(replacement.content["m.new_content"])
+      .text.replace(/\s+/gu, " ")
+      .slice(0, 180);
   if (edited) return "Mensagem editada";
   switch (event.content.msgtype) {
     case "m.image":

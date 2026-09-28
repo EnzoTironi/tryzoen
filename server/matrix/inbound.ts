@@ -68,7 +68,9 @@ export const acceptMatrixTransaction = async function (
   // Homeserver retries refresh transport-only metadata such as unsigned.age.
   // Fence the validated semantic events, not the raw JSON serialization.
   const hash = createHash("sha256")
-    .update(JSON.stringify(transaction))
+    .update(
+      JSON.stringify({ events: transaction.events.map(transactionFingerprint) })
+    )
     .digest("hex");
   const config = await matrixConfiguration();
   return await withDatabaseTransaction(async () => {
@@ -94,6 +96,8 @@ export const acceptMatrixTransaction = async function (
         sql`INSERT INTO matrix_received_events(id) VALUES (${event.event_id}) ON CONFLICT DO NOTHING RETURNING id`
       );
       if (!received.length || !event.room_id) continue;
+      // Replacements update existing history; they must not start another agent turn.
+      if (event.content["m.relates_to"]?.rel_type === "m.replace") continue;
       const bindings = await query<{
         id: string;
         epoch: string;
@@ -152,3 +156,30 @@ export const acceptMatrixTransaction = async function (
     return accepted;
   });
 };
+
+/** Keep accepted transaction fingerprints stable as display-only aggregation schemas evolve. */
+function transactionFingerprint(event: z.infer<typeof MatrixEventSchema>) {
+  return {
+    ...event,
+    content: {
+      ...event.content,
+      "m.new_content": undefined,
+      "org.zoen.edit_operation": undefined,
+    },
+    ...(event.unsigned
+      ? {
+          unsigned: {
+            ...event.unsigned,
+            ...(event.unsigned["m.relations"]
+              ? {
+                  "m.relations": {
+                    ...event.unsigned["m.relations"],
+                    "m.replace": undefined,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}

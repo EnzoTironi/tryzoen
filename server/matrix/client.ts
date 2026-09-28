@@ -151,42 +151,50 @@ export const deactivateMatrixUser = async function (matrixId: string) {
     deactivated: true as const,
   };
 };
-export const MatrixEventSchema = z.object({
+const matrixRelation = z.object({
+  rel_type: z.string().optional(),
+  event_id: z.string().optional(),
+  key: z.string().optional(),
+  "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
+});
+const matrixContent = z.object({
+  body: z.string().optional(),
+  url: z.string().optional(),
+  filename: z.string().optional(),
+  info: z
+    .object({ mimetype: z.string().optional(), size: z.number().optional() })
+    .optional(),
+  msgtype: z.string().optional(),
+  membership: z.string().optional(),
+  "m.relates_to": matrixRelation.optional(),
+});
+const matrixEvent = z.object({
   event_id: z.string(),
-  room_id: z.optional(z.string()),
+  room_id: z.string().optional(),
   type: z.string(),
   sender: z.string(),
-  state_key: z.optional(z.string()),
+  state_key: z.string().optional(),
   "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
-  origin_server_ts: z.optional(z.number()),
-  unsigned: z
-    .object({
-      redacted_because: z.json().optional(),
+  origin_server_ts: z.number().optional(),
+  content: matrixContent.extend({
+    "m.new_content": matrixContent.optional(),
+    "org.zoen.edit_operation": z.string().optional(),
+  }),
+});
+const redaction = z.object({ redacted_because: z.json().optional() });
+export const MatrixEventSchema = matrixEvent.extend({
+  unsigned: redaction
+    .extend({
       "m.relations": z
         .object({
           "m.thread": z
             .object({ count: z.number().int().nonnegative() })
             .optional(),
+          "m.replace": matrixEvent
+            .extend({ unsigned: redaction.optional() })
+            .optional(),
         })
         .optional(),
     })
     .optional(),
-  content: z.object({
-    body: z.optional(z.string()),
-    url: z.string().optional(),
-    filename: z.string().optional(),
-    info: z
-      .object({ mimetype: z.string().optional(), size: z.number().optional() })
-      .optional(),
-    msgtype: z.optional(z.string()),
-    membership: z.optional(z.string()),
-    "m.relates_to": z.optional(
-      z.object({
-        rel_type: z.optional(z.string()),
-        event_id: z.optional(z.string()),
-        key: z.optional(z.string()),
-        "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
-      })
-    ),
-  }),
 });

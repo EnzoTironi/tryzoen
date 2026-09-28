@@ -124,6 +124,7 @@ export function ConnectedCompanion({
                 )}
                 renderAgentPanel={(tab, close) => (
                   <ConnectedAgentPanel
+                    cacheScope={draftScope}
                     tab={tab}
                     onPrompt={(prompt) => {
                       close();

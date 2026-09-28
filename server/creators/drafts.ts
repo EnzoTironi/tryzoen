@@ -1,3 +1,4 @@
+import { validateCreatorSourceExamples } from "./sources/examples";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -32,7 +33,9 @@ export async function requireCreator(
     throw new WorkspaceAccessDenied();
 }
 
-async function lockCreatorDrafts(actor: z.infer<typeof WorkspaceActorSchema>) {
+export async function lockCreatorDrafts(
+  actor: z.infer<typeof WorkspaceActorSchema>
+) {
   // Acquire before membership share locks so concurrent writes cannot deadlock
   // when live authorization upgrades the membership lock.
   await query(
@@ -89,6 +92,7 @@ export function saveCreatorDraft(
   const input = creatorDraftSaveSchema.parse(raw);
   return transaction(async () => {
     await lockCreatorDrafts(actor);
+    await validateCreatorSourceExamples(actor, input);
     const rows = await query<{
       revision: string;
       same: boolean;

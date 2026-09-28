@@ -4,6 +4,7 @@ import { MessageCircle } from "lucide-react-native";
 import type { z } from "zod";
 import { MessageActions } from "../message-actions";
 import { colors } from "../theme";
+import { EditRoomMessage } from "./edit-message";
 import { DeleteRoomMessage } from "./delete-message";
 import type { RoomMessages } from "./messages";
 import type { roomMessageSchema, roomReactionSummarySchema } from "./schema";
@@ -31,12 +32,20 @@ export function RoomMessageControls({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   return (
     <>
       <RoomReactionSummary reaction={item.redacted ? undefined : reaction} />
       {!item.redacted && (
         <MessageActions
+          onEdit={
+            item.mine && !item.media
+              ? () => {
+                  setEditing(true);
+                }
+              : undefined
+          }
           onDelete={
             item.mine
               ? () => {
@@ -58,6 +67,17 @@ export function RoomMessageControls({
           onReact={(emoji) => onReact(item.id, emoji)}
         />
       )}
+      {editing && (
+        <EditRoomMessage
+          data={data}
+          roomId={roomId}
+          cacheScope={cacheScope}
+          item={item}
+          onClose={() => {
+            setEditing(false);
+          }}
+        />
+      )}
       {deleting && (
         <DeleteRoomMessage
           data={data}
@@ -69,6 +89,18 @@ export function RoomMessageControls({
           }}
         />
       )}
+      <RoomThreadAction item={item} onThread={onThread} />
+    </>
+  );
+}
+
+function RoomThreadAction({
+  item,
+  onThread,
+}: Pick<ComponentProps<typeof RoomMessageControls>, "item" | "onThread">) {
+  return (
+    <>
+      {" "}
       {onThread && (
         <Pressable
           accessibilityRole="button"

@@ -1,3 +1,4 @@
+import { activityPageSchema } from "@zoen/companion-ui/activity";
 import type { z } from "zod";
 import {
   learnedMemorySnapshotSchema,
@@ -18,12 +19,21 @@ import { companionDocumentHistory } from "./files";
 
 export function companionAgentData(
   rpc: {
-    query: (path: string, input?: unknown) => Promise<unknown>;
+    query: (
+      path: string,
+      input?: unknown,
+      options?: { signal?: AbortSignal }
+    ) => Promise<unknown>;
     mutation: (path: string, input?: unknown) => Promise<unknown>;
   },
   newOperationId: () => string
 ): AgentPanelData {
   return {
+    async activity(input, signal) {
+      return activityPageSchema.parse(
+        await rpc.query("companion.activity", input, { signal })
+      );
+    },
     learned: {
       newOperationId,
       async history(input) {

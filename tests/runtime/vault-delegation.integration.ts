@@ -99,6 +99,8 @@ test("the agent unwraps only the delegated item and does not read the user ciphe
     expect.objectContaining({ id: grant.id, itemId: delegated.id }),
   ]);
   expect((await inspectVaultDelegations(guest)).mayManage).toBe(false);
+  expect(JSON.stringify(controls)).not.toContain(delegatedPassword);
+  expect(JSON.stringify(controls)).not.toContain(privatePassword);
   const listed = await listDelegatedVaultItems(scope);
   expect(listed.map((item) => item.handle)).toEqual([delegated.id]);
   expect(JSON.stringify(listed)).not.toContain(delegatedPassword);
@@ -131,6 +133,7 @@ test("the agent unwraps only the delegated item and does not read the user ciphe
   expect(guestFill.reveal()).toContain(delegatedPassword);
   await revokeVaultDelegation(actor, grant.id);
   await revokeVaultDelegation(actor, grant.id);
+  expect((await inspectVaultDelegations(actor)).items).toEqual([]);
   denied(
     await Promise.try(async () =>
       releaseDelegatedSecret(scope, delegated.id)
@@ -219,4 +222,15 @@ test("company delegations stay off the personal workspace and expiry plus remova
     )
   );
   return true;
+});
+
+test("removed members cannot inspect or revoke credential grants", async () => {
+  await using workspace = await workspaceFixture();
+  await removeWorkspaceMember(workspace.actor, workspace.guest.userId);
+  await expect(inspectVaultDelegations(workspace.guest)).rejects.toBeInstanceOf(
+    WorkspaceAccessDenied
+  );
+  await expect(
+    revokeVaultDelegation(workspace.guest, randomUUID())
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });
