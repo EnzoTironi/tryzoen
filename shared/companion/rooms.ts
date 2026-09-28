@@ -19,6 +19,9 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async deleteMessage(input) {
+      await rpc.mutation("workspaces.rooms.deleteMessage", input);
+    },
     async people(input) {
       return directPeopleSchema.parse(
         await rpc.query("workspaces.rooms.people", input)

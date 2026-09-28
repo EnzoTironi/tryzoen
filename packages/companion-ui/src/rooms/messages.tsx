@@ -1,3 +1,4 @@
+import { RoomMessageControls } from "./message-controls";
 import { MessageLinks } from "../cards/link";
 import { RoomAttachment } from "./attachment";
 import type { RoomData } from "./schema";
@@ -18,12 +19,11 @@ import {
   View,
   type ViewToken,
 } from "react-native";
-import { ArrowDown, MessageCircle } from "lucide-react-native";
+import { ArrowDown } from "lucide-react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { colors } from "../theme";
 import { ConversationAvatar } from "../chats/avatar";
-import { MessageActions } from "../message-actions";
 import { AssistantMarkdown } from "../markdown";
 import type { roomReactionSummarySchema, roomMemberSchema } from "./schema";
 import type { roomMessageSchema } from "./schema";
@@ -379,55 +379,18 @@ function RoomMessage({
             <AssistantMarkdown text={item.text} />
           )}
         </View>
-        {!item.media && <MessageLinks text={item.text} />}
-        {reaction && reaction.reactions.length > 0 && (
-          <View style={styles.reactions}>
-            {reaction.reactions
-              .filter((entry) => entry.emoji !== reaction.mine)
-              .map((entry) => (
-                <View key={entry.emoji} style={styles.reaction}>
-                  <Text
-                    accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
-                    style={styles.reactionText}
-                  >
-                    {entry.emoji} {entry.count}
-                    {reaction.complete ? "" : "+"}
-                  </Text>
-                </View>
-              ))}
-          </View>
-        )}
-        <MessageActions
-          text={item.text}
-          outgoing={item.mine}
+        {!item.redacted && !item.media && <MessageLinks text={item.text} />}
+        <RoomMessageControls
+          data={data}
+          roomId={roomId}
+          cacheScope={cacheScope}
+          item={item}
+          reaction={reaction}
+          onReact={onReact}
+          onReply={onReply}
           onCopy={onCopy}
-          onReply={() => {
-            onReply(item);
-          }}
-          reaction={reaction?.mine}
-          reactionCount={
-            reaction?.reactions.find((entry) => entry.emoji === reaction.mine)
-              ?.count
-          }
-          onReact={(emoji) => onReact(item.id, emoji)}
+          onThread={onThread}
         />
-        {onThread && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
-            onPress={() => {
-              onThread(item);
-            }}
-            style={styles.reply}
-          >
-            <MessageCircle size={14} color={colors.accent} />
-            <Text style={styles.replyText}>
-              {item.replies
-                ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
-                : "Responder em thread"}
-            </Text>
-          </Pressable>
-        )}
       </View>
     </>
   );
@@ -442,14 +405,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 4,
   },
-  reactions: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  reaction: {
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  reactionText: { fontSize: 13, color: colors.ink },
   list: { flex: 1, minHeight: 0 },
   latest: {
     position: "absolute",
@@ -499,13 +454,6 @@ const styles = StyleSheet.create({
   },
   blue: { backgroundColor: "#cfe7ff" },
   text: { color: colors.ink, fontSize: 15, lineHeight: 23 },
-  reply: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 7,
-  },
-  replyText: { color: colors.accent, fontSize: 12 },
   empty: {
     fontSize: 15,
     color: colors.muted,

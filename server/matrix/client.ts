@@ -150,6 +150,7 @@ export const MatrixEventSchema = z.object({
   origin_server_ts: z.optional(z.number()),
   unsigned: z
     .object({
+      redacted_because: z.json().optional(),
       "m.relations": z
         .object({
           "m.thread": z

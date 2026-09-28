@@ -197,7 +197,9 @@ export const readMatrixMessages = async function (
     const room = await joinMatrixRoom(actor, id);
     await requireWorkspaceAccess(actor);
     const base = `rooms/${encodeURIComponent(room.roomId)}`;
-    const parent = rootId ? await readRoomMessage(room, rootId) : undefined;
+    const parent = rootId
+      ? await readRoomMessage(room, rootId, true)
+      : undefined;
     if (parent?.content["m.relates_to"]?.rel_type === "m.thread")
       throw new WorkspaceAccessDenied();
     const endpoint = rootId
@@ -270,7 +272,7 @@ export const sendMatrixMessage = async function (
     const room = await joinMatrixRoom(actor, input.id);
     await requireWorkspaceAccess(actor);
     if (input.rootId) {
-      const parent = await readRoomMessage(room, input.rootId);
+      const parent = await readRoomMessage(room, input.rootId, true);
       if (parent.content["m.relates_to"]?.rel_type === "m.thread")
         throw new WorkspaceAccessDenied();
     }

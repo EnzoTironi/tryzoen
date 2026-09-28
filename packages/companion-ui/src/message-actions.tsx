@@ -21,7 +21,9 @@ export function MessageActions({
   reaction,
   reactionCount,
   onReact,
+  onDelete,
 }: {
+  readonly onDelete?: () => void;
   readonly text: string;
   readonly outgoing: boolean;
   readonly onCopy?: (text: string) => Promise<void>;
@@ -54,7 +56,7 @@ export function MessageActions({
         ) : (
           <IconButton
             icon={outgoing ? Ellipsis : SmilePlus}
-            label="React to message"
+            label={onDelete ? "Message actions" : "React to message"}
             onPress={() => {
               setMenu(true);
             }}
@@ -81,6 +83,17 @@ export function MessageActions({
               expanded
               onDone={close}
             />
+            {onDelete && (
+              <ActionButton
+                quiet
+                onPress={() => {
+                  close();
+                  onDelete();
+                }}
+              >
+                Excluir mensagem
+              </ActionButton>
+            )}
           </ReactionPicker>
         </Suspense>
       )}

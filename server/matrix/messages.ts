@@ -7,7 +7,8 @@ import { WorkspaceAccessDenied } from "../workspaces/access";
 /** Fetch only a real message visible to the already-authorized room member. */
 export async function readRoomMessage(
   room: Awaited<ReturnType<typeof joinMatrixRoom>>,
-  id: string
+  id: string,
+  allowRedacted = false
 ) {
   const message = MatrixEventSchema.parse(
     await matrixRequest(
@@ -20,7 +21,9 @@ export async function readRoomMessage(
   if (
     message.event_id !== id ||
     message.type !== "m.room.message" ||
-    !message.content.body ||
+    (!allowRedacted && !!message.unsigned?.redacted_because) ||
+    (!message.content.body &&
+      !(allowRedacted && message.unsigned?.redacted_because)) ||
     message.content["m.relates_to"]?.rel_type === "m.replace"
   )
     throw new WorkspaceAccessDenied();
@@ -55,9 +58,12 @@ export function projectMatrixMessage(
   botId: string
 ) {
   const relation = event.content["m.relates_to"];
-  const { text, reply } = readMatrixText(event.content);
+  const redacted = !!event.unsigned?.redacted_because;
+  const { text, reply } = readMatrixText(redacted ? {} : event.content);
   return {
-    ...(event.content.url &&
+    ...(redacted ? { redacted: true } : {}),
+    ...(!redacted &&
+    event.content.url &&
     /^m\.(file|image|video|audio)$/u.test(event.content.msgtype ?? "")
       ? {
           media: {
