@@ -31,6 +31,7 @@ export function readCreatorReleaseCandidate(
       SELECT DISTINCT ON (evaluation->'case'->>'id') ${creatorPreviewProjection}
       FROM creator_previews WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}
       AND draft_id = ${draftId} AND revision = ${draft.revision}
+      AND kind = 'answer'
       AND evaluation->>'revision' = ${draft.evaluation?.revision ?? null}
       ORDER BY evaluation->'case'->>'id', created_at DESC, id DESC LIMIT 20`)
     );

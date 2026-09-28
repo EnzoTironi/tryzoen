@@ -187,6 +187,9 @@ export function CreatorDraft({
           draft={draft.data}
           data={data}
           cacheScope={cacheScope}
+          onChanged={(updated) => {
+            client.setQueryData(queryKey, updated);
+          }}
           onClose={() => {
             setPreview(false);
           }}

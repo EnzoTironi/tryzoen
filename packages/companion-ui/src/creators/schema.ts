@@ -88,6 +88,7 @@ export const creatorPreviewRequestSchema = z.strictObject({
   id: z.uuid(),
   draftId: z.uuid(),
   revision: z.uuid(),
+  kind: z.enum(["answer", "playbook"]),
   question: creatorEvaluationCaseSchema.shape.question,
   caseRef: z.strictObject({ id: z.uuid(), revision: z.uuid() }).optional(),
 });
@@ -135,19 +136,22 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
   snapshot: creatorDraftContentSchema,
 });
 
-export const creatorReleaseEvidenceSchema = creatorPreviewSchema.extend({
-  status: z.literal("completed"),
-  response: z.string().min(1).max(32000),
-  evaluation: creatorEvaluationSnapshotSchema,
-  review: creatorPreviewReviewSchema.extend({
-    content: creatorPreviewReviewContentSchema.extend({
-      verdict: z.literal("useful"),
+export const creatorReleaseEvidenceSchema = creatorPreviewSchema
+  .omit({ kind: true })
+  .strip()
+  .extend({
+    status: z.literal("completed"),
+    response: z.string().min(1).max(32000),
+    evaluation: creatorEvaluationSnapshotSchema,
+    review: creatorPreviewReviewSchema.extend({
+      content: creatorPreviewReviewContentSchema.extend({
+        verdict: z.literal("useful"),
+      }),
     }),
-  }),
-  models: z.array(creatorPreviewModelSchema).min(1).max(8),
-  startedAt: z.number(),
-  finishedAt: z.number(),
-});
+    models: z.array(creatorPreviewModelSchema).min(1).max(8),
+    startedAt: z.number(),
+    finishedAt: z.number(),
+  });
 
 export const creatorReleaseRequestSchema = z.strictObject({
   id: z.uuid(),

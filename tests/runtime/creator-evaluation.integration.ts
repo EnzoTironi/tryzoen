@@ -115,6 +115,7 @@ test("a preview freezes the selected question and criteria, omits evaluation con
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: testCase.question,
     caseRef: { id: testCase.id, revision: saved.evaluation.revision },
   };
@@ -142,7 +143,11 @@ test("a preview freezes the selected question and criteria, omits evaluation con
     "worker",
     { sessionId: randomUUID(), turnId: "turn_0" }
   );
-  expect(claimed).toEqual({ snapshot: content, question: testCase.question });
+  expect(claimed).toEqual({
+    snapshot: content,
+    question: testCase.question,
+    kind: "answer",
+  });
   await finishCreatorPreview(
     workspace.actor,
     preview.id,

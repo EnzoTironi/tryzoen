@@ -9,7 +9,7 @@ import {
 export default defineWorkflowTool({
   availableInSubagents: false,
   description:
-    "Execute a private preview request already created by the user in Creator studio. Supply only its preview UUID. The saved playbook, examples and question are loaded by the workflow and sent to an isolated specialist with no tools or personal memory. Do not substitute a normal chat answer or claim a preview succeeded without this tool. Results appear in Creator studio; this does not publish or evaluate a release.",
+    "Execute a private preview or playbook-proposal request already created by the user in Creator studio. Supply only its request UUID. The workflow loads its task kind and exact authorized sources and sends them to an isolated specialist with no tools or personal memory. Do not substitute a normal chat answer or claim success without this tool. Results appear in Creator studio for review; this does not change the playbook, publish or approve a release.",
   inputSchema: z.strictObject({ id: z.uuid() }),
   async execute({ id }, context) {
     "use workflow";

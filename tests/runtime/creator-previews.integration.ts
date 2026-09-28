@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { expect, test } from "vitest";
 import {
   CreatorDraftConflict,
+  readCreatorDraft,
   saveCreatorDraft,
   setCreatorDraftArchived,
 } from "../../server/creators/drafts";
@@ -25,6 +26,107 @@ const content = {
   examples: [],
 };
 
+test("playbook proposals freeze authored sources without changing the draft, and adoption remains an explicit revision-checked edit", async () => {
+  await using workspace = await workspaceFixture();
+  const original = await saveCreatorDraft(workspace.actor, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content,
+  });
+  const request = {
+    id: randomUUID(),
+    draftId: original.id,
+    revision: original.revision,
+    kind: "playbook" as const,
+    question: "Synthesize a proposed playbook from these examples.",
+  };
+  await expect(createCreatorPreview(workspace.actor, request)).rejects.toThrow(
+    "need authored examples"
+  );
+  const draft = await saveCreatorDraft(workspace.actor, {
+    id: original.id,
+    expectedRevision: original.revision,
+    content: {
+      ...content,
+      examples: [
+        {
+          id: randomUUID(),
+          title: "Fictional quiet group",
+          content: "Ask an open question; allow participants to pass.",
+          source: "Original synthetic example",
+          rights: "original",
+        },
+      ],
+    },
+  });
+  const input = { ...request, revision: draft.revision };
+  await expect(
+    createCreatorPreview(workspace.actor, {
+      ...input,
+      caseRef: { id: randomUUID(), revision: randomUUID() },
+    })
+  ).rejects.toThrow("cannot use evaluation cases");
+  await expect(
+    createCreatorPreview(workspace.guest, input)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  const proposal = await createCreatorPreview(workspace.actor, input);
+  expect(await createCreatorPreview(workspace.actor, input)).toEqual(proposal);
+  await expect(
+    createCreatorPreview(workspace.actor, { ...input, kind: "answer" })
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  await expect(
+    createCreatorPreview(workspace.actor, {
+      ...input,
+      id: randomUUID(),
+      kind: "answer",
+    })
+  ).rejects.toThrow("one preview at a time");
+  const context = await claimCreatorPreview(
+    workspace.actor,
+    proposal.id,
+    "synthesis-worker",
+    { sessionId: randomUUID(), turnId: "turn_0" }
+  );
+  expect(context).toEqual({
+    kind: "playbook",
+    question: input.question,
+    snapshot: { ...draft.content, playbook: "" },
+  });
+  const proposed =
+    "# Proposed strategy\n\nAsk an open question. Source: Fictional quiet group. Validate with a pilot.";
+  await finishCreatorPreview(
+    workspace.actor,
+    proposal.id,
+    "synthesis-worker",
+    proposed
+  );
+  expect(await readCreatorDraft(workspace.actor, draft.id)).toEqual(draft);
+  const receipt = await exportCreatorPreview(workspace.actor, proposal.id);
+  expect(receipt.snapshot).toEqual(context.snapshot);
+  expect(receipt.response).toBe(proposed);
+  expect(receipt.evaluation).toBeNull();
+  const adopted = await saveCreatorDraft(workspace.actor, {
+    id: draft.id,
+    expectedRevision: draft.revision,
+    content: {
+      ...draft.content,
+      playbook: proposed + "\n\nReviewed and edited by the synthetic creator.",
+    },
+  });
+  expect(adopted.revision).not.toBe(draft.revision);
+  expect(adopted.content.examples).toEqual(draft.content.examples);
+  await expect(
+    saveCreatorDraft(workspace.actor, {
+      id: draft.id,
+      expectedRevision: draft.revision,
+      content: { ...draft.content, playbook: proposed },
+    })
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  expect(
+    (await exportCreatorPreview(workspace.actor, proposal.id)).response
+  ).toBe(proposed);
+});
+
 test("preview snapshots are immutable, owner scoped and survive later edits and archival", async () => {
   await using workspace = await workspaceFixture();
   const draft = await saveCreatorDraft(workspace.actor, {
@@ -36,6 +138,7 @@ test("preview snapshots are immutable, owner scoped and survive later edits and 
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: "Help a fictional quiet reading group.",
   };
   const preview = await createCreatorPreview(workspace.actor, request);
@@ -80,7 +183,7 @@ test("preview snapshots are immutable, owner scoped and survive later edits and 
       sessionId: randomUUID(),
       turnId: "turn_0",
     })
-  ).toEqual({ snapshot: content, question: request.question });
+  ).toEqual({ snapshot: content, question: request.question, kind: "answer" });
   await finishCreatorPreview(
     workspace.actor,
     preview.id,
@@ -130,6 +233,7 @@ test("parallel requests admit one preview and competing workflows cannot duplica
   const input = {
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: "Synthetic test",
   };
   const attempts = await Promise.allSettled(
@@ -199,6 +303,7 @@ test("preview context is bounded without truncation and revoked sessions cannot 
       id: randomUUID(),
       draftId: huge.id,
       revision: huge.revision,
+      kind: "answer" as const,
       question: "Test",
     })
   ).rejects.toThrow("48 KB");
@@ -211,6 +316,7 @@ test("preview context is bounded without truncation and revoked sessions cannot 
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: "Test",
   });
   await claimCreatorPreview(workspace.personal, preview.id, "worker", {
@@ -248,6 +354,7 @@ test("preview failures are explicit and the rolling per-person limit is enforced
       id: randomUUID(),
       draftId: draft.id,
       revision: draft.revision,
+      kind: "answer" as const,
       question: `Test ${i}`,
     });
     await claimCreatorPreview(workspace.actor, preview.id, "worker", {
@@ -264,6 +371,7 @@ test("preview failures are explicit and the rolling per-person limit is enforced
       id: randomUUID(),
       draftId: draft.id,
       revision: draft.revision,
+      kind: "answer" as const,
       question: "One too many",
     })
   ).rejects.toThrow("10 in 24 hours");
@@ -277,6 +385,7 @@ test("preview failures are explicit and the rolling per-person limit is enforced
       id: randomUUID(),
       draftId: guest.id,
       revision: guest.revision,
+      kind: "answer" as const,
       question: "Independent person",
     })
   ).resolves.toMatchObject({ status: "pending" });
@@ -292,6 +401,7 @@ test("model selection binds to one coordinator turn, remains bounded and cannot 
   const request = {
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: "Synthetic measured preview",
   };
   const preview = await createCreatorPreview(workspace.actor, {

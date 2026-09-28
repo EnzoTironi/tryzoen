@@ -469,3 +469,56 @@ structural or production gate.
 
 The verified desktop/mobile approval and memory-navigation images are attached
 with `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5868523688).
+
+## Proposed playbooks from authored examples — 2026-09-28
+
+Creator studio can ask the existing isolated specialist to synthesize a Markdown
+playbook from the draft's attributed examples and explicit creator guidance.
+The source list is shown before generation. The server freezes those examples,
+their provenance and the guidance under a distinct `playbook` task kind; it
+omits the current playbook and rejects evaluation-case references. The existing
+Eve workflow, selected model, origin binding, deadline, concurrency and usage
+limits also govern these proposals. No second agent framework or model-facing
+data access tool was added.
+
+The specialist instructions ask for strategies, applicable contexts, alternatives,
+limits and source attributions, while distinguishing supported observations from
+tentative generalizations. The result is a proposal, not an asserted faithful
+extraction of expert knowledge. Generation and completion do not write the
+creator's playbook. A completed proposal opens in the shared visual editor;
+the owner can edit it and explicitly choose “Use as playbook.” That uses the
+existing revision-checked draft save. A stale or archived draft cannot be
+silently replaced; adoption changes the teaching revision and therefore requires
+fresh case runs before approving another version.
+
+Proposals and answer previews share the per-owner limits and bounded history,
+with the task kind preserved in their export. Approved evaluation evidence keeps
+its existing receipt shape and can be drawn only from answer runs with current
+evaluation cases. Existing approved copies are neither rewritten nor invalidated
+by the new task discriminator. Migration 0077 adds that discriminator without
+rewriting the applied chain.
+
+Validation passes: all nine workspace checks (1,323 tests across 205 files),
+production build, migration-chain validation and Expo exports for web, iOS and
+Android. Twenty-two distinct isolated PostgreSQL cases across five suites cover
+previews, evaluations, reviews, approvals and native Eve execution. Both task
+kinds are exercised through a compiled Eve fixture: only the selected teaching
+and question reach the child, with no root memory, history or evaluation rubric;
+proposal input also excludes the old playbook. Migration 0077 was applied only
+to the local review and isolated test databases.
+
+Chrome verified an actual `gpt-5.6-luna` proposal in 18.9 seconds using the fictional
+Cedarbay example. The response attributed its source and distinguished unsupported
+adaptations. A simulated failed save retained edits; retry, reopen and exported
+JSON verified persistence, unchanged examples and preservation of the original
+model response. Adoption blocked approval until fresh evaluations, while the
+previous approved copy still opened with its original playbook. Desktop modal
+and mobile sheet/editor evidence is attached with `gh --attach` to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5868878817).
+This synthetic inspection is not expert endorsement or a creator-led pilot.
+
+The structural delta retains six unsuppressed gating findings for recent edits
+and component/function growth; it is not a clean structural gate. Model-assisted
+synthesis and explicit private adoption are now operational. Public publishing,
+discovery, entitlements, withdrawal, contextual assistance, cost accounting and
+real creator-led pilot/outcome validation remain open.

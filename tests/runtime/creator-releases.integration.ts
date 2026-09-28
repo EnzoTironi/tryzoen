@@ -57,6 +57,7 @@ async function reviewedVersion(actor: Parameters<typeof saveCreatorDraft>[0]) {
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: item.question,
     caseRef: { id: item.id, revision: saved.evaluation.revision },
   };

@@ -540,6 +540,13 @@
       "when": 1790591955542,
       "tag": "0076_creator-releases",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1790593471383,
+      "tag": "0077_creator-playbook-proposals",
+      "breakpoints": true
     }
   ]
 }

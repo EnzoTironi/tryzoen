@@ -9,17 +9,20 @@ import type { CreatorStudioData } from "./studio";
 
 import { CreatorPreviewRequest } from "./preview-request";
 import { CreatorPreviewResult } from "./preview-result";
+import { CreatorPlaybookRequest } from "./playbook-request";
 
 export function CreatorPreviews({
   draft,
   data,
   cacheScope,
   onClose,
+  onChanged,
 }: {
   readonly draft: z.infer<typeof creatorDraftSchema>;
   readonly data: CreatorStudioData;
   readonly cacheScope: string;
   readonly onClose: () => void;
+  readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
   const previews = useQuery({
     queryKey: ["creator-previews", cacheScope, draft.id],
@@ -42,10 +45,18 @@ export function CreatorPreviews({
         or tools. Your selected model is used.
       </Text>
       <Text style={pageStyles.copy}>
-        Responses are private previews, not release evaluations. Review the
-        answer yourself. Up to 10 previews in 24 hours and 100 saved previews
-        per workspace; the latest 20 for this draft appear here.
+        Responses and proposals stay private and need your review. Up to 10
+        requests in 24 hours and 100 saved results per workspace, shared with
+        playbook proposals; the latest 20 results for this draft appear here.
       </Text>
+      {!draft.archivedAt && (
+        <CreatorPlaybookRequest
+          draft={draft}
+          data={data}
+          disabled={previews.isPending || previews.isError || Boolean(active)}
+          onRefresh={previews.refetch}
+        />
+      )}
       {!draft.archivedAt && (
         <CreatorPreviewRequest
           draft={draft}
@@ -75,7 +86,8 @@ export function CreatorPreviews({
           <CreatorPreviewResult
             key={preview.id}
             preview={preview}
-            currentRevision={draft.revision}
+            draft={draft}
+            onChanged={onChanged}
             data={data}
             onRefresh={previews.refetch}
           />

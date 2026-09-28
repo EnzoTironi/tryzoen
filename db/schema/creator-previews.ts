@@ -30,6 +30,7 @@ export const creatorPreviews = pgTable(
       .notNull()
       .references(() => creatorDrafts.id, { onDelete: "cascade" }),
     revision: uuid("revision").notNull(),
+    kind: text("kind").notNull().default("answer"),
     snapshot: jsonb("snapshot")
       .$type<z.infer<typeof creatorDraftContentSchema>>()
       .notNull(),
@@ -63,6 +64,10 @@ export const creatorPreviews = pgTable(
       .default(sql`now() + interval '5 minutes'`),
   },
   (table) => [
+    check(
+      "creator_previews_kind_check",
+      sql`${table.kind} IN ('answer', 'playbook') AND (${table.kind} = 'answer' OR ${table.evaluation} IS NULL)`
+    ),
     uniqueIndex("creator_previews_source_idx").on(
       table.sourceSessionId,
       table.sourceTurnId

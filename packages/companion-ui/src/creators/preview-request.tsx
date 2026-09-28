@@ -30,6 +30,7 @@ export function CreatorPreviewRequest({
         id: requestId.current,
         draftId: draft.id,
         revision: draft.revision,
+        kind: "answer",
         question,
         ...(selectedCase && draft.evaluation
           ? {

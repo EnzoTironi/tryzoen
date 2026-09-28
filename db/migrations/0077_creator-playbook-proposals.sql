@@ -1,0 +1,2 @@
+ALTER TABLE "creator_previews" ADD COLUMN "kind" text DEFAULT 'answer' NOT NULL;--> statement-breakpoint
+ALTER TABLE "creator_previews" ADD CONSTRAINT "creator_previews_kind_check" CHECK ("creator_previews"."kind" IN ('answer', 'playbook') AND ("creator_previews"."kind" = 'answer' OR "creator_previews"."evaluation" IS NULL));

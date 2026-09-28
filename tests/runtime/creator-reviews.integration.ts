@@ -43,6 +43,7 @@ async function previewFor(
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
+    kind: "answer" as const,
     question: "Welcome a fictional quiet book club.",
   });
   return { draft, preview };

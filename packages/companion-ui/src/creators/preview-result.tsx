@@ -6,28 +6,31 @@ import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
 import { pageStyles } from "../page";
 import { CreatorPreviewReview, creatorReviewVerdicts } from "./review";
-import type { creatorPreviewSchema } from "./schema";
+import type { creatorDraftSchema, creatorPreviewSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
+import { CreatorPlaybookReview } from "./playbook-review";
 
 const statusLabels = {
   pending: "Waiting to start…",
-  running: "Trying your playbook…",
-  completed: "Response saved",
-  failed: "The model could not complete this preview. Try a new preview.",
+  running: "Generating…",
+  completed: "Result saved",
+  failed: "The model could not complete this request. Try a new request.",
   expired:
     "No response was saved before the five-minute deadline. Try a new preview.",
 };
 
 export function CreatorPreviewResult({
   preview,
-  currentRevision,
   data,
   onRefresh,
+  draft,
+  onChanged,
 }: {
   readonly preview: z.infer<typeof creatorPreviewSchema>;
-  readonly currentRevision: string;
   readonly data: CreatorStudioData;
   readonly onRefresh: () => Promise<unknown>;
+  readonly draft: z.infer<typeof creatorDraftSchema>;
+  readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
   const [reading, setReading] = useState(false);
   // Capture the opening version so background refresh cannot replace an unsaved review.
@@ -35,11 +38,14 @@ export function CreatorPreviewResult({
     useState<z.infer<typeof creatorPreviewSchema>>();
   const download = useMutation({ mutationFn: data.exportPreview });
   const version =
-    preview.revision === currentRevision
+    preview.revision === draft.revision
       ? "Current saved version"
       : "Earlier saved version";
   return (
     <View style={{ gap: 8, paddingVertical: 12 }}>
+      {preview.kind === "playbook" && (
+        <Text style={pageStyles.rowTitle}>Playbook proposal</Text>
+      )}
       {preview.evaluation && (
         <Text
           style={pageStyles.rowTitle}
@@ -72,8 +78,16 @@ export function CreatorPreviewResult({
               setReading(true);
             }}
           >
-            Read response
+            {preview.kind === "playbook" ? "Read proposal" : "Read response"}
           </ActionButton>
+          {preview.kind === "playbook" && (
+            <CreatorPlaybookReview
+              preview={preview}
+              draft={draft}
+              data={data}
+              onChanged={onChanged}
+            />
+          )}
           <Text style={pageStyles.copy}>
             {preview.review
               ? `Your review: ${creatorReviewVerdicts[preview.review.content.verdict]}`
@@ -96,7 +110,7 @@ export function CreatorPreviewResult({
           download.mutate(preview.id);
         }}
       >
-        Export preview and sources
+        Export result and sources
       </ActionButton>
       {download.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>

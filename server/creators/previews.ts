@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   creatorDraftContentSchema,
+  type creatorDraftSchema,
   creatorPreviewListSchema,
   creatorPreviewRequestSchema,
   creatorPreviewSchema,
@@ -15,7 +16,7 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 
-export const creatorPreviewProjection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
+export const creatorPreviewProjection = sql`id, draft_id AS "draftId", revision, kind, question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
   response, evaluation, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
   extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",
@@ -82,6 +83,7 @@ export function createCreatorPreview(
       if (
         preview.draftId !== input.draftId ||
         preview.revision !== input.revision ||
+        preview.kind !== input.kind ||
         preview.question !== input.question ||
         (preview.evaluation?.case.id ?? null) !== (input.caseRef?.id ?? null) ||
         (preview.evaluation?.revision ?? null) !==
@@ -90,26 +92,7 @@ export function createCreatorPreview(
         throw new CreatorDraftConflict();
       return preview;
     }
-    if (draft.archivedAt || draft.revision !== input.revision)
-      throw new CreatorDraftConflict();
-    const evaluationCase =
-      input.caseRef &&
-      draft.evaluation?.cases.find((item) => item.id === input.caseRef?.id);
-    if (
-      input.caseRef &&
-      (!evaluationCase ||
-        draft.evaluation?.revision !== input.caseRef.revision ||
-        evaluationCase.question !== input.question)
-    )
-      throw new CreatorDraftConflict();
-    const evaluation =
-      evaluationCase && draft.evaluation
-        ? { revision: draft.evaluation.revision, case: evaluationCase }
-        : null;
-    if (Buffer.byteLength(JSON.stringify(draft.content), "utf8") > 48000)
-      throw new Error(
-        "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
-      );
+    const { snapshot, evaluation } = selectPreviewSources(draft, input);
     const [capacity] = await query<{
       total: number;
       today: number;
@@ -128,12 +111,50 @@ export function createCreatorPreview(
         "You can run one preview at a time, up to 10 in 24 hours and 100 saved previews in this workspace. A pending preview expires after five minutes."
       );
     const rows =
-      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, snapshot, question, evaluation)
-      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${JSON.stringify(draft.content)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
+      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, kind, snapshot, question, evaluation)
+      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${input.kind}, ${JSON.stringify(snapshot)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
       ON CONFLICT (id) DO NOTHING RETURNING ${creatorPreviewProjection}`);
     if (!rows[0]) throw new WorkspaceAccessDenied();
     return creatorPreviewSchema.parse(rows[0]);
   });
+}
+
+function selectPreviewSources(
+  draft: z.infer<typeof creatorDraftSchema>,
+  input: z.infer<typeof creatorPreviewRequestSchema>
+) {
+  if (draft.archivedAt || draft.revision !== input.revision)
+    throw new CreatorDraftConflict();
+  if (
+    input.kind === "playbook" &&
+    (input.caseRef || !draft.content.examples.length)
+  )
+    throw new Error(
+      "Playbook proposals need authored examples and cannot use evaluation cases."
+    );
+  const snapshot =
+    input.kind === "playbook"
+      ? { ...draft.content, playbook: "" }
+      : draft.content;
+  const evaluationCase =
+    input.caseRef &&
+    draft.evaluation?.cases.find((item) => item.id === input.caseRef?.id);
+  if (
+    input.caseRef &&
+    (!evaluationCase ||
+      draft.evaluation?.revision !== input.caseRef.revision ||
+      evaluationCase.question !== input.question)
+  )
+    throw new CreatorDraftConflict();
+  const evaluation =
+    evaluationCase && draft.evaluation
+      ? { revision: draft.evaluation.revision, case: evaluationCase }
+      : null;
+  if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > 48000)
+    throw new Error(
+      "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
+    );
+  return { snapshot, evaluation };
 }
 
 export function claimCreatorPreview(
@@ -150,7 +171,7 @@ export function claimCreatorPreview(
     const [claimed] =
       await query(sql`UPDATE creator_previews SET status = 'running', invocation = ${invocation}, started_at = clock_timestamp(), source_session_id = ${origin.sessionId}, source_turn_id = ${origin.turnId}
       WHERE id = ${id} AND status = 'pending' AND expires_at > now()
-      RETURNING snapshot, question`);
+      RETURNING snapshot, question, kind`);
     if (!claimed)
       throw new Error(
         "This preview has already started or expired. Open its saved result in Creator studio."
@@ -159,6 +180,7 @@ export function claimCreatorPreview(
       .object({
         snapshot: creatorDraftContentSchema,
         question: creatorPreviewRequestSchema.shape.question,
+        kind: creatorPreviewRequestSchema.shape.kind,
       })
       .parse(claimed);
   });
