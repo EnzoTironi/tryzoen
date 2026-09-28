@@ -192,6 +192,8 @@ async function creatorArchiveResponse(
 ) {
   const key = Id.parse(attachmentId);
   const rows = await query(sql`SELECT id, revision, content,
+      CASE WHEN evaluation_cases IS NULL THEN NULL ELSE jsonb_build_object('revision', evaluation_revision,
+        'cases', evaluation_cases, 'updatedAt', extract(epoch FROM evaluation_updated_at)::float8 * 1000) END AS evaluation,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",
       to_char(archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "archivedAt"
       FROM creator_drafts WHERE id = ${key} AND workspace_id = ${archive.workspaceId}

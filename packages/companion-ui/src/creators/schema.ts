@@ -27,10 +27,43 @@ export const creatorDraftContentSchema = z
   })
   .strict();
 
+export const creatorEvaluationCaseSchema = z.strictObject({
+  id: z.uuid(),
+  title: z.string().trim().min(1).max(120),
+  question: z.string().trim().min(1).max(4000),
+  criteria: z.string().trim().min(1).max(4000),
+});
+
+export const creatorEvaluationCasesSchema = z
+  .array(creatorEvaluationCaseSchema)
+  .max(20)
+  .refine(
+    (cases) => new Set(cases.map((item) => item.id)).size === cases.length,
+    "Each evaluation case must have its own identity."
+  );
+
+export const creatorEvaluationSchema = z.strictObject({
+  revision: z.uuid(),
+  cases: creatorEvaluationCasesSchema,
+  updatedAt: z.number(),
+});
+
+export const creatorEvaluationSaveSchema = z.strictObject({
+  draftId: z.uuid(),
+  expectedRevision: z.uuid().nullable(),
+  cases: creatorEvaluationCasesSchema,
+});
+
+export const creatorEvaluationSnapshotSchema = z.strictObject({
+  revision: z.uuid(),
+  case: creatorEvaluationCaseSchema,
+});
+
 export const creatorDraftSchema = z.object({
   id: z.uuid(),
   revision: z.uuid(),
   content: creatorDraftContentSchema,
+  evaluation: creatorEvaluationSchema.nullable(),
   updatedAt: z.iso.datetime(),
   archivedAt: z.iso.datetime().nullable(),
 });
@@ -55,7 +88,8 @@ export const creatorPreviewRequestSchema = z.strictObject({
   id: z.uuid(),
   draftId: z.uuid(),
   revision: z.uuid(),
-  question: z.string().trim().min(1).max(4000),
+  question: creatorEvaluationCaseSchema.shape.question,
+  caseRef: z.strictObject({ id: z.uuid(), revision: z.uuid() }).optional(),
 });
 
 export const creatorPreviewReviewContentSchema = z.strictObject({
@@ -81,17 +115,20 @@ export const creatorPreviewModelSchema = z.strictObject({
   modelId: z.string().min(1).max(200),
 });
 
-export const creatorPreviewSchema = creatorPreviewRequestSchema.extend({
-  title: z.string().min(1).max(80),
-  status: z.enum(["pending", "running", "completed", "failed", "expired"]),
-  response: z.string().max(32000).nullable(),
-  createdAt: z.number(),
-  expiresAt: z.number(),
-  review: creatorPreviewReviewSchema.nullable(),
-  models: z.array(creatorPreviewModelSchema).max(8),
-  startedAt: z.number().nullable(),
-  finishedAt: z.number().nullable(),
-});
+export const creatorPreviewSchema = creatorPreviewRequestSchema
+  .omit({ caseRef: true })
+  .extend({
+    evaluation: creatorEvaluationSnapshotSchema.nullable(),
+    title: z.string().min(1).max(80),
+    status: z.enum(["pending", "running", "completed", "failed", "expired"]),
+    response: z.string().max(32000).nullable(),
+    createdAt: z.number(),
+    expiresAt: z.number(),
+    review: creatorPreviewReviewSchema.nullable(),
+    models: z.array(creatorPreviewModelSchema).max(8),
+    startedAt: z.number().nullable(),
+    finishedAt: z.number().nullable(),
+  });
 
 export const creatorPreviewListSchema = z.array(creatorPreviewSchema).max(20);
 export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
@@ -100,7 +137,7 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
 
 export const creatorDraftListSchema = z
   .array(
-    creatorDraftSchema.omit({ content: true }).extend({
+    creatorDraftSchema.omit({ content: true, evaluation: true }).extend({
       title: creatorDraftContentSchema.shape.title,
       description: creatorDraftContentSchema.shape.description,
       examples: z.number().int().min(0).max(20),

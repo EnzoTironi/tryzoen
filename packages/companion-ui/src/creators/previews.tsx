@@ -1,6 +1,5 @@
-import { useRef, useState } from "react";
-import { Text, TextInput } from "react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { Text } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
@@ -8,6 +7,7 @@ import { pageStyles } from "../page";
 import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
+import { CreatorPreviewRequest } from "./preview-request";
 import { CreatorPreviewResult } from "./preview-result";
 
 export function CreatorPreviews({
@@ -21,8 +21,6 @@ export function CreatorPreviews({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
-  const [question, setQuestion] = useState("");
-  const requestId = useRef<string | undefined>(undefined);
   const previews = useQuery({
     queryKey: ["creator-previews", cacheScope, draft.id],
     queryFn: () => data.previews(draft.id),
@@ -32,24 +30,6 @@ export function CreatorPreviews({
       )
         ? 3000
         : false,
-  });
-  const mutation = useMutation({
-    mutationFn: () => {
-      requestId.current ??= data.newId();
-      return data.preview({
-        id: requestId.current,
-        draftId: draft.id,
-        revision: draft.revision,
-        question,
-      });
-    },
-    onSuccess: () => {
-      setQuestion("");
-      requestId.current = undefined;
-    },
-    onSettled: () => {
-      void previews.refetch();
-    },
   });
   const active = previews.data?.some(
     (item) => item.status === "pending" || item.status === "running"
@@ -67,40 +47,12 @@ export function CreatorPreviews({
         per workspace; the latest 20 for this draft appear here.
       </Text>
       {!draft.archivedAt && (
-        <>
-          <TextInput
-            accessibilityLabel="Preview question"
-            multiline
-            maxLength={4000}
-            value={question}
-            editable={!mutation.isPending}
-            onChangeText={(value) => {
-              setQuestion(value);
-              requestId.current = undefined;
-            }}
-            placeholder="What should this specialist help with?"
-            style={[pageStyles.field, { minHeight: 120 }]}
-          />
-          <ActionButton
-            disabled={
-              !question.trim() ||
-              mutation.isPending ||
-              previews.isPending ||
-              previews.isError ||
-              active
-            }
-            onPress={() => {
-              mutation.mutate();
-            }}
-          >
-            {mutation.isPending ? "Starting preview…" : "Run private preview"}
-          </ActionButton>
-        </>
-      )}
-      {mutation.error && (
-        <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {mutation.error.message} Any accepted request will appear below.
-        </Text>
+        <CreatorPreviewRequest
+          draft={draft}
+          data={data}
+          disabled={previews.isPending || previews.isError || Boolean(active)}
+          onRefresh={previews.refetch}
+        />
       )}
       {previews.isPending && (
         <Text style={pageStyles.copy}>Loading previews…</Text>

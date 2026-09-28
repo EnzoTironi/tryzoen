@@ -43,13 +43,16 @@ export function CreatorPreviewReview({
   readonly onClose: () => void;
 }) {
   const initial = preview.review?.content ?? {
-    criteria: "",
+    criteria: preview.evaluation?.case.criteria ?? "",
     notes: "",
     verdict: "needs-revision" as const,
   };
   const [value, setValue] = useState(initial);
   const [confirmed, setConfirmed] = useState(Boolean(preview.review));
   const [editing, setEditing] = useState<"criteria" | "notes" | "response">();
+  const criteriaLocked = Boolean(preview.evaluation);
+  const documentReadOnly =
+    editing === "response" || (editing === "criteria" && criteriaLocked);
   const [discarding, setDiscarding] = useState(false);
   const save = useMutation({
     mutationFn: () =>
@@ -88,7 +91,11 @@ export function CreatorPreviewReview({
           setEditing("criteria");
         }}
       >
-        {value.criteria ? "Edit review criteria" : "Write review criteria"}
+        {preview.evaluation
+          ? "Read predeclared criteria"
+          : value.criteria
+            ? "Edit review criteria"
+            : "Write review criteria"}
       </ActionButton>
       <View
         accessibilityRole="radiogroup"
@@ -183,17 +190,19 @@ export function CreatorPreviewReview({
         <DocumentEditor
           {...reviewDocuments[editing]}
           description={
-            editing === "response"
-              ? "The original answer is read-only. Your review cannot alter it."
-              : "This editor updates your review draft. Use Save my review to save your criteria, verdict and notes together."
+            editing === "criteria" && criteriaLocked
+              ? "These criteria were saved before the model answered. This run keeps that original version."
+              : editing === "response"
+                ? "The original answer is read-only. Your review cannot alter it."
+                : "This editor updates your review draft. Use Save my review to save your criteria, verdict and notes together."
           }
           initialText={
             editing === "response" ? (preview.response ?? "") : value[editing]
           }
           markdown
-          readOnly={editing === "response"}
+          readOnly={documentReadOnly}
           onSave={async (text) => {
-            if (editing !== "response") setValue({ ...value, [editing]: text });
+            if (!documentReadOnly) setValue({ ...value, [editing]: text });
           }}
           onClose={() => {
             setEditing(undefined);

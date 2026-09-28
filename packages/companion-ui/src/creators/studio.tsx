@@ -8,6 +8,7 @@ import { pageStyles } from "../page";
 import { CreatorDraftCreate } from "./create";
 import { CreatorDraft } from "./draft";
 import type {
+  creatorEvaluationSaveSchema,
   creatorDraftListSchema,
   creatorDraftSaveSchema,
   creatorDraftSchema,
@@ -19,6 +20,9 @@ import type {
 } from "./schema";
 
 export interface CreatorStudioData {
+  saveEvaluation: (
+    input: z.infer<typeof creatorEvaluationSaveSchema>
+  ) => Promise<z.infer<typeof creatorDraftSchema>>;
   list: () => Promise<z.infer<typeof creatorDraftListSchema>>;
   read: (id: string) => Promise<z.infer<typeof creatorDraftSchema>>;
   save: (

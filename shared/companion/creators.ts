@@ -23,6 +23,11 @@ export function companionCreatorData(
 ): CreatorStudioData {
   return {
     newId,
+    async saveEvaluation(input) {
+      return creatorDraftSchema.parse(
+        await rpc.mutation("workspaces.creators.saveEvaluation", input)
+      );
+    },
     async reviewPreview(input) {
       return creatorPreviewReviewSchema.parse(
         await rpc.mutation("workspaces.creators.reviewPreview", input)

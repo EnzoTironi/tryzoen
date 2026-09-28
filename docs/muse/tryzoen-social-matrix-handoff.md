@@ -352,3 +352,64 @@ suppressed; this is not a clean structural gate.
 
 The verified desktop modal and mobile sheet screenshots are attached with
 `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867496760).
+
+## Private evaluation cases — 2026-09-28
+
+A specialist now has a separate set of up to 20 private evaluation cases. Each
+case has a title, question and predeclared Markdown criteria. Cases use the
+shared visual editor and responsive modal/sheet; saving or removing one updates
+a separately versioned case set without changing the teaching playbook or its
+revision. Cases live under the existing person/workspace-owned draft, outside
+its teaching content, and use its existing authorization and deletion cascade.
+Archived drafts are readable, including their cases, but cannot be edited.
+
+Before a saved case starts, the server verifies its case-set revision and exact
+question, then freezes that case alongside the preview's teaching snapshot. The
+workflow receives only the selected question and teaching content. It never
+receives the rubric or other evaluation cases. A native Eve fixture inspects the
+actual child model messages to prove these exclusions, alongside root-history
+and personal-memory exclusion. Case edits/removals cannot rewrite an accepted
+run, and a lost-response retry returns its original snapshot. Review criteria
+for these runs are read-only; server validation and a database constraint reject
+changing them after seeing the answer. Ordinary exploratory previews retain
+their existing editable review criteria.
+
+Only a live human owner can read or edit cases. Concurrent case edits use the
+existing draft-write lock and an expected case-set revision; stale requests
+cannot restore a removed case or replace a later edit. Questions and criteria
+are bounded to 4,000 characters each, with unique case IDs and database payload
+limits. No separate generic evaluation framework, agent, model call or extra
+dependency was introduced. Draft exports, including the authorized former-account
+archive, carry the case set; preview exports carry the frozen selected case.
+
+This establishes separation of teaching and evaluation inputs, not guaranteed
+statistical independence. A creator can still write overlapping material, and
+repeatedly using a case makes it familiar. There is no hidden benchmark,
+automatic expert score, release certificate or public marketplace. Immutable
+release reviews, cost/token receipts, creator-approved synthesis, publishing,
+entitlements, withdrawal, real-device qualification and outcome measurement
+remain required.
+
+Validation passes: 1,323 general tests in 205 files, all nine workspace checks,
+production build, migration-chain check and Expo exports for web/iOS/Android.
+Twenty-one unique isolated runtime cases cover creator authoring, former-account
+export, evaluations, preview execution and review. Migration 0075 was applied
+only to local review and test databases. The structural pass still has eight
+unsuppressed gating findings: review/preview complexity, typed-RPC duplication,
+recent preview changes and component/function growth. JSX reachability is not
+recognized by that pass; the unused-code check passes. This is not a clean
+structural gate.
+
+Chrome saved a fictional quotation case, ran it, reviewed its predeclared
+read-only criteria and exported its receipt. The first run failed with no saved
+answer; its cause remains undiagnosed. A second run completed in 4,363 ms with
+`gpt-5.6-luna`, refused fabricated attribution and offered discussion questions.
+Both outcomes remain visible. The review is explicitly labeled as synthetic
+feedback from the coding agent, not an expert certification. The exported JSON
+contains the exact original case, criteria, teaching revision, model, timestamps
+and review. A blocked case-save request retained the edited title and displayed
+an error; the interception was cleared and that unsaved test edit discarded.
+The responsive viewport override was cleared after evidence capture.
+
+The verified desktop/mobile, fixed criteria, failed-save and response screenshots
+are attached with `gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867871597).

@@ -31,10 +31,18 @@ export function saveCreatorPreviewReview(
     const [current] = await query<{
       revision: string | null;
       same: boolean;
+      criteria: string | null;
     }>(sql`
-      SELECT review_revision AS revision, review = ${JSON.stringify(input.content)}::jsonb AS same
+      SELECT evaluation->'case'->>'criteria' AS criteria, review_revision AS revision, review = ${JSON.stringify(input.content)}::jsonb AS same
       FROM creator_previews WHERE id = ${input.id} AND status = 'completed' FOR UPDATE`);
     if (!current) throw new Error("Only a completed preview can be reviewed.");
+    if (
+      current.criteria !== null &&
+      current.criteria !== input.content.criteria
+    )
+      throw new Error(
+        "Use the criteria saved before this evaluation ran. They cannot be changed after seeing the answer."
+      );
     // Preserve the revision on a response-loss retry only while that content is current.
     if (!current.same) {
       if (current.revision !== input.expectedRevision)

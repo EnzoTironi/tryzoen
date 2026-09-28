@@ -13,6 +13,7 @@ import {
   downloadAccountArchive,
   readAccountArchive,
 } from "../../server/accounts/archives";
+import { saveCreatorEvaluation } from "../../server/creators/evaluation";
 import { AccountControlError } from "../../server/accounts/controls";
 
 test("account-archive exports include only the former owner's selected creator draft and require a live target session", async () => {
@@ -27,6 +28,18 @@ test("account-archive exports include only the former owner's selected creator d
     id: randomUUID(),
     expectedRevision: null,
     content,
+  });
+  await saveCreatorEvaluation(workspace.personal, {
+    draftId: source.id,
+    expectedRevision: null,
+    cases: [
+      {
+        id: randomUUID(),
+        title: "Private archived case",
+        question: "Synthetic question",
+        criteria: "Hidden criteria",
+      },
+    ],
   });
   const archived = await setCreatorDraftArchived(workspace.personal, {
     id: source.id,

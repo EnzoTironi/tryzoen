@@ -40,6 +40,11 @@ export function CreatorPreviewResult({
       : "Earlier saved version";
   return (
     <View style={{ gap: 8, paddingVertical: 12 }}>
+      {preview.evaluation && (
+        <Text
+          style={pageStyles.rowTitle}
+        >{`Evaluation: ${preview.evaluation.case.title}`}</Text>
+      )}
       <Text style={pageStyles.rowTitle}>{preview.question}</Text>
       <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
         {statusLabels[preview.status]}

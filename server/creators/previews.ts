@@ -17,7 +17,7 @@ import {
 
 const projection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
-  response, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
+  response, evaluation, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
   extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",
   extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt",
   CASE WHEN review IS NULL THEN NULL ELSE jsonb_build_object('revision', review_revision, 'content', review,
@@ -82,13 +82,30 @@ export function createCreatorPreview(
       if (
         preview.draftId !== input.draftId ||
         preview.revision !== input.revision ||
-        preview.question !== input.question
+        preview.question !== input.question ||
+        (preview.evaluation?.case.id ?? null) !== (input.caseRef?.id ?? null) ||
+        (preview.evaluation?.revision ?? null) !==
+          (input.caseRef?.revision ?? null)
       )
         throw new CreatorDraftConflict();
       return preview;
     }
     if (draft.archivedAt || draft.revision !== input.revision)
       throw new CreatorDraftConflict();
+    const evaluationCase =
+      input.caseRef &&
+      draft.evaluation?.cases.find((item) => item.id === input.caseRef?.id);
+    if (
+      input.caseRef &&
+      (!evaluationCase ||
+        draft.evaluation?.revision !== input.caseRef.revision ||
+        evaluationCase.question !== input.question)
+    )
+      throw new CreatorDraftConflict();
+    const evaluation =
+      evaluationCase && draft.evaluation
+        ? { revision: draft.evaluation.revision, case: evaluationCase }
+        : null;
     if (Buffer.byteLength(JSON.stringify(draft.content), "utf8") > 48000)
       throw new Error(
         "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
@@ -111,8 +128,8 @@ export function createCreatorPreview(
         "You can run one preview at a time, up to 10 in 24 hours and 100 saved previews in this workspace. A pending preview expires after five minutes."
       );
     const rows =
-      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, snapshot, question)
-      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${JSON.stringify(draft.content)}::jsonb, ${input.question})
+      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, snapshot, question, evaluation)
+      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${JSON.stringify(draft.content)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
       ON CONFLICT (id) DO NOTHING RETURNING ${projection}`);
     if (!rows[0]) throw new WorkspaceAccessDenied();
     return creatorPreviewSchema.parse(rows[0]);

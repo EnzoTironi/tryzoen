@@ -15,6 +15,7 @@ import type {
   creatorDraftContentSchema,
   creatorPreviewReviewContentSchema,
   creatorPreviewModelSchema,
+  creatorEvaluationSnapshotSchema,
 } from "@zoen/companion-ui/creators";
 import { workspaceMemberships } from "./workspaces";
 import { creatorDrafts } from "./creator-drafts";
@@ -32,6 +33,10 @@ export const creatorPreviews = pgTable(
     snapshot: jsonb("snapshot")
       .$type<z.infer<typeof creatorDraftContentSchema>>()
       .notNull(),
+    evaluation:
+      jsonb("evaluation").$type<
+        z.infer<typeof creatorEvaluationSnapshotSchema>
+      >(),
     question: text("question").notNull(),
     status: text("status").notNull().default("pending"),
     invocation: text("invocation"),
@@ -95,6 +100,14 @@ export const creatorPreviews = pgTable(
         AND coalesce(jsonb_typeof(${table.review}->'criteria') = 'string' AND length(${table.review}->>'criteria') BETWEEN 1 AND 4000, false)
         AND coalesce(jsonb_typeof(${table.review}->'notes') = 'string' AND length(${table.review}->>'notes') BETWEEN 1 AND 8000, false)
         AND coalesce(${table.review}->>'verdict' IN ('useful', 'needs-revision', 'unsafe-or-unsupported'), false))`
+    ),
+    check(
+      "creator_previews_evaluation_check",
+      sql`${table.evaluation} IS NULL OR (
+      jsonb_typeof(${table.evaluation}) = 'object' AND octet_length(${table.evaluation}::text) <= 65536
+      AND coalesce(${table.evaluation}->'case'->>'question' = ${table.question}, false)
+      AND coalesce(jsonb_typeof(${table.evaluation}->'case'->'criteria') = 'string' AND length(${table.evaluation}->'case'->>'criteria') BETWEEN 1 AND 4000, false)
+      AND (${table.review} IS NULL OR coalesce(${table.review}->>'criteria' = ${table.evaluation}->'case'->>'criteria', false)))`
     ),
     check(
       "creator_previews_execution_check",

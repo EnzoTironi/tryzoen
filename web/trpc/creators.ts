@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
+  creatorEvaluationSaveSchema,
   creatorDraftListSchema,
   creatorDraftSaveSchema,
   creatorDraftSchema,
@@ -23,6 +24,7 @@ import {
   saveCreatorDraft,
   setCreatorDraftArchived,
 } from "../../server/creators/drafts";
+import { saveCreatorEvaluation } from "../../server/creators/evaluation";
 import { withSignal } from "../../server/operations/async";
 import { workspaceProcedure } from "./workspace-procedure";
 import {
@@ -32,6 +34,20 @@ import {
 } from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  saveEvaluation: workspaceProcedure
+    .input(creatorEvaluationSaveSchema)
+    .output(creatorDraftSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, async () => {
+        try {
+          return await saveCreatorEvaluation(ctx.actor, input);
+        } catch (error) {
+          if (error instanceof CreatorDraftConflict)
+            throw new TRPCError({ code: "CONFLICT", message: error.message });
+          throw error;
+        }
+      })
+    ),
   reviewPreview: workspaceProcedure
     .input(creatorPreviewReviewSaveSchema)
     .output(creatorPreviewReviewSchema)

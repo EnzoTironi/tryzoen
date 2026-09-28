@@ -11,6 +11,7 @@ import {
   runtime,
 } from "./eve-fixture";
 import { workspaceExecutionFor, workspaceFixture } from "./workspace-fixture";
+import { saveCreatorEvaluation } from "../../server/creators/evaluation";
 import { saveCreatorDraft } from "../../server/creators/drafts";
 import {
   createCreatorPreview,
@@ -54,11 +55,32 @@ test("native Eve workflow runs only the authorized snapshot in a tool-free child
       examples: [],
     },
   });
+  const caseId = randomUUID();
+  const saved = await saveCreatorEvaluation(workspace.personal, {
+    draftId: draft.id,
+    expectedRevision: null,
+    cases: [
+      {
+        id: caseId,
+        title: "Selected case",
+        question: "SYNTHETIC-QUESTION-ONLY",
+        criteria: "HIDDEN-EVALUATION-RUBRIC-MUST-NOT-CROSS",
+      },
+      {
+        id: randomUUID(),
+        title: "Other case",
+        question: "OTHER-HELD-OUT-QUESTION-MUST-NOT-CROSS",
+        criteria: "Other criteria",
+      },
+    ],
+  });
+  if (!saved.evaluation) throw new Error("Expected saved cases");
   const preview = await createCreatorPreview(workspace.personal, {
     id: randomUUID(),
     draftId: draft.id,
     revision: draft.revision,
     question: "SYNTHETIC-QUESTION-ONLY",
+    caseRef: { id: caseId, revision: saved.evaluation.revision },
   });
   const server = await runtime(await freePort(), "127.0.0.1", directory);
   const principal = workspaceExecutionFor(workspace.personal).session.auth
@@ -122,6 +144,11 @@ test("native Eve workflow runs only the authorized snapshot in a tool-free child
   expect(context).toContain("SYNTHETIC-PLAYBOOK-ONLY");
   expect(context).toContain("SYNTHETIC-QUESTION-ONLY");
   expect(context).not.toContain("ROOT-PRIVATE-CONTEXT-MUST-NOT-CROSS");
+  expect(context).not.toContain("HIDDEN-EVALUATION-RUBRIC-MUST-NOT-CROSS");
+  expect(context).not.toContain("OTHER-HELD-OUT-QUESTION-MUST-NOT-CROSS");
+  expect(result.evaluation?.case.criteria).toBe(
+    "HIDDEN-EVALUATION-RUBRIC-MUST-NOT-CROSS"
+  );
   expect(context).not.toContain("personal_info");
   expect(context).not.toContain("Synthetic favorite color: orange");
   await server.stop();

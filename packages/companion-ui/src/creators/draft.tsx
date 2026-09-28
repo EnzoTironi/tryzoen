@@ -10,6 +10,7 @@ import type { CreatorStudioData } from "./studio";
 import { CreatorExamples } from "./examples";
 import { CreatorDraftActions } from "./actions";
 import { CreatorDetails } from "./details";
+import { CreatorEvaluation } from "./evaluation";
 import { CreatorPreviews } from "./previews";
 import type { creatorDraftSchema } from "./schema";
 
@@ -30,6 +31,7 @@ export function CreatorDraft({
   const [playbook, setPlaybook] =
     useState<z.infer<typeof creatorDraftSchema>>();
   const [details, setDetails] = useState<z.infer<typeof creatorDraftSchema>>();
+  const [evaluation, setEvaluation] = useState(false);
   const [preview, setPreview] = useState(false);
   return (
     <CompanionSheet
@@ -79,6 +81,14 @@ export function CreatorDraft({
             }}
           >
             {draft.data.archivedAt ? "Saved previews" : "Try this specialist"}
+          </ActionButton>
+          <ActionButton
+            quiet
+            onPress={() => {
+              setEvaluation(true);
+            }}
+          >
+            Evaluation cases
           </ActionButton>
           {!draft.data.archivedAt && (
             <ActionButton
@@ -147,6 +157,18 @@ export function CreatorDraft({
           }}
           onClose={() => {
             setDetails(undefined);
+          }}
+        />
+      )}
+      {evaluation && draft.data && !draft.isError && (
+        <CreatorEvaluation
+          draft={draft.data}
+          data={data}
+          onChanged={(updated) => {
+            client.setQueryData(queryKey, updated);
+          }}
+          onClose={() => {
+            setEvaluation(false);
           }}
         />
       )}
