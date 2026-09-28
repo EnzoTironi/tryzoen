@@ -185,3 +185,13 @@ Feed instructions reuse the visual Markdown editor with stale-write checks and r
 Migrations 0061 and 0062 were applied only to the local review database and isolated runtime test database. Real PostgreSQL checks cover concurrent deduplication, private reads/reactions/deletion, immutable retries, deletion replay, membership revocation and instruction conflicts. Automatic editorial generation, media viewers and retention/export policies remain production work.
 
 The Feed checkpoint passed `pnpm check` (1,288 tests in 199 files), `pnpm build`, Expo web/iOS/Android exports and three isolated PostgreSQL tests. A real discussion invoked `feed_read` before answering; the original quotation, human-readable conversation title and response survived reload. Evidence uses synthetic local data. Final verification ran in a managed worktree outside iCloud after cloud eviction interrupted reads in the original checkout.
+
+## Attachment transport and verification limits
+
+The shared composer uses `expo-document-picker` 57.0.2, matching Expo 57.0.25's bundled module manifest; web and Electron use their native file chooser. `expo-file-system` and `expo-sharing` were already installed and are reused for private temporary copies and save/share actions, including Markdown export. See [Expo DocumentPicker](https://docs.expo.dev/versions/latest/sdk/document-picker/).
+
+Inline attachment input is bounded to four files / 3 MiB decoded in the client. Eve's two message POST routes authenticate and read at most 4,400,000 bytes with a 30-second deadline before invoking the native handler. This accommodates base64 overhead within the [hosted request limit](https://vercel.com/docs/functions/limitations#request-body-size). Rebuilt requests preserve public URL, headers and abort signal instead of cloning the runtime's request facade. Large-file private object storage and provider format conversion remain release work. No new database migration or production operation is required for this slice.
+
+The real browser text regression verified creation, a subsequent turn and retained drafts after rejection. Full attachment upload/model/reload and native-device tests remain pending. The original text/file composition helper was removed from the web route; the shared SDK-shaped draft is now the single owner for both chat surfaces.
+
+Attachment checkpoint validation: `pnpm check` passed 1,313 tests across 201 files, lint, types, formatting, unused-code checks and desktop compilation. `pnpm build` passed; Expo exported web, iOS and Android. The browser text conversation survived reload. The structural quality delta is not clean (24 gating findings, dominated by churn plus Composer/MessagePart complexity/size); it is not evidence of release readiness.

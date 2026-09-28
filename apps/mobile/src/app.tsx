@@ -7,6 +7,7 @@ import {
   ActionButton,
   CompanionShell,
   MarkdownEditorProvider,
+  AttachmentProvider,
   type CompanionSection,
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
@@ -20,6 +21,8 @@ import { MobileConversation } from "./conversation";
 import { MobileSections } from "./sections";
 import { apiOrigin } from "./environment";
 import { MobileEditor } from "./editor";
+import type { ConversationDraft } from "@zoen/companion-ui/messages";
+import { pickAttachments, saveAttachment } from "./attachments";
 
 function renderMarkdownEditor(props: MarkdownEditorProps) {
   return <MobileEditor {...props} />;
@@ -94,14 +97,16 @@ function AccountCompanion() {
   return (
     <QueryClientProvider client={client}>
       <MarkdownEditorProvider value={renderMarkdownEditor}>
-        <MobileCompanion
-          onSignOut={async () => {
-            const result = await auth.signOut();
-            if (result.error)
-              throw new Error(result.error.message ?? "Could not sign out.");
-            client.clear();
-          }}
-        />
+        <AttachmentProvider pick={pickAttachments} save={saveAttachment}>
+          <MobileCompanion
+            onSignOut={async () => {
+              const result = await auth.signOut();
+              if (result.error)
+                throw new Error(result.error.message ?? "Could not sign out.");
+              client.clear();
+            }}
+          />
+        </AttachmentProvider>
       </MarkdownEditorProvider>
     </QueryClientProvider>
   );
@@ -115,11 +120,15 @@ function MobileCompanion({
   const [section, setSection] = useState<CompanionSection>("chat");
   const [conversation, setConversation] = useState<{
     id?: string;
-    draft?: string;
+    draft?: ConversationDraft;
     key: number;
   }>({ key: 0 });
   const openConversation = (id?: string, draft?: string) => {
-    setConversation((current) => ({ id, draft, key: current.key + 1 }));
+    setConversation((current) => ({
+      id,
+      draft: draft ? { text: draft, files: [] } : undefined,
+      key: current.key + 1,
+    }));
     setSection("chat");
   };
   return (

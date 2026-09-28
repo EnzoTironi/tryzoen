@@ -2,7 +2,7 @@ import type { useEveAgent } from "eve/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { PromptInputMessage } from "@web/components/ai-elements/prompt-input";
+import type { ConversationDraft } from "@zoen/companion-ui/messages";
 
 type AgentOptions = Parameters<typeof useEveAgent>[0];
 
@@ -14,7 +14,7 @@ interface Mocks {
   agent: MockAgent;
   options: AgentOptions | undefined;
   promptSubmit:
-    | ((message: PromptInputMessage) => void | Promise<void>)
+    | ((message: ConversationDraft) => void | Promise<void>)
     | undefined;
   saveChat: Mock<
     (input: { sessionId: string; title: string | undefined }) => Promise<void>
@@ -59,7 +59,7 @@ vi.mock("@web/components/ai-elements/prompt-input", () => ({
     onSubmit,
   }: {
     children: ReactNode;
-    onSubmit: (message: PromptInputMessage) => void | Promise<void>;
+    onSubmit: (message: ConversationDraft) => void | Promise<void>;
   }) => {
     mocks.promptSubmit = onSubmit;
     return <form>{children}</form>;

@@ -6,7 +6,7 @@ const native = vi.hoisted(() => ({
   createDirectory: vi.fn<() => void>(),
   deleteDirectory: vi.fn<() => void>(),
   createFile: vi.fn<() => void>(),
-  write: vi.fn<(text: string) => void>(),
+  write: vi.fn<import("expo-file-system").File["write"]>(),
   filenames: [] as string[],
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "isolated-export" }));
@@ -42,7 +42,7 @@ it("exports the exact Markdown and cleans the private temporary file after shari
   const text = "---\nname: reading\n---\n# Read\n\n**One book**";
   await shareMarkdown(text, "../SOUL.md");
   expect(native.filenames).toEqual(["..-SOUL.md"]);
-  expect(native.write).toHaveBeenCalledWith(text);
+  expect(native.write).toHaveBeenCalledWith(text, { encoding: undefined });
   expect(native.share).toHaveBeenCalledWith(
     "cache/isolated-export/file.md",
     expect.objectContaining({ mimeType: "text/markdown" })

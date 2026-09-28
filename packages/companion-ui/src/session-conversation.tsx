@@ -3,6 +3,7 @@ import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
 import { visibleConversationMessages } from "./session/delivered";
+import type { ConversationDraft } from "./session/input";
 
 export function SessionConversation({
   sessionId,
@@ -13,7 +14,7 @@ export function SessionConversation({
   readonly sessionId: string;
   readonly client: Client;
   readonly onCopyText?: (text: string) => Promise<void>;
-  readonly initialDraft?: string;
+  readonly initialDraft?: ConversationDraft;
 }) {
   const agent = useSessionAgent(sessionId, client);
   const messages = useMemo(

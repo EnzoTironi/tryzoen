@@ -2,13 +2,18 @@ import { Client } from "eve/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NewConversation } from "./new-conversation";
+import type { ConversationDraft } from "./session/input";
+import type { UserContent } from "ai";
 import { replyMessage } from "./session/reply";
 const mocks = vi.hoisted(() => ({
-  create: vi.fn<(input: { message: string }) => Promise<unknown>>(),
+  create:
+    vi.fn<(input: { message: string | UserContent }) => Promise<unknown>>(),
   send: vi.fn<(message: string) => Promise<unknown>>(),
   save: vi.fn<(id: string, title: string) => Promise<void>>(),
-  created: vi.fn<(id: string, draft?: string) => void>(),
-  submit: undefined as ((text: string) => Promise<void>) | undefined,
+  created: vi.fn<(id: string, draft?: ConversationDraft) => void>(),
+  submit: undefined as
+    | ((message: ConversationDraft) => Promise<void>)
+    | undefined,
 }));
 vi.mock("eve/client", () => ({
   Client: class {
@@ -16,7 +21,11 @@ vi.mock("eve/client", () => ({
   },
 }));
 vi.mock("./welcome", () => ({
-  Welcome: ({ onSend }: { onSend: (text: string) => Promise<void> }) => {
+  Welcome: ({
+    onSend,
+  }: {
+    onSend: (message: ConversationDraft) => Promise<void>;
+  }) => {
     mocks.submit = onSend;
     return <div>Welcome</div>;
   },
@@ -46,7 +55,7 @@ it("keeps a Feed reference in the turn while naming the conversation after the u
     role: "assistant",
     text: "A reading routine",
   });
-  await mocks.submit?.(message);
+  await mocks.submit?.({ text: message, files: [] });
   expect(mocks.create).toHaveBeenCalledExactlyOnceWith({ message });
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith(
     "test-session",
@@ -54,7 +63,7 @@ it("keeps a Feed reference in the turn while naming the conversation after the u
   );
 });
 it("creates the first turn with its session before saving the title and navigating", async () => {
-  await mocks.submit?.("Plan tomorrow");
+  await mocks.submit?.({ text: "Plan tomorrow", files: [] });
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith(
     "test-session",
     "Plan tomorrow"
@@ -73,26 +82,32 @@ it("creates the first turn with its session before saving the title and navigati
 });
 it("preserves the draft and reuses the session after a history write fails", async () => {
   mocks.save.mockRejectedValueOnce(new Error("Offline"));
-  await expect(mocks.submit?.("Keep this draft")).rejects.toThrow("Offline");
+  await expect(
+    mocks.submit?.({ text: "Keep this draft", files: [] })
+  ).rejects.toThrow("Offline");
   expect(mocks.send).not.toHaveBeenCalled();
   expect(mocks.created).not.toHaveBeenCalled();
-  await mocks.submit?.("Keep this draft");
+  await mocks.submit?.({ text: "Keep this draft", files: [] });
   expect(mocks.create).toHaveBeenCalledTimes(1);
   expect(mocks.send).not.toHaveBeenCalled();
 });
 it("does not save or navigate when the first turn is rejected and allows retry", async () => {
   mocks.create.mockRejectedValueOnce(new Error("Turn rejected"));
-  await expect(mocks.submit?.("Try this")).rejects.toThrow("Turn rejected");
+  await expect(mocks.submit?.({ text: "Try this", files: [] })).rejects.toThrow(
+    "Turn rejected"
+  );
   expect(mocks.created).not.toHaveBeenCalled();
   expect(mocks.save).not.toHaveBeenCalled();
-  await mocks.submit?.("Try this");
+  await mocks.submit?.({ text: "Try this", files: [] });
   expect(mocks.create).toHaveBeenCalledTimes(2);
   expect(mocks.save).toHaveBeenCalledTimes(1);
 });
 it("preserves an edited draft when recovering an already accepted first turn", async () => {
   mocks.save.mockRejectedValueOnce(new Error("Offline"));
-  await expect(mocks.submit?.("Original request")).rejects.toThrow("Offline");
-  await mocks.submit?.("A revised request");
+  await expect(
+    mocks.submit?.({ text: "Original request", files: [] })
+  ).rejects.toThrow("Offline");
+  await mocks.submit?.({ text: "A revised request", files: [] });
   expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
     message: "Original request",
   });
@@ -100,9 +115,55 @@ it("preserves an edited draft when recovering an already accepted first turn", a
     "test-session",
     "Original request"
   );
-  expect(mocks.created).toHaveBeenCalledExactlyOnceWith(
-    "test-session",
-    "A revised request"
-  );
+  expect(mocks.created).toHaveBeenCalledExactlyOnceWith("test-session", {
+    text: "A revised request",
+    files: [],
+  });
   expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it("sends a file-only first turn and does not replay accepted files after a title failure", async () => {
+  const file = {
+    type: "file" as const,
+    filename: "note.txt",
+    mediaType: "text/plain",
+    url: "data:text/plain;base64,YQ==",
+  };
+  const draft = { text: "", files: [file] };
+  mocks.save.mockRejectedValueOnce(new Error("Offline"));
+  await expect(mocks.submit?.(draft)).rejects.toThrow("Offline");
+  expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+    message: [
+      {
+        type: "file",
+        filename: "note.txt",
+        mediaType: "text/plain",
+        data: file.url,
+      },
+    ],
+  });
+  await mocks.submit?.(draft);
+  expect(mocks.create).toHaveBeenCalledTimes(1);
+  expect(mocks.save).toHaveBeenLastCalledWith("test-session", "note.txt");
+  expect(mocks.created).toHaveBeenCalledWith("test-session", undefined);
+});
+
+it("retains changed attachments when recovering an already accepted first turn", async () => {
+  const file = {
+    type: "file" as const,
+    filename: "note.txt",
+    mediaType: "text/plain",
+    url: "data:text/plain;base64,YQ==",
+  };
+  mocks.save.mockRejectedValueOnce(new Error("Offline"));
+  await expect(mocks.submit?.({ text: "Read", files: [file] })).rejects.toThrow(
+    "Offline"
+  );
+  const updated = {
+    text: "Read",
+    files: [{ ...file, url: "data:text/plain;base64,Yg==" }],
+  };
+  await mocks.submit?.(updated);
+  expect(mocks.create).toHaveBeenCalledTimes(1);
+  expect(mocks.created).toHaveBeenCalledWith("test-session", updated);
 });

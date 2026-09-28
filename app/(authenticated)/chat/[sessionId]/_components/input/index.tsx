@@ -5,12 +5,14 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
-  type PromptInputMessage,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "@web/components/ai-elements/prompt-input";
-import { messageContent } from "../../../_lib/message-input";
+import {
+  messageContent,
+  type ConversationDraft,
+} from "@zoen/companion-ui/messages";
 import { api } from "@web/trpc/client";
 import type { ChatAgent } from "@zoen/companion-ui/session";
 import { isTerminalSession } from "@zoen/companion-ui/session";
@@ -38,7 +40,7 @@ export function ChatInput({
       (part) => part.type === "authorization" && part.state === "required"
     )
   );
-  const handleSubmit = async (message: PromptInputMessage) => {
+  const handleSubmit = async (message: ConversationDraft) => {
     if (isTerminal)
       throw new Error("This conversation has ended. Start a new chat.");
     const text = message.text.trim();

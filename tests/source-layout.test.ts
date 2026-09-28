@@ -35,6 +35,7 @@ describe("source layout", () => {
       "browser",
       "components",
       "eve",
+      "files",
       "i18n",
       "trpc",
       "workspaces",

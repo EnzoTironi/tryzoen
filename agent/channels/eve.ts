@@ -1,5 +1,10 @@
-import { sleep } from "../../server/operations/async";
-import { withSignal } from "../../server/operations/async";
+import {
+  sleep,
+  withSignal,
+  withTimeout,
+  TimeoutError,
+} from "../../server/operations/async";
+import { BodyTooLarge, readBody } from "../../server/http/body";
 
 import { defineChannel } from "eve/channels";
 import { eveChannel } from "eve/channels/eve";
@@ -121,9 +126,14 @@ export default defineChannel({
   ...channel,
   // oxlint-disable-next-line oxc/no-map-spread -- Keep Eve's original route definitions intact when adding the app authorization boundary.
   routes: channel.routes.map((route) => {
+    const acceptsMessage =
+      route.transport !== "websocket" &&
+      route.method === "POST" &&
+      (route.path === "/eve/v1/session" ||
+        route.path === "/eve/v1/session/:sessionId");
     if (
       route.transport === "websocket" ||
-      !ownedCallbackRoutes.has(route.path)
+      (!ownedCallbackRoutes.has(route.path) && !acceptsMessage)
     ) {
       return route;
     }
@@ -132,6 +142,36 @@ export default defineChannel({
       async handler(request, context) {
         const principal = await routeAuth(request, authenticate);
         if (principal instanceof Response) return principal;
+        if (acceptsMessage && request.body) {
+          try {
+            // Three MiB of inline attachments plus JSON/text, below the hosted
+            // 4.5 MB limit. Count the stream even when Content-Length is absent.
+            const body = await withSignal(request.signal, () =>
+              withTimeout(() => readBody(request.body, 4_400_000), 30_000)
+            );
+            request = new Request(request.url, {
+              method: "POST",
+              headers: request.headers,
+              signal: request.signal,
+              body: new Uint8Array(body).buffer,
+            });
+          } catch (error) {
+            if (error instanceof BodyTooLarge)
+              return Response.json(
+                {
+                  error:
+                    "This message is too large. Choose up to four files totaling 3 MiB.",
+                },
+                { status: 413 }
+              );
+            if (error instanceof TimeoutError)
+              return Response.json(
+                { error: "The upload timed out. Please try again." },
+                { status: 408 }
+              );
+            throw error;
+          }
+        }
         return route.handler(request, context);
       },
     };

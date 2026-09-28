@@ -21,6 +21,9 @@ import { Composer } from "./composer";
 import { colors } from "./theme";
 import { isSafeWebLink } from "./links";
 import { MessageActions } from "./message-actions";
+import { AttachmentCard } from "./attachments/card";
+import { messageContent, type ConversationDraft } from "./session/input";
+import type { ChatAgent } from "./session/types";
 import {
   readReplyMessage,
   replyMessage,
@@ -42,15 +45,15 @@ export function Conversation({
   readonly messages: readonly EveMessage[];
   readonly status: UseEveAgentStatus;
   readonly error?: string;
-  readonly onSend: (text: string) => Promise<void>;
+  readonly onSend: ChatAgent["send"];
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
   readonly onCancel: () => void;
   readonly onLoadOlder?: () => void;
   readonly loadingOlder?: boolean;
   readonly onCopyText?: (text: string) => Promise<void>;
-  readonly initialDraft?: string;
+  readonly initialDraft?: ConversationDraft;
 }) {
-  const staged = readReplyMessage(initialDraft ?? "");
+  const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
     staged
       ? { id: staged.id, role: staged.role, text: staged.quote }
@@ -182,9 +185,17 @@ export function Conversation({
       <View style={styles.composer}>
         <View style={styles.column}>
           <Composer
-            initialDraft={staged?.text ?? initialDraft}
-            onSend={async (text) => {
-              await onSend(replyMessage(text, reply));
+            initialDraft={{
+              text: staged?.text ?? initialDraft?.text ?? "",
+              files: initialDraft?.files ?? [],
+            }}
+            onSend={async (message) => {
+              await onSend(
+                messageContent({
+                  ...message,
+                  text: replyMessage(message.text, reply),
+                })
+              );
               setReply((current) =>
                 current?.id === reply?.id ? undefined : current
               );
@@ -317,7 +328,16 @@ export function MessagePart({
     );
   }
   if (part.type === "file")
-    return part.url ? (
+    return part.url?.startsWith("data:") ? (
+      <AttachmentCard
+        file={{
+          type: "file",
+          url: part.url,
+          filename: part.filename,
+          mediaType: part.mediaType,
+        }}
+      />
+    ) : part.url ? (
       <WebLink url={part.url} label={part.filename ?? "Attachment"} />
     ) : (
       <Text style={styles.caption}>{part.filename ?? "Attachment"}</Text>

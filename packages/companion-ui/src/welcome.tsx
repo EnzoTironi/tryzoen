@@ -12,7 +12,8 @@ import {
   Compass,
   Lightbulb,
 } from "lucide-react-native";
-import { useState, type ComponentProps } from "react";
+import { useCallback, useState, type ComponentProps } from "react";
+import type { ConversationDraft } from "./session/input";
 import { Composer } from "./composer";
 import { colors } from "./theme";
 import {
@@ -47,25 +48,31 @@ const suggestions = [
 
 export function Welcome({
   name,
-  initialDraft = "",
+  initialDraft,
   avatarUri,
   onSend,
   disabled = false,
 }: Pick<ComponentProps<typeof Composer>, "onSend" | "disabled"> & {
   readonly name?: string;
-  readonly initialDraft?: string;
+  readonly initialDraft?: ConversationDraft;
   readonly avatarUri?: string;
 }) {
-  const staged = readReplyMessage(initialDraft);
+  const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
     staged
       ? { id: staged.id, role: staged.role, text: staged.quote }
       : undefined
   );
   const [suggestion, setSuggestion] = useState({
-    draft: staged?.text ?? initialDraft,
+    draft: {
+      files: initialDraft?.files ?? [],
+      text: staged?.text ?? initialDraft?.text ?? "",
+    },
     revision: 0,
   });
+  const rememberDraft = useCallback((draft: ConversationDraft) => {
+    setSuggestion((current) => ({ ...current, draft }));
+  }, []);
   return (
     <ScrollView
       contentContainerStyle={styles.scroll}
@@ -92,12 +99,16 @@ export function Welcome({
         <Composer
           key={suggestion.revision}
           initialDraft={suggestion.draft}
+          onDraftChange={rememberDraft}
           reply={reply}
           onRemoveReply={() => {
             setReply(undefined);
           }}
-          onSend={async (text) => {
-            await onSend(replyMessage(text, reply));
+          onSend={async (message) => {
+            await onSend({
+              ...message,
+              text: replyMessage(message.text, reply),
+            });
             setReply(undefined);
           }}
           disabled={disabled}
@@ -112,7 +123,7 @@ export function Welcome({
               accessibilityLabel={title}
               onPress={() => {
                 setSuggestion((current) => ({
-                  draft: prompt,
+                  draft: { ...current.draft, text: prompt },
                   revision: current.revision + 1,
                 }));
               }}

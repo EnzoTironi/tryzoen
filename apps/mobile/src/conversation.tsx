@@ -4,6 +4,7 @@ import { accountHeaders } from "./auth";
 import { apiOrigin } from "./environment";
 import { rpc } from "./api";
 import { setStringAsync } from "expo-clipboard";
+import type { ConversationDraft } from "@zoen/companion-ui/messages";
 export const client = new Client({
   host: apiOrigin,
   headers: accountHeaders,
@@ -15,8 +16,8 @@ export function MobileConversation({
   onCreated,
 }: {
   readonly sessionId?: string;
-  readonly initialDraft?: string;
-  readonly onCreated: (id: string, draft?: string) => void;
+  readonly initialDraft?: ConversationDraft;
+  readonly onCreated: (id: string, draft?: ConversationDraft) => void;
 }) {
   return sessionId ? (
     <SessionConversation

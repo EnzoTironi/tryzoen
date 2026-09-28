@@ -18,31 +18,35 @@ afterEach(() => {
 });
 
 it("hands off text only inside its account/workspace and consumes the matching token", () => {
-  const token = writeConversationDraft(
-    "account-a/workspace-a",
-    "Private reading note"
-  );
+  const token = writeConversationDraft("account-a/workspace-a", {
+    text: "Private reading note",
+    files: [],
+  });
   expect(token).not.toContain("Private");
-  expect(readConversationDraft("account-a/workspace-a", token)).toBe(
-    "Private reading note"
-  );
-  expect(readConversationDraft("account-b/workspace-a", token)).toBe("");
-  expect(readConversationDraft("account-a/workspace-b", token)).toBe("");
-  const replacement = writeConversationDraft(
-    "account-a/workspace-a",
-    "New note"
-  );
+  expect(readConversationDraft("account-a/workspace-a", token)).toEqual({
+    text: "Private reading note",
+    files: [],
+  });
+  expect(readConversationDraft("account-b/workspace-a", token)).toBeUndefined();
+  expect(readConversationDraft("account-a/workspace-b", token)).toBeUndefined();
+  const replacement = writeConversationDraft("account-a/workspace-a", {
+    text: "New note",
+    files: [],
+  });
   forgetConversationDraft("account-a/workspace-a", token);
-  expect(readConversationDraft("account-a/workspace-a", replacement)).toBe(
-    "New note"
-  );
-  expect(readConversationDraft("account-a/workspace-a", token)).toBe("");
+  expect(readConversationDraft("account-a/workspace-a", replacement)).toEqual({
+    text: "New note",
+    files: [],
+  });
+  expect(readConversationDraft("account-a/workspace-a", token)).toBeUndefined();
   forgetConversationDraft("account-a/workspace-a", replacement);
-  expect(readConversationDraft("account-a/workspace-a", replacement)).toBe("");
+  expect(
+    readConversationDraft("account-a/workspace-a", replacement)
+  ).toBeUndefined();
 });
 
 it("does not accept arbitrary URL text and reports failure to store a new draft", () => {
-  expect(readConversationDraft("scope", "Private text in URL")).toBe("");
+  expect(readConversationDraft("scope", "Private text in URL")).toBeUndefined();
   vi.stubGlobal("sessionStorage", {
     getItem: () => {
       throw new Error("Unavailable");
@@ -51,8 +55,26 @@ it("does not accept arbitrary URL text and reports failure to store a new draft"
       throw new Error("Unavailable");
     },
   });
-  expect(readConversationDraft("scope", "token")).toBe("");
-  expect(() => writeConversationDraft("scope", "Keep this note")).toThrow(
-    "Unavailable"
-  );
+  expect(readConversationDraft("scope", "token")).toBeUndefined();
+  expect(() =>
+    writeConversationDraft("scope", { text: "Keep this note", files: [] })
+  ).toThrow("Unavailable");
+});
+
+it("preserves attachments during a scoped handoff without exposing them in the URL", () => {
+  const draft = {
+    text: "Read",
+    files: [
+      {
+        type: "file" as const,
+        filename: "note.txt",
+        mediaType: "text/plain",
+        url: "data:text/plain;base64,YQ==",
+      },
+    ],
+  };
+  const token = writeConversationDraft("account/workspace", draft);
+  expect(token).toMatch(/^[\da-f-]{36}$/u);
+  expect(readConversationDraft("account/workspace", token)).toEqual(draft);
+  expect(readConversationDraft("other/workspace", token)).toBeUndefined();
 });

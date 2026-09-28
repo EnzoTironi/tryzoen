@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -8,7 +8,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ArrowUp, Square, X } from "lucide-react-native";
+import { ArrowUp, Square, X, Plus, FileText } from "lucide-react-native";
+import { useAttachments } from "./attachments/provider";
+import {
+  requireAttachmentSizes,
+  inlineAttachmentBytes,
+} from "./attachments/limits";
+import type { ConversationDraft } from "./session/input";
 import { IconButton } from "./icon-button";
 import type { MessageReply } from "./session/reply";
 import { colors } from "./theme";
@@ -18,23 +24,62 @@ export function Composer({
   onCancel,
   busy = false,
   disabled = false,
-  initialDraft = "",
+  initialDraft,
   reply,
   onRemoveReply,
+  onDraftChange,
 }: {
-  readonly onSend: (message: string) => Promise<void>;
+  readonly onSend: (message: ConversationDraft) => Promise<void>;
   readonly onCancel?: () => void;
   readonly busy?: boolean;
   readonly disabled?: boolean;
-  readonly initialDraft?: string;
+  readonly initialDraft?: ConversationDraft;
   readonly reply?: MessageReply;
   readonly onRemoveReply?: () => void;
+  readonly onDraftChange?: (draft: ConversationDraft) => void;
 }) {
-  const [draft, setDraft] = useState(initialDraft);
+  const [draft, setDraft] = useState(initialDraft?.text ?? "");
+  const nextFile = useRef(initialDraft?.files.length ?? 0);
+  const [files, setFiles] = useState(() =>
+    (initialDraft?.files ?? []).map((file, key) => ({ file, key }))
+  );
+  const pick = useAttachments()?.pick;
+  const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
   const inFlight = useRef(false);
-  const canSend = Boolean(draft.trim()) && !disabled && !sending;
+  const canSend =
+    (Boolean(draft.trim()) || files.length > 0) &&
+    !disabled &&
+    !sending &&
+    !picking;
+  useEffect(() => {
+    onDraftChange?.({ text: draft, files: files.map(({ file }) => file) });
+  }, [draft, files, onDraftChange]);
+  async function selectFiles() {
+    if (!pick || picking || sending) return;
+    setPicking(true);
+    setError(undefined);
+    try {
+      const picked = await pick();
+      const combined = [...files.map(({ file }) => file), ...picked];
+      requireAttachmentSizes(
+        combined.map((file) => inlineAttachmentBytes(file.url))
+      );
+      setFiles((current) => [
+        ...current,
+        ...picked.map((file) => ({ file, key: nextFile.current++ })),
+      ]);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The files could not be opened. Try again."
+      );
+    } finally {
+      setPicking(false);
+    }
+  }
   async function submit() {
     if (!canSend || inFlight.current) return;
     inFlight.current = true;
@@ -42,8 +87,9 @@ export function Composer({
     setError(undefined);
     const submitted = draft.trim();
     try {
-      await onSend(submitted);
+      await onSend({ text: submitted, files: files.map(({ file }) => file) });
       setDraft((current) => (current.trim() === submitted ? "" : current));
+      setFiles([]);
     } catch {
       setError(
         "Your message couldn’t be sent. Your draft is still here — try again."
@@ -55,6 +101,28 @@ export function Composer({
   }
   return (
     <View style={styles.wrapper}>
+      {files.length > 0 && (
+        <View style={styles.attachments}>
+          {files.map(({ file, key }) => (
+            <View key={key} style={styles.attachment}>
+              <FileText size={20} color={colors.muted} />
+              <Text style={styles.attachmentName} numberOfLines={1}>
+                {file.filename ?? "Attachment"}
+              </Text>
+              <IconButton
+                icon={X}
+                label={`Remove ${file.filename ?? "attachment"}`}
+                disabled={sending || picking}
+                onPress={() => {
+                  setFiles((current) =>
+                    current.filter((item) => item.key !== key)
+                  );
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      )}
       {reply && (
         <View style={styles.quote}>
           <View style={styles.quoteText}>
@@ -79,6 +147,20 @@ export function Composer({
         </View>
       )}
       <View style={styles.composer}>
+        {pick && (
+          <IconButton
+            icon={Plus}
+            label="Add attachments"
+            disabled={disabled || sending || picking}
+            onPress={() => void selectFiles()}
+          />
+        )}
+        {picking && (
+          <ActivityIndicator
+            accessibilityLabel="Reading attachments"
+            color={colors.muted}
+          />
+        )}
         <TextInput
           accessibilityLabel="Message Zoen"
           placeholder="Message"
@@ -87,6 +169,7 @@ export function Composer({
           onChangeText={setDraft}
           editable={!disabled && !sending}
           multiline
+          maxLength={10000}
           style={styles.input}
           onKeyPress={(event) => {
             if (Platform.OS !== "web" || event.nativeEvent.key !== "Enter")
@@ -140,6 +223,16 @@ export function Composer({
 }
 
 const styles = StyleSheet.create({
+  attachments: { gap: 8 },
+  attachment: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 14,
+    backgroundColor: colors.wash,
+    borderRadius: 18,
+  },
+  attachmentName: { flex: 1, fontSize: 14, color: colors.ink },
   quote: {
     flexDirection: "row",
     alignItems: "center",
