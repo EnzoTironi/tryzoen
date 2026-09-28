@@ -90,6 +90,7 @@ export const creatorPreviewRequestSchema = z.strictObject({
   revision: z.uuid(),
   kind: z.enum(["answer", "playbook"]),
   question: creatorEvaluationCaseSchema.shape.question,
+  pilotId: z.uuid().optional(),
   caseRef: z.strictObject({ id: z.uuid(), revision: z.uuid() }).optional(),
 });
 
@@ -119,6 +120,7 @@ export const creatorPreviewModelSchema = z.strictObject({
 export const creatorPreviewSchema = creatorPreviewRequestSchema
   .omit({ caseRef: true })
   .extend({
+    pilotId: z.uuid().nullable(),
     evaluation: creatorEvaluationSnapshotSchema.nullable(),
     title: z.string().min(1).max(80),
     status: z.enum(["pending", "running", "completed", "failed", "expired"]),
@@ -137,7 +139,7 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
 });
 
 export const creatorReleaseEvidenceSchema = creatorPreviewSchema
-  .omit({ kind: true })
+  .omit({ kind: true, pilotId: true })
   .strip()
   .extend({
     status: z.literal("completed"),
@@ -229,3 +231,34 @@ Write an example of the response you would want the specialist to offer.
 
 Describe what this example does not justify and when someone should take over.
 `;
+
+export const creatorPilotInviteSchema = z.strictObject({
+  id: z.uuid(),
+  releaseId: z.uuid(),
+  username: z.string().regex(/^[a-z][a-z0-9_]{2,29}$/),
+  shareTeaching: z.literal(true),
+});
+
+export const creatorPilotActionSchema = z.strictObject({
+  id: z.uuid(),
+  action: z.enum(["accept", "decline", "withdraw"]),
+});
+
+export const creatorPilotSchema = z.object({
+  id: z.uuid(),
+  releaseId: z.uuid(),
+  draftId: z.uuid(),
+  revision: z.uuid(),
+  title: creatorDraftContentSchema.shape.title,
+  description: creatorDraftContentSchema.shape.description,
+  creatorName: z.string(),
+  recipientName: z.string(),
+  isCreator: z.boolean(),
+  status: z.enum(["pending", "active", "declined", "withdrawn"]),
+  createdAt: z.number(),
+});
+
+export const creatorPilotListSchema = z.array(creatorPilotSchema).max(100);
+export const creatorPilotTeachingSchema = creatorPilotSchema.extend({
+  content: creatorDraftContentSchema,
+});

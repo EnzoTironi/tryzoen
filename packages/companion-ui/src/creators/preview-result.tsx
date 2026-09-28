@@ -29,16 +29,17 @@ export function CreatorPreviewResult({
   readonly preview: z.infer<typeof creatorPreviewSchema>;
   readonly data: CreatorStudioData;
   readonly onRefresh: () => Promise<unknown>;
-  readonly draft: z.infer<typeof creatorDraftSchema>;
-  readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
+  readonly draft?: z.infer<typeof creatorDraftSchema>;
+  readonly onChanged?: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
   const [reading, setReading] = useState(false);
   // Capture the opening version so background refresh cannot replace an unsaved review.
   const [reviewing, setReviewing] =
     useState<z.infer<typeof creatorPreviewSchema>>();
   const download = useMutation({ mutationFn: data.exportPreview });
-  const version =
-    preview.revision === draft.revision
+  const version = !draft
+    ? "Approved pilot version"
+    : preview.revision === draft.revision
       ? "Current saved version"
       : "Earlier saved version";
   return (
@@ -80,7 +81,7 @@ export function CreatorPreviewResult({
           >
             {preview.kind === "playbook" ? "Read proposal" : "Read response"}
           </ActionButton>
-          {preview.kind === "playbook" && (
+          {preview.kind === "playbook" && draft && onChanged && (
             <CreatorPlaybookReview
               preview={preview}
               draft={draft}

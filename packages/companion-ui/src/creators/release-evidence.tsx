@@ -9,7 +9,8 @@ import { pageStyles } from "../page";
 export function CreatorReleaseEvidence({
   content,
   evidence,
-}: Pick<z.infer<typeof creatorReleaseSchema>, "content" | "evidence">) {
+}: Pick<z.infer<typeof creatorReleaseSchema>, "content"> &
+  Partial<Pick<z.infer<typeof creatorReleaseSchema>, "evidence">>) {
   const [reading, setReading] = useState<{ title: string; text: string }>();
   return (
     <>
@@ -37,10 +38,12 @@ export function CreatorReleaseEvidence({
           {`Read source: ${example.title}`}
         </ActionButton>
       ))}
-      <Text accessibilityRole="header" style={pageStyles.heading}>
-        Reviewed cases
-      </Text>
-      {evidence.map((item) => (
+      {evidence && (
+        <Text accessibilityRole="header" style={pageStyles.heading}>
+          Reviewed cases
+        </Text>
+      )}
+      {evidence?.map((item) => (
         <View key={item.id} style={{ gap: 8 }}>
           <Text style={pageStyles.rowTitle}>{item.evaluation.case.title}</Text>
           <Text style={pageStyles.copy}>

@@ -7,6 +7,7 @@ import { CompanionSheet } from "../sheet";
 import { pageStyles } from "../page";
 import { CreatorDraftCreate } from "./create";
 import { CreatorDraft } from "./draft";
+import { CreatorPilots } from "./pilots";
 import type {
   creatorEvaluationSaveSchema,
   creatorDraftListSchema,
@@ -21,9 +22,22 @@ import type {
   creatorReleaseListSchema,
   creatorReleaseRequestSchema,
   creatorReleaseSchema,
+  creatorPilotInviteSchema,
+  creatorPilotActionSchema,
+  creatorPilotSchema,
+  creatorPilotListSchema,
+  creatorPilotTeachingSchema,
 } from "./schema";
 
 export interface CreatorStudioData {
+  pilots: () => Promise<z.infer<typeof creatorPilotListSchema>>;
+  pilot: (id: string) => Promise<z.infer<typeof creatorPilotTeachingSchema>>;
+  invitePilot: (
+    input: z.infer<typeof creatorPilotInviteSchema>
+  ) => Promise<z.infer<typeof creatorPilotTeachingSchema>>;
+  actOnPilot: (
+    input: z.infer<typeof creatorPilotActionSchema>
+  ) => Promise<z.infer<typeof creatorPilotSchema>>;
   releaseCandidate: (
     draftId: string
   ) => Promise<z.infer<typeof creatorReleaseCandidateSchema>>;
@@ -55,7 +69,8 @@ export interface CreatorStudioData {
     input: z.infer<typeof creatorPreviewRequestSchema>
   ) => Promise<void>;
   previews: (
-    draftId: string
+    draftId: string,
+    pilotId?: string
   ) => Promise<z.infer<typeof creatorPreviewListSchema>>;
   newId: () => string;
 }
@@ -113,9 +128,11 @@ function StudioDrafts({
         permission to use, then review your strategies and limits.
       </Text>
       <Text style={pageStyles.copy}>
-        Drafts and approved versions are private to you in this workspace.
-        Public publishing is not available yet.
+        Drafts and approval records stay private. You can share selected
+        teaching from an approved version with a named person in this workspace
+        for a pilot. Public publishing is not available yet.
       </Text>
+      <CreatorPilots data={data} cacheScope={cacheScope} />
       {!archived && (
         <CreatorDraftCreate
           data={data}

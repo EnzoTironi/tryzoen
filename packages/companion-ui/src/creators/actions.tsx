@@ -54,6 +54,10 @@ export function CreatorDraftActions({
               : "Archive draft"}
         </ActionButton>
       </View>
+      <Text style={pageStyles.copy}>
+        Archiving a draft does not end access to an approved pilot. Manage
+        shared access in Private pilots.
+      </Text>
       {(archive.error ?? download.error) && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
           {archive.error?.message ??

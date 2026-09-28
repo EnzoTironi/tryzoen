@@ -1,3 +1,10 @@
+import { reviewedCreatorVersion } from "../helpers/creator-release";
+import { approveCreatorRelease } from "../../server/creators/releases";
+import { saveDirectoryProfile } from "../../server/accounts/directory";
+import {
+  actOnCreatorPilot,
+  inviteCreatorPilot,
+} from "../../server/creators/pilots";
 import { randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -14,6 +21,7 @@ import { workspaceExecutionFor, workspaceFixture } from "./workspace-fixture";
 import { saveCreatorEvaluation } from "../../server/creators/evaluation";
 import { saveCreatorDraft } from "../../server/creators/drafts";
 import {
+  exportCreatorPreview,
   createCreatorPreview,
   listCreatorPreviews,
 } from "../../server/creators/previews";
@@ -158,9 +166,8 @@ test.each(["answer", "playbook"] as const)(
     const receipt = z
       .object({ tools: z.array(z.string()), messages: z.unknown() })
       .parse(JSON.parse(result.response ?? "null"));
-    // Eve's result formatter is the sole tool; there are no filesystem, network,
-    // memory, connection, delegation or application capabilities in this child.
-    expect(receipt.tools).toEqual(["final_output"]);
+    // Markdown is the result itself; no result formatter or action tools are exposed.
+    expect(receipt.tools).toEqual([]);
     const context = JSON.stringify(receipt.messages);
     expect(context.includes("SYNTHETIC-PLAYBOOK-ONLY")).toBe(kind === "answer");
     expect(context).toContain("SYNTHETIC-AUTHORED-EXAMPLE");
@@ -178,38 +185,112 @@ test.each(["answer", "playbook"] as const)(
   90000
 );
 
-test("native child provider failure persists a failed preview instead of a fabricated answer", async () => {
+test.each([
+  "synthetic-provider-failure",
+  "synthetic-blank-answer",
+  "synthetic-oversized-answer",
+])(
+  "native child %s persists a failed preview without an invalid answer",
+  async (question) => {
+    await using workspace = await workspaceFixture();
+    const draft = await saveCreatorDraft(workspace.personal, {
+      id: randomUUID(),
+      expectedRevision: null,
+      content: {
+        title: "Synthetic failed preview",
+        description: "Test",
+        playbook: "Test only",
+        examples: [],
+      },
+    });
+    const preview = await createCreatorPreview(workspace.personal, {
+      id: randomUUID(),
+      draftId: draft.id,
+      revision: draft.revision,
+      kind: "answer" as const,
+      question,
+    });
+    const server = await runtime(await freePort(), "127.0.0.1", directory);
+    const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        message: `preview ${preview.id}`,
+        auth,
+      })
+    );
+    await server.settled(sessionId);
+    expect(
+      (await listCreatorPreviews(workspace.personal, draft.id))[0]
+    ).toMatchObject({ status: "failed", response: null });
+    await server.stop();
+  },
+  90000
+);
+
+test("an accepted pilot runs the creator's approved teaching as the participant's isolated Eve child", async () => {
   await using workspace = await workspaceFixture();
-  const draft = await saveCreatorDraft(workspace.personal, {
-    id: randomUUID(),
-    expectedRevision: null,
-    content: {
-      title: "Synthetic failed preview",
-      description: "Test",
-      playbook: "Test only",
-      examples: [],
-    },
+  const source = await reviewedCreatorVersion(workspace.actor);
+  const release = await approveCreatorRelease(workspace.actor, source.input);
+  const username = `pilot_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+  await saveDirectoryProfile(workspace.guest, {
+    username,
+    discoverable: false,
   });
-  const preview = await createCreatorPreview(workspace.personal, {
+  const pilot = await inviteCreatorPilot(workspace.actor, {
     id: randomUUID(),
-    draftId: draft.id,
-    revision: draft.revision,
-    kind: "answer" as const,
-    question: "synthetic-provider-failure",
+    releaseId: release.id,
+    username,
+    shareTeaching: true,
+  });
+  await actOnCreatorPilot(workspace.guest, { id: pilot.id, action: "accept" });
+  const preview = await createCreatorPreview(workspace.guest, {
+    id: randomUUID(),
+    draftId: release.draftId,
+    revision: release.revision,
+    pilotId: pilot.id,
+    kind: "answer",
+    question: "SYNTHETIC-PARTICIPANT-QUESTION",
   });
   const server = await runtime(await freePort(), "127.0.0.1", directory);
-  const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
-  const { sessionId } = z.object({ sessionId: z.string() }).parse(
-    await server.request("/probe/send", {
-      address: randomUUID(),
-      id: randomUUID(),
+  try {
+    const auth = workspaceExecutionFor(workspace.guest).session.auth.current;
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        message: "PARTICIPANT-ROOT-HISTORY-MUST-NOT-CROSS",
+        auth,
+      })
+    );
+    await server.settled(sessionId);
+    await server.request(`/probe/message/${sessionId}`, {
       message: `preview ${preview.id}`,
       auth,
-    })
-  );
-  await server.settled(sessionId);
-  expect(
-    (await listCreatorPreviews(workspace.personal, draft.id))[0]
-  ).toMatchObject({ status: "failed", response: null });
-  await server.stop();
+    });
+    await server.settled(sessionId, 2);
+    const [result] = await listCreatorPreviews(
+      workspace.guest,
+      release.draftId,
+      pilot.id
+    );
+    expect(result?.status).toBe("completed");
+    const receipt = z
+      .object({ tools: z.array(z.string()), messages: z.unknown() })
+      .parse(JSON.parse(result?.response ?? "null"));
+    expect(receipt.tools).toEqual([]);
+    const context = JSON.stringify(receipt.messages);
+    expect(context).toContain(release.content.playbook);
+    expect(context).toContain("SYNTHETIC-PARTICIPANT-QUESTION");
+    expect(context).not.toContain("PARTICIPANT-ROOT-HISTORY-MUST-NOT-CROSS");
+    expect(context).not.toContain(source.input.notes);
+    expect(context).not.toContain(source.draft.evaluation?.cases[0]?.criteria);
+    expect(result?.models).toHaveLength(1);
+    await expect(
+      exportCreatorPreview(workspace.actor, preview.id)
+    ).rejects.toThrow("WorkspaceAccessDenied");
+  } finally {
+    await server.stop();
+  }
 }, 90000);

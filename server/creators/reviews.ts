@@ -7,7 +7,7 @@ import {
 } from "@zoen/companion-ui/creators";
 import type { z } from "zod";
 import type { WorkspaceActorSchema } from "../workspaces/access";
-import { requirePreview } from "./previews";
+import { requirePreview } from "./preview-access";
 
 export class CreatorReviewConflict extends Error {
   constructor() {

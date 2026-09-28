@@ -1,3 +1,4 @@
+import { creatorPreviewProjection } from "./preview-record";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -11,32 +12,12 @@ import {
 } from "@zoen/companion-ui/creators";
 import { CreatorDraftConflict, readCreatorDraft } from "./drafts";
 import { creatorPreviewOriginSchema } from "./execution";
+import { requirePreview } from "./preview-access";
+import { requireActiveCreatorPilot } from "./pilots";
 import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-
-export const creatorPreviewProjection = sql`id, draft_id AS "draftId", revision, kind, question, snapshot->>'title' AS title,
-  CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
-  response, evaluation, models, extract(epoch FROM started_at)::float8 * 1000 AS "startedAt",
-  extract(epoch FROM finished_at)::float8 * 1000 AS "finishedAt",
-  extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt",
-  CASE WHEN review IS NULL THEN NULL ELSE jsonb_build_object('revision', review_revision, 'content', review,
-    'updatedAt', extract(epoch FROM reviewed_at)::float8 * 1000) END AS review`;
-
-export async function requirePreview(
-  actor: z.infer<typeof WorkspaceActorSchema>,
-  id: string
-) {
-  const [owned] =
-    await query(sql`SELECT draft_id AS "draftId" FROM creator_previews
-    WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
-  if (!owned) throw new WorkspaceAccessDenied();
-  await readCreatorDraft(
-    actor,
-    z.object({ draftId: z.uuid() }).parse(owned).draftId
-  );
-}
 
 export function exportCreatorPreview(
   actor: z.infer<typeof WorkspaceActorSchema>,
@@ -53,13 +34,18 @@ export function exportCreatorPreview(
 
 export function listCreatorPreviews(
   actor: z.infer<typeof WorkspaceActorSchema>,
-  draftId: string
+  draftId: string,
+  pilotId?: string
 ) {
   return transaction(async () => {
-    await readCreatorDraft(actor, draftId);
+    if (pilotId) {
+      const pilot = await requireActiveCreatorPilot(actor, pilotId);
+      if (pilot.draftId !== draftId) throw new WorkspaceAccessDenied();
+    } else await readCreatorDraft(actor, draftId);
     return creatorPreviewListSchema.parse(
       await query(sql`SELECT ${creatorPreviewProjection} FROM creator_previews
       WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId} AND draft_id = ${draftId}
+      AND pilot_id IS NOT DISTINCT FROM ${pilotId ?? null}::uuid
       ORDER BY created_at DESC, id DESC LIMIT 20`)
     );
   });
@@ -74,7 +60,7 @@ export function createCreatorPreview(
     await query(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["creator-previews", actor.workspaceId, actor.userId])}, 0))`
     );
-    const draft = await readCreatorDraft(actor, input.draftId);
+    const sources = await readPreviewSources(actor, input);
     const existing =
       await query(sql`SELECT ${creatorPreviewProjection} FROM creator_previews WHERE id = ${input.id}
       AND workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
@@ -85,6 +71,7 @@ export function createCreatorPreview(
         preview.revision !== input.revision ||
         preview.kind !== input.kind ||
         preview.question !== input.question ||
+        preview.pilotId !== (input.pilotId ?? null) ||
         (preview.evaluation?.case.id ?? null) !== (input.caseRef?.id ?? null) ||
         (preview.evaluation?.revision ?? null) !==
           (input.caseRef?.revision ?? null)
@@ -92,7 +79,14 @@ export function createCreatorPreview(
         throw new CreatorDraftConflict();
       return preview;
     }
-    const { snapshot, evaluation } = selectPreviewSources(draft, input);
+    const { snapshot, evaluation } =
+      sources.kind === "draft"
+        ? selectPreviewSources(sources.draft, input)
+        : sources;
+    if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > 48000)
+      throw new Error(
+        "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
+      );
     const [capacity] = await query<{
       total: number;
       today: number;
@@ -111,12 +105,32 @@ export function createCreatorPreview(
         "You can run one preview at a time, up to 10 in 24 hours and 100 saved previews in this workspace. A pending preview expires after five minutes."
       );
     const rows =
-      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, revision, kind, snapshot, question, evaluation)
-      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.revision}, ${input.kind}, ${JSON.stringify(snapshot)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
+      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, pilot_id, revision, kind, snapshot, question, evaluation)
+      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.pilotId ?? null}, ${input.revision}, ${input.kind}, ${JSON.stringify(snapshot)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
       ON CONFLICT (id) DO NOTHING RETURNING ${creatorPreviewProjection}`);
     if (!rows[0]) throw new WorkspaceAccessDenied();
     return creatorPreviewSchema.parse(rows[0]);
   });
+}
+
+async function readPreviewSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  input: z.infer<typeof creatorPreviewRequestSchema>
+) {
+  if (!input.pilotId) {
+    const draft = await readCreatorDraft(actor, input.draftId);
+    // Retry validation must preserve the original result even after the draft changes.
+    return { kind: "draft" as const, draft };
+  }
+  const pilot = await requireActiveCreatorPilot(actor, input.pilotId);
+  if (
+    input.kind !== "answer" ||
+    input.caseRef ||
+    input.draftId !== pilot.draftId ||
+    input.revision !== pilot.revision
+  )
+    throw new WorkspaceAccessDenied();
+  return { kind: "pilot" as const, snapshot: pilot.content, evaluation: null };
 }
 
 function selectPreviewSources(
@@ -150,10 +164,6 @@ function selectPreviewSources(
     evaluationCase && draft.evaluation
       ? { revision: draft.evaluation.revision, case: evaluationCase }
       : null;
-  if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > 48000)
-    throw new Error(
-      "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
-    );
   return { snapshot, evaluation };
 }
 

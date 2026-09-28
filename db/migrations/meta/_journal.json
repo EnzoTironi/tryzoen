@@ -547,6 +547,13 @@
       "when": 1790593471383,
       "tag": "0077_creator-playbook-proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1790595333878,
+      "tag": "0078_creator-private-pilots",
+      "breakpoints": true
     }
   ]
 }

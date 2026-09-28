@@ -62,7 +62,7 @@ export function CreatorDraft({
           <Text style={pageStyles.copy}>
             {draft.data.archivedAt
               ? "Archived draft · Restore it to make changes."
-              : "Private draft · Only you can open this specialist in this workspace."}
+              : "Private draft · Only you can open this draft. Sharing an approved version requires a separate pilot invitation."}
           </Text>
           {Boolean(draft.data.content.description) && (
             <Text style={pageStyles.copy}>

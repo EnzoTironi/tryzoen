@@ -522,3 +522,71 @@ and component/function growth; it is not a clean structural gate. Model-assisted
 synthesis and explicit private adoption are now operational. Public publishing,
 discovery, entitlements, withdrawal, contextual assistance, cost accounting and
 real creator-led pilot/outcome validation remain open.
+
+## Named private creator pilots — 2026-09-28
+
+An approved version can now be offered to a named person already in the same
+shared workspace. The author reviews the exact playbook/examples and explicitly
+confirms permission to share them. The recipient must accept before reading
+that teaching or running the specialist. Invitations do not send email or chat
+messages. Personal workspaces cannot host shared pilots. Both live organization
+and workspace membership remain required; group/protocol actors cannot use the
+human authoring or pilot endpoints.
+
+The participant receives only the immutable approved teaching. Evaluation cases,
+private approval notes, personal memory, room history and tools are not shared.
+Questions, answers and reviews belong to the participant, not the author.
+Existing isolated Eve execution, the participant's selected model, source
+binding, model/timing receipt, visual Markdown editor and export are reused.
+Pilot results cannot qualify a creator's predeclared evaluation cases. Editing
+or archiving the source draft does not silently change or end an approved pilot;
+the product directs the author to manage access separately.
+
+Either party can withdraw. Declined or withdrawn invitations cannot reactivate;
+a new explicit invitation is required. Identical retries preserve the original
+receipt. Authorization locks serialize withdrawal with execution claims, model
+receipts and result persistence, preventing a late response from being saved
+after withdrawal. Membership deletion cascades the grant and participant results;
+account archival explicitly withdraws its pending/active pilots. Previously read
+or exported copies cannot be recalled, which the interface explains.
+
+Admission is serialized per workspace with indexed, bounded participant/release
+counts: 20 invitations per approved version and 100 sent/received per person in
+a workspace, including closed pilots. Pilot runs share the existing per-person
+preview limits (one active, 10 per day, 100 saved, five-minute expiration).
+Metadata lists are bounded and do not load every teaching/evidence bundle.
+Migration 0078 adds the grant and preview reference without rewriting applied
+migration history. It has been applied only to local review and isolated test
+databases.
+
+Chrome verification found a real integration defect: a short, valid model answer
+was rejected because the workflow required an additional structured-output tool
+call. A compiled native regression reproduced the failure with plain model text.
+The specialist now returns Markdown directly and exposes zero tools; the workflow
+validates nonblank text and the 32,000-character bound before persistence. Native
+tests cover normal answers, playbook proposals, participant isolation, provider
+failure, blank output and oversized output. The same real browser request then
+completed with `gpt-5.6-luna` in 1.8 seconds.
+
+Desktop and mobile verification covered acceptance, source inspection, response
+reading, WYSIWYG review, exported selected sources/model/private review, nonmember
+invite rejection, and access withdrawal. A simulated lost connection retained
+the unsent question, disabled new execution and recovered without losing the
+draft. The synthetic fixture is explicitly fictional and the review identifies
+itself as software verification; it is not an expert endorsement or a real
+creator-led outcome evaluation. Verified screenshots are attached with
+`gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5869523198).
+
+All nine workspace checks pass (1,323 tests across 205 files), as do the production
+build, migration-chain validation and Expo web/iOS/Android exports. The six
+isolated creator suites now contain 30 cases; separate account/channel archive
+checks cover the archive integration. The structural delta retains 21
+unsuppressed gating findings for wrapper/component similarity, recent edits and
+component/function growth; JSX reachability findings remain inconsistent with
+the passing unused-code check. This is not a clean structural or production gate.
+
+This implements invitation and private trial mechanics only. Explicitly submitted
+participant feedback, real creator-led pilots/outcome measures, cross-workspace
+distribution, public discovery/publication, entitlement/billing/cost accounting
+and contextual assistance remain open. No production migration or deployment was
+performed, and million-user capacity has not been measured.

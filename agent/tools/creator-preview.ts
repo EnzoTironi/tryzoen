@@ -18,14 +18,8 @@ export default defineWorkflowTool({
     try {
       const result = await context.agent("creator-specialist", {
         message: JSON.stringify(snapshot),
-        outputSchema: {
-          type: "object",
-          properties: { response: { type: "string" } },
-          required: ["response"],
-          additionalProperties: false,
-        },
       });
-      response = result.response;
+      response = typeof result === "string" ? result : null;
     } catch {
       // Persist a clear failure without copying provider errors or private context.
       response = null;

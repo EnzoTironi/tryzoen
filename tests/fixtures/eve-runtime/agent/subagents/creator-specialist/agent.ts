@@ -13,22 +13,18 @@ export default defineAgent({
   model: defineDynamic({
     events: {
       "step.started": async (_event, context) => {
-        const model = mockModel(({ tools, messages, lastUserMessage }) => {
-          if (lastUserMessage?.includes("synthetic-provider-failure"))
+        const model = mockModel(({ tools, messages, userMessages }) => {
+          // Eve may append an empty-answer retry; keep the original scenario.
+          const scenario = userMessages.join("\n");
+          if (scenario.includes("synthetic-provider-failure"))
             throw new Error("Synthetic provider failure");
-          return {
-            toolCalls: [
-              {
-                name: "final_output",
-                input: {
-                  response: JSON.stringify({
-                    tools: tools.map((tool) => tool.name),
-                    messages,
-                  }),
-                },
-              },
-            ],
-          };
+          if (scenario.includes("synthetic-blank-answer")) return "   ";
+          if (scenario.includes("synthetic-oversized-answer"))
+            return "x".repeat(32001);
+          return JSON.stringify({
+            tools: tools.map((tool) => tool.name),
+            messages,
+          });
         });
         const actor = await workspaceActorFromPrincipal(
           context.session.auth.current ?? undefined

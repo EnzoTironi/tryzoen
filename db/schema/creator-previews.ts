@@ -18,6 +18,7 @@ import type {
   creatorEvaluationSnapshotSchema,
 } from "@zoen/companion-ui/creators";
 import { workspaceMemberships } from "./workspaces";
+import { creatorPilots } from "./creator-pilots";
 import { creatorDrafts } from "./creator-drafts";
 
 export const creatorPreviews = pgTable(
@@ -29,6 +30,9 @@ export const creatorPreviews = pgTable(
     draftId: uuid("draft_id")
       .notNull()
       .references(() => creatorDrafts.id, { onDelete: "cascade" }),
+    pilotId: uuid("pilot_id").references(() => creatorPilots.id, {
+      onDelete: "cascade",
+    }),
     revision: uuid("revision").notNull(),
     kind: text("kind").notNull().default("answer"),
     snapshot: jsonb("snapshot")
@@ -67,6 +71,10 @@ export const creatorPreviews = pgTable(
     check(
       "creator_previews_kind_check",
       sql`${table.kind} IN ('answer', 'playbook') AND (${table.kind} = 'answer' OR ${table.evaluation} IS NULL)`
+    ),
+    check(
+      "creator_previews_pilot_check",
+      sql`${table.pilotId} IS NULL OR (${table.kind} = 'answer' AND ${table.evaluation} IS NULL)`
     ),
     uniqueIndex("creator_previews_source_idx").on(
       table.sourceSessionId,

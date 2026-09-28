@@ -16,7 +16,18 @@ import {
   creatorReleaseListSchema,
   creatorReleaseRequestSchema,
   creatorReleaseSchema,
+  creatorPilotInviteSchema,
+  creatorPilotActionSchema,
+  creatorPilotSchema,
+  creatorPilotListSchema,
+  creatorPilotTeachingSchema,
 } from "@zoen/companion-ui/creators";
+import {
+  actOnCreatorPilot,
+  inviteCreatorPilot,
+  listCreatorPilots,
+  readCreatorPilot,
+} from "../../server/creators/pilots";
 import {
   CreatorReviewConflict,
   saveCreatorPreviewReview,
@@ -44,6 +55,29 @@ import {
 } from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  pilots: workspaceProcedure
+    .output(creatorPilotListSchema)
+    .query(({ ctx, signal }) =>
+      withSignal(signal, () => listCreatorPilots(ctx.actor))
+    ),
+  pilot: workspaceProcedure
+    .input(z.strictObject({ id: z.uuid() }))
+    .output(creatorPilotTeachingSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readCreatorPilot(ctx.actor, input.id))
+    ),
+  invitePilot: workspaceProcedure
+    .input(creatorPilotInviteSchema)
+    .output(creatorPilotTeachingSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => inviteCreatorPilot(ctx.actor, input))
+    ),
+  actOnPilot: workspaceProcedure
+    .input(creatorPilotActionSchema)
+    .output(creatorPilotSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => actOnCreatorPilot(ctx.actor, input))
+    ),
   releaseCandidate: workspaceProcedure
     .input(z.strictObject({ draftId: z.uuid() }))
     .output(creatorReleaseCandidateSchema)
@@ -111,10 +145,12 @@ export const creatorsRouter = {
       withSignal(signal, () => createCreatorPreview(ctx.actor, input))
     ),
   previews: workspaceProcedure
-    .input(z.strictObject({ draftId: z.uuid() }))
+    .input(z.strictObject({ draftId: z.uuid(), pilotId: z.uuid().optional() }))
     .output(creatorPreviewListSchema)
     .query(({ ctx, input, signal }) =>
-      withSignal(signal, () => listCreatorPreviews(ctx.actor, input.draftId))
+      withSignal(signal, () =>
+        listCreatorPreviews(ctx.actor, input.draftId, input.pilotId)
+      )
     ),
   archive: workspaceProcedure
     .input(creatorDraftStateSchema)

@@ -7,6 +7,7 @@ import { ActionButton } from "../button";
 import { pageStyles } from "../page";
 import { CreatorReleaseEvidence } from "./release-evidence";
 import { DocumentEditor } from "../document-editor";
+import { CreatorPilotInvite } from "./pilot-invite";
 
 export function CreatorRelease({
   id,
@@ -25,6 +26,7 @@ export function CreatorRelease({
   });
   const download = useMutation({ mutationFn: () => data.exportRelease(id) });
   const [readingNotes, setReadingNotes] = useState(false);
+  const [inviting, setInviting] = useState(false);
   return (
     <CompanionSheet title="Approved private version" onClose={onClose}>
       {release.isPending && (
@@ -58,6 +60,14 @@ export function CreatorRelease({
             content={release.data.content}
             evidence={release.data.evidence}
           />
+          <ActionButton
+            quiet
+            onPress={() => {
+              setInviting(true);
+            }}
+          >
+            Invite to a private pilot
+          </ActionButton>
           <Text accessibilityRole="header" style={pageStyles.heading}>
             Approval notes
           </Text>
@@ -98,6 +108,15 @@ export function CreatorRelease({
           }}
           onSave={async () => {
             throw new Error("Approved versions cannot be edited.");
+          }}
+        />
+      )}
+      {inviting && release.data && !release.isError && (
+        <CreatorPilotInvite
+          release={release.data}
+          data={data}
+          onClose={() => {
+            setInviting(false);
           }}
         />
       )}

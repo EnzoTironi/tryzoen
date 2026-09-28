@@ -10,6 +10,9 @@ import {
   creatorReleaseCandidateSchema,
   creatorReleaseListSchema,
   creatorReleaseSchema,
+  creatorPilotListSchema,
+  creatorPilotSchema,
+  creatorPilotTeachingSchema,
 } from "@zoen/companion-ui/creators";
 
 export function companionCreatorData(
@@ -32,6 +35,26 @@ export function companionCreatorData(
   }
   return {
     newId,
+    async pilots() {
+      return creatorPilotListSchema.parse(
+        await rpc.query("workspaces.creators.pilots")
+      );
+    },
+    async pilot(id) {
+      return creatorPilotTeachingSchema.parse(
+        await rpc.query("workspaces.creators.pilot", { id })
+      );
+    },
+    async invitePilot(input) {
+      return creatorPilotTeachingSchema.parse(
+        await rpc.mutation("workspaces.creators.invitePilot", input)
+      );
+    },
+    async actOnPilot(input) {
+      return creatorPilotSchema.parse(
+        await rpc.mutation("workspaces.creators.actOnPilot", input)
+      );
+    },
     async releaseCandidate(draftId) {
       return creatorReleaseCandidateSchema.parse(
         await rpc.query("workspaces.creators.releaseCandidate", { draftId })
@@ -82,9 +105,9 @@ export function companionCreatorData(
         preview,
       });
     },
-    async previews(draftId) {
+    async previews(draftId, pilotId) {
       return creatorPreviewListSchema.parse(
-        await rpc.query("workspaces.creators.previews", { draftId })
+        await rpc.query("workspaces.creators.previews", { draftId, pilotId })
       );
     },
     async preview(input) {

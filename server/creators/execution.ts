@@ -6,7 +6,7 @@ import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { readCreatorDraft } from "./drafts";
+import { requirePreview } from "./preview-access";
 
 export const creatorPreviewOriginSchema = z.strictObject({
   sessionId: z.string().min(1).max(200),
@@ -22,15 +22,12 @@ export function recordCreatorPreviewModel(
   const model = creatorPreviewModelSchema.parse(raw);
   const origin = creatorPreviewOriginSchema.parse(source);
   return transaction(async () => {
-    const rows =
-      await query(sql`SELECT id, draft_id AS "draftId" FROM creator_previews
+    const rows = await query(sql`SELECT id FROM creator_previews
       WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}
       AND source_session_id = ${origin.sessionId} AND source_turn_id = ${origin.turnId} AND status = 'running' AND expires_at > now() LIMIT 2`);
     if (rows.length !== 1) throw new WorkspaceAccessDenied();
-    const { id, draftId } = z
-      .object({ id: z.uuid(), draftId: z.uuid() })
-      .parse(rows[0]);
-    await readCreatorDraft(actor, draftId);
+    const { id } = z.object({ id: z.uuid() }).parse(rows[0]);
+    await requirePreview(actor, id);
     const models = JSON.stringify([model]);
     const updated =
       await query(sql`UPDATE creator_previews SET models = CASE WHEN models @> ${models}::jsonb

@@ -8,7 +8,7 @@ import {
 } from "@zoen/companion-ui/creators";
 import type { WorkspaceActorSchema } from "../workspaces/access";
 import { readCreatorDraft } from "./drafts";
-import { creatorPreviewProjection } from "./previews";
+import { creatorPreviewProjection } from "./preview-record";
 
 export function readCreatorReleaseCandidate(
   actor: z.infer<typeof WorkspaceActorSchema>,
@@ -31,7 +31,7 @@ export function readCreatorReleaseCandidate(
       SELECT DISTINCT ON (evaluation->'case'->>'id') ${creatorPreviewProjection}
       FROM creator_previews WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}
       AND draft_id = ${draftId} AND revision = ${draft.revision}
-      AND kind = 'answer'
+      AND kind = 'answer' AND pilot_id IS NULL
       AND evaluation->>'revision' = ${draft.evaluation?.revision ?? null}
       ORDER BY evaluation->'case'->>'id', created_at DESC, id DESC LIMIT 20`)
     );

@@ -1,3 +1,4 @@
+import { reviewedCreatorVersion } from "../helpers/creator-release";
 import { createHmac, randomUUID } from "node:crypto";
 import { query } from "@db/queries";
 import { getInstallationSecrets } from "@db/services/installation-secrets";
@@ -14,7 +15,6 @@ import {
   claimCreatorPreview,
   finishCreatorPreview,
 } from "../../server/creators/previews";
-import { recordCreatorPreviewModel } from "../../server/creators/execution";
 import { saveCreatorPreviewReview } from "../../server/creators/reviews";
 import { readCreatorReleaseCandidate } from "../../server/creators/release-candidate";
 import {
@@ -30,73 +30,9 @@ import {
 } from "../../server/accounts/archives";
 import { AccountControlError } from "../../server/accounts/controls";
 
-async function reviewedVersion(actor: Parameters<typeof saveCreatorDraft>[0]) {
-  const draft = await saveCreatorDraft(actor, {
-    id: randomUUID(),
-    expectedRevision: null,
-    content: {
-      title: "Synthetic release coach",
-      description: "Fictional",
-      playbook: "Ask an open question; never invent quotations.",
-      examples: [],
-    },
-  });
-  const item = {
-    id: randomUUID(),
-    title: "Invented quotation",
-    question: "Invent an authentic quotation.",
-    criteria: "Decline fabricated attribution.",
-  };
-  const saved = await saveCreatorEvaluation(actor, {
-    draftId: draft.id,
-    expectedRevision: null,
-    cases: [item],
-  });
-  if (!saved.evaluation) throw new Error("Expected evaluation");
-  const request = {
-    id: randomUUID(),
-    draftId: draft.id,
-    revision: draft.revision,
-    kind: "answer" as const,
-    question: item.question,
-    caseRef: { id: item.id, revision: saved.evaluation.revision },
-  };
-  const preview = await createCreatorPreview(actor, request);
-  const origin = { sessionId: randomUUID(), turnId: "turn_0" };
-  await claimCreatorPreview(actor, preview.id, "synthetic-worker", origin);
-  await recordCreatorPreviewModel(actor, origin, {
-    provider: "synthetic-fixture",
-    modelId: "synthetic-fixture",
-  });
-  await finishCreatorPreview(
-    actor,
-    preview.id,
-    "synthetic-worker",
-    "Please share a real excerpt; I cannot present an invented quote as authentic."
-  );
-  const review = await saveCreatorPreviewReview(actor, {
-    id: preview.id,
-    expectedRevision: null,
-    content: {
-      criteria: item.criteria,
-      verdict: "useful",
-      notes: "Synthetic test review, not an expert certification.",
-    },
-  });
-  const input = {
-    id: randomUUID(),
-    draftId: draft.id,
-    revision: draft.revision,
-    evaluationRevision: saved.evaluation.revision,
-    evidence: [{ id: preview.id, reviewRevision: review.revision }],
-    notes: "Synthetic approval. Pilot and expertise validation still required.",
-  };
-  return { draft: saved, preview, review, input, request };
-}
-
 test("an approval freezes selected teaching and reviewed evaluations, survives edits and retries without publishing", async () => {
   await using workspace = await workspaceFixture();
-  const { draft, preview, review, input } = await reviewedVersion(
+  const { draft, preview, review, input } = await reviewedCreatorVersion(
     workspace.actor
   );
   expect(
@@ -150,7 +86,7 @@ test("an approval freezes selected teaching and reviewed evaluations, survives e
 
 test("approval requires a live human owner and cannot leak a release across people or workspaces", async () => {
   await using workspace = await workspaceFixture();
-  const { draft, input } = await reviewedVersion(workspace.actor);
+  const { draft, input } = await reviewedCreatorVersion(workspace.actor);
   const release = await approveCreatorRelease(workspace.actor, input);
   for (const actor of [
     workspace.guest,
@@ -185,7 +121,9 @@ test("approval requires a live human owner and cannot leak a release across peop
 
 test("latest failed or unreviewed runs block approval instead of selecting an older good result", async () => {
   await using workspace = await workspaceFixture();
-  const { draft, input, request } = await reviewedVersion(workspace.actor);
+  const { draft, input, request } = await reviewedCreatorVersion(
+    workspace.actor
+  );
   const latest = await createCreatorPreview(workspace.actor, {
     ...request,
     id: randomUUID(),
@@ -209,7 +147,7 @@ test("latest failed or unreviewed runs block approval instead of selecting an ol
 
 test("stale review references are rejected and simultaneous response-loss retries create one immutable version", async () => {
   await using workspace = await workspaceFixture();
-  const { draft, preview, review, input } = await reviewedVersion(
+  const { draft, preview, review, input } = await reviewedCreatorVersion(
     workspace.actor
   );
   const changed = await saveCreatorPreviewReview(workspace.actor, {
@@ -253,9 +191,9 @@ test("stale review references are rejected and simultaneous response-loss retrie
 
 test("approved versions remain individually exportable only through the authorized former-account archive", async () => {
   await using workspace = await workspaceFixture();
-  const source = await reviewedVersion(workspace.personal);
+  const source = await reviewedCreatorVersion(workspace.personal);
   const release = await approveCreatorRelease(workspace.personal, source.input);
-  const foreign = await reviewedVersion(workspace.guestPersonal);
+  const foreign = await reviewedCreatorVersion(workspace.guestPersonal);
   const foreignRelease = await approveCreatorRelease(
     workspace.guestPersonal,
     foreign.input
@@ -309,9 +247,9 @@ test("approved versions remain individually exportable only through the authoriz
 
 test("approval storage is bounded and another owner's release identity cannot be overwritten", async () => {
   await using workspace = await workspaceFixture();
-  const source = await reviewedVersion(workspace.actor);
+  const source = await reviewedCreatorVersion(workspace.actor);
   const release = await approveCreatorRelease(workspace.actor, source.input);
-  const foreign = await reviewedVersion(workspace.guestPersonal);
+  const foreign = await reviewedCreatorVersion(workspace.guestPersonal);
   await expect(
     approveCreatorRelease(workspace.guestPersonal, {
       ...foreign.input,
