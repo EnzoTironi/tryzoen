@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { CircleCheck } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ActionButton } from "../button";
 import { pageStyles } from "../page";
@@ -18,6 +18,7 @@ export function GoalActivity({
   readonly revision: number;
   readonly cacheScope: string;
 }) {
+  const compact = useWindowDimensions().width < 720;
   const history = useInfiniteQuery({
     queryKey: ["goal-history", cacheScope, id, revision],
     queryFn: ({ pageParam }) => data.history(id, pageParam),
@@ -27,7 +28,10 @@ export function GoalActivity({
   const entries = history.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <View style={styles.section}>
-      <Text accessibilityRole="header" style={styles.heading}>
+      <Text
+        accessibilityRole="header"
+        style={[styles.heading, compact && styles.compactHeading]}
+      >
         Activity
       </Text>
       {history.isPending && (
@@ -69,12 +73,20 @@ export function GoalActivity({
             )}
             <View style={styles.entry}>
               <View style={styles.track}>
-                <CircleCheck size={18} strokeWidth={1.5} color="#008000" />
+                <CircleCheck
+                  size={compact ? 14 : 18}
+                  strokeWidth={1.5}
+                  color="#008000"
+                />
                 {index < entries.length - 1 && <View style={styles.line} />}
               </View>
               <View style={styles.copy}>
-                <Text style={styles.title}>{entry.title}</Text>
-                <Text style={styles.summary}>{entry.summary}</Text>
+                <Text style={[styles.title, compact && styles.compactCopy]}>
+                  {entry.title}
+                </Text>
+                <Text style={[styles.summary, compact && styles.compactCopy]}>
+                  {entry.summary}
+                </Text>
               </View>
             </View>
           </Fragment>
@@ -129,4 +141,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   summary: { color: colors.muted, fontSize: 15, lineHeight: 21 },
+  compactHeading: { fontSize: 18 },
+  compactCopy: { fontSize: 14, lineHeight: 19 },
 });

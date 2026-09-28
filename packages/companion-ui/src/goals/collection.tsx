@@ -8,6 +8,7 @@ import {
 import { Goals } from "../goals";
 import { GoalRow } from "./row";
 import { GoalDetail } from "./detail";
+import { GoalActions } from "./actions";
 
 export interface GoalsData {
   preferences: () => Promise<z.infer<typeof goalPreferencesSchema>>;
@@ -54,6 +55,7 @@ export function GoalCollection({
   readonly onPrompt: (prompt: string) => void;
 }) {
   const [selected, setSelected] = useState<string>();
+  const [actions, setActions] = useState<string>();
   const queryClient = useQueryClient();
   const preferences = useQuery({
     queryKey: ["goal-preferences", cacheScope],
@@ -82,6 +84,10 @@ export function GoalCollection({
     },
   });
   const current = goals.data?.find((goal) => goal.id === selected);
+  const target = goals.data?.find((goal) => goal.id === actions);
+  const refresh = async () => {
+    await goals.refetch({ throwOnError: true });
+  };
   return (
     <>
       <Goals
@@ -109,6 +115,7 @@ export function GoalCollection({
         }}
         pendingId={complete.isPending ? complete.variables.id : undefined}
         onOpen={setSelected}
+        onOptions={setActions}
         onToggle={(id) => {
           const goal = goals.data?.find((item) => item.id === id);
           if (goal && !complete.isPending) complete.mutate(goal);
@@ -137,14 +144,27 @@ export function GoalCollection({
                 onToggle={() => {
                   if (!complete.isPending) complete.mutate(item);
                 }}
+                onOptions={() => {
+                  setActions(item.id);
+                }}
               />
             ))}
           cacheScope={cacheScope}
-          onChanged={async () => {
-            await goals.refetch();
-          }}
+          onChanged={refresh}
           onClose={() => {
             setSelected(undefined);
+          }}
+          onPrompt={onPrompt}
+        />
+      )}
+      {target && (
+        <GoalActions
+          key={target.id}
+          goal={target}
+          data={data}
+          onChanged={refresh}
+          onClose={() => {
+            setActions(undefined);
           }}
           onPrompt={onPrompt}
         />

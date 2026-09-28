@@ -1,20 +1,131 @@
+import { useRef, useState, type ComponentProps } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Pencil, PlusSquare, SquareCheck, Trash2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActionButton } from "../button";
 import { CompanionOverlay } from "../overlay";
+import { pageStyles } from "../page";
+import { CompanionSheet } from "../sheet";
 import { colors } from "../theme";
+import type { GoalDetail } from "./detail";
+import { GoalRename } from "./rename";
 
 export function GoalActions({
+  goal,
+  data,
+  onChanged,
+  onPrompt,
+  onClose,
+}: Pick<
+  ComponentProps<typeof GoalDetail>,
+  "goal" | "data" | "onChanged" | "onPrompt" | "onClose"
+>) {
+  // Keep the revision and receipt stable while this menu is open, including retries.
+  const [target] = useState(goal);
+  const [operations] = useState(() => ({
+    complete: data.newOperationId(),
+    delete: data.newOperationId(),
+  }));
+  const [view, setView] = useState<"menu" | "rename" | "delete">("menu");
+  const renameAttempt = useRef({ title: "", id: "" });
+  const change = useMutation({
+    mutationFn: (action: "complete" | "delete") =>
+      action === "complete"
+        ? data.complete(
+            target.id,
+            target.revision,
+            !target.completed,
+            operations.complete
+          )
+        : data.remove(target.id, target.revision, operations.delete),
+    onSuccess: async () => {
+      await onChanged();
+      onClose();
+    },
+  });
+  const close = () => {
+    if (!change.isPending) onClose();
+  };
+  if (view === "rename")
+    return (
+      <GoalRename
+        initialTitle={target.title}
+        onClose={onClose}
+        onSave={async (title) => {
+          if (renameAttempt.current.title !== title)
+            renameAttempt.current = { title, id: data.newOperationId() };
+          await data.rename(
+            target.id,
+            target.revision,
+            title,
+            renameAttempt.current.id
+          );
+          await onChanged();
+        }}
+      />
+    );
+  if (view === "delete")
+    return (
+      <CompanionSheet title="Delete this goal?" onClose={close}>
+        <Text style={pageStyles.rowTitle}>{target.title}</Text>
+        <Text style={pageStyles.copy}>
+          This removes the saved goal, its subgoals and their activity history.
+          Existing conversations and schedules are unchanged.
+        </Text>
+        {change.error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {change.error.message}
+          </Text>
+        )}
+        <ActionButton
+          disabled={change.isPending}
+          onPress={() => {
+            change.mutate("delete");
+          }}
+        >
+          Delete goal and history
+        </ActionButton>
+        <ActionButton quiet disabled={change.isPending} onPress={close}>
+          Keep goal
+        </ActionButton>
+      </CompanionSheet>
+    );
+  return (
+    <GoalActionMenu
+      completed={target.completed}
+      canAddSubgoal={!target.parentId}
+      pending={change.isPending}
+      error={change.error?.message}
+      onClose={close}
+      onAction={(action) => {
+        if (action === "complete") change.mutate(action);
+        else if (action === "subgoal") {
+          onClose();
+          onPrompt(
+            `Help me add a subgoal to “${target.title}” (workstream ID ${target.reference}). Read the parent first, ask what milestone I want, and save the agreed subgoal with parentId set to this parent. Do not create a schedule without discussing it.`
+          );
+        } else setView(action);
+      }}
+    />
+  );
+}
+
+function GoalActionMenu({
   completed,
   canAddSubgoal,
-  onAction,
+  pending,
+  error,
   onClose,
+  onAction,
 }: {
   readonly completed: boolean;
   readonly canAddSubgoal: boolean;
+  readonly pending: boolean;
+  readonly error?: string;
+  readonly onClose: () => void;
   readonly onAction: (
     action: "complete" | "subgoal" | "rename" | "delete"
   ) => void;
-  readonly onClose: () => void;
 }) {
   const actions = [
     {
@@ -39,17 +150,28 @@ export function GoalActions({
         />
         <View style={styles.sheet}>
           <View style={styles.handle} />
+          {error && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {error}
+            </Text>
+          )}
           {actions.map(({ id, label, icon: Icon }) => (
             <Pressable
               key={id}
               accessibilityRole="button"
+              disabled={pending}
+              accessibilityState={{ disabled: pending }}
               onPress={() => {
                 onAction(id);
               }}
-              style={[styles.row, id === "delete" && styles.destructive]}
+              style={[
+                styles.row,
+                id === "delete" && styles.destructive,
+                pending && styles.pending,
+              ]}
             >
               <Icon
-                size={22}
+                size={18}
                 strokeWidth={1.7}
                 color={id === "delete" ? colors.danger : colors.ink}
               />
@@ -76,6 +198,7 @@ const styles = StyleSheet.create({
     maxWidth: 740,
     padding: 24,
     paddingTop: 12,
+    paddingBottom: 24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: colors.canvas,
@@ -89,13 +212,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   row: {
-    minHeight: 56,
+    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
     paddingHorizontal: 8,
   },
-  label: { color: colors.ink, fontSize: 18 },
+  label: { color: colors.ink, fontSize: 16 },
   destructive: {
     marginTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -103,4 +226,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   danger: { color: colors.danger },
+  error: { color: colors.danger, fontSize: 14, marginBottom: 12 },
+  pending: { opacity: 0.5 },
 });

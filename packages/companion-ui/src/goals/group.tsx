@@ -11,6 +11,7 @@ export function GoalGroup({
   items,
   onOpen,
   onToggle,
+  onOptions,
   pendingId,
   showSubtitle,
 }: {
@@ -20,6 +21,7 @@ export function GoalGroup({
   readonly items: readonly ComponentProps<typeof GoalRow>["item"][];
   readonly onOpen: (id: string) => void;
   readonly onToggle: (id: string) => void;
+  readonly onOptions: (id: string) => void;
   readonly pendingId?: string;
   readonly showSubtitle: boolean;
 }) {
@@ -53,6 +55,9 @@ export function GoalGroup({
             }}
             onToggle={() => {
               onToggle(item.id);
+            }}
+            onOptions={() => {
+              onOptions(item.id);
             }}
           />
         ))}

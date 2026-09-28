@@ -13,6 +13,7 @@ export function Goals({
   items,
   onOpen,
   onToggle,
+  onOptions,
   onCreate,
   pendingId,
   preferences,
@@ -24,6 +25,7 @@ export function Goals({
   readonly items: readonly ComponentProps<typeof GoalRow>["item"][];
   readonly onOpen: (id: string) => void;
   readonly onToggle: (id: string) => void;
+  readonly onOptions: (id: string) => void;
   readonly onCreate: (category: string) => void;
   readonly pendingId?: string;
   readonly preferences: ComponentProps<typeof GoalOptions>["preferences"];
@@ -45,6 +47,7 @@ export function Goals({
   const rowProps = {
     onOpen,
     onToggle,
+    onOptions,
     pendingId,
     showSubtitle: preferences.showSubtitles,
   };
@@ -113,6 +116,9 @@ export function Goals({
               }}
               onToggle={() => {
                 onToggle(item.id);
+              }}
+              onOptions={() => {
+                onOptions(item.id);
               }}
             />
           ))}

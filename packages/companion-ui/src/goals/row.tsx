@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Check, ChevronRight } from "lucide-react-native";
+import { Check, ChevronRight, Ellipsis } from "lucide-react-native";
+import { IconButton } from "../icon-button";
 import { pageStyles } from "../page";
 import { colors } from "../theme";
 
@@ -8,6 +9,7 @@ export function GoalRow({
   pending,
   onOpen,
   onToggle,
+  onOptions,
   showSubtitle = true,
 }: {
   readonly item: {
@@ -22,6 +24,7 @@ export function GoalRow({
   readonly showSubtitle?: boolean;
   readonly onOpen: () => void;
   readonly onToggle: () => void;
+  readonly onOptions?: () => void;
 }) {
   return (
     <View style={[pageStyles.row, item.parentId && styles.subgoal]}>
@@ -50,7 +53,16 @@ export function GoalRow({
           <Text style={pageStyles.copy}>{item.description}</Text>
         ) : null}
       </Pressable>
-      <ChevronRight size={16} color={colors.muted} />
+      {onOptions ? (
+        <IconButton
+          icon={Ellipsis}
+          label={`Actions for ${item.title}`}
+          disabled={pending}
+          onPress={onOptions}
+        />
+      ) : (
+        <ChevronRight size={16} color={colors.muted} />
+      )}
     </View>
   );
 }

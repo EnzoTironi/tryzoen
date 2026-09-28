@@ -5,10 +5,20 @@ export interface CompanionOverlayProps {
   readonly title: string;
   readonly children: ReactNode;
   readonly onClose: () => void;
+  readonly focusOnOpen?: () => void;
 }
-function renderNativeOverlay({ children, onClose }: CompanionOverlayProps) {
+function renderNativeOverlay({
+  children,
+  onClose,
+  focusOnOpen,
+}: CompanionOverlayProps) {
   return (
-    <Modal transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      onShow={focusOnOpen}
+    >
       {children}
     </Modal>
   );
