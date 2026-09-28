@@ -1,22 +1,14 @@
 import { useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, TextInput } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { DocumentEditor } from "../document-editor";
 import { pageStyles } from "../page";
-import type { creatorDraftSchema, creatorPreviewSchema } from "./schema";
+import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
-const statusLabels = {
-  pending: "Waiting to start…",
-  running: "Trying your playbook…",
-  completed: "Response saved",
-  failed: "The model could not complete this preview. Try a new preview.",
-  expired:
-    "No response was saved before the five-minute deadline. Try a new preview.",
-};
+import { CreatorPreviewResult } from "./preview-result";
 
 export function CreatorPreviews({
   draft,
@@ -30,10 +22,7 @@ export function CreatorPreviews({
   readonly onClose: () => void;
 }) {
   const [question, setQuestion] = useState("");
-  const [selected, setSelected] =
-    useState<z.infer<typeof creatorPreviewSchema>>();
   const requestId = useRef<string | undefined>(undefined);
-  const download = useMutation({ mutationFn: data.exportPreview });
   const previews = useQuery({
     queryKey: ["creator-previews", cacheScope, draft.id],
     queryFn: () => data.previews(draft.id),
@@ -113,11 +102,6 @@ export function CreatorPreviews({
           {mutation.error.message} Any accepted request will appear below.
         </Text>
       )}
-      {download.error && (
-        <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The preview could not be exported. Try again.
-        </Text>
-      )}
       {previews.isPending && (
         <Text style={pageStyles.copy}>Loading previews…</Text>
       )}
@@ -136,59 +120,18 @@ export function CreatorPreviews({
       </ActionButton>
       {!previews.isError &&
         previews.data?.map((preview) => (
-          <View key={preview.id} style={{ gap: 8, paddingVertical: 12 }}>
-            <Text style={pageStyles.rowTitle}>{preview.question}</Text>
-            <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
-              {statusLabels[preview.status]}
-            </Text>
-            <Text style={pageStyles.copy}>
-              {new Date(preview.createdAt).toLocaleString()} ·{" "}
-              {preview.revision === draft.revision
-                ? "Current saved version"
-                : "Earlier saved version"}
-            </Text>
-            {preview.response !== null && (
-              <ActionButton
-                quiet
-                onPress={() => {
-                  setSelected(preview);
-                }}
-              >
-                Read response
-              </ActionButton>
-            )}
-            <ActionButton
-              quiet
-              disabled={download.isPending}
-              onPress={() => {
-                download.mutate(preview.id);
-              }}
-            >
-              Export preview and sources
-            </ActionButton>
-          </View>
+          <CreatorPreviewResult
+            key={preview.id}
+            preview={preview}
+            currentRevision={draft.revision}
+            data={data}
+            onRefresh={previews.refetch}
+          />
         ))}
       {previews.data?.length === 0 && (
         <Text style={pageStyles.copy}>
           No previews yet. Start with a situation your specialist should handle.
         </Text>
-      )}
-      {selected?.response && (
-        <DocumentEditor
-          title="Preview response"
-          label="Specialist preview response"
-          initialText={selected.response}
-          maxLength={32000}
-          description={`${selected.question}\n\nSaved ${new Date(selected.createdAt).toLocaleString()} · ${selected.revision === draft.revision ? "Current saved version" : "Earlier saved version"}. This is a private preview, not a verified outcome.`}
-          markdown
-          readOnly
-          onSave={async () => {
-            throw new Error("Preview results are read-only.");
-          }}
-          onClose={() => {
-            setSelected(undefined);
-          }}
-        />
       )}
     </CompanionSheet>
   );

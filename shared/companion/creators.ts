@@ -6,6 +6,7 @@ import {
   creatorPreviewSchema,
   creatorPreviewListSchema,
   creatorPreviewExportSchema,
+  creatorPreviewReviewSchema,
 } from "@zoen/companion-ui/creators";
 
 export function companionCreatorData(
@@ -22,6 +23,11 @@ export function companionCreatorData(
 ): CreatorStudioData {
   return {
     newId,
+    async reviewPreview(input) {
+      return creatorPreviewReviewSchema.parse(
+        await rpc.mutation("workspaces.creators.reviewPreview", input)
+      );
+    },
     async exportPreview(id) {
       const preview = creatorPreviewExportSchema.parse(
         await rpc.query("workspaces.creators.exportPreview", { id })

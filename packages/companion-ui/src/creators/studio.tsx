@@ -14,6 +14,8 @@ import type {
   creatorDraftStateSchema,
   creatorPreviewRequestSchema,
   creatorPreviewListSchema,
+  creatorPreviewReviewSaveSchema,
+  creatorPreviewReviewSchema,
 } from "./schema";
 
 export interface CreatorStudioData {
@@ -27,6 +29,9 @@ export interface CreatorStudioData {
   ) => Promise<z.infer<typeof creatorDraftSchema>>;
   exportDraft: (id: string) => Promise<void>;
   exportPreview: (id: string) => Promise<void>;
+  reviewPreview: (
+    input: z.infer<typeof creatorPreviewReviewSaveSchema>
+  ) => Promise<z.infer<typeof creatorPreviewReviewSchema>>;
   preview: (
     input: z.infer<typeof creatorPreviewRequestSchema>
   ) => Promise<void>;

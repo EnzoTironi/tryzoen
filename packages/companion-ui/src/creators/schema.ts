@@ -58,12 +58,31 @@ export const creatorPreviewRequestSchema = z.strictObject({
   question: z.string().trim().min(1).max(4000),
 });
 
+export const creatorPreviewReviewContentSchema = z.strictObject({
+  criteria: z.string().trim().min(1).max(4000),
+  verdict: z.enum(["useful", "needs-revision", "unsafe-or-unsupported"]),
+  notes: z.string().trim().min(1).max(8000),
+});
+
+export const creatorPreviewReviewSchema = z.strictObject({
+  revision: z.uuid(),
+  content: creatorPreviewReviewContentSchema,
+  updatedAt: z.number(),
+});
+
+export const creatorPreviewReviewSaveSchema = z.strictObject({
+  id: z.uuid(),
+  expectedRevision: z.uuid().nullable(),
+  content: creatorPreviewReviewContentSchema,
+});
+
 export const creatorPreviewSchema = creatorPreviewRequestSchema.extend({
   title: z.string().min(1).max(80),
   status: z.enum(["pending", "running", "completed", "failed", "expired"]),
   response: z.string().max(32000).nullable(),
   createdAt: z.number(),
   expiresAt: z.number(),
+  review: creatorPreviewReviewSchema.nullable(),
 });
 
 export const creatorPreviewListSchema = z.array(creatorPreviewSchema).max(20);

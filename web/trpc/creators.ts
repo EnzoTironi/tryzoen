@@ -9,7 +9,13 @@ import {
   creatorPreviewSchema,
   creatorPreviewListSchema,
   creatorPreviewExportSchema,
+  creatorPreviewReviewSaveSchema,
+  creatorPreviewReviewSchema,
 } from "@zoen/companion-ui/creators";
+import {
+  CreatorReviewConflict,
+  saveCreatorPreviewReview,
+} from "../../server/creators/reviews";
 import {
   CreatorDraftConflict,
   listCreatorDrafts,
@@ -26,6 +32,20 @@ import {
 } from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  reviewPreview: workspaceProcedure
+    .input(creatorPreviewReviewSaveSchema)
+    .output(creatorPreviewReviewSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, async () => {
+        try {
+          return await saveCreatorPreviewReview(ctx.actor, input);
+        } catch (error) {
+          if (error instanceof CreatorReviewConflict)
+            throw new TRPCError({ code: "CONFLICT", message: error.message });
+          throw error;
+        }
+      })
+    ),
   exportPreview: workspaceProcedure
     .input(z.strictObject({ id: z.uuid() }))
     .output(creatorPreviewExportSchema)

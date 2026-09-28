@@ -250,3 +250,55 @@ wrapper similarity, component length and recent ownership changes. No findings
 were suppressed. The unused-code check passes; the scanner does not recognize
 the shared editor's JSX usage. This checkpoint does not qualify physical devices,
 production deployment, dreams, public marketplace releases or million-user load.
+
+## Creator review of private previews — 2026-09-28
+
+Migration 0072 adds one editable review to each completed preview. The creator
+writes explicit criteria and explanatory notes in the shared visual Markdown
+editor and chooses useful, needs revision, or unsafe/unsupported. The review has
+its own revision and saved timestamp. It belongs to the original preview's frozen
+playbook version, question and response; later draft edits or archival do not
+rebind it. Reading a response cannot edit it, and saving feedback cannot publish
+or change the playbook. Criteria here are written after a preview; this is not a
+held-out, blinded or independently scored release evaluation.
+
+The backend rechecks live human session and person/workspace ownership. Only a
+completed preview accepts feedback. Owner serialization and revision checks
+reject competing or stale updates; a lost-response retry succeeds without a new
+revision only while its exact content is still current. Criteria are limited to
+4,000 characters and notes to 8,000, with one current review per retained preview.
+This does not retain a history of overwritten reviews. Database constraints keep
+the payload bounded and disallow reviews on incomplete responses. Membership
+removal cascades the review with its preview. The existing individual preview
+export now includes the current review and its revision; former-account archive
+export still needs explicit preview support.
+
+The shared result card owns response reading, review and export. Desktop uses a
+modal and mobile a sheet, with the full visual editor for criteria and notes.
+An opening review retains its own revision while background refresh occurs;
+failed saves keep the local draft and closing a changed review offers to keep it.
+Four isolated review tests cover ownership, revoked sessions, immutable source
+preservation, exact retries, concurrent/stale edits, incomplete previews, input
+bounds, the database constraint and membership deletion. Together with the
+existing preview and native Eve cases, ten isolated runtime tests pass.
+
+All nine workspace checks pass, including 1,323 general tests in 205 files. The
+production build, migration-chain check and Expo web/iOS/Android export pass.
+Migration 0072 was applied only to the local review and isolated test databases.
+Chrome saved clearly labeled synthetic feedback on the fictional Cedarbay case,
+reopened its formatted notes and checked the downloaded JSON. A blocked save
+kept the changed verdict and displayed an error; the interception was removed and
+the unsaved test change discarded. No production deployment was performed.
+
+The structural pass still flags two gating findings for the short typed RPC
+adapter pattern. It also reports the new review's component length and complexity
+(17), and fails to recognize JSX reachability. No findings were suppressed; the
+unused-code check passes. These findings are not a clean structural gate.
+
+Still required: a separate held-out case set with predeclared criteria,
+model/version provenance, measured execution latency and cost, immutable release
+reviews, creator-approved synthesis, publishing/discovery, entitlements,
+withdrawal, outcomes and native-device/production qualification.
+
+The desktop/mobile/editor and failure-state screenshots are attached with
+`gh --attach` to [PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5867136130).

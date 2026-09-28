@@ -16,9 +16,11 @@ import {
 
 const projection = sql`id, draft_id AS "draftId", revision, question, snapshot->>'title' AS title,
   CASE WHEN status IN ('pending', 'running') AND expires_at <= now() THEN 'expired' ELSE status END AS status,
-  response, extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt"`;
+  response, extract(epoch FROM created_at)::float8 * 1000 AS "createdAt", extract(epoch FROM expires_at)::float8 * 1000 AS "expiresAt",
+  CASE WHEN review IS NULL THEN NULL ELSE jsonb_build_object('revision', review_revision, 'content', review,
+    'updatedAt', extract(epoch FROM reviewed_at)::float8 * 1000) END AS review`;
 
-async function requirePreview(
+export async function requirePreview(
   actor: z.infer<typeof WorkspaceActorSchema>,
   id: string
 ) {
