@@ -4,7 +4,7 @@ import * as Output from "alchemy/Output";
 import { adopt } from "alchemy/AdoptPolicy";
 import { retain } from "alchemy/RemovalPolicy";
 import { Random } from "alchemy/Random";
-import { Config, Effect, Redacted } from "effect";
+import { Config, Effect, Redacted, Schema } from "effect";
 import { CompanionStagePolicy } from "./companion-stage.ts";
 import { releaseImage } from "./images.ts";
 import { production } from "./production.ts";
@@ -28,9 +28,14 @@ export const hosted = Effect.gen(function* () {
   const region = production.region;
   const pgName = prod ? production.database.app : `zoen-pg-${policy.stage}`;
   const webName = prod ? production.web.app : `zoen-${policy.stage}`;
-  const memoryName = prod
-    ? production.memory.app
-    : `zoen-memory-${policy.stage}`;
+  // Production must attach the already verified/imported memory volume. An empty
+  // replacement must never silently hide records from the previous installation.
+  const memoryVolume = prod
+    ? yield* Config.schema(
+        Schema.String.check(Schema.isPattern(/^vol_[a-z0-9]+$/)),
+        "ZOEN_FILE_MEMORY_VOLUME_ID"
+      )
+    : undefined;
   const hostname = prod ? production.hostname : `${webName}.fly.dev`;
   const appHostname = prod ? production.appHostname : hostname;
   const appOrigin = `https://${appHostname}`;
@@ -41,10 +46,6 @@ export const hosted = Effect.gen(function* () {
   }).pipe(adopt(prod), retain(true));
   const webApp = yield* Fly.App("WebApp", {
     name: webName,
-    orgSlug: production.organization,
-  }).pipe(adopt(prod), retain(true));
-  const memoryApp = yield* Fly.App("MemoryApp", {
-    name: memoryName,
     orgSlug: production.organization,
   }).pipe(adopt(prod), retain(true));
   const matrixSecrets = yield* provisionMatrix({
@@ -100,14 +101,6 @@ export const hosted = Effect.gen(function* () {
     applicationCredential.digest,
     migrationCredential.digest
   ).pipe(Output.map((values) => values.join(":")));
-  const memoryPassword = yield* Random("MemoryDatabasePassword", {
-    bytes: 32,
-  }).pipe(retain(true));
-  const memoryBootstrapPassword = yield* Fly.Secret("MemoryBootstrapPassword", {
-    app: postgresApp,
-    name: "ZOEN_MEMORY_DATABASE_PASSWORD",
-    value: memoryPassword.text,
-  }).pipe(retain(true));
   const preUpgradeSnapshot = prod
     ? yield* Fly.VolumeSnapshot("BeforePgBackRest", {
         app: postgresApp,
@@ -121,7 +114,7 @@ export const hosted = Effect.gen(function* () {
     region,
     count: 1,
     existingMachineIds: prod ? [production.database.machine] : undefined,
-    existingVolumeIds: prod
+    existingVolumeIds: memoryVolume
       ? { "/data": production.database.volume }
       : undefined,
     image: pgImage,
@@ -158,9 +151,6 @@ export const hosted = Effect.gen(function* () {
       "zoen.secret": pgSecret.digest.pipe(Output.map((value) => value ?? "")),
       "zoen.backups": backupVersion,
       "zoen.application-roles": applicationCredentialVersion,
-      "zoen.memory-password": memoryBootstrapPassword.digest.pipe(
-        Output.map((value) => value ?? "")
-      ),
       "zoen.matrix-password": matrixSecrets.databaseVersion,
       "zoen.whatsapp-password": whatsappSecrets.databaseVersion,
       "zoen.vault-password": vaultSecrets.databaseVersion.pipe(
@@ -178,7 +168,6 @@ export const hosted = Effect.gen(function* () {
     release: pgImage,
     credentialVersion: Output.all(
       applicationCredentialVersion,
-      memoryBootstrapPassword.digest,
       matrixSecrets.databaseVersion,
       whatsappSecrets.databaseVersion,
       vaultSecrets.databaseVersion
@@ -208,54 +197,6 @@ export const hosted = Effect.gen(function* () {
     issuer: `${appOrigin}/api/auth`,
     databaseRelease: databases.release,
   });
-
-  const memoryDatabaseSecret = yield* Fly.Secret("MemoryDatabaseUrl", {
-    app: memoryApp,
-    name: "ZOEN_MEMORY_DATABASE_URL",
-    value: Output.all(memoryPassword.text, databases.host).pipe(
-      Output.map(([value, host]) =>
-        Redacted.make(
-          `postgresql://zoen_memory:${encodeURIComponent(Redacted.value(value))}@${host}:5432/zoen_memory`
-        )
-      )
-    ),
-  }).pipe(retain(true));
-
-  const memorySecrets = yield* appSecrets("Memory", memoryApp, [
-    "OPENROUTER_API_KEY",
-    "ZOEN_MEM0_API_KEY",
-  ]);
-  const memoryImage = yield* releaseImage("Memory", memoryName, "./memory");
-  const memory = yield* Fly.Machine("Memory", {
-    app: memoryApp,
-    name: prod ? production.memory.name : "memory",
-    region,
-    count: 1,
-    existingMachineIds: prod ? [production.memory.machine] : undefined,
-    image: memoryImage,
-    guest: { cpuKind: "shared", cpus: 1, memoryMb: 1024 },
-    env: { MEM0_TELEMETRY: "false" },
-    services: [],
-    checks: {
-      health: {
-        type: "http",
-        port: 8000,
-        method: "GET",
-        path: "/health",
-        interval: "30s",
-        timeout: "5s",
-        grace_period: "1m30s",
-      },
-    },
-    restart: { policy: "always" },
-    metadata: {
-      "zoen.secrets": memorySecrets,
-      "zoen.database": memoryDatabaseSecret.digest.pipe(
-        Output.map((value) => value ?? "")
-      ),
-      "zoen.database-ready": databases.release,
-    },
-  }).pipe(retain(true));
 
   const webSecrets = yield* appSecrets("Web", webApp, webSecretNames);
   const erasureJournal = yield* provisionErasureJournal(webApp, policy.stage);
@@ -288,8 +229,11 @@ export const hosted = Effect.gen(function* () {
     name: prod ? production.web.name : "web",
     region,
     count: 1,
-    existingVolumeIds: prod
-      ? { "/root/.eve/auth": production.web.authVolume }
+    existingVolumeIds: memoryVolume
+      ? {
+          "/root/.eve/auth": production.web.authVolume,
+          "/var/lib/zoen": memoryVolume,
+        }
       : undefined,
     image: webImage,
     guest: { cpuKind: "shared", cpus: 2, memoryMb: 2048 },
@@ -313,13 +257,22 @@ export const hosted = Effect.gen(function* () {
       BETTER_AUTH_URL: appOrigin,
       COMPANION_PUBLIC_BASE_URL: appOrigin,
       WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:3000",
-      ZOEN_MEM0_URL: `http://${memoryName}.internal:8000`,
+      ZOEN_AI_MEMORY_BINARY: "/usr/local/bin/ai-memory",
+      ZOEN_SESSION_ARCHIVE_DIR: "/var/lib/zoen/memory",
       ZOEN_MATRIX_URL: `http://${matrixSecrets.name}.internal:8008`,
       ZOEN_MATRIX_SERVER_NAME: matrixServerName,
       ZOEN_WHATSAPP_BRIDGE_URL: `http://${whatsappSecrets.name}.internal:29318`,
       ZOEN_VAULTWARDEN_URL: `https://${vaultSecrets.hostname}`,
     },
     mounts: [
+      {
+        path: "/var/lib/zoen",
+        name: "file_memory",
+        sizeGb: 10,
+        encrypted: true,
+        autoBackupEnabled: true,
+        snapshotRetention: 14,
+      },
       {
         path: "/root/.eve/auth",
         name: "model_auth",
@@ -417,7 +370,7 @@ export const hosted = Effect.gen(function* () {
     url: appOrigin,
     marketingUrl: `https://${prod ? production.marketingHostname : hostname}`,
     postgres: postgres.machineId,
-    memory: memory.machineId,
+    memory: "File memory on the retained web volume",
     matrix: matrix.machineId,
     whatsapp: whatsapp.machineId,
     vaultwarden: vaultwarden.machineId,

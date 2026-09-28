@@ -1,7 +1,7 @@
 import * as Machines from "@distilled.cloud/fly-io/machines";
 import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import { NodeRuntime } from "@effect/platform-node";
-import { Config, Effect, Schema } from "effect";
+import { Config, Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { production } from "./production.ts";
 
@@ -31,32 +31,33 @@ const databaseCheck = Effect.gen(function* () {
       new Error("PostgreSQL backup or WAL archive health check failed")
     );
   yield* Effect.log(check.stdout ?? "Backup check passed");
-  // Probe the private memory endpoint from the database network using the
-  // same app-scoped operations token; it needs no user or memory credentials.
-  const memory = yield* Machines.execMachine({
-    app_name: production.database.app,
-    machine_id: production.database.machine,
-    command: [
-      "wget",
-      "-q",
-      "-T",
-      "15",
-      "-O",
-      "-",
-      `http://${production.memory.app}.internal:8000/health`,
-    ],
-    timeout: 20,
-  });
-  if (memory.exit_code !== 0)
-    return yield* Effect.fail(new Error("Private memory health check failed"));
-  const health = yield* Schema.decodeUnknownEffect(
-    Schema.fromJsonString(
-      Schema.Struct({
-        ok: Schema.Literal(true),
-        backend: Schema.Literal("mem0-pgvector"),
-      })
+  // File content lives on the paired web/Eve persistent volume. This verifies
+  // placement/version only; it is not a recall, restore or throughput proof.
+  const webs = yield* Machines.listMachines({ app_name: production.web.app });
+  const web = webs.find(
+    (candidate) =>
+      candidate.name === production.web.name && candidate.state === "started"
+  );
+  const volume = yield* Config.string("ZOEN_FILE_MEMORY_VOLUME_ID");
+  if (
+    !web?.id ||
+    !web.config?.mounts?.some(
+      (mount) => mount.path === "/var/lib/zoen" && mount.volume === volume
     )
-  )(memory.stdout ?? "");
+  )
+    return yield* Effect.fail(
+      new Error("File-memory volume placement is not verified")
+    );
+  const memory = yield* Machines.execMachine({
+    app_name: production.web.app,
+    machine_id: web.id,
+    command: ["/usr/local/bin/ai-memory", "--version"],
+    timeout: 10,
+  });
+  if (memory.exit_code !== 0 || memory.stdout?.trim() !== "ai-memory 2.4.1")
+    return yield* Effect.fail(
+      new Error("File-memory engine version is not qualified")
+    );
   const matrix = yield* Machines.execMachine({
     app_name: production.database.app,
     machine_id: production.database.machine,
@@ -93,7 +94,9 @@ const databaseCheck = Effect.gen(function* () {
     return yield* Effect.fail(
       new Error("Application database role isolation failed")
     );
-  return yield* Effect.log(health);
+  return yield* Effect.log(
+    "PostgreSQL roles, backup status and file-memory placement/version verified."
+  );
 });
 
 const vaultCheck = Effect.gen(function* () {

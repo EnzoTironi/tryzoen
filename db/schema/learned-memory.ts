@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   jsonb,
   pgTable,
   primaryKey,
@@ -9,12 +10,17 @@ import {
 } from "drizzle-orm/pg-core";
 import { workspaces } from "./workspaces";
 
-export const workspaceMemoryErasures = pgTable("workspace_memory_erasure", {
-  namespaceId: uuid("namespace_id").primaryKey(),
-  requestedAt: timestamp("requested_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const workspaceMemoryErasures = pgTable(
+  "workspace_memory_erasure",
+  {
+    namespaceId: uuid("namespace_id").primaryKey(),
+    ownerUserId: text("owner_user_id"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("workspace_memory_erasure_owner_idx").on(table.ownerUserId)]
+);
 
 export const workspaceMemoryNamespaces = pgTable(
   "workspace_memory_namespace",

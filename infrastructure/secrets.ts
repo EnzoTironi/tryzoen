@@ -13,7 +13,6 @@ export const webSecretNames = [
   "WORKFLOW_LOCAL_BASE_URL",
   "TELEGRAM_BOT_ID",
   "TELEGRAM_BOT_USERNAME",
-  "ZOEN_MEM0_URL",
   "MARKETING_IMESSAGE_NUMBER",
   "MARKETING_TELEGRAM_USERNAME",
   "MARKETING_WHATSAPP_NUMBER",
@@ -30,7 +29,6 @@ export const webSecretNames = [
   "OPENROUTER_API_KEY",
   "AI_GATEWAY_API_KEY",
   "CODEX_AUTH_JSON",
-  "ZOEN_MEM0_API_KEY",
 ] as const;
 
 /** Only vault digests enter Machine metadata; rotations restart the consumer with the new vault values. */

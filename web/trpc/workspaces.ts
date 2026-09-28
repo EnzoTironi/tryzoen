@@ -10,6 +10,7 @@ import {
   listReminders,
   readReminderHistory,
 } from "../../server/schedules/queries";
+import { learnedMemorySnapshotSchema } from "@shared/companion/learned-memory";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
@@ -167,16 +168,18 @@ export const workspacesRouter = {
         return await LearnedMemory.recover(ctx.actor);
       })
     ),
-    list: workspaceProcedure.query(({ ctx, signal }) =>
-      withSignal(signal, async () => {
-        return await LearnedMemory.read(ctx.actor, undefined, true);
-      })
-    ),
+    list: workspaceProcedure
+      .output(learnedMemorySnapshotSchema)
+      .query(({ ctx, signal }) =>
+        withSignal(signal, async () => {
+          return await LearnedMemory.read(ctx.actor, undefined, true);
+        })
+      ),
     write: workspaceProcedure
       .input(LearnedMemoryWriteSchema)
       .mutation(({ ctx, input, signal }) =>
         withSignal(signal, async () => {
-          return await LearnedMemory.write(ctx.actor, input, false);
+          return await LearnedMemory.write(ctx.actor, input);
         })
       ),
     setEnabled: workspaceProcedure

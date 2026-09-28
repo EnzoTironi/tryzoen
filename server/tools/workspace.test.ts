@@ -1,5 +1,4 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { Secret } from "@shared/environment/secret";
 import { invokeWorkspaceTool, readWorkspaceToolCatalog } from "./workspace";
 
 const configuration = vi.hoisted(() => ({ url: false, key: false }));
@@ -8,11 +7,11 @@ vi.mock("@shared/environment/env", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/environment/env")>()),
   env: {
     ...(await importOriginal<typeof import("@shared/environment/env")>()).env,
-    get ZOEN_MEM0_URL() {
-      return configuration.url ? "https://memory.test" : undefined;
+    get ZOEN_SESSION_ARCHIVE_DIR() {
+      return configuration.url ? "/synthetic/archive" : undefined;
     },
-    get ZOEN_MEM0_API_KEY() {
-      return configuration.key ? new Secret("test-key") : undefined;
+    get ZOEN_AI_MEMORY_BINARY() {
+      return configuration.key ? "/synthetic/ai-memory" : undefined;
     },
   },
 }));

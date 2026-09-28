@@ -1,6 +1,5 @@
 "use client";
 import { browserSessionClient } from "@web/eve/client";
-import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
   writeConversationDraft,
@@ -11,13 +10,10 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CompanionShell,
-  CompanionOverlayProvider,
-  MarkdownEditorProvider,
   SessionConversation,
   NewConversation,
   AttachmentProvider,
   type CompanionSection,
-  type MarkdownEditorProps,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
 import { getUntypedClient } from "@trpc/client";
@@ -37,14 +33,7 @@ import {
   ConnectedAgentHeader,
   ConnectedAgentName,
 } from "./agent-panel";
-import { renderWebCompanionOverlay } from "./overlay";
-const RichTextEditor = dynamic(
-  () => import("@web/components/markdown-editor/rich-text"),
-  {
-    ssr: false,
-  }
-);
-
+import { CompanionEditingProvider } from "./editing";
 const sections: readonly CompanionSection[] = [
   "chat",
   "search",
@@ -53,10 +42,6 @@ const sections: readonly CompanionSection[] = [
   "goals",
   "library",
 ];
-
-function renderMarkdownEditor(props: MarkdownEditorProps) {
-  return <RichTextEditor {...props} />;
-}
 
 export function ConnectedCompanion({
   sessionId,
@@ -114,106 +99,104 @@ export function ConnectedCompanion({
           Couldn’t open the draft. Allow storage for this site and try again.
         </p>
       )}
-      <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
-        <MarkdownEditorProvider value={renderMarkdownEditor}>
-          <AttachmentProvider
-            pick={pickBrowserAttachments}
-            save={saveBrowserAttachment}
-          >
-            <CompanionShell
-              section={section}
-              title={title ?? "Zoen"}
-              avatarUri="/marketing/zoen-avatar.webp"
-              agentName={<ConnectedAgentName />}
-              renderAgentHeader={(onEdit) => (
-                <ConnectedAgentHeader onEdit={onEdit} />
-              )}
-              renderAgentPanel={(tab, close) => (
-                <ConnectedAgentPanel
-                  tab={tab}
-                  onPrompt={(prompt) => {
-                    close();
-                    stagePrompt(prompt);
-                  }}
-                  onConversation={(id) => {
-                    close();
-                    openConversation(id);
-                  }}
-                />
-              )}
-              renderConversations={({ close, selected }) => (
-                <ConnectedSearch
-                  selectedId={sessionId}
-                  panel={{
-                    onClose: close,
-                  }}
-                  onConversation={(id) => {
-                    selected();
-                    openConversation(id);
-                  }}
-                />
-              )}
-              onNavigate={(nextSection) => {
-                if (nextSection === "settings") {
-                  setSettingsOpen(true);
-                  return;
-                }
-                navigate(
-                  `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
-                );
-              }}
-              onNewConversation={() => {
-                openConversation();
-              }}
-            >
-              {section !== "chat" ? (
-                <ConnectedSections
-                  section={section}
-                  onPrompt={stagePrompt}
-                  onConversation={openConversation}
-                />
-              ) : sessionId ? (
-                <SessionConversation
-                  key={`${draftScope}:${sessionId}`}
-                  reactions={reactions}
-                  cacheScope={draftScope}
-                  sessionId={sessionId}
-                  initialDraft={draft}
-                  client={browserSessionClient}
-                  onCopyText={(text) => navigator.clipboard.writeText(text)}
-                />
-              ) : (
-                <NewConversation
-                  key={token}
-                  client={browserSessionClient}
-                  avatarUri="/marketing/zoen-avatar.webp"
-                  save={(id, name) => saveChat({ sessionId: id, title: name })}
-                  initialDraft={draft}
-                  onCreated={(id, retainedDraft) => {
-                    const retainedToken = retainedDraft
-                      ? writeConversationDraft(draftScope, retainedDraft)
-                      : undefined;
-                    router.replace(
-                      workspaceHref(
-                        `/companion/${encodeURIComponent(id)}${retainedToken ? `?draft=${retainedToken}` : ""}`,
-                        workspaceId
-                      )
-                    );
-                  }}
-                />
-              )}
-            </CompanionShell>
-            {settingsOpen && (
-              <ConnectedSettings
-                onClose={() => {
-                  setSettingsOpen(false);
+      <CompanionEditingProvider>
+        <AttachmentProvider
+          pick={pickBrowserAttachments}
+          save={saveBrowserAttachment}
+        >
+          <CompanionShell
+            section={section}
+            title={title ?? "Zoen"}
+            avatarUri="/marketing/zoen-avatar.webp"
+            agentName={<ConnectedAgentName />}
+            renderAgentHeader={(onEdit) => (
+              <ConnectedAgentHeader onEdit={onEdit} />
+            )}
+            renderAgentPanel={(tab, close) => (
+              <ConnectedAgentPanel
+                tab={tab}
+                onPrompt={(prompt) => {
+                  close();
+                  stagePrompt(prompt);
                 }}
-                onPrompt={stagePrompt}
+                onConversation={(id) => {
+                  close();
+                  openConversation(id);
+                }}
               />
             )}
-          </AttachmentProvider>
-        </MarkdownEditorProvider>
-      </CompanionOverlayProvider>
+            renderConversations={({ close, selected }) => (
+              <ConnectedSearch
+                selectedId={sessionId}
+                panel={{
+                  onClose: close,
+                }}
+                onConversation={(id) => {
+                  selected();
+                  openConversation(id);
+                }}
+              />
+            )}
+            onNavigate={(nextSection) => {
+              if (nextSection === "settings") {
+                setSettingsOpen(true);
+                return;
+              }
+              navigate(
+                `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
+              );
+            }}
+            onNewConversation={() => {
+              openConversation();
+            }}
+          >
+            {section !== "chat" ? (
+              <ConnectedSections
+                section={section}
+                onPrompt={stagePrompt}
+                onConversation={openConversation}
+              />
+            ) : sessionId ? (
+              <SessionConversation
+                key={`${draftScope}:${sessionId}`}
+                reactions={reactions}
+                cacheScope={draftScope}
+                sessionId={sessionId}
+                initialDraft={draft}
+                client={browserSessionClient}
+                onCopyText={(text) => navigator.clipboard.writeText(text)}
+              />
+            ) : (
+              <NewConversation
+                key={token}
+                client={browserSessionClient}
+                avatarUri="/marketing/zoen-avatar.webp"
+                save={(id, name) => saveChat({ sessionId: id, title: name })}
+                initialDraft={draft}
+                onCreated={(id, retainedDraft) => {
+                  const retainedToken = retainedDraft
+                    ? writeConversationDraft(draftScope, retainedDraft)
+                    : undefined;
+                  router.replace(
+                    workspaceHref(
+                      `/companion/${encodeURIComponent(id)}${retainedToken ? `?draft=${retainedToken}` : ""}`,
+                      workspaceId
+                    )
+                  );
+                }}
+              />
+            )}
+          </CompanionShell>
+          {settingsOpen && (
+            <ConnectedSettings
+              onClose={() => {
+                setSettingsOpen(false);
+              }}
+              onPrompt={stagePrompt}
+            />
+          )}
+        </AttachmentProvider>
+      </CompanionEditingProvider>
     </div>
   );
 }

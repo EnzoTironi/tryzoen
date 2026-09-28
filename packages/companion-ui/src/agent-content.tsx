@@ -1,6 +1,8 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
+import { View } from "react-native";
+import { LearnedNotes, type LearnedNotesData } from "./learned-notes";
 import { PersonalMemory } from "./personal-memory";
 import { Upcoming, type UpcomingItem } from "./upcoming";
 import { ActionButton } from "./button";
@@ -12,6 +14,7 @@ import type { DocumentHistoryData } from "./document-history";
 
 /** Authenticated platform adapter. Data is already mapped for the shared views. */
 export interface AgentPanelData {
+  learned: LearnedNotesData;
   documentHistory: (path: string, cacheScope: string) => DocumentHistoryData;
   identity: () => Promise<{
     name: string;
@@ -211,12 +214,30 @@ export function PersonalMemorySection({
   ComponentProps<typeof AgentPanelContent>,
   "data" | "cacheScope" | "onPrompt"
 >) {
+  const [showLearned, setShowLearned] = useState(false);
   const memory = useQuery({
     queryKey: ["companion-personal-memory", cacheScope],
     queryFn: data.memory,
   });
+  if (showLearned)
+    return (
+      <View style={{ flex: 1 }}>
+        <ActionButton
+          quiet
+          onPress={() => {
+            setShowLearned(false);
+          }}
+        >
+          Back to personal memory
+        </ActionButton>
+        <LearnedNotes data={data.learned} cacheScope={cacheScope} />
+      </View>
+    );
   return (
     <PersonalMemory
+      onLearned={() => {
+        setShowLearned(true);
+      }}
       profile={memory.data?.profile ?? []}
       documents={memory.data?.documents ?? []}
       unresolved={memory.data?.unresolved ?? true}

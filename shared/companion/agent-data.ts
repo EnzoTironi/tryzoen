@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { learnedMemorySnapshotSchema } from "./learned-memory";
 import type { scheduleTimingSchema } from "../schedules/timing";
 import type { AgentPanelData } from "@zoen/companion-ui";
 import { personalMemorySnapshotSchema } from "../personal-memory/schema";
@@ -20,6 +21,54 @@ export function companionAgentData(
   newOperationId: () => string
 ): AgentPanelData {
   return {
+    learned: {
+      newOperationId,
+      async read() {
+        const snapshot = learnedMemorySnapshotSchema.parse(
+          await rpc.query("workspaces.memory.list")
+        );
+        return {
+          enabled: snapshot.enabled,
+          workspaceEnabled: snapshot.workspaceEnabled,
+          needsAttention: snapshot.needsAttention,
+          documents: snapshot.results.map((item) => ({
+            id: item.id,
+            title: "Learned memory",
+            text: item.memory,
+            updated: item.updatedAt
+              ? new Date(item.updatedAt).toLocaleString()
+              : "",
+          })),
+        };
+      },
+      async save(id, text, operationId) {
+        await rpc.mutation("workspaces.memory.write", {
+          action: id ? "update" : "remember",
+          memoryId: id,
+          text,
+          operationId,
+        });
+      },
+      async remove(id, operationId) {
+        await rpc.mutation("workspaces.memory.write", {
+          action: "delete",
+          memoryId: id,
+          operationId,
+        });
+      },
+      async clear(operationId) {
+        await rpc.mutation("workspaces.memory.write", {
+          action: "clear",
+          operationId,
+        });
+      },
+      async setEnabled(enabled) {
+        await rpc.mutation("workspaces.memory.setEnabled", { enabled });
+      },
+      async recover() {
+        await rpc.mutation("workspaces.memory.recover");
+      },
+    },
     documentHistory: (path, cacheScope) =>
       companionDocumentHistory(rpc, path, cacheScope),
     newOperationId,

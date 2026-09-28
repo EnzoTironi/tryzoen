@@ -1,6 +1,6 @@
 import { withSignal } from "../../../../../server/operations/async";
 import { SqlError } from "../../../../../db/queries";
-import { Mem0Error } from "../../../../../server/memory/mem0";
+import { FileMemoryError } from "../../../../../server/memory/ai-memory/mutations";
 import { AuthUnavailable } from "../../../../../db/services/auth/index";
 import { ZodError as SchemaError } from "zod";
 import { AccountArchiveMissing } from "../../../../../server/accounts/archives";
@@ -49,7 +49,7 @@ export async function GET(
     } catch (error) {
       if (
         error instanceof AuthUnavailable ||
-        error instanceof Mem0Error ||
+        error instanceof FileMemoryError ||
         error instanceof SqlError
       )
         return new Response("Archive unavailable", {

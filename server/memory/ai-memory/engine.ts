@@ -17,6 +17,7 @@ const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
 const supervisor = String.raw`
 const { spawn } = require('node:child_process');
 if (!process.connected) process.exit(1);
+process.umask(0o077);
 const [binary, ...args] = process.argv.slice(1);
 const child = spawn(binary, args, { stdio: ['ignore', 'ignore', 'pipe'] });
 let stopping = false;
@@ -41,12 +42,16 @@ child.once('exit', (code) => {
 });
 `;
 
-async function prepareSessionMemory(root: string, namespaceId: string) {
+async function prepareSessionMemory(
+  root: string,
+  namespaceId: string,
+  corpus: "ai-memory" | "learned-memory"
+) {
   const namespace = z.uuid().parse(namespaceId);
   await privateMemoryDirectory(root);
   const owner = join(root, namespace);
   await privateMemoryDirectory(owner);
-  const data = join(owner, "ai-memory");
+  const data = join(owner, corpus);
   await privateMemoryDirectory(data);
   const config = join(data, "config.toml");
   try {
@@ -213,14 +218,15 @@ async function deliverSessionBatch(
 }
 
 /** Operator-owned local worker. Never expose its URL, token, or generic MCP to a client/model. */
-export async function openSessionMemoryEngine(
+export async function openMemoryEngine(
   binary: string,
   root: string,
-  namespaceId: string
+  namespaceId: string,
+  corpus: "ai-memory" | "learned-memory"
 ) {
-  const data = await prepareSessionMemory(root, namespaceId);
+  const data = await prepareSessionMemory(root, namespaceId, corpus);
   const runtime = await launchSessionMemory(binary, data);
-  const client = new Client({ name: "zoen-session-memory", version: "1.0.0" });
+  const client = new Client({ name: "zoen-file-memory", version: "1.0.0" });
   const headers = { Authorization: `Bearer ${runtime.token}` };
   try {
     await client.connect(
@@ -230,6 +236,7 @@ export async function openSessionMemoryEngine(
       { timeout: 15_000 }
     );
     return {
+      data,
       client,
       deliver: (items: Parameters<typeof deliverSessionBatch>[2]) =>
         deliverSessionBatch(runtime.address, headers, items),

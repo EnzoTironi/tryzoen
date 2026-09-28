@@ -78,7 +78,6 @@ void test("waits for each bootstrap before starting the next shared-catalog muta
   assert.deepEqual(api.calls, [
     "pg_isready",
     "/usr/local/bin/bootstrap-application.sh",
-    "/usr/local/bin/bootstrap-memory.sh",
     "/usr/local/bin/bootstrap-matrix.sh",
     "/usr/local/bin/bootstrap-whatsapp.sh",
     "/usr/local/bin/bootstrap-vaultwarden.sh",
@@ -96,13 +95,7 @@ void test("pins the database endpoint to the prepared primary in each deployment
   );
 });
 
-for (const database of [
-  "application",
-  "memory",
-  "matrix",
-  "whatsapp",
-  "vaultwarden",
-]) {
+for (const database of ["application", "matrix", "whatsapp", "vaultwarden"]) {
   void test(`stops after ${database} fails and keeps command output private`, async () => {
     const failure = `/usr/local/bin/bootstrap-${database}.sh`;
     const api = databaseApi(async (command) =>

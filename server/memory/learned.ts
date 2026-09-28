@@ -12,7 +12,10 @@ import {
   requireWorkspaceAccess,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { LearnedMemoryItemSchema, Mem0 } from "./mem0";
+import { LearnedMemoryItemSchema } from "@shared/companion/learned-memory";
+import { FileMemory } from "./ai-memory/learned";
+import { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
+export { LearnedMemoryWriteSchema } from "@shared/companion/learned-memory";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 
 const namespaceSchema = z.object({
@@ -25,12 +28,6 @@ const namespaceSchema = z.object({
 const snapshotSchema = z.object({
   enabled: z.boolean(),
   results: z.array(LearnedMemoryItemSchema),
-});
-export const LearnedMemoryWriteSchema = z.object({
-  action: z.enum(["remember", "update", "delete", "clear"]),
-  operationId: z.string().min(1).max(256),
-  text: z.optional(z.string().min(1).max(8000)),
-  memoryId: z.optional(z.uuid()),
 });
 
 export class LearnedMemoryError extends Error {
@@ -53,7 +50,6 @@ export class LearnedMemoryError extends Error {
   }
 }
 
-const mem0 = Mem0;
 export const memoryNamespace = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   scopeKey?: string
@@ -108,7 +104,10 @@ export const LearnedMemory = {
           return await snapshotSchema.parseAsync(previous[0].snapshot);
         }
         const result = partition.enabled
-          ? await mem0.read(partition.id, query.slice(0, 8000) || undefined)
+          ? await FileMemory.read(
+              partition.id,
+              query.slice(0, 8000) || undefined
+            )
           : { results: [] };
         const value = { enabled: partition.enabled, results: result.results };
         await dbQuery(sql`INSERT INTO workspace_memory_recall (namespace_id, operation_id, snapshot)
@@ -140,7 +139,10 @@ export const LearnedMemory = {
             results: [],
             needsAttention: partition.pendingOperation !== null,
           };
-        const result = await mem0.read(partition.id, query?.slice(0, 8000));
+        const result = await FileMemory.read(
+          partition.id,
+          query?.slice(0, 8000)
+        );
         return {
           enabled: partition.enabled,
           workspaceEnabled: partition.workspaceEnabled,
@@ -157,11 +159,9 @@ export const LearnedMemory = {
   },
   write: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
-    raw: z.output<typeof LearnedMemoryWriteSchema>,
-    inferInput?: boolean
+    raw: z.output<typeof LearnedMemoryWriteSchema>
   ) {
     try {
-      const infer = inferInput ?? true;
       const input = await Promise.try(async () =>
         LearnedMemoryWriteSchema.parseAsync(raw)
       ).catch(() => {
@@ -178,10 +178,10 @@ export const LearnedMemory = {
       )
         throw new LearnedMemoryError({ reason: "invalid_input" });
       const hash = createHash("sha256")
-        .update(JSON.stringify({ input, infer }))
+        .update(JSON.stringify(input))
         .digest("hex");
       // Fence recall durably BEFORE crossing the service boundary. A timeout or
-      // database rollback after Mem0 accepts a deletion cannot expose old notes.
+      // database rollback after the file engine accepts a deletion cannot expose old notes.
       await withDatabaseTransaction(async () => {
         const partition = await memoryNamespace(actor);
         if (!partition.enabled && input.action === "remember")
@@ -208,14 +208,7 @@ export const LearnedMemory = {
           partition.pendingHash !== hash
         )
           throw new LearnedMemoryError({ reason: "stale_recall" });
-        const result = await mem0.mutate({
-          namespace: partition.id,
-          action: input.action,
-          operation_id: input.operationId,
-          text: input.text,
-          memory_id: input.memoryId,
-          infer,
-        });
+        const result = await FileMemory.mutate(partition.id, input);
         await dbQuery(
           sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${partition.id}`
         );
@@ -236,7 +229,7 @@ export const LearnedMemory = {
       const partition = await memoryNamespace(actor);
       // A fresh, successful service read completes before recall is unfenced.
       // Old operation receipts remain tombstoned; recovery never replays writes.
-      await mem0.read(partition.id);
+      await FileMemory.read(partition.id);
       await dbQuery(
         sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${partition.id}`
       );

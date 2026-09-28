@@ -2,7 +2,7 @@
 
 ## Accepted direction, 2026-09-28
 
-The user selected Muse's readable files and [Fabio Akita's ai-memory](https://github.com/akitaonrails/ai-memory), including persisted sessions, dreaming, relations and temporal recall. This supersedes the previous decision to retain Mem0 as the target learned-memory system. Mem0 and Eve's current profile adapter still run today; this document does not claim they have been replaced. Remove them with their complete replacement slices and callers, without a fallback or dual-write migration.
+The user selected Muse's readable files and [Fabio Akita's ai-memory](https://github.com/akitaonrails/ai-memory), including persisted sessions, dreaming, relations and temporal recall. This supersedes the previous decision to retain Mem0 as the target learned-memory system. The local learned-memory path now uses Akita as described below. The hosted installation has not been cut over; Eve's separate profile adapter remains. Remove them with their complete replacement slices and callers, without a fallback or dual-write migration.
 
 Eve continues to own execution, sessions and approvals. PostgreSQL owns Zoen accounts, grants, memberships and product records. Memory content becomes file-authoritative, with the upstream engine preferred over a TypeScript reimplementation of indexing, versioning, graph and consolidation. Shared web/Electron/Expo clients use authenticated product APIs and the existing visual Markdown editor.
 
@@ -112,3 +112,74 @@ The shared conversation menu now offers an archive download on web/Electron and 
 Each file is read under a fresh live membership/session/namespace check and matched against its durable digest and delivery receipt. The reader rejects symlinks, public file permissions, inconsistent segments and unowned sources. Memory pause permits the owner to download previously saved sources. Cancellation and revocation stop subsequent reads. Reads allocate at most 8 MiB per source file; requests have a 60-second deadline, a 10,000-directory-entry limit and a 128 MiB content limit. Exceeding a limit or encountering an invalid file fails the stream rather than claiming a complete download. Web creates a download only after receiving the complete response; native sharing uses Expo's file download and removes its temporary directory afterward. These limits do not prove aggregate capacity or backup recovery.
 
 Twelve isolated archive/database tests include owner and workspace isolation, segmented export, paused-memory export, revocation during streaming, cancellation and content tampering. Three native adapter tests cover authenticated download, cleanup after failure and unavailable sharing; they are not real-device proof. A synthetic Chrome download produced a 1,516-byte JSONL file with exactly four records from the Cedarbay session, including its accepted final reply. The missing-archive error and mobile/desktop menu layouts were inspected separately. `pnpm check` passed 1,323 tests across 205 files; `pnpm build` and Expo web/iOS/Android exports passed. The Expo results qualify bundles, not signed applications or device behavior. The structural review separated menu presentation and receipt verification from their callers; remaining findings include recent edits and small JSX/stream-lifecycle length overruns, with no suppression of findings.
+
+## Learned notes replacement — 2026-09-28
+
+The application learned-memory owner now calls Akita directly. The Mem0 HTTP
+adapter, application variables and service source have been removed. Native Eve
+save/recall/remove tools, workspace review/correction, shared web/Electron/Expo
+controls and merged-account export use the same owner. Profile notes remain a
+separate Eve surface. The learned-note editor uses the shared visual Markdown
+editor, including the existing `/space/memory` route.
+
+Each private namespace has a `learned-memory` engine directory alongside its
+`ai-memory` session corpus. Learned notes use `notes/<stable UUID>.md`. No raw
+conversation fallback is available in learned-note search. Zoen passes a fixed
+workspace/project, quotes at most 32 plain query terms and requests eight hits;
+ordinary reads require an authoritative Markdown file, rejecting derived-index
+fallback. Disk enumeration is bounded to 200 notes instead of silently truncating
+at upstream `memory_recent`'s 100-page ceiling. Notes contain at most 8,000
+characters. Upstream still owns indexing, Git versions and supersession.
+
+Content-free mutation receipts are fsynced before any side effect and atomically
+completed after the write/delete and Git checkpoint are verified. Their stable
+operation IDs survive restart and later deletion: replaying an old save cannot
+recreate a removed note, and replaying an old clear cannot erase newer notes.
+Interrupted receipts fail closed; existing Zoen recovery requires reviewing
+current notes and never blindly repeats the old write. There is a 10,000-receipt
+per-corpus bound. This is a bounded initial product limit, not a sharding or
+million-account capacity result.
+
+A correction supersedes the former version. Ordinary note removal deletes the
+live file and its indexed versions, including their `as_of` results, but retains
+Git history and external snapshots. UI copy states that distinction. Full
+namespace erasure removes both engine directories and raw source files. Migration
+0068 carries the erased namespace's owner into its durable receipt so the final
+successful removal can acknowledge the account's `file_memory` ledger entry.
+Historical `mem0` obligations remain pending; the new worker cannot certify an
+old external provider was purged. No production records were migrated or erased.
+
+The root Dockerfile downloads official 2.4.1 Linux assets with pinned SHA-256 and
+retains the MIT license. Native arm64 and emulated amd64 container checks verify
+Markdown/Git after engine restart, without network access or model credentials.
+The paired Next/Eve host requires a retained `/var/lib/zoen` volume; production
+configuration requires `ZOEN_FILE_MEMORY_VOLUME_ID` pointing to an already
+prepared, verified volume. Startup rejects an absent mount. This gate is not an
+import or backup-restore proof. Production cutover, historical reconstruction
+from backup, selective Git purging, exposed relation/temporal editing, full
+assistant ingestion and dreaming remain outstanding.
+
+### Verified learned-note checkpoint — 2026-09-28
+
+`pnpm check` passed 1,323 tests in 205 files and the application, desktop and
+mobile type checks; `pnpm build`, Expo web/iOS/Android exports and `pnpm db:check`
+passed. Thirty isolated runtime tests cover the real file engine, account
+deletion, owner separation, replay, correction, erasure and session capture.
+The upstream acceptance script passed its 17 contracts after the engine change;
+infrastructure types and 28 provider tests also passed.
+
+In Chrome on the local synthetic review account, a formatted Cedarbay note was
+saved, reopened and corrected. Both writes produced Git checkpoints. Pause and
+resume preserved the note. A new conversation
+`wrun_01M3KBZARM9VYECMDWJADWCJ9M` recalled Saturday at 10:00 and the newly added
+north entrance without those details appearing in its prompt. Desktop and
+390-pixel responsive editor screenshots record this flow. These are web evidence,
+not native-device or hosted-installation proofs.
+
+The shared companion exposes review, correction, pause, recovery and deletion
+controls. Both this entry point and `/space/memory` use the shared visual document
+editor; the latter's old plain-text Markdown editing form is removed. The
+structural quality report remains non-green: churn and wrapper-similarity findings
+were reviewed, while the new bounded filesystem discovery, mutation handling and
+note screen remain candidates for simplification. It is not a clean global
+quality or scale verdict.

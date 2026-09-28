@@ -19,7 +19,7 @@ const Provider = z.enum([
   "whatsapp",
   "vaultwarden",
   "matrix",
-  "mem0",
+  "file_memory",
   "kernel",
   "model",
 ]);
@@ -50,7 +50,8 @@ const live = {
   whatsapp: "No live mautrix or WhatsApp session in this environment.",
   vaultwarden: "No live Vaultwarden in this environment.",
   matrix: "No Synapse in this environment.",
-  mem0: "No live Mem0 journey in this environment.",
+  file_memory:
+    "Local Akita engine and ownership tests pass; hosted volume recovery and cutover remain unqualified.",
   kernel: "No Kernel browser session in this qualification run.",
   model: "Launch evals were listed, not executed against a live model.",
   load: "Closed-beta load, soak and burst were not measured.",
@@ -172,7 +173,7 @@ const rows: readonly QualificationRow[] = [
     "none",
     "tests/runtime/customer-connectors.integration.ts"
   ),
-  coordinator("workspace_memory_search", "mem0", learned),
+  coordinator("workspace_memory_search", "file_memory", learned),
   coordinator("workspace_ontology_read", "none", ontology),
   coordinator("workspace_google_mail_search", "google", google),
   coordinator("workspace_google_calendar_list", "google", google),
@@ -331,7 +332,7 @@ const rows: readonly QualificationRow[] = [
     advertised: false,
     fixture: fixture("integration", `${whatsapp}, ${vault}`),
     live: blocked(
-      "Fail-closed requireVaultwarden and requireWhatsAppBridge are proved. Live PostgreSQL/Mem0/worker kill was not injected in this run."
+      "Fail-closed requireVaultwarden and requireWhatsAppBridge are proved. Live PostgreSQL/file-memory/worker kill was not injected in this run."
     ),
   },
   {

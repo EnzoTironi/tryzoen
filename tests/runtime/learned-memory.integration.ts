@@ -1,46 +1,34 @@
-import { Secret } from "@shared/environment/secret";
-vi.mock("@shared/environment", async (original) => {
-  const actual = await original<typeof import("@shared/environment")>();
-  return {
-    ...actual,
-    env: {
-      ...actual.env,
-      ZOEN_MEM0_URL: "https://mem0.zoen.test",
-      ZOEN_MEM0_API_KEY: new Secret("synthetic-memory-key"),
-    },
-  };
-});
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
-import { jsonString } from "@shared/validation";
-import { z } from "zod";
 import { randomUUID } from "node:crypto";
-
-import { afterEach, expect, test, vi } from "vitest";
+import { rm } from "node:fs/promises";
+import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { LearnedMemory } from "../../server/memory/learned";
-
+import { FileMemory } from "../../server/memory/ai-memory/learned";
+import { FileMemoryError } from "../../server/memory/ai-memory/mutations";
+import * as sourceFiles from "../../server/memory/session-files";
 import { drainMemoryErasures } from "../../server/memory/erasure";
-
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { invokeWorkspaceTool } from "../../server/tools/workspace";
 import { workspaceFixture } from "./workspace-fixture";
 
-const requestSchema = jsonString(
-  z.object({
-    namespace: z.uuid(),
-    action: z.string(),
-    operation_id: z.optional(z.string()),
-  })
-);
-const network = () =>
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    const input = requestSchema.parse(init?.body);
-    return Response.json(
-      input.action === "list" || input.action === "search"
-        ? { results: [] }
-        : { ids: [] }
-    );
-  });
+const { directory } = await vi.hoisted(async () => {
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  return {
+    directory: await mkdtemp(path.join(tmpdir(), "zoen-learned-owner-")),
+  };
+});
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: { ...actual.env, ZOEN_SESSION_ARCHIVE_DIR: directory },
+  };
+});
+afterAll(() => rm(directory, { recursive: true, force: true }));
+afterEach(() => vi.restoreAllMocks());
 const run = async (
   body: (
     value: Awaited<ReturnType<typeof workspaceFixture>> & {
@@ -51,190 +39,130 @@ const run = async (
   await using workspace = await workspaceFixture();
   await body({ ...workspace, memory: LearnedMemory });
 };
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
-test("partitions personal/work memory and each member; forged workspace access never reaches Mem0", () => {
-  const backend = network();
-  return run(async ({ actor, guest, personal, memory }) => {
-    for (const person of [actor, guest, personal])
-      await memory.write(
-        person,
-        {
-          action: "remember",
-          text: "Synthetic preference",
-          operationId: randomUUID(),
-        },
-        false
-      );
-    const requests = backend.mock.calls.map(([, init]) =>
-      requestSchema.parse(init?.body)
-    );
-    expect(new Set(requests.map((request) => request.namespace)).size).toBe(3);
+test("partitions each person/workspace and rejects forged access before reaching the file engine", () =>
+  run(async ({ actor, guest, personal, memory }) => {
+    const writes = vi.spyOn(FileMemory, "mutate");
+    const reads = vi.spyOn(FileMemory, "read");
+    for (const [index, person] of [actor, guest, personal].entries()) {
+      await memory.write(person, {
+        action: "remember",
+        text: `Synthetic preference ${index}`,
+        operationId: randomUUID(),
+      });
+      expect(
+        (await memory.read(person)).results.map((item) => item.memory)
+      ).toEqual([`Synthetic preference ${index}`]);
+    }
     expect(
-      requests.every((request) => !request.namespace.includes(actor.userId))
-    ).toBe(true);
-    const denied = await Promise.try(async () =>
-      memory.read({ ...guest, workspaceId: personal.workspaceId })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!denied.ok && denied.error).toBeInstanceOf(WorkspaceAccessDenied);
-    expect(backend).toHaveBeenCalledTimes(3);
-  });
-});
-
-test("replay is stable, forget tombstones previous recalls, and a scope key cannot be rebound", () => {
-  const backend = network();
-  const fact = {
-    id: randomUUID(),
-    memory: "Synthetic old preference",
-    createdAt: null,
-    updatedAt: null,
-  };
-  return run(async ({ actor, memory }) => {
-    backend.mockResolvedValueOnce(Response.json({ results: [fact] }));
-    const first = await memory.recall(
-      actor,
-      "opaque-scope-one",
-      "recall-one",
-      "preference"
-    );
-    expect(first.results).toEqual([fact]);
+      new Set(writes.mock.calls.map(([namespace]) => namespace)).size
+    ).toBe(3);
     expect(
-      await memory.recall(
-        actor,
-        "opaque-scope-one",
-        "recall-one",
-        "changed query"
+      writes.mock.calls.every(
+        ([namespace]) => !namespace.includes(actor.userId)
       )
-    ).toEqual(first);
-    expect(backend).toHaveBeenCalledTimes(1);
-    await memory.write(actor, {
-      action: "delete",
-      memoryId: fact.id,
+    ).toBe(true);
+    await expect(
+      memory.read({ ...guest, workspaceId: personal.workspaceId })
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    expect(reads).toHaveBeenCalledTimes(3);
+  }));
+
+test("replay is stable, deletion invalidates earlier recalls, and an Eve scope cannot be rebound", () =>
+  run(async ({ actor, memory }) => {
+    const saved = await memory.write(actor, {
+      action: "remember",
+      text: "Synthetic preference: Cedarbay",
       operationId: randomUUID(),
     });
-    const stale = await Promise.try(async () =>
-      memory.recall(actor, "opaque-scope-one", "recall-one", "preference")
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
+    const first = await memory.recall(
+      actor,
+      "scope-one",
+      "recall-one",
+      "Cedarbay"
     );
-    expect(!stale.ok && stale.error).toMatchObject({
-      reason: "stale_recall",
-    });
+    expect(first.results[0]?.id).toBe(saved.ids[0]);
     expect(
-      (
-        await memory.recall(
-          actor,
-          "opaque-scope-one",
-          "recall-two",
-          "preference"
-        )
-      ).results
+      await memory.recall(actor, "scope-one", "recall-one", "changed query")
+    ).toEqual(first);
+    await memory.write(actor, {
+      action: "delete",
+      memoryId: saved.ids[0],
+      operationId: randomUUID(),
+    });
+    await expect(
+      memory.recall(actor, "scope-one", "recall-one", "Cedarbay")
+    ).rejects.toMatchObject({ reason: "stale_recall" });
+    expect(
+      (await memory.recall(actor, "scope-one", "recall-two", "Cedarbay"))
+        .results
     ).toEqual([]);
-    const rebound = await Promise.try(async () =>
-      memory.recall(actor, "forged-scope", "recall-three", "preference")
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!rebound.ok && rebound.error).toMatchObject({
-      reason: "invalid_input",
-    });
+    await expect(
+      memory.recall(actor, "forged-scope", "recall-three", "Cedarbay")
+    ).rejects.toMatchObject({ reason: "invalid_input" });
+    const reads = vi.spyOn(FileMemory, "read");
     await memory.setEnabled(actor, false);
-    const before = backend.mock.calls.length;
     expect(
-      await memory.recall(
-        actor,
-        "opaque-scope-one",
-        "recall-paused",
-        "preference"
-      )
+      await memory.recall(actor, "scope-one", "paused", "Cedarbay")
     ).toEqual({ enabled: false, results: [] });
-    expect(backend).toHaveBeenCalledTimes(before);
-  });
-});
+    expect(reads).not.toHaveBeenCalled();
+  }));
 
-test("an ambiguous deletion fences recall until an explicit clear acknowledges recovery", () => {
-  const backend = network();
-  return run(async ({ actor, memory }) => {
-    await memory.recall(actor, "scope", "before", "test");
-    backend.mockResolvedValueOnce(Response.json({}, { status: 503 }));
-    const failed = await Promise.try(async () =>
+test("an ambiguous deletion fences recall until explicit clear succeeds", () =>
+  run(async ({ actor, memory }) => {
+    const saved = await memory.write(actor, {
+      action: "remember",
+      text: "Cedarbay",
+      operationId: randomUUID(),
+    });
+    await memory.recall(actor, "scope", "before", "Cedarbay");
+    vi.spyOn(FileMemory, "mutate").mockRejectedValueOnce(
+      new FileMemoryError("unavailable")
+    );
+    await expect(
       memory.write(actor, {
         action: "delete",
-        memoryId: randomUUID(),
+        memoryId: saved.ids[0],
         operationId: "uncertain-delete",
       })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!failed.ok && failed.error).toMatchObject({
-      _tag: "Mem0Error",
-    });
-    const fenced = await Promise.try(async () =>
-      memory.recall(actor, "scope", "after", "test")
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!fenced.ok && fenced.error).toMatchObject({
-      reason: "stale_recall",
-    });
-    const unrelated = await Promise.try(async () =>
+    ).rejects.toBeInstanceOf(FileMemoryError);
+    await expect(
+      memory.recall(actor, "scope", "after", "Cedarbay")
+    ).rejects.toMatchObject({ reason: "stale_recall" });
+    await expect(
       memory.write(actor, {
         action: "remember",
         text: "New fact",
         operationId: "new-write",
       })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!unrelated.ok && unrelated.error).toMatchObject({
-      reason: "stale_recall",
-    });
-    expect(backend).toHaveBeenCalledTimes(2);
+    ).rejects.toMatchObject({ reason: "stale_recall" });
     await memory.write(actor, {
       action: "clear",
       operationId: "explicit-recovery",
     });
     expect((await memory.read(actor)).needsAttention).toBe(false);
     expect(
-      (await memory.recall(actor, "scope", "recovered", "test")).results
+      (await memory.recall(actor, "scope", "recovered", "Cedarbay")).results
     ).toEqual([]);
-  });
-});
+  }));
 
-test("recovery verifies current memory without replaying an uncertain mutation or restoring old recalls", () => {
-  const backend = network();
-  return run(async ({ actor, memory }) => {
-    await memory.recall(actor, "scope", "before", "test");
-    backend.mockResolvedValueOnce(Response.json({}, { status: 503 }));
-    await Promise.try(async () =>
+test("recovery verifies current files without replaying an uncertain mutation or restoring stale recalls", () =>
+  run(async ({ actor, memory }) => {
+    await memory.recall(actor, "scope", "before", "Cedarbay");
+    const writes = vi
+      .spyOn(FileMemory, "mutate")
+      .mockRejectedValueOnce(new FileMemoryError("unavailable"));
+    await expect(
       memory.write(actor, {
         action: "remember",
-        text: "Uncertain fact",
+        text: "Cedarbay",
         operationId: "uncertain-write",
       })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
+    ).rejects.toBeInstanceOf(FileMemoryError);
+    vi.spyOn(FileMemory, "read").mockRejectedValueOnce(
+      new FileMemoryError("unavailable")
     );
-    backend.mockResolvedValueOnce(Response.json({}, { status: 503 }));
-    expect(
-      !(
-        await Promise.try(async () => memory.recover(actor)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(memory.recover(actor)).rejects.toBeInstanceOf(FileMemoryError);
     expect((await memory.read(actor, undefined, true)).needsAttention).toBe(
       true
     );
@@ -242,25 +170,13 @@ test("recovery verifies current memory without replaying an uncertain mutation o
     expect((await memory.read(actor, undefined, true)).needsAttention).toBe(
       false
     );
-    const stale = await Promise.try(async () =>
-      memory.recall(actor, "scope", "before", "test")
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!stale.ok && stale.error).toMatchObject({
-      reason: "stale_recall",
-    });
-    const actions = backend.mock.calls.map(
-      ([, init]) => requestSchema.parse(init?.body).action
-    );
-    expect(actions.filter((action) => action === "remember")).toHaveLength(1);
-    expect(actions).not.toContain("clear");
-  });
-});
+    await expect(
+      memory.recall(actor, "scope", "before", "Cedarbay")
+    ).rejects.toMatchObject({ reason: "stale_recall" });
+    expect(writes).toHaveBeenCalledTimes(1);
+  }));
 
 test("Native tools enforce the published plugin catalog and membership on every call", () => {
-  network();
   return run(async ({ actor, guest, repository }) => {
     const first = await repository.write(actor, {
       path: "knowledge/plan.md",
@@ -299,52 +215,58 @@ test("Native tools enforce the published plugin catalog and membership on every 
   });
 });
 
-test("deleted accounts queue durable memory erasure; a failed service call retains the receipt", () => {
-  const backend = network();
-  return run(async ({ actor, personal, memory }) => {
-    await memory.read(actor);
-    await memory.read(personal);
-    const partitions = await query<{
-      id: string;
-    }>(
+test("deleted accounts queue durable file erasure; filesystem failure retains the receipt", () =>
+  run(async ({ actor, personal, memory }) => {
+    for (const person of [actor, personal])
+      await memory.write(person, {
+        action: "remember",
+        text: "Synthetic private note",
+        operationId: randomUUID(),
+      });
+    const partitions = await query<{ id: string }>(
       sql`SELECT namespace_id AS id FROM workspace_memory_namespace WHERE user_id = ${actor.userId}`
     );
+    const requestId = randomUUID();
+    await query(sql`INSERT INTO account_deletion_requests(id, user_id, status, backup_expires_at, completed_at)
+      VALUES (${requestId}, ${actor.userId}, 'pending_external', now() + interval '30 days', now())`);
+    await query(sql`INSERT INTO account_deletion_ledger(id, request_id, surface, status) VALUES
+      (${randomUUID()}, ${requestId}, 'file_memory', 'pending_external'),
+      (${randomUUID()}, ${requestId}, 'mem0', 'pending_external')`);
     await query(
       sql`DELETE FROM public.user WHERE id = ${actor.userId.slice("better-auth:".length)}`
     );
-    for (const { id } of partitions) {
-      expect(
-        await query(
-          sql`SELECT 1 FROM workspace_memory_erasure WHERE namespace_id = ${id}`
-        )
-      ).toHaveLength(1);
-    }
-    backend.mockResolvedValueOnce(Response.json({}, { status: 503 }));
-    expect(
-      !(
-        await Promise.try(async () => drainMemoryErasures()).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
-    for (const { id } of partitions) {
-      expect(
-        await query(
-          sql`SELECT 1 FROM workspace_memory_erasure WHERE namespace_id = ${id}`
-        )
-      ).toHaveLength(1);
-    }
-    // The isolated test database can contain receipts from previous integration fixtures.
-    for (let i = 0; i < 20; i++) {
+    const queued = async () => {
+      for (const { id } of partitions)
+        expect(
+          await query(
+            sql`SELECT 1 FROM workspace_memory_erasure WHERE namespace_id = ${id}`
+          )
+        ).toHaveLength(1);
+    };
+    await queued();
+    vi.spyOn(sourceFiles, "eraseSessionSources").mockRejectedValueOnce(
+      new Error("Synthetic filesystem failure")
+    );
+    await expect(drainMemoryErasures()).rejects.toThrow(
+      "Synthetic filesystem failure"
+    );
+    await queued();
+    for (let i = 0; i < 20; i++)
       if ((await drainMemoryErasures()).cleared === 0) break;
-    }
-    for (const { id } of partitions) {
+    for (const { id } of partitions)
       expect(
         await query(
           sql`SELECT 1 FROM workspace_memory_erasure WHERE namespace_id = ${id}`
         )
       ).toHaveLength(0);
-    }
-  });
-});
+    expect(
+      await query(
+        sql`SELECT surface, status FROM account_deletion_ledger WHERE request_id = ${requestId}`
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        { surface: "file_memory", status: "erased" },
+        { surface: "mem0", status: "pending_external" },
+      ])
+    );
+  }));

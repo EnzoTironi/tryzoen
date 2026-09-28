@@ -55,9 +55,12 @@ backups or account/workspace rows. That path is `partial_online_wipe`.
 `POST /api/account/erasure` is a separate durable process for Zoen-controlled
 personal data: it suspends the account, revokes sessions and connections, erases
 the personal workspace and writes a tombstone so a restore cannot revive that
-user. Company workspaces stay. Live copies at Mem0, Matrix, Vaultwarden, the
-user WhatsApp bridge and backups remain `pending_external` until those providers
-are purged. Contact the administrator for that request. These limits are also
+user. Company workspaces stay. The memory worker removes private session files,
+learned Markdown, their local Git history and indexes before marking file-memory
+removal complete. Backups and unverified external or historical provider copies
+remain pending until their cleanup is verified. Removing a single learned note
+stops learned-memory recall, but leaves earlier conversations, local Git versions
+and backups intact. Contact the administrator for that request. These limits are also
 shown in the account interface and must not be represented as complete erasure of
 every third-party copy.
 

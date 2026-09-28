@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { sessionSourceSchema } from "../session-files";
 import { sessionSourceSegments } from "../session-files";
-import type { openSessionMemoryEngine } from "./engine";
+import type { openMemoryEngine } from "./engine";
 
 const scope = { workspace: "zoen", project: "private" };
 const digest = (value: string) =>
@@ -12,7 +12,7 @@ const digest = (value: string) =>
 
 /** Upstream 2.4.1's assistant hook protocol excludes generic/Eve clients. */
 export async function ingestSessionSource(
-  engine: Awaited<ReturnType<typeof openSessionMemoryEngine>>,
+  engine: Awaited<ReturnType<typeof openMemoryEngine>>,
   namespaceId: string,
   source: z.infer<typeof sessionSourceSchema>
 ) {

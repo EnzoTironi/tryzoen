@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
-import { openSessionMemoryEngine } from "../server/memory/ai-memory/engine";
+import { openMemoryEngine } from "../server/memory/ai-memory/engine";
 import { ingestSessionSource } from "../server/memory/ai-memory/session-ingestion";
 import {
   sessionSourceSchema,
@@ -297,7 +297,12 @@ const acceptedPath = await writeSessionSource(
   4
 );
 {
-  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  await using engine = await openMemoryEngine(
+    binary,
+    directory,
+    owner,
+    "ai-memory"
+  );
   const network = globalThis.fetch;
   let deliveredBatches = 0;
   globalThis.fetch = async (input, init) => {
@@ -319,14 +324,24 @@ const acceptedPath = await writeSessionSource(
   }
 }
 {
-  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  await using engine = await openMemoryEngine(
+    binary,
+    directory,
+    owner,
+    "ai-memory"
+  );
   await ingestSessionSource(engine, owner, source);
   await ingestSessionSource(engine, owner, assistant);
   await ingestSessionSource(engine, owner, acceptedAssistant);
   await ingestSessionSource(engine, owner, boundary);
 }
 {
-  await using engine = await openSessionMemoryEngine(binary, directory, owner);
+  await using engine = await openMemoryEngine(
+    binary,
+    directory,
+    owner,
+    "ai-memory"
+  );
   // Model the acknowledgement being lost after delivery: replay the same source
   // and close marker after a process restart, not just the same HTTP connection.
   await ingestSessionSource(engine, owner, source);
@@ -395,10 +410,11 @@ const acceptedPath = await writeSessionSource(
 assert.match(await readFile(acceptedPath, "utf8"), /Bluefern/);
 const otherOwner = randomUUID();
 {
-  await using other = await openSessionMemoryEngine(
+  await using other = await openMemoryEngine(
     binary,
     directory,
-    otherOwner
+    otherOwner,
+    "ai-memory"
   );
   assert.equal(
     await search(other.client, { query: "Cedarfield", global: true }),
@@ -419,8 +435,8 @@ const crashedWorker = spawn(
     "--eval",
     String.raw`
       const [module, binary, root, owner] = process.argv.slice(1);
-      const { openSessionMemoryEngine } = await import(module);
-      const engine = await openSessionMemoryEngine(binary, root, owner);
+      const { openMemoryEngine } = await import(module);
+      const engine = await openMemoryEngine(binary, root, owner, "ai-memory");
       const result = await engine.client.callTool({
         name: 'memory_write_page',
         arguments: {
@@ -454,17 +470,18 @@ try {
   ]);
   assert.deepEqual(ready, [{ ready: true }, undefined]);
   await assert.rejects(
-    openSessionMemoryEngine(binary, directory, crashOwner),
+    openMemoryEngine(binary, directory, crashOwner, "ai-memory"),
     /exited before readiness/,
     "A second writer must remain excluded before the crash."
   );
   crashedWorker.kill("SIGKILL");
   await crashedExit;
   await delay(2_000);
-  await using resumed = await openSessionMemoryEngine(
+  await using resumed = await openMemoryEngine(
     binary,
     directory,
-    crashOwner
+    crashOwner,
+    "ai-memory"
   );
   assert.match(
     await search(resumed.client, { ...memoryScope, query: "Willowgate" }),

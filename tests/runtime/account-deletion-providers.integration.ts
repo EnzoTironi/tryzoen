@@ -1,6 +1,6 @@
 import { onTestFinished } from "vitest";
 import { Secret } from "@shared/environment/secret";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -14,6 +14,7 @@ import { startWhatsAppPairing } from "../../server/workspaces/whatsapp";
 
 import { accountDeletionProvidersFixture } from "./account-deletion-providers-fixture";
 
+import { memoryNamespace } from "../../server/memory/learned";
 import { workspaceFixture } from "./workspace-fixture";
 import { installErasureJournalFixture } from "./erasure-journal-fixture";
 
@@ -61,10 +62,11 @@ test("unreachable vault, WhatsApp and Matrix wipes stay pending_external", async
   await query(sql`INSERT INTO matrix_identities(user_id, matrix_id)
         VALUES (${guest.userId}, ${`@guest-${randomUUID()}:zoen.test`})`);
   await startWhatsAppPairing(guestPersonal);
+  await transaction(() => memoryNamespace(guestPersonal));
   const deleted = await requestAccountDeletion(guest);
   expect(deleted.status).toBe("pending_external");
   expect(deleted.pending).toEqual(
-    expect.arrayContaining(["vaultwarden", "whatsapp", "matrix", "mem0"])
+    expect.arrayContaining(["vaultwarden", "whatsapp", "matrix"])
   );
   const ledger = await ledgerOf(guest.userId);
   expect(
@@ -115,7 +117,7 @@ test("tombstone retries vault after the provider recovers", async () => {
   return true;
 });
 
-test("fixture wipes mark vault, WhatsApp and Matrix erased and stay pending for Mem0", async () => {
+test("fixture wipes mark vault, WhatsApp and Matrix erased and keep queued file memory pending", async () => {
   const fixture = await (async () => {
     const resource = await accountDeletionProvidersFixture();
     onTestFinished(async () => {
@@ -130,9 +132,10 @@ test("fixture wipes mark vault, WhatsApp and Matrix erased and stay pending for 
         VALUES (${guest.userId}, ${matrixId})`);
   const pairing = await startWhatsAppPairing(guestPersonal);
   expect(pairing.qr).toBe("synthetic-deletion-qr");
+  await transaction(() => memoryNamespace(guestPersonal));
   const deleted = await requestAccountDeletion(guest);
   expect(deleted.status).toBe("pending_external");
-  expect(deleted.pending).toEqual(expect.arrayContaining(["mem0"]));
+  expect(deleted.pending).toEqual(expect.arrayContaining(["file_memory"]));
   expect(deleted.pending).not.toContain("vaultwarden");
   expect(deleted.pending).not.toContain("whatsapp");
   expect(deleted.pending).not.toContain("matrix");
@@ -142,7 +145,7 @@ test("fixture wipes mark vault, WhatsApp and Matrix erased and stay pending for 
       { status: "erased", surface: "vaultwarden" },
       { status: "erased", surface: "whatsapp" },
       { status: "erased", surface: "matrix" },
-      { status: "pending_external", surface: "mem0" },
+      { status: "pending_external", surface: "file_memory" },
     ])
   );
   expect(fixture.vaultUsers).toContain(

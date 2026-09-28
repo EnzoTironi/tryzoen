@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import { query, transaction } from "@db/queries";
 import { env } from "@shared/environment/env";
-import { openSessionMemoryEngine } from "./ai-memory/engine";
+import { openMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
 import { memoryNamespace } from "./learned";
 import { sessionSourceSchema, writeSessionSource } from "./session-files";
@@ -73,10 +73,11 @@ export async function drainSessionSources() {
       // Own one engine at a time; the namespace lock serializes other workers
       // and prevents revocation/erasure from racing a live private engine.
       await using engine = env.ZOEN_AI_MEMORY_BINARY
-        ? await openSessionMemoryEngine(
+        ? await openMemoryEngine(
             env.ZOEN_AI_MEMORY_BINARY,
             root,
-            namespaceId
+            namespaceId,
+            "ai-memory"
           )
         : null;
       for (const record of records) {

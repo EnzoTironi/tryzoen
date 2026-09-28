@@ -1,8 +1,8 @@
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { mapAsync } from "../operations/async";
 import { z } from "zod";
-import { Mem0 } from "../memory/mem0";
+import { FileMemory } from "../memory/ai-memory/learned";
 import { requireControlSession } from "./controls";
 
 const Id = z.uuid();
@@ -156,16 +156,17 @@ export const downloadAccountArchive = async function (
   const documents =
     await query(sql`SELECT d.content, d.updated_at FROM memory_document d
     JOIN personal_memory_binding b ON b.key = d.key WHERE b.workspace_id = ${archive.workspaceId}`);
-  const namespaces = await query<{
-    id: string;
-  }>(sql`SELECT namespace_id AS id FROM workspace_memory_namespace
-    WHERE workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`}`);
-  const mem0 = Mem0;
-  const learned = await mapAsync(
-    namespaces,
-    (namespace) => mem0.read(namespace.id),
-    1
-  );
+  const learned = await transaction(async () => {
+    const namespaces = await query<{
+      id: string;
+    }>(sql`SELECT namespace_id AS id FROM workspace_memory_namespace
+      WHERE workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`} FOR UPDATE`);
+    return mapAsync(
+      namespaces,
+      (namespace) => FileMemory.read(namespace.id),
+      1
+    );
+  });
   return Response.json(
     {
       profile: profile[0] ?? null,

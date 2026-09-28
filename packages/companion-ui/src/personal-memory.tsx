@@ -20,6 +20,7 @@ export function PersonalMemory({
   onRetry,
   onSave,
   onCorrectProfile,
+  onLearned,
 }: {
   readonly profile: readonly { label: string; value: string }[];
   readonly documents: readonly MemoryDocumentView[];
@@ -29,6 +30,7 @@ export function PersonalMemory({
   readonly onRetry: () => void;
   readonly onSave: (id: string, text: string) => Promise<void>;
   readonly onCorrectProfile: () => void;
+  readonly onLearned: () => void;
 }) {
   const [editing, setEditing] = useState<MemoryDocumentView>();
   return (
@@ -99,6 +101,9 @@ export function PersonalMemory({
           </Text>
         )}
       </View>
+      <ActionButton quiet onPress={onLearned}>
+        Review learned memories
+      </ActionButton>
       <Text style={[pageStyles.copy, pageStyles.section]}>
         This view includes your profile and personal notes. Learned workspace
         memories, conversations, files, connected accounts and schedules are

@@ -1,6 +1,6 @@
 import { withSignal } from "../../server/operations/async";
 import { LearnedMemoryError } from "../../server/memory/learned";
-import { Mem0Error } from "../../server/memory/mem0";
+import { FileMemoryError } from "../../server/memory/ai-memory/mutations";
 import { z } from "zod";
 
 import {
@@ -27,7 +27,7 @@ const memoryAttributes = z.object({
 });
 
 const memoryScope = (context: MemoryScopeContext) => {
-  if (!env.ZOEN_MEM0_URL || !env.ZOEN_MEM0_API_KEY) return null;
+  if (!env.ZOEN_SESSION_ARCHIVE_DIR || !env.ZOEN_AI_MEMORY_BINARY) return null;
   const principal = context.session.auth.current;
   if (
     principal?.principalType !== "user" ||
@@ -77,7 +77,7 @@ const recall = (
           query
         );
       } catch (error) {
-        if (error instanceof Mem0Error) return null;
+        if (error instanceof FileMemoryError) return null;
         throw error;
       }
     }).catch((error: unknown) => {

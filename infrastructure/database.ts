@@ -32,7 +32,6 @@ export const prepareServiceDatabases = Effect.fn("prepareServiceDatabases")(
     // PostgreSQL catalogs and database ACLs, so they belong to one ordered action.
     for (const database of [
       "application",
-      "memory",
       "matrix",
       "whatsapp",
       "vaultwarden",
