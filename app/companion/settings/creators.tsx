@@ -2,14 +2,16 @@
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
-import { CreatorStudio } from "@zoen/companion-ui";
+import { CreatorStudio, DiscoverBots } from "@zoen/companion-ui";
 import { companionCreatorData } from "@shared/companion/creators";
 import { api } from "@web/trpc/client";
 import { downloadBlob } from "@web/files/download";
 import { authClient } from "@web/auth/client";
 import { browserSessionClient } from "@web/eve/client";
 
-export function ConnectedCreatorStudio() {
+export function ConnectedCreatorStudio({
+  onPrompt,
+}: { readonly onPrompt?: (prompt: string) => void } = {}) {
   const { client } = api.useUtils();
   const session = authClient.useSession();
   const params = useSearchParams();
@@ -40,5 +42,15 @@ export function ConnectedCreatorStudio() {
     session.data.user.id,
     params.get("space") ?? "personal",
   ]);
+  if (onPrompt)
+    return (
+      <DiscoverBots
+        key={cacheScope}
+        data={data}
+        cacheScope={cacheScope}
+        onPrompt={onPrompt}
+        avatarUri="/marketing/zoen-avatar.webp"
+      />
+    );
   return <CreatorStudio key={cacheScope} data={data} cacheScope={cacheScope} />;
 }

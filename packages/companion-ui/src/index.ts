@@ -40,3 +40,7 @@ export { MarkdownSourceEditor } from "./editor/source";
 export { DocumentEditor } from "./document-editor";
 export { MemoryRelations } from "./learned/relations";
 export type { DocumentHistoryData } from "./document-history";
+
+export { ConversationInbox } from "./chats/inbox";
+export { RoomConversation } from "./rooms/conversation";
+export { DiscoverBots } from "./creators/discover";

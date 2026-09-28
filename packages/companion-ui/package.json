@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./rooms": {
+      "types": "./dist/rooms/schema.d.ts",
+      "default": "./dist/rooms/schema.js"
+    },
     "./creators": {
       "types": "./dist/creators/schema.d.ts",
       "default": "./dist/creators/schema.js"

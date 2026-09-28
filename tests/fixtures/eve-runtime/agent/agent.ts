@@ -20,6 +20,20 @@ export default defineAgent({
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           if (
+            lastUserMessage?.startsWith("creator-authoring ") &&
+            !toolResults.some((result) => result.name === "creator-library")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-library",
+                  input: JSON.parse(
+                    lastUserMessage.slice("creator-authoring ".length)
+                  ),
+                },
+              ],
+            };
+          if (
             lastUserMessage?.startsWith("preview ") &&
             !toolResults.some((result) => result.name === "creator-preview")
           )

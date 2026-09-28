@@ -6,7 +6,10 @@ import { matrixReceiver } from "./matrix-fixture";
 
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { requireWorkspaceAccess } from "../../server/workspaces/access";
+import {
+  requireWorkspaceAccess,
+  WorkspaceAccessDenied,
+} from "../../server/workspaces/access";
 import { acceptMatrixTransaction } from "../../server/matrix/inbound";
 import {
   createMatrixRoom,
@@ -126,6 +129,37 @@ test(
         )
       ).ok
     ).toBe(true);
+    const parent = await sendMatrixMessage(actor, {
+      id: room.id,
+      operationId: randomUUID(),
+      text: "Synthetic thread: release plan",
+    });
+    const replyId = randomUUID();
+    await sendMatrixMessage(guest, {
+      id: room.id,
+      operationId: replyId,
+      text: "Ready for review",
+      rootId: parent.event_id,
+    });
+    await sendMatrixMessage(guest, {
+      id: room.id,
+      operationId: replyId,
+      text: "Ready for review",
+      rootId: parent.event_id,
+    });
+    const thread = await readMatrixMessages(
+      actor,
+      room.id,
+      undefined,
+      parent.event_id
+    );
+    expect(thread.parent?.text).toBe("Synthetic thread: release plan");
+    expect(thread.messages).toHaveLength(1);
+    expect(thread.messages[0]?.text).toBe("Ready for review");
+    expect(thread.messages[0]?.rootId).toBe(parent.event_id);
+    await expect(
+      readMatrixMessages(personal, room.id, undefined, parent.event_id)
+    ).rejects.toThrow(WorkspaceAccessDenied);
     await query(
       sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
     );

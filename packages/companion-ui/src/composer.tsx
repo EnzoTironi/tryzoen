@@ -28,6 +28,10 @@ export function Composer({
   reply,
   onRemoveReply,
   onDraftChange,
+  attachments = true,
+  maxLength = 10000,
+  label = "Message Zoen",
+  placeholder = "Message",
 }: {
   readonly onSend: (message: ConversationDraft) => Promise<void>;
   readonly onCancel?: () => void;
@@ -36,6 +40,10 @@ export function Composer({
   readonly initialDraft?: ConversationDraft;
   readonly reply?: MessageReply;
   readonly onRemoveReply?: () => void;
+  readonly attachments?: boolean;
+  readonly maxLength?: number;
+  readonly label?: string;
+  readonly placeholder?: string;
   readonly onDraftChange?: (draft: ConversationDraft) => void;
 }) {
   const [draft, setDraft] = useState(initialDraft?.text ?? "");
@@ -43,7 +51,8 @@ export function Composer({
   const [files, setFiles] = useState(() =>
     (initialDraft?.files ?? []).map((file, key) => ({ file, key }))
   );
-  const pick = useAttachments()?.pick;
+  const attachmentPicker = useAttachments()?.pick;
+  const pick = attachments ? attachmentPicker : undefined;
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
@@ -162,14 +171,14 @@ export function Composer({
           />
         )}
         <TextInput
-          accessibilityLabel="Message Zoen"
-          placeholder="Message"
+          accessibilityLabel={label}
+          placeholder={placeholder}
           placeholderTextColor={colors.muted}
           value={draft}
           onChangeText={setDraft}
           editable={!disabled && !sending}
           multiline
-          maxLength={10000}
+          maxLength={maxLength}
           style={styles.input}
           onKeyPress={(event) => {
             if (Platform.OS !== "web" || event.nativeEvent.key !== "Enter")

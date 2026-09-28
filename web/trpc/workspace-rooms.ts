@@ -1,10 +1,15 @@
+import {
+  roomCreateSchema,
+  roomSendSchema,
+  roomReadSchema,
+  roomThreadSchema,
+  roomPageSchema,
+  roomThreadPageSchema,
+} from "@zoen/companion-ui/rooms";
 import { withSignal } from "../../server/operations/async";
 
 import { workspaceProcedure } from "./workspace-procedure";
 import {
-  MatrixCreateInput,
-  MatrixMessageInput,
-  MatrixRoomInput,
   closeMatrixRoom,
   createMatrixRoom,
   listMatrixRooms,
@@ -17,22 +22,35 @@ export const workspaceRoomsRouter = {
     withSignal(signal, async () => listMatrixRooms(ctx.actor))
   ),
   create: workspaceProcedure
-    .input(MatrixCreateInput)
+    .input(roomCreateSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, async () => createMatrixRoom(ctx.actor, input))
     ),
-  messages: workspaceProcedure
-    .input(MatrixRoomInput)
+  thread: workspaceProcedure
+    .input(roomThreadSchema)
+    .output(roomThreadPageSchema)
     .query(({ ctx, input, signal }) =>
-      withSignal(signal, async () => readMatrixMessages(ctx.actor, input.id))
+      withSignal(signal, () =>
+        readMatrixMessages(ctx.actor, input.id, input.from, input.rootId).then(
+          (result) => roomThreadPageSchema.parse(result)
+        )
+      )
+    ),
+  messages: workspaceProcedure
+    .input(roomReadSchema)
+    .output(roomPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, async () =>
+        readMatrixMessages(ctx.actor, input.id, input.from)
+      )
     ),
   send: workspaceProcedure
-    .input(MatrixMessageInput)
+    .input(roomSendSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, async () => sendMatrixMessage(ctx.actor, input))
     ),
   close: workspaceProcedure
-    .input(MatrixRoomInput)
+    .input(roomReadSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, async () => closeMatrixRoom(ctx.actor, input.id))
     ),

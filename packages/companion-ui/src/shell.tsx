@@ -2,7 +2,6 @@ import type { ComponentProps, ReactNode } from "react";
 import { useState } from "react";
 import {
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +16,8 @@ import {
   Search,
   Menu,
   SquarePen,
+  ArrowLeft,
+  Compass,
   PanelsTopLeft,
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
@@ -31,6 +32,7 @@ const sections = [
   { id: "ideas", label: "Ideas", icon: Lightbulb },
   { id: "goals", label: "Goals", icon: SquareCheck },
   { id: "library", label: "Library", icon: Shapes },
+  { id: "discover", label: "Descobrir", icon: Compass },
 ] as const;
 
 export type CompanionSection =
@@ -40,7 +42,8 @@ export type CompanionSection =
   | "ideas"
   | "goals"
   | "library"
-  | "settings";
+  | "settings"
+  | "discover";
 
 export function CompanionShell({
   children,
@@ -53,8 +56,14 @@ export function CompanionShell({
   renderAgentPanel,
   renderAgentHeader,
   renderConversations,
+  conversationOpen = false,
+  onShowInbox,
+  hideConversationHeader = false,
 }: {
   readonly children: ReactNode;
+  readonly conversationOpen?: boolean;
+  readonly onShowInbox?: () => void;
+  readonly hideConversationHeader?: boolean;
   readonly section?: CompanionSection;
   readonly title?: string;
   readonly avatarUri?: string;
@@ -116,16 +125,17 @@ export function CompanionShell({
       <ConversationNavigation
         active={section === "chat"}
         renderConversations={renderConversations}
+        conversationOpen={conversationOpen}
+        onShowInbox={onShowInbox}
       >
         {(toggle) => (
           <View style={styles.body}>
-            {(section === "chat" || (compact && Platform.OS !== "web")) && (
+            {section === "chat" && !hideConversationHeader && (
               <CompanionHeader
                 compact={compact}
                 title={title}
                 avatarUri={avatarUri}
                 agentName={agentName}
-                onNavigate={onNavigate}
                 onNewConversation={onNewConversation}
                 onOpenConversations={toggle}
                 onOpenAgent={() => {
@@ -140,7 +150,7 @@ export function CompanionShell({
       {compact && (
         <View style={styles.bottomBar}>
           {sections
-            .filter(({ id }) => id !== "search")
+            .filter(({ id }) => id !== "search" && id !== "discover")
             .map(({ id, label, icon }) => (
               <IconButton
                 key={id}
@@ -148,20 +158,19 @@ export function CompanionShell({
                 label={label}
                 selected={id === section}
                 onPress={() => {
+                  if (id === "chat") onShowInbox?.();
                   onNavigate(id);
                 }}
               />
             ))}
-          {Platform.OS === "web" && (
-            <IconButton
-              label="Settings"
-              icon={Menu}
-              selected={section === "settings"}
-              onPress={() => {
-                onNavigate("settings");
-              }}
-            />
-          )}
+          <IconButton
+            label="Settings"
+            icon={Menu}
+            selected={section === "settings"}
+            onPress={() => {
+              onNavigate("settings");
+            }}
+          />
         </View>
       )}
       {showAgent && renderAgentPanel && (
@@ -187,33 +196,32 @@ function CompanionHeader({
   title,
   avatarUri,
   agentName,
-  onNavigate,
   onNewConversation,
   onOpenAgent,
   onOpenConversations,
 }: Pick<
   ComponentProps<typeof CompanionShell>,
-  "title" | "avatarUri" | "agentName" | "onNavigate" | "onNewConversation"
+  "title" | "avatarUri" | "agentName" | "onNewConversation"
 > & {
   readonly compact: boolean;
   readonly onOpenAgent: () => void;
   readonly onOpenConversations: () => void;
 }) {
-  const nativeCompact = compact && Platform.OS !== "web";
   return (
     <View
       accessibilityLabel={title}
       style={[styles.header, compact && styles.mobileHeader]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Conversations"
-        onPress={onOpenConversations}
-        style={styles.chatMenu}
-      >
-        <Menu size={20} color={colors.muted} />
-        {!compact && <Text style={styles.chatMenuLabel}>Conversations</Text>}
-      </Pressable>
+      {compact && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Voltar às conversas"
+          onPress={onOpenConversations}
+          style={styles.chatMenu}
+        >
+          <ArrowLeft size={20} color={colors.muted} />
+        </Pressable>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Agent activity and memory"
@@ -237,15 +245,9 @@ function CompanionHeader({
       </Pressable>
       <View style={[styles.headerEnd, compact && styles.mobileHeaderEnd]}>
         <IconButton
-          label={nativeCompact ? "Settings" : "New conversation"}
-          icon={nativeCompact ? Menu : SquarePen}
-          onPress={
-            nativeCompact
-              ? () => {
-                  onNavigate("settings");
-                }
-              : onNewConversation
-          }
+          label="New conversation"
+          icon={SquarePen}
+          onPress={onNewConversation}
         />
       </View>
     </View>
@@ -256,11 +258,11 @@ const styles = StyleSheet.create({
   shell: { flex: 1, flexDirection: "row", backgroundColor: colors.canvas },
   compact: { flexDirection: "column" },
   rail: {
-    width: 78,
+    width: 68,
     borderRightWidth: 1,
     borderRightColor: colors.line,
     alignItems: "center",
-    paddingTop: 40,
+    paddingTop: 24,
     paddingBottom: 22,
     justifyContent: "space-between",
   },
@@ -278,10 +280,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -3,
   },
-  navigation: { gap: 12, marginTop: 64, marginBottom: "auto", paddingTop: 8 },
+  navigation: { gap: 10, marginTop: 40, marginBottom: "auto", paddingTop: 8 },
   body: { flex: 1, minWidth: 0 },
   header: {
-    minHeight: 82,
+    minHeight: 78,
+    borderBottomWidth: 1,
+    borderBottomColor: "#efeff1",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -289,11 +293,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   mobileHeader: {
-    minHeight: 104,
+    minHeight: 78,
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   chatMenu: {
     flexDirection: "row",
@@ -304,7 +308,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     boxShadow: "0 3px 12px rgba(0,0,0,0.07)",
   },
-  chatMenuLabel: { fontSize: 16, color: colors.ink },
   headerEnd: { width: 156, alignItems: "flex-end" },
   mobileHeaderEnd: { width: 44 },
   identity: {
@@ -313,25 +316,12 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 8,
     borderRadius: 24,
-    backgroundColor: colors.surface,
-    boxShadow: "0 3px 12px rgba(0,0,0,0.07)",
+    flex: 1,
   },
   identityAvatar: { width: 28, height: 28, borderRadius: 14 },
-  mobileIdentity: {
-    flexDirection: "column",
-    gap: 0,
-    padding: 0,
-    backgroundColor: "transparent",
-    boxShadow: "none",
-  },
-  mobileAvatar: { width: 50, height: 50, borderRadius: 25 },
-  mobileTitle: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    boxShadow: "0 5px 12px rgba(0,0,0,0.06)",
-  },
+  mobileIdentity: { flexDirection: "row", gap: 8, flex: 1 },
+  mobileAvatar: { width: 32, height: 32, borderRadius: 16 },
+  mobileTitle: { fontSize: 16 },
   title: {
     textAlign: "center",
     fontSize: 15,

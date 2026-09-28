@@ -1,3 +1,4 @@
+import { matrixReplyRelation } from "./replies";
 import {
   sendDurableMessage,
   type DeliveryState,
@@ -100,7 +101,7 @@ export const publishMatrixAnswer = async function (eventId: string) {
       {
         msgtype: "m.text",
         body: rows[0].output,
-        "m.relates_to": { "m.in_reply_to": { event_id: eventId } },
+        "m.relates_to": await matrixReplyRelation(rows[0].roomId, eventId),
       }
     );
     await query(

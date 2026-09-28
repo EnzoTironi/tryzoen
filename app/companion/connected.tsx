@@ -1,23 +1,14 @@
 "use client";
-import { browserSessionClient } from "@web/eve/client";
-import { useEffect, useMemo, useState } from "react";
-import {
-  writeConversationDraft,
-  readConversationDraft,
-  forgetConversationDraft,
-} from "./drafts";
+import { useState } from "react";
+import { writeConversationDraft } from "./drafts";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CompanionShell,
-  SessionConversation,
-  NewConversation,
   AttachmentProvider,
   type CompanionSection,
 } from "@zoen/companion-ui";
-import { api } from "@web/trpc/client";
-import { getUntypedClient } from "@trpc/client";
-import { companionReactionData } from "@shared/companion/reactions";
+import { ConnectedConversation } from "./conversation";
 import { workspaceHref } from "@web/workspaces/navigation";
 import styles from "./companion.module.css";
 import {
@@ -25,7 +16,7 @@ import {
   saveBrowserAttachment,
 } from "@web/files/attachments";
 
-import { ConnectedSearch } from "./search";
+import { ConnectedInbox, ConnectedRoom } from "./inbox";
 import { ConnectedSections } from "./sections";
 import { ConnectedSettings } from "./settings";
 import {
@@ -41,6 +32,7 @@ const sections: readonly CompanionSection[] = [
   "ideas",
   "goals",
   "library",
+  "discover",
 ];
 
 export function ConnectedCompanion({
@@ -53,32 +45,28 @@ export function ConnectedCompanion({
   readonly draftScope: string;
 }) {
   const router = useRouter();
-  const { client } = api.useUtils();
-  const reactions = useMemo(
-    () => companionReactionData(getUntypedClient(client)),
-    [client]
-  );
-  const { mutateAsync: saveChat } = api.chats.save.useMutation();
   const params = useSearchParams();
   const workspaceId = params.get("space");
   const view = params.get("view");
   const section = sections.find((candidate) => candidate === view) ?? "chat";
   const token = params.get("draft");
-  const draft = useMemo(
-    () => readConversationDraft(draftScope, token),
-    [draftScope, token]
+  const roomId = params.get("room");
+  const conversationOpen = Boolean(
+    sessionId ?? roomId ?? token ?? params.get("compose")
   );
   const [draftError, setDraftError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useEffect(() => {
-    forgetConversationDraft(draftScope, token);
-  }, [draftScope, token]);
   const navigate = (path: string) => {
     router.push(workspaceHref(path, workspaceId));
   };
   const openConversation = (id?: string) => {
-    if (id === sessionId && id !== undefined) return;
-    navigate(id ? `/companion/${encodeURIComponent(id)}` : "/companion");
+    navigate(
+      id ? `/companion/${encodeURIComponent(id)}` : "/companion?compose=1"
+    );
+  };
+  const navigateSection = (next: CompanionSection) => {
+    if (next === "settings") setSettingsOpen(true);
+    else navigate(`/companion?view=${next}`);
   };
   const stagePrompt = (prompt: string) => {
     try {
@@ -106,6 +94,11 @@ export function ConnectedCompanion({
         >
           <CompanionShell
             section={section}
+            conversationOpen={conversationOpen}
+            onShowInbox={() => {
+              navigate("/companion");
+            }}
+            hideConversationHeader={Boolean(roomId)}
             title={title ?? "Zoen"}
             avatarUri="/marketing/zoen-avatar.webp"
             agentName={<ConnectedAgentName />}
@@ -125,27 +118,25 @@ export function ConnectedCompanion({
                 }}
               />
             )}
-            renderConversations={({ close, selected }) => (
-              <ConnectedSearch
+            renderConversations={() => (
+              <ConnectedInbox
+                cacheScope={draftScope}
+                workspaceId={workspaceId}
                 selectedId={sessionId}
-                panel={{
-                  onClose: close,
+                selectedRoom={roomId ?? undefined}
+                onOpen={openConversation}
+                onCreate={() => {
+                  openConversation();
                 }}
-                onConversation={(id) => {
-                  selected();
-                  openConversation(id);
+                onOpenRoom={(id) => {
+                  navigate(`/companion?room=${encodeURIComponent(id)}`);
+                }}
+                onDiscover={() => {
+                  navigate("/companion?view=discover");
                 }}
               />
             )}
-            onNavigate={(nextSection) => {
-              if (nextSection === "settings") {
-                setSettingsOpen(true);
-                return;
-              }
-              navigate(
-                `/companion${sessionId ? `/${encodeURIComponent(sessionId)}` : ""}?view=${nextSection}`
-              );
-            }}
+            onNavigate={navigateSection}
             onNewConversation={() => {
               openConversation();
             }}
@@ -156,34 +147,19 @@ export function ConnectedCompanion({
                 onPrompt={stagePrompt}
                 onConversation={openConversation}
               />
-            ) : sessionId ? (
-              <SessionConversation
-                key={`${draftScope}:${sessionId}`}
-                reactions={reactions}
+            ) : roomId ? (
+              <ConnectedRoom
+                key={`${draftScope}:${roomId}`}
+                roomId={roomId}
                 cacheScope={draftScope}
-                sessionId={sessionId}
-                initialDraft={draft}
-                client={browserSessionClient}
-                onCopyText={(text) => navigator.clipboard.writeText(text)}
+                onBack={() => {
+                  navigate("/companion");
+                }}
               />
             ) : (
-              <NewConversation
-                key={token}
-                client={browserSessionClient}
-                avatarUri="/marketing/zoen-avatar.webp"
-                save={(id, name) => saveChat({ sessionId: id, title: name })}
-                initialDraft={draft}
-                onCreated={(id, retainedDraft) => {
-                  const retainedToken = retainedDraft
-                    ? writeConversationDraft(draftScope, retainedDraft)
-                    : undefined;
-                  router.replace(
-                    workspaceHref(
-                      `/companion/${encodeURIComponent(id)}${retainedToken ? `?draft=${retainedToken}` : ""}`,
-                      workspaceId
-                    )
-                  );
-                }}
+              <ConnectedConversation
+                sessionId={sessionId}
+                draftScope={draftScope}
               />
             )}
           </CompanionShell>

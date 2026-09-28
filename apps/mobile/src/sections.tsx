@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ActionButton,
+  DiscoverBots,
   CompanionPage,
   DocumentEditor,
   FeedCollection,
@@ -43,6 +44,7 @@ export function MobileSections({
   readonly onConversation: (id?: string) => void;
   readonly onSignOut: () => Promise<void>;
 }) {
+  if (section === "discover") return <MobileDiscover onPrompt={onPrompt} />;
   if (section === "ideas")
     return <IdeasSection onPrompt={onPrompt} onConversation={onConversation} />;
   if (section === "search")
@@ -280,5 +282,20 @@ function SettingsSection({
         </ActionButton>
       </View>
     </CompanionPage>
+  );
+}
+
+function MobileDiscover({
+  onPrompt,
+}: {
+  readonly onPrompt: (prompt: string) => void;
+}) {
+  const account = auth.useSession();
+  return (
+    <DiscoverBots
+      data={mobileCreators}
+      cacheScope={account.data?.user.id ?? "anonymous"}
+      onPrompt={onPrompt}
+    />
   );
 }

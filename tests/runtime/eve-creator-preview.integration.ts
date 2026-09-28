@@ -19,7 +19,11 @@ import {
 } from "./eve-fixture";
 import { workspaceExecutionFor, workspaceFixture } from "./workspace-fixture";
 import { saveCreatorEvaluation } from "../../server/creators/evaluation";
-import { saveCreatorDraft } from "../../server/creators/drafts";
+import {
+  listCreatorDrafts,
+  readCreatorDraft,
+  saveCreatorDraft,
+} from "../../server/creators/drafts";
 import {
   exportCreatorPreview,
   createCreatorPreview,
@@ -36,14 +40,16 @@ beforeAll(async () => {
       recursive: true,
     });
   // Workflow tools must be compiled as authored modules, not re-exported definitions.
-  const tool = await readFile(
-    new URL("../../agent/tools/creator-preview.ts", import.meta.url),
-    "utf8"
-  );
-  await writeFile(
-    join(directory, "agent/tools/creator-preview.ts"),
-    tool.replaceAll('"../../server/', '"../../../../../server/')
-  );
+  for (const name of ["creator-preview", "creator-library"]) {
+    const tool = await readFile(
+      new URL(`../../agent/tools/${name}.ts`, import.meta.url),
+      "utf8"
+    );
+    await writeFile(
+      join(directory, `agent/tools/${name}.ts`),
+      tool.replaceAll('"../../server/', '"../../../../../server/')
+    );
+  }
   await cp(
     new URL(
       "../../agent/subagents/creator-specialist/instructions.md",
@@ -290,6 +296,51 @@ test("an accepted pilot runs the creator's approved teaching as the participant'
     await expect(
       exportCreatorPreview(workspace.actor, preview.id)
     ).rejects.toThrow("WorkspaceAccessDenied");
+  } finally {
+    await server.stop();
+  }
+}, 90000);
+
+test("the native conversational authoring tool persists private drafts and denies a different participant", async () => {
+  await using workspace = await workspaceFixture();
+  const server = await runtime(await freePort(), "127.0.0.1", directory);
+  const draft = {
+    id: randomUUID(),
+    expectedRevision: null,
+    content: {
+      title: "Synthetic interview bot",
+      description: "Created through a native tool call in a conversation.",
+      playbook: "# Approach\n\nAsk an open question before offering advice.",
+      examples: [],
+    },
+  };
+  try {
+    const auth = workspaceExecutionFor(workspace.actor).session.auth.current;
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        auth,
+        message: `creator-authoring ${JSON.stringify({ action: "save", draft })}`,
+      })
+    );
+    await server.settled(sessionId);
+    const saved = await readCreatorDraft(workspace.actor, draft.id);
+    expect(saved.content).toEqual(draft.content);
+    expect(await listCreatorDrafts(workspace.guest)).toEqual([]);
+    const guest = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        auth: workspaceExecutionFor(workspace.guest).session.auth.current,
+        message: `creator-authoring ${JSON.stringify({ action: "read", id: draft.id })}`,
+      })
+    );
+    const events = await server.settled(guest.sessionId);
+    expect(JSON.stringify(events)).toContain("creator-library");
+    expect(JSON.stringify(events)).toContain("WorkspaceAccessDenied");
+    expect(JSON.stringify(events)).not.toContain(draft.content.playbook);
+    expect(await readCreatorDraft(workspace.actor, draft.id)).toEqual(saved);
   } finally {
     await server.stop();
   }

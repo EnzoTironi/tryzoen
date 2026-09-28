@@ -37,10 +37,11 @@ export const matrixRequest = async function (
   method: "GET" | "POST" | "PUT",
   path: string,
   body?: z.core.util.JSONType,
-  userId?: string
+  userId?: string,
+  version: "v1" | "v3" = "v3"
 ) {
   const config = await matrixConfiguration();
-  const url = new URL(`/_matrix/client/v3/${path}`, config.url);
+  const url = new URL(`/_matrix/client/${version}/${path}`, config.url);
   if (userId) url.searchParams.set("user_id", userId);
   return await withTimeout(async () => {
     try {
@@ -138,6 +139,17 @@ export const MatrixEventSchema = z.object({
   sender: z.string(),
   state_key: z.optional(z.string()),
   origin_server_ts: z.optional(z.number()),
+  unsigned: z
+    .object({
+      "m.relations": z
+        .object({
+          "m.thread": z
+            .object({ count: z.number().int().nonnegative() })
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   content: z.object({
     body: z.optional(z.string()),
     msgtype: z.optional(z.string()),

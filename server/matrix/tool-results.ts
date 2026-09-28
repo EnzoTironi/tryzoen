@@ -1,3 +1,4 @@
+import { matrixReplyRelation } from "./replies";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { ChannelEvents } from "eve/channels";
@@ -64,9 +65,7 @@ export async function publishMatrixToolResult(
       {
         msgtype: "m.text",
         body,
-        ...(output.replyTo
-          ? { "m.relates_to": { "m.in_reply_to": { event_id: eventId } } }
-          : {}),
+        "m.relates_to": await matrixReplyRelation(room.roomId, eventId),
       }
     );
   } else if (reaction.success) {

@@ -17,6 +17,7 @@ import type { z } from "zod";
 import { IconButton } from "../icon-button";
 import { CompanionSheet } from "../sheet";
 import { pageStyles } from "../page";
+import { ConversationAvatar } from "./avatar";
 import { colors } from "../theme";
 import { chatTitleSchema, type ChatData, type chatPageSchema } from "./schema";
 
@@ -30,6 +31,7 @@ export function ConversationRow({
   onChange,
   onExport,
   dense = false,
+  avatarUri,
   selected = false,
 }: {
   readonly chat: z.infer<typeof chatPageSchema>["items"][number];
@@ -37,6 +39,7 @@ export function ConversationRow({
   readonly onChange: ChatData["change"];
   readonly onExport: (sessionId: string) => Promise<void>;
   readonly dense?: boolean;
+  readonly avatarUri?: string;
   readonly selected?: boolean;
 }) {
   const [menu, setMenu] = useState(false);
@@ -66,11 +69,13 @@ export function ConversationRow({
           selected && styles.selected,
         ]}
       >
-        {chat.pinned ? (
+        {dense ? (
+          <ConversationAvatar name={chat.title} uri={avatarUri} />
+        ) : chat.pinned ? (
           <Pin size={22} color={colors.ink} />
-        ) : !dense ? (
+        ) : (
           <MessageCircle size={22} color={colors.muted} />
-        ) : null}
+        )}
         {renaming ? (
           <ConversationName
             initialTitle={chat.title}
@@ -263,6 +268,15 @@ function ConversationPreview({
       >
         {chat.title}
       </Text>
+      {dense && (
+        <Text numberOfLines={1} style={pageStyles.copy}>
+          Zoen ·{" "}
+          {new Date(chat.updatedAt).toLocaleDateString([], {
+            day: "numeric",
+            month: "short",
+          })}
+        </Text>
+      )}
       {!dense && (
         <Text style={pageStyles.copy}>
           {new Date(chat.updatedAt).toLocaleString()}
@@ -274,14 +288,14 @@ function ConversationPreview({
 
 const styles = StyleSheet.create({
   dense: {
-    paddingVertical: 0,
+    paddingVertical: 12,
     paddingLeft: 8,
-    minHeight: 44,
-    gap: 6,
+    minHeight: 76,
+    gap: 12,
     borderRadius: 12,
   },
-  denseTitle: { fontSize: 14, fontWeight: "400" },
-  selected: { backgroundColor: colors.wash },
+  denseTitle: { fontSize: 15, fontWeight: "600" },
+  selected: { backgroundColor: "#e8f2ff" },
   dimmed: { opacity: 0.5 },
   rename: {
     flex: 1,

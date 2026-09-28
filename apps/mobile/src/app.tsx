@@ -18,7 +18,7 @@ import {
 } from "./agent-panel";
 import { auth } from "./auth";
 import { MobileConversation } from "./conversation";
-import { SearchSection } from "./search";
+import { MobileInbox, MobileRoom } from "./inbox";
 import { MobileSections } from "./sections";
 import { apiOrigin } from "./environment";
 import { MobileEditor } from "./editor";
@@ -119,12 +119,16 @@ function MobileCompanion({
   readonly onSignOut: () => Promise<void>;
 }) {
   const [section, setSection] = useState<CompanionSection>("chat");
+  const [roomId, setRoomId] = useState<string>();
+  const [conversationOpen, setConversationOpen] = useState(false);
   const [conversation, setConversation] = useState<{
     id?: string;
     draft?: ConversationDraft;
     key: number;
   }>({ key: 0 });
   const openConversation = (id?: string, draft?: string) => {
+    setRoomId(undefined);
+    setConversationOpen(true);
     setConversation((current) => ({
       id,
       draft: draft ? { text: draft, files: [] } : undefined,
@@ -135,6 +139,11 @@ function MobileCompanion({
   return (
     <CompanionShell
       section={section}
+      conversationOpen={conversationOpen}
+      onShowInbox={() => {
+        setConversationOpen(false);
+      }}
+      hideConversationHeader={Boolean(roomId)}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
       agentName={<MobileAgentName />}
       renderAgentHeader={(onEdit) => <MobileAgentHeader onEdit={onEdit} />}
@@ -151,14 +160,20 @@ function MobileCompanion({
           }}
         />
       )}
-      renderConversations={({ close, selected }) => (
-        <SearchSection
+      renderConversations={() => (
+        <MobileInbox
           selectedId={conversation.id}
-          panel={{ onClose: close }}
-          onConversation={(id) => {
-            selected();
-            if (id !== conversation.id || id === undefined)
-              openConversation(id);
+          selectedRoom={roomId}
+          onOpen={openConversation}
+          onCreate={() => {
+            openConversation();
+          }}
+          onOpenRoom={(id) => {
+            setRoomId(id);
+            setConversationOpen(true);
+          }}
+          onDiscover={() => {
+            setSection("discover");
           }}
         />
       )}
@@ -167,7 +182,15 @@ function MobileCompanion({
         openConversation();
       }}
     >
-      {section === "chat" ? (
+      {section === "chat" && roomId ? (
+        <MobileRoom
+          key={roomId}
+          roomId={roomId}
+          onBack={() => {
+            setConversationOpen(false);
+          }}
+        />
+      ) : section === "chat" ? (
         <MobileConversation
           key={conversation.key}
           sessionId={conversation.id}

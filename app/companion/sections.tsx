@@ -1,4 +1,5 @@
 "use client";
+import { ConnectedCreatorStudio } from "./settings/creators";
 import { ConnectedSearch } from "./search";
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
@@ -27,6 +28,8 @@ export function ConnectedSections({
   readonly onPrompt: (prompt: string) => void;
   readonly onConversation: (sessionId?: string) => void;
 }) {
+  if (section === "discover")
+    return <ConnectedCreatorStudio onPrompt={onPrompt} />;
   if (section === "ideas")
     return (
       <ConnectedIdeas onPrompt={onPrompt} onConversation={onConversation} />

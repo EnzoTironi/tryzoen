@@ -1,5 +1,5 @@
 import { useDeferredValue, useState, type ComponentProps } from "react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useConversationLibrary } from "./library";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,8 +12,7 @@ import { ActionButton } from "../button";
 import { colors } from "../theme";
 import { ConversationToolbar } from "./toolbar";
 import { ConversationRow } from "./row";
-import type { ChatData, chatPageSchema } from "./schema";
-import type { z } from "zod";
+import type { ChatData } from "./schema";
 
 export function ConversationSearch({
   data,
@@ -36,26 +35,16 @@ export function ConversationSearch({
   readonly panel?: ComponentProps<typeof ConversationToolbar>["panel"];
   readonly onExport: (sessionId: string) => Promise<void>;
 }) {
-  const client = useQueryClient();
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [width, setWidth] = useState(0);
   const search = useDeferredValue(query);
-  const key = ["conversation-library", cacheScope];
-  const chats = useInfiniteQuery({
-    queryKey: [...key, archived, search],
-    initialPageParam: null as z.infer<typeof chatPageSchema>["nextCursor"],
-    queryFn: ({ pageParam }) =>
-      data.list({ query: search, archived, cursor: pageParam }),
-    getNextPageParam: (last) => last.nextCursor,
-    staleTime: 15_000,
-    gcTime: 60_000,
-  });
-  const items = chats.data?.pages.flatMap((page) => page.items) ?? [];
-  const change: ChatData["change"] = async (input) => {
-    await data.change(input);
-    await client.invalidateQueries({ queryKey: key });
-  };
+  const { chats, items, change } = useConversationLibrary(
+    data,
+    cacheScope,
+    search,
+    archived
+  );
   const toggleArchive = () => {
     setArchived(!archived);
     setQuery("");

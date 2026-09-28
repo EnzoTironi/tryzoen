@@ -47,12 +47,18 @@ beforeEach(() => {
         epoch: "epoch",
         matrixId: "@member:matrix.test",
       },
+      members: [],
+      membersTruncated: false,
+      nextCursor: null,
       messages: [
         {
           id: "$message",
           text: "Zoen, react to this",
           sender: "Member",
           mine: true,
+          bot: false,
+          rootId: null,
+          replies: 0,
           timestamp: 0,
           reactions: [{ type: "heart", count: 2 }],
         },

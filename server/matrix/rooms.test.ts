@@ -1,8 +1,10 @@
+import { z } from "zod";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MatrixEventSchema } from "./client";
 import type { matrixRequest } from "./client";
 import type { requireWorkspaceAccess } from "../workspaces/access";
-import { readMatrixMessages } from "./rooms";
+import { readMatrixMessages, sendMatrixMessage } from "./rooms";
+import { WorkspaceAccessDenied } from "../workspaces/access";
 
 const mocks = vi.hoisted(() => ({
   request: vi.fn<typeof matrixRequest>(),
@@ -13,12 +15,14 @@ vi.mock("@db/queries", () => ({
   transaction: async (operation: () => Promise<unknown>) => operation(),
   query: async () => [
     {
-      id: "binding",
+      id: "@member:matrix.test",
       roomId: "!room:matrix.test",
       label: "Team room",
       epoch: "epoch",
       matrixId: "@member:matrix.test",
       name: "Member",
+      mine: true,
+      bot: false,
     },
   ],
 }));
@@ -102,6 +106,9 @@ it("projects native Matrix reactions onto their message, counting each sender on
       sender: "Member",
       mine: true,
       timestamp: 0,
+      bot: false,
+      rootId: null,
+      replies: 0,
       reactions: [{ type: "heart", count: 2 }],
     },
   ]);
@@ -113,7 +120,8 @@ it("projects native Matrix reactions onto their message, counting each sender on
       )
     ),
     undefined,
-    "@member:matrix.test"
+    "@member:matrix.test",
+    "v3"
   );
   expect(mocks.access).toHaveBeenCalledTimes(4);
 });
@@ -141,4 +149,102 @@ it("preserves Matrix reaction relation data without requiring it on normal messa
       },
     }).content["m.relates_to"]
   ).toEqual({ rel_type: "m.annotation", event_id: "$message", key: "👍" });
+});
+
+it("reads a thread through the authorized room and preserves pagination", async () => {
+  const root = {
+    event_id: "$root",
+    type: "m.room.message",
+    sender: "@member:matrix.test",
+    content: { body: "Plan" },
+  };
+  mocks.request.mockResolvedValueOnce(root).mockResolvedValueOnce({
+    chunk: [
+      {
+        ...root,
+        event_id: "$reply",
+        content: {
+          body: "Ready",
+          "m.relates_to": { rel_type: "m.thread", event_id: "$root" },
+        },
+      },
+    ],
+    next_batch: "next-page",
+  });
+  const result = await readMatrixMessages(
+    actor,
+    "binding",
+    "page&scope=other",
+    "$root"
+  );
+  expect(result.parent?.id).toBe("$root");
+  expect(result.messages[0]?.rootId).toBe("$root");
+  expect(result.nextCursor).toBe("next-page");
+  expect(mocks.request).toHaveBeenLastCalledWith(
+    "GET",
+    expect.stringContaining(
+      "/relations/%24root/m.thread/m.room.message?dir=b&limit=100&from=page%26scope%3Dother"
+    ),
+    undefined,
+    "@member:matrix.test",
+    "v1"
+  );
+});
+
+it("uses native Matrix thread relations and a stable transaction ID for sends", async () => {
+  mocks.request
+    .mockResolvedValueOnce({
+      event_id: "$root",
+      type: "m.room.message",
+      sender: "@member:matrix.test",
+      content: { body: "Plan" },
+    })
+    .mockResolvedValueOnce({ event_id: "$sent" });
+  await sendMatrixMessage(actor, {
+    id: "binding",
+    operationId: "deduplicated-operation",
+    text: "Ready",
+    rootId: "$root",
+  });
+  expect(mocks.request).toHaveBeenLastCalledWith(
+    "PUT",
+    expect.stringContaining("/send/m.room.message/deduplicated-operation"),
+    {
+      msgtype: "m.text",
+      body: "Ready",
+      "m.relates_to": {
+        rel_type: "m.thread",
+        event_id: "$root",
+        is_falling_back: true,
+        "m.in_reply_to": { event_id: "$root" },
+      },
+    },
+    "@member:matrix.test"
+  );
+});
+
+it.each([
+  { event_id: "$wrong", type: "m.room.message", content: { body: "Other" } },
+  {
+    event_id: "$root",
+    type: "m.room.message",
+    content: {
+      body: "Nested",
+      "m.relates_to": { rel_type: "m.thread", event_id: "$parent" },
+    },
+  },
+  { event_id: "$root", type: "m.room.member", content: {} },
+])("rejects invalid thread parents before sending", async (parent) => {
+  mocks.request.mockResolvedValueOnce(
+    z.json().parse({ ...parent, sender: "@member:matrix.test" })
+  );
+  await expect(
+    sendMatrixMessage(actor, {
+      id: "binding",
+      operationId: "operation",
+      text: "Reply",
+      rootId: "$root",
+    })
+  ).rejects.toThrow(WorkspaceAccessDenied);
+  expect(mocks.request).toHaveBeenCalledTimes(1);
 });

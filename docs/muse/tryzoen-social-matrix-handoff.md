@@ -6,7 +6,242 @@ Updated 2026-09-28 from the user-provided `tryzoen-social-matrix-handoff.md` and
 
 The user wants personal agents, official specialist/creator agents, real people and communities, with iMessage-inspired conversations and a desktop sidebar. Matrix is the chosen communication feasibility candidate. Eve remains the execution owner; Zoen owns accounts, grants, subscriptions, goals and published content.
 
-The proposed `Conversas / Descobrir / Meu espaço` navigation and photography pilot are not final commitments. Preserve existing Muse capabilities. Mark official AI identities clearly; a creator and their AI are different senders. Paid AI access does not imply unlimited personal access to the creator.
+The user clarified the creator experience on 2026-09-28: creating and teaching a bot must happen through a conversation with the agent. The primary social surfaces are a marketplace and a unified messaging interface for people, groups and bots, using iMessage, Slack and Ando as references. The approved navigation is recorded below; the photography pilot remains a proposal. Preserve existing Muse capabilities. Mark official AI identities clearly; a creator and their AI are different senders. Paid AI access does not imply unlimited personal access to the creator.
+
+## Approved messaging implementation — 2026-09-28
+
+The user approved the iMessage/Slack/Ando/Buzz concept, then explicitly retained
+the original mobile bottom bar. Conversation, Feed, Ideas, Goals, Library and
+Settings remain directly accessible. Discover is an entry in the conversation
+list and desktop rail, **not** a mobile bottom-bar tab. There is no replacement
+“My space” submenu hiding the original functions.
+
+The shared React Native client now renders a persistent desktop conversation
+list, existing pinned private chats, search and archive access, group/bot
+filters, real workspace groups and a conversation view. Mobile uses the same
+list and a back action. Group replies open in a right-hand desktop thread pane
+or a dedicated mobile view. Other sheets continue to use centered desktop
+modals. Existing chat rename, pin, archive, export, agent activity/memory and
+Markdown editor owners are retained. Web/Electron and Expo use thin adapters
+to the existing session and room APIs; no second messaging runtime was added.
+
+Conversation info now has an iMessage-inspired identity header, a group portrait
+with the agent badge, real participant counts and a grouped participant list.
+A compact action returns to the main conversation. The about section explains
+agent mentions and private-memory boundaries without implying E2EE or presence.
+It is a mobile sheet and a centered 480px desktop modal; its participant list
+expands after six entries and the server projection remains bounded to 100.
+Unimplemented call, video, notification and invite controls are not rendered.
+
+Matrix rooms use native `m.thread` relationships and the v1 relations endpoint.
+The current application user joins through the existing workspace membership
+boundary. Every read/send checks live authorization; the thread parent must
+belong to the selected room and cannot itself be a thread child. Stable
+transaction IDs deduplicate a response-loss retry. Agent answers, native
+message-tool output and approval/input cards inherit the requesting thread.
+Reads are bounded to 100 events per page and five loaded pages per open timeline;
+the list remains virtualized and only visible queries poll every ten seconds.
+This is bounded HTTP polling, not yet a direct Matrix sync/E2EE client, and is
+not a million-user throughput qualification.
+
+Discover currently shows Zoen and the participant's accepted private creator
+pilots, with search and resumable own drafts. “Create my bot” opens a drafted
+chat request for an interview. The native Eve `creator-library` tool can list,
+read and revision-safely save that person's private teaching draft, or read an
+active pilot's selected teaching. It derives the actor from the session and
+rejects group/protocol actors. A draft is not publication or evidence that linked
+content was ingested. The existing visual editor remains available for review.
+
+Still unfinished: a public/paid marketplace, direct human-to-human invitations
+and conversation management in this shell, presence and voice/video hangouts,
+resumable authorized YouTube/source ingestion, final bot identity routing,
+entitlements and published knowledge deployment. Mobile group workspace
+selection and physical-device transport/encryption recovery also need completion.
+The concept's live hangout strip is deliberately not presented as an active
+service. Native Akita dream and temporal limitations remain those documented in
+[file-memory.md](file-memory.md); this change does not claim full Muse parity.
+
+[Block's Buzz](https://github.com/block/buzz) is the additional open-source UX
+reference for lightweight shared presence/hangouts. Its Nostr transport is not
+substituted for the existing Matrix/Eve owners. Ando and Grok Bot marketplace
+references below continue to guide participation and discovery.
+
+### Verification checkpoint
+
+The 2026-09-28 messaging and info-panel checkpoint passes `pnpm check`
+(1,335 tests in 207 files; all nine tasks), `pnpm build`, and Expo exports for
+web, iOS and Android. Compiled Eve creator/group/session-capture fixtures pass
+11 cases; the final isolated Matrix-room case covers native thread replies,
+retry deduplication and revoked access. These run against local synthetic data.
+Chrome verification covers persisted thread replies after reload, separate
+mobile/desktop thread layouts, opening/scrolling/closing conversation info,
+direct Ideas/Goals/Library navigation, mobile settings, and the catalog's
+"Create my bot" transition to a drafted interview in chat. The latest visual
+pass uses the production build. It does not qualify physical devices or a live
+model's interview quality. Screenshots are attached to PR 148 using `gh --attach`.
+
+The structural delta still reports 24 unsuppressed gating findings, primarily
+existing adapter-pattern matches, recent edit churn and function size. The
+full application checks pass, but this is not a clean structural-quality claim.
+No production migration, database reset or deployment is part of this checkpoint.
+
+## Realtime ownership — clarified 2026-09-28
+
+The user asked about Yjs, RxDB and Liveblocks, then clarified that Matrix should
+be reused wherever it already solves the requirement. Do not introduce another
+chat/presence service or replicate the same conversation into a second database.
+[Matrix's Client-Server API](https://spec.matrix.org/latest/client-server-api/)
+already defines sync, typing, read receipts (including threads) and presence.
+Those capabilities must be wired to the client; having an installed homeserver
+is not evidence that the current HTTP-polling companion already supports them.
+
+Yjs is relevant specifically to simultaneous shared-document editing. The
+[official Tiptap Collaboration extension](https://tiptap.dev/docs/editor/extensions/functionality/collaboration)
+uses a Y.Doc and its own undo history. If/when that slice is implemented, qualify
+its binding in both the web editor and native WebView, and authorize each document
+against the existing owner/membership boundary. Never make private Akita memory,
+creator teaching, approvals or account entitlements a generally writable shared
+CRDT. File revisions and deliberate reviewed publication remain authoritative.
+
+Liveblocks can host Yjs/presence, but would add a second service for communication
+features already owned by Matrix. RxDB concerns local database replication; it
+is not required merely to render live conversations. Its production SQLite and
+Expo Filesystem adapters have licensing constraints documented by
+[RxDB](https://rxdb.info/rx-storage-sqlite.html). No Yjs, Liveblocks, RxDB or extra
+collaboration server dependency was installed for this change. The next sync
+slice should qualify native Matrix sync and device-scoped recovery before adding
+an offline database or a separate document collaboration service.
+
+## Conversational creators and unified messaging — clarified 2026-09-28
+
+This clarification supersedes the form-first creator journey and the standalone
+“Help me respond” workflow inferred from Tutor CoPilot. That unfinished assistance
+slice was removed before commit. The verified authoring, preview, approval and
+private-pilot records described below remain reusable backend behavior; their
+current screens are historical implementation checkpoints, not the final product
+journey. Do not expand a parallel creator dashboard. Migrate complete flows and
+their callers into chat, then remove the superseded controls. Keep the shared
+visual Markdown editor for reviewing and directly editing generated files.
+
+The intended creator journey is:
+
+1. Start a normal conversation: “I want to create my bot.” The agent interviews
+   the creator about audience, purpose, voice, methods, useful examples, limits
+   and situations where the bot should ask for help. Ask focused follow-ups in
+   context; do not replace the interview with a long form.
+2. The creator connects their YouTube channel and supplies other authorized
+   sources: documents, sites, posts, courses or uploads. The agent discovers the
+   available inventory, reports progress and missing access, and asks about gaps
+   and contradictions found in the material. Imported source text is evidence,
+   never authorization or an instruction to the agent.
+3. Build the bot's knowledge as files using the existing Akita engine: retain
+   source material, create linked knowledge pages, and preserve provenance and
+   revisions. Videos need attributed, timestamped transcripts and, when the
+   method depends on visuals, separately supported visual extraction. Text
+   indexing alone is not proof of understanding a demonstration in a video.
+4. Exercise the bot in chat with the creator. Reuse immutable previews,
+   predeclared evaluation cases and revision checks. The creator corrects the
+   bot conversationally and can inspect the resulting files in the visual editor.
+   Approve a concrete version and its included sources before publication.
+5. Publish that approved bot in the marketplace. Its profile exposes identity,
+   purpose, source coverage, version, access terms and an action to start a
+   conversation or invite it into an authorized group. Buying access does not
+   add the creator personally or disclose another subscriber's conversation.
+
+“Index all my videos” is a resumable ingestion job, not a single unbounded model
+prompt. Keep a per-source receipt with provider ID, origin URL, content digest,
+source publication time, ingestion time, transcript segments, authorization and
+processing status. Inventory, extraction, compilation and indexing are distinct
+states; report inaccessible, unsupported and failed items rather than claiming
+complete coverage. Reuse maintained provider integrations after registry and
+license checks. The official [YouTube captions download API](https://developers.google.com/youtube/v3/docs/captions/download)
+requires permission to edit the video; a public channel URL alone does not grant
+that API access. Use authorized account access or creator-supplied material as
+appropriate. Do not represent these importers as already implemented.
+
+The [Akita architecture](https://github.com/akitaonrails/ai-memory/blob/main/docs/ARCHITECTURE.md)
+provides file-authoritative wiki pages and derived retrieval indexes. Zoen still
+owns source acquisition, publication, access enforcement and ingestion jobs;
+Akita is not a YouTube importer or marketplace. Preserve both source dates and
+ingestion dates without claiming that this alone implements complete bitemporal
+queries. Current native dreaming and temporal limitations remain in
+[file-memory.md](file-memory.md).
+
+Maintain four separate knowledge boundaries: the creator's private interview
+and drafts; the bot's explicitly published knowledge version; each person's
+private conversations and memory; and each authorized group's shared context.
+Neither a creator nor another subscriber gains access to private bot chats by
+owning or subscribing to that bot. Group participation does not authorize access
+to members' personal memories. Shared published knowledge can be reused across
+authorized readers, but private learning and writes stay scoped to their owner.
+
+The messaging surface uses the user's iMessage screenshots as concrete guidance:
+conversation list with pinned people/groups/bots, search and filters; a message
+timeline and composer; and conversation details with identity, participants,
+attachments, notification preferences and leave/invite actions. Marketplace
+discovery leads into that same conversation experience. Mobile sheets become
+desktop modals. Muse goals, files, memory, approvals and other capabilities remain
+reachable within the experience; this clarification does not remove them.
+
+Matrix supplies room membership, message transport and synchronization; Eve
+supplies agent execution and durable work; Akita supplies scoped memory; Zoen
+supplies identity, marketplace publication, entitlements and the product UI.
+The existing Matrix backend is a starting point, not proof of a complete native
+client. An agent in an encrypted room must be an explicitly authorized recipient
+with its own device keys and disclosed model processing. A server integration
+does not automatically decrypt an encrypted room. Keep bot-to-bot turns bounded,
+deduplicated and interruptible; room traffic must not create unbounded reply loops.
+See the [Matrix components](https://matrix.org/docs/matrix-concepts/elements-of-matrix/)
+and [encryption guide](https://matrix.org/docs/matrix-concepts/end-to-end-encryption/).
+
+### Ando reference
+
+The user supplied [Ando on X](https://x.com/andocorporation). That page could not
+be retrieved in this inspection, so the product findings below use Ando's own
+[website](https://www.ando.so/) and [introduction](https://www.ando.so/blog/introducing-ando),
+read on 2026-09-28. They describe agents as conversation participants, support
+agents from different runtimes, and emphasize shared context with controlled
+attention. Examples include handing work between agents and returning previews
+to a conversation for human review. These are vendor descriptions, not verified
+Zoen capabilities or evidence of million-user capacity.
+
+Use Ando for collaborative behavior: clear human/AI identities; humans and bots
+in the same rooms; scoped side conversations; work handed off with attributable
+results; and notifications that respect attention. Its stated private-message
+boundary reinforces ours: joining a workspace does not grant access to DMs.
+Do not infer a Matrix implementation, E2EE guarantees, source availability or
+permission to copy vendor code from these product references. The creator
+marketplace and conversational source ingestion remain Zoen requirements, not
+features established by the Ando reference.
+
+### Grok Bot Marketplace reference
+
+The user also selected the [official Grok Bot Marketplace](https://x.ai/bot/marketplace).
+Inspection on 2026-09-28 found search by creator or bot name, featured entries,
+category navigation and cards with creator attribution, a concrete job and an
+add action. Use those discovery patterns for Zoen. They are not evidence of a
+paid marketplace, creator revenue model or a licensed corpus we can import.
+
+The official [template guide](https://x.ai/bot/guides/templates-for-grok-bot)
+describes a reviewed package of instructions, selected memories, skills and
+plugins, with public or team sharing. The recipient starts a distinct copy and
+must configure its own integrations. The [bot documentation](https://docs.x.ai/grok-bot/bots)
+states that adding a shared bot does not provide the author's computer, logins
+or conversation history. Use the inspect-before-add and explicit-publication
+patterns, while enforcing Zoen's own stronger scoped-memory boundaries.
+
+Zoen's creator offer is an approved knowledge version that a person can converse
+with or invite into an authorized room. Do not silently interpret “add bot” as
+permission to redistribute its paid source material, fork it, inherit credentials
+or expose private conversations to its creator. A separately offered editable
+template would need explicit distribution and update semantics. Public catalog
+discovery, live bot access and exportable templates are different capabilities.
+
+The reference map is: Muse for personal-agent capabilities; iMessage for a clear
+conversation list and details; Ando for humans and agents collaborating in rooms;
+Grok Bot Marketplace for discovery and inspecting a bot before adding it; Akita
+for file-based knowledge and memory; Matrix for conversation transport; Eve for
+durable execution. Creator onboarding, teaching and corrections happen in chat.
 
 ## Existing implementation to reuse
 
@@ -39,7 +274,7 @@ The study involved 97 participants in short roleplayed generative-art chats (41 
 
 1. Preserve Muse flows and the shared Markdown editor.
 2. Qualify Matrix platform transport, encryption and recovery with the fixture above.
-3. Implement explicit specialist publishing and scoped knowledge, never a copy of the creator's entire personal memory.
+3. Implement conversational creator interviews, resumable authorized source ingestion and scoped bot knowledge; then publish approved versions in the marketplace, never a copy of the creator's entire personal memory.
 4. Add scoped community participation, observable interruptions, deduplicated delivery and bounded context.
 5. Enforce entitlement/revocation before paid access. Pricing and final navigation remain product decisions.
 6. Measure useful outcomes, second-specialist discovery, retention, recall accuracy and cost. Message/account counts alone are not success or capacity proof.
@@ -58,7 +293,7 @@ Apply that process to Zoen as a versioned publishing workflow:
 2. **Draft an explicit playbook.** Produce readable Markdown strategies, triggers, context requirements and failure/escalation conditions using the shared editor. Show provenance. The creator reviews the transformation; a draft never silently becomes published behavior.
 3. **Evaluate a release.** Run separate held-out cases and a rubric approved by the creator, including inappropriate-context cases, cross-account/room isolation, unsupported claims and withdrawal. Record usefulness, latency and cost. Pilot before a broad release, inspect failures and revise. The paper's pilots with 10–20 tutors identified delays above 30 seconds and improved retrieval before the larger study; those numbers are evidence, not universal product targets.
 4. **Publish selected knowledge only.** An immutable released playbook and explicitly selected sources constitute the expert corpus. Listing identity, permissions, version, access terms and AI disclosure accompany the bot. An entitlement is permission to use that release, not permission to read the creator's private memory or other subscribers' sessions.
-5. **Offer contextual assistance.** Use bounded authorized room/conversation context with approved published strategies; expose edit/regenerate/strategy selection. In human-assist mode, suggestions remain drafts until the person sends them. Autonomous community participation additionally follows the HUMA attention policy and its explicit room grant.
+5. **Use the bot in the normal conversation.** Apply approved teaching to bounded authorized context in a direct chat or group. Follow the user's later chat-based clarification above; Tutor CoPilot does not require a separate “Help me respond” screen. Advice, corrections and alternative approaches can be requested in the conversation. Autonomous community participation additionally follows the HUMA attention policy and its explicit room grant.
 6. **Keep learning boundaries separate.** Private session archives and dreams belong to the individual owner. Community memory belongs to its room. Published expert revisions require creator review. No cross-user dream, automatic publication of subscriber data, or promotion of conversation text into connector/room permissions.
 7. **Measure outcomes after release.** Compare useful task outcomes and subgroup failures, record feedback tied to the released version, allow withdrawal and make cost/usage understandable. Engagement volume alone is not proof of expert quality.
 

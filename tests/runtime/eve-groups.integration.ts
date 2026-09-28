@@ -187,6 +187,7 @@ test("real group conversation executes workspace tools, retains shared context a
       id: room.id,
       operationId: randomUUID(),
       text: "@Zoen group-message",
+      rootId: chatter.event_id,
     });
     await waitForMatrixState(nativeMessage.event_id, "completed");
     const nativeMessages = (await readMatrixMessages(actor, room.id)).messages;
@@ -209,6 +210,17 @@ test("real group conversation executes workspace tools, retains shared context a
       nativeMessages.find((message) => message.id === nativeMessage.event_id)
         ?.reactions
     ).toContainEqual({ type: "heart", count: 1 });
+    const threaded = await readMatrixMessages(
+      actor,
+      room.id,
+      undefined,
+      chatter.event_id
+    );
+    expect(
+      threaded.messages.find(
+        (message) => message.text === "Native group message."
+      )
+    ).toMatchObject({ bot: true, rootId: chatter.event_id });
     const reactions = z
       .object({
         chunk: z.array(
