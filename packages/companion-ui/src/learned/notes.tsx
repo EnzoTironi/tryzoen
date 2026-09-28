@@ -10,15 +10,23 @@ import type { z } from "zod";
 import type {
   learnedMemoryHistoryInputSchema,
   learnedMemoryHistorySchema,
+  learnedMemoryRelationEditSchema,
+  LearnedMemoryItemSchema,
 } from "./schema";
 import { MemoryHistory } from "./history";
+import { MemoryRelations } from "./relations";
 
 export interface LearnedNotesData {
+  relate: (
+    input: z.infer<typeof learnedMemoryRelationEditSchema>,
+    operationId: string
+  ) => Promise<void>;
   history: (
     input: z.infer<typeof learnedMemoryHistoryInputSchema>
   ) => Promise<z.infer<typeof learnedMemoryHistorySchema>>;
   read: () => Promise<{
-    documents: readonly MemoryDocumentView[];
+    documents: readonly (MemoryDocumentView &
+      Pick<z.infer<typeof LearnedMemoryItemSchema>, "relations">)[];
     enabled: boolean;
     workspaceEnabled: boolean;
     needsAttention: boolean;
@@ -43,6 +51,7 @@ export function LearnedNotes({
   readonly cacheScope: string;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [relating, setRelating] = useState<string>();
   const memory = useQuery({
     queryKey: ["companion-learned-memory", cacheScope],
     queryFn: data.read,
@@ -154,6 +163,15 @@ export function LearnedNotes({
               quiet
               disabled={mutation.isPending || memory.data.needsAttention}
               onPress={() => {
+                setRelating(note.id);
+              }}
+            >
+              {`Relationships (${note.relations.length})`}
+            </ActionButton>
+            <ActionButton
+              quiet
+              disabled={mutation.isPending || memory.data.needsAttention}
+              onPress={() => {
                 edit(note.id, note.text);
               }}
             >
@@ -221,6 +239,20 @@ export function LearnedNotes({
           load={data.history}
           onClose={() => {
             setHistoryOpen(false);
+          }}
+        />
+      )}
+      {relating && memory.data && (
+        <MemoryRelations
+          key={relating}
+          noteId={relating}
+          documents={memory.data.documents}
+          data={data}
+          onSaved={async () => {
+            await memory.refetch();
+          }}
+          onClose={() => {
+            setRelating(undefined);
           }}
         />
       )}

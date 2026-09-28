@@ -1,9 +1,11 @@
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { rm } from "node:fs/promises";
+import { rm, glob, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { LearnedMemory } from "../../server/memory/learned";
 import { FileMemory } from "../../server/memory/ai-memory/learned";
@@ -53,7 +55,7 @@ test("historical excerpts preserve the old version and enforce owner, pause and 
     await delay(20);
     await memory.write(actor, {
       action: "update",
-      memoryId: saved.ids[0],
+      memoryId: z.uuid().parse(saved.ids[0]),
       operationId: randomUUID(),
       text: "The book club now meets in Ambertrail.",
     });
@@ -87,7 +89,7 @@ test("historical excerpts preserve the old version and enforce owner, pause and 
     await expect(
       memory.write(actor, {
         action: "update",
-        memoryId: saved.ids[0],
+        memoryId: z.uuid().parse(saved.ids[0]),
         text: "An unfinished correction.",
         operationId: randomUUID(),
       })
@@ -96,6 +98,211 @@ test("historical excerpts preserve the old version and enforce owner, pause and 
       reason: "stale_recall",
     });
     expect(audit).not.toHaveBeenCalled();
+  }));
+
+test("typed relationships survive body edits, retain dangling history and cannot be resurrected by a replay", () =>
+  run(async ({ actor, memory }) => {
+    const writes = vi.spyOn(FileMemory, "mutate");
+    const source = (
+      await memory.write(actor, {
+        action: "remember",
+        operationId: randomUUID(),
+        text: "Cedarbay club meets on Monday.",
+      })
+    ).ids[0];
+    const target = (
+      await memory.write(actor, {
+        action: "remember",
+        operationId: randomUUID(),
+        text: "Cedarbay club meets on Tuesday.",
+      })
+    ).ids[0];
+    const relations = [
+      { kind: "contradicts" as const, memoryId: z.uuid().parse(target) },
+    ];
+    const input = {
+      action: "relate" as const,
+      memoryId: z.uuid().parse(source),
+      relations,
+      expectedRelations: [],
+      operationId: randomUUID(),
+    };
+    await memory.write(actor, input);
+    expect(
+      (await memory.read(actor, "Tuesday")).results.some(
+        (item) => item.id === source
+      )
+    ).toBe(true);
+    expect(
+      (await memory.read(actor)).results.find((item) => item.id === source)
+        ?.relations
+    ).toEqual(relations);
+    const asOf = new Date().toISOString();
+    await delay(20);
+    await memory.write(actor, {
+      action: "update",
+      memoryId: z.uuid().parse(source),
+      operationId: randomUUID(),
+      text: "Ambertrail club now meets on Wednesday.",
+    });
+    const current = (await memory.read(actor)).results.find(
+      (item) => item.id === source
+    );
+    expect(current).toMatchObject({
+      memory: "Ambertrail club now meets on Wednesday.",
+      relations,
+    });
+    const wiki = join(
+      directory,
+      z.uuid().parse(writes.mock.calls[0]?.[0]),
+      "learned-memory",
+      "wiki"
+    );
+    const sources = await Array.fromAsync(
+      glob(`*/*/notes/${z.uuid().parse(source)}.md`, { cwd: wiki })
+    );
+    expect(sources).toHaveLength(1);
+    const markdown = await readFile(
+      join(wiki, z.string().parse(sources[0])),
+      "utf8"
+    );
+    expect(markdown).toContain("contradicts:");
+    expect(markdown).toContain(`notes/${z.uuid().parse(target)}.md`);
+    expect(
+      execFileSync(
+        "git",
+        ["-C", wiki, "show", `HEAD:${z.string().parse(sources[0])}`],
+        {
+          encoding: "utf8",
+        }
+      )
+    ).toBe(markdown);
+    expect(
+      (await memory.history(actor, { query: "Monday", asOf })).hits.some(
+        (item) => item.noteId === source && item.excerpt.includes("Monday")
+      )
+    ).toBe(true);
+    await memory.write(actor, {
+      action: "delete",
+      memoryId: z.uuid().parse(target),
+      operationId: randomUUID(),
+    });
+    expect(
+      (await memory.read(actor)).results.find((item) => item.id === source)
+        ?.relations
+    ).toEqual(relations);
+    await memory.write(actor, {
+      ...input,
+      relations: [],
+      expectedRelations: relations,
+      operationId: randomUUID(),
+    });
+    await memory.write(actor, input);
+    expect(
+      (await memory.read(actor)).results.find((item) => item.id === source)
+        ?.relations
+    ).toEqual([]);
+  }));
+
+test("a failed Git checkpoint leaves recall fenced and the source reviewable", () =>
+  run(async ({ actor, memory }) => {
+    const saved = await memory.write(actor, {
+      action: "remember",
+      operationId: randomUUID(),
+      text: "Synthetic original note.",
+    });
+    const request = fetch;
+    const failure = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input, init) => {
+        if (
+          new URL(input instanceof Request ? input.url : input).pathname ===
+          "/admin/commit"
+        )
+          return Promise.reject(new Error("Synthetic checkpoint outage"));
+        return request(input, init);
+      });
+    const input = {
+      action: "update" as const,
+      memoryId: z.uuid().parse(saved.ids[0]),
+      text: "Synthetic changed source.",
+      operationId: randomUUID(),
+    };
+    await expect(memory.write(actor, input)).rejects.toMatchObject({
+      reason: "unavailable",
+    });
+    await expect(memory.recover(actor)).rejects.toMatchObject({
+      reason: "unavailable",
+    });
+    failure.mockRestore();
+    await expect(
+      memory.recall(actor, "checkpoint-failure", randomUUID(), "Synthetic")
+    ).rejects.toMatchObject({
+      reason: "stale_recall",
+    });
+    const review = await memory.read(actor, undefined, true);
+    expect(review.needsAttention).toBe(true);
+    expect(review.results[0]?.memory).toBe(input.text);
+    await memory.recover(actor);
+    expect((await memory.read(actor)).results[0]?.memory).toBe(input.text);
+  }));
+
+test("relation destinations cannot cross a person/workspace and stale replacement cannot overwrite newer links", () =>
+  run(async ({ actor, guest, personal, memory }) => {
+    const save = async (
+      person: Parameters<typeof memory.write>[0],
+      text: string
+    ) =>
+      (
+        await memory.write(person, {
+          action: "remember",
+          operationId: randomUUID(),
+          text,
+        })
+      ).ids[0];
+    const source = await save(actor, "Synthetic source");
+    const target = await save(actor, "Synthetic target");
+    const foreign = [
+      await save(guest, "Other person"),
+      await save(personal, "Other workspace"),
+      source,
+    ];
+    for (const memoryId of foreign) {
+      await expect(
+        memory.write(actor, {
+          action: "relate",
+          memoryId: z.uuid().parse(source),
+          relations: [{ kind: "causes", memoryId: z.uuid().parse(memoryId) }],
+          expectedRelations: [],
+          operationId: randomUUID(),
+        })
+      ).rejects.toMatchObject({ reason: "not_found" });
+      await memory.recover(actor);
+    }
+    const relations = [
+      { kind: "fixes" as const, memoryId: z.uuid().parse(target) },
+    ];
+    await memory.write(actor, {
+      action: "relate",
+      memoryId: z.uuid().parse(source),
+      relations,
+      expectedRelations: [],
+      operationId: randomUUID(),
+    });
+    await expect(
+      memory.write(actor, {
+        action: "relate",
+        memoryId: z.uuid().parse(source),
+        relations: [],
+        expectedRelations: [],
+        operationId: randomUUID(),
+      })
+    ).rejects.toMatchObject({ reason: "conflict" });
+    await memory.recover(actor);
+    expect(
+      (await memory.read(actor)).results.find((item) => item.id === source)
+        ?.relations
+    ).toEqual(relations);
   }));
 
 test("partitions each person/workspace and rejects forged access before reaching the file engine", () =>
@@ -145,7 +352,7 @@ test("replay is stable, deletion invalidates earlier recalls, and an Eve scope c
     ).toEqual(first);
     await memory.write(actor, {
       action: "delete",
-      memoryId: saved.ids[0],
+      memoryId: z.uuid().parse(saved.ids[0]),
       operationId: randomUUID(),
     });
     await expect(
@@ -180,7 +387,7 @@ test("an ambiguous deletion fences recall until explicit clear succeeds", () =>
     await expect(
       memory.write(actor, {
         action: "delete",
-        memoryId: saved.ids[0],
+        memoryId: z.uuid().parse(saved.ids[0]),
         operationId: "uncertain-delete",
       })
     ).rejects.toBeInstanceOf(FileMemoryError);
@@ -217,7 +424,7 @@ test("recovery verifies current files without replaying an uncertain mutation or
         operationId: "uncertain-write",
       })
     ).rejects.toBeInstanceOf(FileMemoryError);
-    vi.spyOn(FileMemory, "read").mockRejectedValueOnce(
+    vi.spyOn(FileMemory, "recover").mockRejectedValueOnce(
       new FileMemoryError("unavailable")
     );
     await expect(memory.recover(actor)).rejects.toBeInstanceOf(FileMemoryError);

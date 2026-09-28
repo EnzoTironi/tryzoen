@@ -30,6 +30,12 @@ async function withLearnedCorpus<Result>(
 
 /** Call only under the authorized namespace's database lock. No client-supplied paths or scopes. */
 export const FileMemory = {
+  recover(namespace: string) {
+    return withLearnedCorpus(namespace, async (engine) => {
+      await readNotes(engine);
+      await engine.checkpoint();
+    });
+  },
   history(
     namespace: string,
     input: z.infer<typeof learnedMemoryHistoryInputSchema>

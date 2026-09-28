@@ -57,7 +57,7 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
     await mutateNotes(engine, namespace, {
       action: "update",
       operationId: randomUUID(),
-      memoryId: saved,
+      memoryId: z.uuid().parse(saved),
       text: "# Book club\nWe meet at Ambertrail.",
     });
     expect((await readNotes(engine, "Cedarbay")).results).toEqual([]);
@@ -111,7 +111,7 @@ test("saves exact Markdown, corrects current recall, and persists idempotent mut
     await mutateNotes(engine, namespace, {
       action: "delete",
       operationId: randomUUID(),
-      memoryId: saved,
+      memoryId: z.uuid().parse(saved),
     });
     expect((await readNotes(engine, "Ambertrail")).results).toEqual([]);
     expect(await mutateNotes(engine, namespace, remember)).toEqual({
@@ -208,7 +208,7 @@ test("keeps namespaces private and a clear receipt cannot erase subsequently sav
       mutateNotes(privateEngine, other, {
         action: "delete",
         operationId: randomUUID(),
-        memoryId: id,
+        memoryId: z.uuid().parse(id),
       })
     ).rejects.toMatchObject({ reason: "not_found" });
   }

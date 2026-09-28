@@ -223,3 +223,30 @@ length. The exports retain their distinct schemas and file formats instead of
 introducing a generic export factory. The unused-code check passes; the structural
 scanner's JSX/interface-method reachability findings are false positives. No
 structural findings were suppressed and this is not a clean structural gate.
+
+### Private memory relations checkpoint — 2026-09-28
+
+Private learned notes now expose Akita’s typed relationships with the same
+person/workspace isolation as recall. They stay in the original Markdown/Git
+corpus; they are not creator knowledge, a marketplace discovery graph or shared
+room memory. The specialist preview still receives only its frozen playbook,
+examples and fictional question. This does not enable a specialist to read or
+link the creator’s personal memory. See [file-memory implementation and limits](file-memory.md#private-typed-relationships--2026-09-28).
+
+The previous preview checkpoint’s actual desktop/mobile images are attached to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5866398125).
+
+Validation for typed relations: all nine workspace checks passed, including 1,323
+tests in 205 files; the production build and Expo web/iOS/Android exports also
+passed. Eighteen isolated runtime cases cover learned memory, source notes and
+revocation/save/remove races. Chrome verified persistence after reload, the same
+editor on both memory surfaces, desktop modal/mobile sheet presentation, and a
+failed save retaining its draft. The interception was removed after verification.
+Actual screenshots are attached with `gh --attach` to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5866883758).
+
+The structural report still has twelve gating findings, primarily short RPC
+wrapper similarity, component length and recent ownership changes. No findings
+were suppressed. The unused-code check passes; the scanner does not recognize
+the shared editor's JSX usage. This checkpoint does not qualify physical devices,
+production deployment, dreams, public marketplace releases or million-user load.

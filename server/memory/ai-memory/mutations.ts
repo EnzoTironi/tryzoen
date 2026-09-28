@@ -4,10 +4,18 @@ import { open, opendir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
+import type { learnedMemoryRelationsSchema } from "@zoen/companion-ui/memory";
 import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 import { privateMemoryDirectory } from "../session-files";
 import type { openMemoryEngine } from "./engine";
-import { deleteNote, listNotePaths, writeNote } from "./notes";
+import {
+  deleteNote,
+  listNotePaths,
+  writeNote,
+  readNotePage,
+  noteRelations,
+} from "./notes";
+import { editNoteSource } from "./source-edit";
 
 const receiptSchema = z.object({
   digest: z.string().regex(/^[0-9a-f]{64}$/),
@@ -84,6 +92,36 @@ async function completeReceipt(
   }
 }
 
+const relationKey = (items: z.infer<typeof learnedMemoryRelationsSchema>) =>
+  items
+    .map((item) => `${item.kind}:${item.memoryId}`)
+    .toSorted()
+    .join("|");
+
+async function validateRelations(
+  engine: Awaited<ReturnType<typeof openMemoryEngine>>,
+  input: Extract<
+    z.infer<typeof LearnedMemoryWriteSchema>,
+    { action: "relate" }
+  >,
+  paths: string[]
+) {
+  if (
+    input.relations.some(
+      (item) =>
+        item.memoryId === input.memoryId ||
+        !paths.includes(`notes/${item.memoryId}.md`)
+    )
+  )
+    throw new FileMemoryError("not_found");
+  const page = await readNotePage(engine, `notes/${input.memoryId}.md`);
+  if (
+    relationKey(noteRelations(page.frontmatter)) !==
+    relationKey(input.expectedRelations)
+  )
+    throw new FileMemoryError("conflict");
+}
+
 /** The engine's writer lock must stay held across reservation, mutation and fsync. */
 export async function mutateNotes(
   engine: Awaited<ReturnType<typeof openMemoryEngine>>,
@@ -105,23 +143,37 @@ export async function mutateNotes(
   const id =
     input.action === "remember"
       ? uuidv5(input.operationId, z.uuid().parse(namespace))
-      : input.memoryId;
+      : input.action === "clear"
+        ? undefined
+        : input.memoryId;
   if (input.action === "remember" && paths.length >= 200)
     throw new FileMemoryError("limit");
   if (
-    (input.action === "update" || input.action === "delete") &&
-    (!id || !paths.includes(`notes/${id}.md`))
+    input.action !== "remember" &&
+    input.action !== "clear" &&
+    !paths.includes(`notes/${input.memoryId}.md`)
   )
     throw new FileMemoryError("not_found");
-  if ((input.action === "remember" || input.action === "update") && !input.text)
-    throw new FileMemoryError("conflict");
+  if (input.action === "relate") await validateRelations(engine, input, paths);
   await reserveReceipt(directory, path, hash);
-  if (input.action === "clear") {
-    for (const note of paths) await deleteNote(engine, note.slice(6, -3));
-  } else if (input.action === "delete" && id) {
-    await deleteNote(engine, id);
-  } else if (id && input.text) {
-    await writeNote(engine, id, input.text);
+  switch (input.action) {
+    case "clear":
+      for (const note of paths) await deleteNote(engine, note.slice(6, -3));
+      break;
+    case "delete":
+      await deleteNote(engine, input.memoryId);
+      break;
+    case "relate":
+      await editNoteSource(engine, input.memoryId, {
+        relations: input.relations,
+      });
+      break;
+    case "update":
+      await editNoteSource(engine, input.memoryId, { text: input.text });
+      break;
+    case "remember":
+      await writeNote(engine, z.uuid().parse(id), input.text);
+      break;
   }
   const result = { ids: input.action === "clear" || !id ? [] : [id] };
   await completeReceipt(directory, path, { digest: hash, result });

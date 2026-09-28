@@ -217,6 +217,30 @@ async function deliverSessionBatch(
     );
 }
 
+async function checkpointMemory(address: URL, headers: Record<string, string>) {
+  const response = await fetch(new URL("/admin/commit", address), {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: "Zoen: edit private learned note",
+    }),
+    redirect: "error",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error("Memory checkpoint failed.");
+  const receipt = z
+    .object({
+      committed: z.boolean(),
+      oid: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
+    })
+    .parse(await response.json());
+  if (receipt.committed && !receipt.oid)
+    throw new Error("Memory checkpoint is incomplete.");
+}
+
 /** Operator-owned local worker. Never expose its URL, token, or generic MCP to a client/model. */
 export async function openMemoryEngine(
   binary: string,
@@ -238,6 +262,7 @@ export async function openMemoryEngine(
     return {
       data,
       client,
+      checkpoint: () => checkpointMemory(runtime.address, headers),
       deliver: (items: Parameters<typeof deliverSessionBatch>[2]) =>
         deliverSessionBatch(runtime.address, headers, items),
       async [Symbol.asyncDispose]() {

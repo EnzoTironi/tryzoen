@@ -244,9 +244,9 @@ export const LearnedMemory = {
   recover: async function (actor: z.output<typeof WorkspaceActorSchema>) {
     return await withDatabaseTransaction(async () => {
       const partition = await memoryNamespace(actor);
-      // A fresh, successful service read completes before recall is unfenced.
+      // Verify current source files and checkpoint them before recall is unfenced.
       // Old operation receipts remain tombstoned; recovery never replays writes.
-      await FileMemory.read(partition.id);
+      await FileMemory.recover(partition.id);
       await dbQuery(
         sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${partition.id}`
       );

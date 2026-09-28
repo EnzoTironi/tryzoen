@@ -8,11 +8,12 @@ import {
   PlayIcon,
   PlusIcon,
   Trash2Icon,
+  LinkIcon,
 } from "lucide-react";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
-import { DocumentEditor } from "@zoen/companion-ui";
+import { DocumentEditor, MemoryRelations } from "@zoen/companion-ui";
 import { CompanionEditingProvider } from "../../../companion/editing";
 import { PanelIntro } from "../../_components/panel-intro";
 import panel from "../../_components/panel.module.css";
@@ -27,12 +28,14 @@ export default function LearnedMemoryPage() {
   const [editing, setEditing] = useState<string>();
   const [text, setText] = useState("");
   const [adding, setAdding] = useState(false);
+  const [relating, setRelating] = useState<string>();
   const save = async (content: string) => {
     if (!content.trim())
       throw new Error(t("Escreva uma memória antes de salvar."));
     await write.mutateAsync({
-      action: editing ? "update" : "remember",
-      memoryId: editing,
+      ...(editing
+        ? ({ action: "update", memoryId: editing } as const)
+        : ({ action: "remember" } as const)),
       text: content,
       operationId: crypto.randomUUID(),
     });
@@ -103,6 +106,34 @@ export default function LearnedMemoryPage() {
             }}
           />
         )}
+        {relating && memory.data && (
+          <MemoryRelations
+            key={relating}
+            noteId={relating}
+            documents={memory.data.results.map((item) => ({
+              id: item.id,
+              title: "Learned memory",
+              text: item.memory,
+              relations: item.relations,
+            }))}
+            data={{
+              newOperationId: () => crypto.randomUUID(),
+              relate: async (input, operationId) => {
+                await write.mutateAsync({
+                  ...input,
+                  action: "relate",
+                  operationId,
+                });
+              },
+            }}
+            onSaved={async () => {
+              await memory.refetch();
+            }}
+            onClose={() => {
+              setRelating(undefined);
+            }}
+          />
+        )}
         {(memory.error ?? write.error ?? toggle.error ?? recover.error) && (
           <p className={styles.error} role="alert">
             {t("A memória está indisponível agora. Tente novamente.")}
@@ -131,6 +162,17 @@ export default function LearnedMemoryPage() {
             <div className={styles.row} key={item.id}>
               <BrainIcon aria-hidden="true" />
               <span>{item.memory}</span>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={t("Relações da memória")}
+                disabled={write.isPending || memory.data.needsAttention}
+                onClick={() => {
+                  setRelating(item.id);
+                }}
+              >
+                <LinkIcon />
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"

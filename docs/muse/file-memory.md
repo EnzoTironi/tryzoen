@@ -156,8 +156,9 @@ The paired Next/Eve host requires a retained `/var/lib/zoen` volume; production
 configuration requires `ZOEN_FILE_MEMORY_VOLUME_ID` pointing to an already
 prepared, verified volume. Startup rejects an absent mount. This gate is not an
 import or backup-restore proof. Production cutover, historical reconstruction
-from backup, selective Git purging, exposed relation/temporal editing, full
-assistant ingestion and dreaming remain outstanding.
+from backup, selective Git purging, complete historical document/temporal editing, full
+assistant ingestion and dreaming remain outstanding. Private relation controls
+are described below.
 
 ### Verified learned-note checkpoint — 2026-09-28
 
@@ -222,3 +223,63 @@ Final checkpoint checks passed: `pnpm check` (1,323 tests / 205 files),
 gating findings, including short delegation wrappers and test-fixture churn;
 the moved note screen is also reported as a new large component. These were
 reviewed without suppression and are not a clean structural-quality verdict.
+
+## Private typed relationships — 2026-09-28
+
+Learned notes expose Akita’s closed `causes`, `fixes`, `contradicts` vocabulary in
+both the shared companion and `/space/memory`. The same relation editor opens as
+a desktop modal or mobile sheet; Markdown text edits still use the shared visual
+editor. Selection is limited to existing notes in this person’s private workspace
+corpus, with 20 outgoing links per note and bounded search over at most 200 notes.
+Deleted targets remain labeled as removed until the user removes their link. No
+private corpus is joined to a colleague’s memory, creator playbook or community.
+
+`learned__relate_memory` uses the same owner-bound service and exact recalled IDs.
+It requires an explicit user-stated/approved relation and the current outgoing
+relations as an optimistic precondition; similarity is not evidence of causality.
+The actor’s membership, human session, namespace lock, recall fence and durable
+content-free operation receipt remain the authority. An old successful operation
+cannot restore links that a subsequent operation removed. Conflicting/unfinished
+writes require review and recovery, and foreign IDs never become paths or scopes.
+
+Akita 2.4.1’s MCP and admin write-page endpoints do not accept relation metadata.
+Zoen therefore uses its documented human-editable Markdown/watcher path: it
+preserves the body and other frontmatter values, emits canonical YAML with the
+maintained `yaml` 2.9.1 package, writes a private temporary file, fsyncs and atomically
+renames it, waits for a changed upstream page-version ID, verifies the source and
+calls the native `/admin/commit`. Source formatting/comments may be normalized;
+there is no parallel PostgreSQL relation store or direct SQLite mutation. Existing
+body corrections use this path too, so they cannot discard relationship metadata.
+A failed checkpoint leaves automatic recall fenced. Explicit recovery verifies
+current files and requires a successful checkpoint before resuming; uncertain
+operation receipts remain tombstoned.
+
+The bounded watcher acknowledgement uses `memory_recent` within the fixed private
+scope; this upstream call also reinforces the inspected pages’ access counters.
+It waits up to 12 seconds before failing closed. A dropped filesystem event whose
+30-second upstream reconciliation has not run in time requires review/recovery.
+This does not prove recovery of a missing index or concurrent out-of-band file
+edits. Git/version history remains available to the operator; this is not a
+complete historical document editor. Historical `as_of` retrieval continues to
+exclude present-day graph expansion and describes ingestion time only.
+
+The isolated real-engine tests exercise graph retrieval, source/Git agreement,
+body corrections preserving relations, historical excerpts, target deletion,
+replayed operations, stale replacement, person/workspace separation and a failed
+Git checkpoint followed by recovery. Production deployment, dreams, embeddings,
+public/community memory, backup restore and capacity qualification remain open.
+
+Validation for typed relations: all nine workspace checks passed, including 1,323
+tests in 205 files; the production build and Expo web/iOS/Android exports also
+passed. Eighteen isolated runtime cases cover learned memory, source notes and
+revocation/save/remove races. Chrome verified persistence after reload, the same
+editor on both memory surfaces, desktop modal/mobile sheet presentation, and a
+failed save retaining its draft. The interception was removed after verification.
+Actual screenshots are attached with `gh --attach` to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5866883758).
+
+The structural report still has twelve gating findings, primarily short RPC
+wrapper similarity, component length and recent ownership changes. No findings
+were suppressed. The unused-code check passes; the scanner does not recognize
+the shared editor's JSX usage. This checkpoint does not qualify physical devices,
+production deployment, dreams, public marketplace releases or million-user load.

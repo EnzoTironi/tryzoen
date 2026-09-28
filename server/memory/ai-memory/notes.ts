@@ -5,6 +5,7 @@ import {
   LearnedMemoryItemSchema,
   learnedMemoryHistoryInputSchema,
   learnedMemoryHistorySchema,
+  learnedMemoryRelationsSchema,
 } from "@zoen/companion-ui/memory";
 import type { openMemoryEngine } from "./engine";
 import { operationSignal } from "../../operations/async";
@@ -25,7 +26,7 @@ function queryTerms(query: string) {
 }
 
 /** Only the private learned corpus is opened here. Raw session fallback is excluded. */
-async function noteTool(
+export async function noteTool(
   engine: Awaited<ReturnType<typeof openMemoryEngine>>,
   name: string,
   args: Record<string, unknown>
@@ -64,10 +65,10 @@ async function scopeDirectories(root: string) {
 }
 
 /** Bound discovery on disk; upstream memory_recent caps at 100 and has no cursor. */
-export async function listNotePaths(
+export async function listNoteFiles(
   engine: Awaited<ReturnType<typeof openMemoryEngine>>
 ) {
-  const paths = new Set<string>();
+  const paths = new Map<string, string>();
   for (const workspace of await scopeDirectories(join(engine.data, "wiki"))) {
     for (const project of await scopeDirectories(workspace)) {
       const directory = join(project, "notes");
@@ -91,11 +92,53 @@ export async function listNotePaths(
         const file = await lstat(join(directory, entry.name));
         if (!file.isFile() || file.isSymbolicLink() || file.size > 64 * 1024)
           throw new Error("Invalid learned memory file.");
-        paths.add(path);
+        paths.set(path, join(directory, entry.name));
       }
     }
   }
-  return [...paths].toSorted();
+  return paths;
+}
+
+export async function listNotePaths(
+  engine: Awaited<ReturnType<typeof openMemoryEngine>>
+) {
+  return [...(await listNoteFiles(engine)).keys()].toSorted();
+}
+
+export function noteRelations(frontmatter: Record<string, unknown>) {
+  const metadata = z
+    .object({
+      causes: z.array(notePath).optional(),
+      fixes: z.array(notePath).optional(),
+      contradicts: z.array(notePath).optional(),
+    })
+    .parse(frontmatter.relations ?? {});
+  return learnedMemoryRelationsSchema.parse(
+    Object.entries(metadata).flatMap(([kind, targets]) =>
+      targets.map((path) => ({ kind, memoryId: path.slice(6, -3) }))
+    )
+  );
+}
+
+export async function readNotePage(
+  engine: Awaited<ReturnType<typeof openMemoryEngine>>,
+  path: string
+) {
+  const page = z
+    .object({
+      path: notePath,
+      body: z.string().max(8000),
+      served_from: z.never().optional(),
+      frontmatter: z
+        .object({ generated: z.object({ at: z.string() }).loose().optional() })
+        .loose(),
+    })
+    .parse(
+      await noteTool(engine, "memory_read_page", { path: notePath.parse(path) })
+    );
+  if (page.path !== path)
+    throw new Error("Memory returned an unexpected source.");
+  return page;
 }
 
 export async function readNotes(
@@ -126,24 +169,14 @@ export async function readNotes(
   }
   const results: z.infer<typeof LearnedMemoryItemSchema>[] = [];
   for (const path of selected) {
-    const page = z
-      .object({
-        path: notePath,
-        body: z.string().max(8000),
-        served_from: z.never().optional(),
-        frontmatter: z
-          .object({ generated: z.object({ at: z.string() }).optional() })
-          .loose(),
-      })
-      .parse(await noteTool(engine, "memory_read_page", { path }));
-    if (page.path !== path)
-      throw new Error("Memory returned an unexpected source.");
+    const page = await readNotePage(engine, path);
     results.push(
       LearnedMemoryItemSchema.parse({
         id: path.slice(6, -3),
         memory: page.body,
         createdAt: null,
         updatedAt: page.frontmatter.generated?.at ?? null,
+        relations: noteRelations(page.frontmatter),
       })
     );
   }

@@ -43,6 +43,7 @@ export function companionAgentData(
             id: item.id,
             title: "Learned memory",
             text: item.memory,
+            relations: item.relations,
             updated: item.updatedAt
               ? new Date(item.updatedAt).toLocaleString()
               : "",
@@ -54,6 +55,13 @@ export function companionAgentData(
           action: id ? "update" : "remember",
           memoryId: id,
           text,
+          operationId,
+        });
+      },
+      async relate(input, operationId) {
+        await rpc.mutation("workspaces.memory.write", {
+          ...input,
+          action: "relate",
           operationId,
         });
       },
