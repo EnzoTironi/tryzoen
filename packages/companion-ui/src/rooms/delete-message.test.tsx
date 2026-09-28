@@ -20,6 +20,7 @@ vi.mock("../button", () => ({
   },
 }));
 const data: RoomData = {
+  markRead: vi.fn<RoomData["markRead"]>(),
   deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
   operationId: () => "operation",
   people: vi.fn<RoomData["people"]>(),

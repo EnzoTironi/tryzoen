@@ -110,11 +110,11 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 5. **Marketplace:** interface de descoberta pode avançar com contratos definidos; publicação depende de versão/fonte/autoridade e acesso pago depende de entitlements. Nunca lançar acesso só porque o cartão ficou pronto.
 6. **Muse proativo e distribuição:** Feed/Ideias dependem de fontes autorizadas, orçamento e rotinas, não de sonhos automáticos. Aparelhos reais, proteção contra abuso e capacidade são gates de lançamento e acompanham as entregas.
 
-## Execução paralela atual
+## Organização da execução paralela
 
 O PR 148 foi integrado depois dos seis checks aprovados. Com autorização do usuário, a exigência obsoleta `Private Mem0 service` foi removida da proteção da `main`; `Checks` e `Runtime storage and build` continuam obrigatórios, com atualização estrita da base. O segundo já executa qualificação de ingestão, restore e sonhos Akita.
 
-| Frente           | Entrega atual                                                                   | Dono de código                                                                           | Dependências / limite                                                                                                                                        |
+| Frente           | Primeira rodada                                                                 | Dono de código                                                                           | Dependências / limite                                                                                                                                        |
 | ---------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Comunicação      | Exclusão de mensagem própria em DM/grupo/thread, confirmação e redaction Matrix | `server/matrix`, contratos/adapters de rooms, UI de rooms, testes respectivos            | Preservar respostas ao excluir raiz; sem alegação de exclusão de todas as cópias/backups. Caixa de entrada completa precisa primeiro do contrato de projeção |
 | Criadores        | Avaliação e previews pelo chat, inspeção de candidato e revisão humana          | Ferramentas Eve de creator, `server/creators`, testes respectivos                        | O agente não pode atribuir a si mesmo o veredito humano; publicação/aprovação de release não são inferidas                                                   |
@@ -135,6 +135,20 @@ Cada frente publica primeiro o contrato e os arquivos que possui. Alterações e
 - Expo web com API real em proxy local da mesma origem: sessão antiga pede reautenticação; sessão recente lista dispositivos, revoga somente a sessão descartável e preserva o login atual. A sessão criada para QA foi encerrada ao final. OAuth em aparelho físico continua pendente.
 - Nenhuma mudança em produção nem habilitação de sonhos. A evidência visual representa os fluxos executados; o vídeo é uma sequência das capturas, não uma gravação contínua.
 - A revisão estrutural continua com observações de churn, pequenos trechos repetidos e tamanho de `MessageActions`; elas não foram suprimidas. A complexidade adicional de `RoomMessage` foi removida separando seus controles em um componente coeso.
+
+### Segunda rodada — 28/09/2026
+
+- **COMM-01:** paginação global por atividade entre chats do agente, DMs e grupos, filtros no servidor e atualização reiniciando na primeira página. O índice Matrix guarda somente metadados; prévias consultam no máximo 30 eventos exatos por página, com concorrência quatro e autorização antes/depois. Reconciliação histórica é limitada e retomável. Mensagens editadas usam indicador conservador; removidas usam tombstone.
+- **COMM-03:** marcadores privados de leitura Matrix após 750 ms de visibilidade efetiva, separados entre conversa e thread. Interrupções, modais e troca de conta cancelam o avanço pendente. Não lidas permanecem desconhecidas: o servidor testado devolve contagem zero para usuários virtuais mesmo havendo mensagens novas.
+- **MEDIA-03:** gravação compartilhada com adaptadores web/Electron/Expo, limite de 60 segundos, revisão, descarte e anexação explícita. Cancelamento, indisponibilidade e falha ao anexar preservam o rascunho de texto e liberam o microfone. Captura física e permissões reais ainda precisam de qualificação em aparelhos.
+- **Criadores:** entrevista por chat sobre propósito, método/voz e limites, com pular/cancelar, prévia exata e confirmação para salvar no rascunho privado. Concorrência, reinício e revogação são testados no workflow Eve. Isso não publica o bot nem importa seu corpus automaticamente.
+- Migrações aditivas 0083–0084; nenhum banco de produção foi alterado. Atualização incremental contínua, notificações, não lidas confiáveis e capacidade de um milhão de usuários continuam pendentes. Os limites de consulta são um orçamento explícito, não comprovação de escala.
+
+Validação integrada desta rodada: `pnpm check` passou com 225 arquivos e 1.426 testes; `pnpm build`, `pnpm db:check` e exports Expo para iOS/Android/web passaram. Cinco testes isolados PostgreSQL/Synapse cobrem inbox, recibos e envio com/sem callback; três testes Eve cobrem a entrevista durável. Os 26 testes específicos de áudio cobrem estados e adaptadores, sem qualificar captura física.
+
+Chrome no build final: envio em DM atualizou a prévia e moveu a conversa para o topo, sem depender do callback; busca/filtros e a barra mobile foram conferidos em desktop e 390 × 844. Foram capturadas quatro imagens e um vídeo de 16 segundos composto dessas imagens. A sessão sintética foi retirada do navegador após a revisão. A gravação real de microfone não foi exercitada nem autorizada pelo tooling.
+
+Revisão estrutural comparada ao commit anterior `f8f5498`: 56 observações, 26 marcadas como gating pelo scanner, sem supressões. Incluem churn, scaffolding repetido de testes, falsos candidatos a código morto e crescimento/tamanho real do compositor e ciclos de gravação. A consulta da inbox e o consentimento Electron ganharam responsáveis coesos separados; o restante não está declarado resolvido. Essa rodada não conclui paridade nem qualificação de lançamento.
 
 ### Critérios para cada rodada
 

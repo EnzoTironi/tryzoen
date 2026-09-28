@@ -20,6 +20,20 @@ export default defineAgent({
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           if (
+            lastUserMessage?.startsWith("creator-interview ") &&
+            !toolResults.some((result) => result.name === "creator-interview")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-interview",
+                  input: JSON.parse(
+                    lastUserMessage.slice("creator-interview ".length)
+                  ),
+                },
+              ],
+            };
+          if (
             lastUserMessage?.startsWith("creator-review ") &&
             !toolResults.some((result) => result.name === "creator-review")
           )

@@ -119,6 +119,9 @@ function useMessageDeletion({
       client.removeQueries({
         queryKey: ["matrix-media", cacheScope, roomId, messageId],
       });
+      void client.invalidateQueries({
+        queryKey: ["conversation-inbox", cacheScope],
+      });
       onClose();
     },
   });

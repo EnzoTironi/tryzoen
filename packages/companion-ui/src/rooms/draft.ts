@@ -113,6 +113,9 @@ export function useRoomDraft(
           return;
         client.setQueryData<RoomDraft>(key, { text: "", status: "idle" });
         void client.invalidateQueries({
+          queryKey: ["conversation-inbox", cacheScope],
+        });
+        void client.invalidateQueries({
           queryKey: ["matrix-messages", cacheScope, roomId],
         });
         if (rootId)

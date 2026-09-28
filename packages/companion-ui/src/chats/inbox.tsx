@@ -1,5 +1,5 @@
 import { useDeferredValue, useState, type ComponentProps } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,22 +9,84 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Archive, Compass, Search, SquarePen, Plus } from "lucide-react-native";
+import {
+  Archive,
+  Compass,
+  Search,
+  SquarePen,
+  Plus,
+  RefreshCw,
+} from "lucide-react-native";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
 import { colors } from "../theme";
 import { ConversationRow } from "./row";
 import { ConversationAvatar } from "./avatar";
-import { useConversationLibrary } from "./library";
+import type {
+  InboxData,
+  inboxItemSchema,
+  inboxPageSchema,
+  inboxQuerySchema,
+} from "./inbox-schema";
 import type { ChatData } from "./schema";
-import type { RoomData, roomSchema } from "../rooms/schema";
+import type { RoomData } from "../rooms/schema";
 import type { z } from "zod";
 import { CreateRoom } from "../rooms/create";
 import { CreateConversation } from "./create";
 
+function useConversationInbox(
+  inbox: InboxData,
+  cacheScope: string,
+  input: Omit<z.infer<typeof inboxQuerySchema>, "cursor">
+) {
+  const client = useQueryClient();
+  const conversations = useInfiniteQuery({
+    queryKey: [
+      "conversation-inbox",
+      cacheScope,
+      input.archived,
+      input.query,
+      input.filter,
+    ],
+    initialPageParam: null as z.infer<typeof inboxPageSchema>["nextCursor"],
+    queryFn: ({ pageParam }) =>
+      inbox.list({
+        ...input,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (last, _pages, _cursor, cursors) =>
+      last.nextCursor &&
+      !cursors.some(
+        (cursor) =>
+          cursor?.activityAt === last.nextCursor?.activityAt &&
+          cursor?.kind === last.nextCursor?.kind &&
+          cursor?.id === last.nextCursor?.id
+      )
+        ? last.nextCursor
+        : undefined,
+    staleTime: 15_000,
+    gcTime: 60_000,
+    retry: 1,
+  });
+  const refresh = () => {
+    void client.resetQueries({
+      queryKey: [
+        "conversation-inbox",
+        cacheScope,
+        input.archived,
+        input.query,
+        input.filter,
+      ],
+      exact: true,
+    });
+  };
+  return { conversations, refresh };
+}
+
 const filters = ["Todas", "Pessoas", "Grupos", "Bots"] as const;
 export function ConversationInbox({
   data,
+  inbox,
   rooms,
   cacheScope,
   selectedId,
@@ -37,6 +99,7 @@ export function ConversationInbox({
   onExport,
 }: {
   readonly data: ChatData;
+  readonly inbox: InboxData;
   readonly rooms: RoomData;
   readonly cacheScope: string;
   readonly selectedId?: string;
@@ -54,63 +117,56 @@ export function ConversationInbox({
   const [archived, setArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [composing, setComposing] = useState(false);
-  const { chats, items, change } = useConversationLibrary(
-    data,
-    cacheScope,
-    search,
-    archived
+  const client = useQueryClient();
+  const filterKind = {
+    Todas: "all",
+    Pessoas: "people",
+    Grupos: "groups",
+    Bots: "bots",
+  } as const;
+  const { conversations, refresh } = useConversationInbox(inbox, cacheScope, {
+    query: search,
+    archived,
+    filter: filterKind[filter],
+  });
+  const pages = conversations.isError ? [] : (conversations.data?.pages ?? []);
+  const page = pages[0];
+  const pinned = page?.pinned ?? [];
+  const rows = Array.from(
+    new Map(
+      pages
+        .flatMap((entry) => entry.items)
+        .map((entry) => [
+          entry.kind === "room"
+            ? `room:${entry.room.id}`
+            : `agent:${entry.chat.sessionId}`,
+          entry,
+        ])
+    ).values()
   );
-  const groups = useQuery({
-    queryKey: ["matrix-rooms", cacheScope],
-    queryFn: () => rooms.list(),
-    staleTime: 30_000,
-  });
-  const directs = useInfiniteQuery({
-    queryKey: ["matrix-directs", cacheScope],
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => rooms.directs({ before: pageParam }),
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled: groups.data?.configured === true,
-    staleTime: 10_000,
-    refetchInterval: 30_000,
-  });
-  const visibleDirects =
-    !archived &&
-    (filter === "Todas" || filter === "Pessoas") &&
-    !directs.isError
-      ? (directs.data?.pages
-          .flatMap((page) => page.items)
-          .filter((room) =>
-            `${room.label} ${room.username ?? ""}`
-              .toLocaleLowerCase()
-              .includes(search.toLocaleLowerCase())
-          ) ?? [])
-      : [];
-  const visibleGroups =
-    !archived && (filter === "Todas" || filter === "Grupos")
-      ? (groups.data?.rooms.filter((room) =>
-          room.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())
-        ) ?? [])
-      : [];
-  const showBots = filter === "Todas" || filter === "Bots";
-  const visibleChats = showBots ? items : [];
-  const pinned =
-    !search && !archived && showBots
-      ? items.filter((chat) => chat.pinned).slice(0, 6)
-      : [];
-  const rows = [
-    ...[...visibleDirects, ...visibleGroups].map((room) => ({
-      kind: "room" as const,
-      room,
-    })),
-    ...visibleChats.map((chat) => ({ kind: "agent" as const, chat })),
-  ];
+  const change: ChatData["change"] = async (input) => {
+    await data.change(input);
+    await Promise.all([
+      client.invalidateQueries({
+        queryKey: ["conversation-inbox", cacheScope],
+      }),
+      client.invalidateQueries({
+        queryKey: ["conversation-library", cacheScope],
+      }),
+    ]);
+  };
   return (
     <View style={styles.inbox}>
       <View style={styles.heading}>
         <Text accessibilityRole="header" style={styles.title}>
           {archived ? "Arquivadas" : "Conversas"}
         </Text>
+        <IconButton
+          icon={RefreshCw}
+          label="Atualizar conversas"
+          disabled={conversations.isFetching}
+          onPress={refresh}
+        />
         <IconButton
           icon={Archive}
           label={archived ? "Ver conversas ativas" : "Ver arquivadas"}
@@ -160,12 +216,25 @@ export function ConversationInbox({
       <FlatList
         data={rows}
         keyExtractor={(item) =>
-          item.kind === "room" ? item.room.id : item.chat.sessionId
+          item.kind === "room"
+            ? `room:${item.room.id}`
+            : `agent:${item.chat.sessionId}`
         }
         style={styles.list}
         keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
         windowSize={5}
+        onEndReached={() => {
+          if (
+            conversations.hasNextPage &&
+            !conversations.isFetching &&
+            !conversations.isError
+          )
+            void conversations.fetchNextPage({ cancelRefetch: false });
+        }}
+        onEndReachedThreshold={0.5}
+        refreshing={conversations.isRefetching}
+        onRefresh={refresh}
         ListHeaderComponent={
           <>
             <PinnedConversations
@@ -173,24 +242,22 @@ export function ConversationInbox({
               avatarUri={avatarUri}
               onOpen={onOpen}
             />
-            {filter === "Grupos" &&
-              groups.data?.mayManage &&
-              groups.data.configured && (
-                <ActionButton
-                  quiet
-                  onPress={() => {
-                    setCreating(true);
-                  }}
-                >
-                  Criar grupo
-                </ActionButton>
-              )}
+            {filter === "Grupos" && page?.mayManage && page.configured && (
+              <ActionButton
+                quiet
+                onPress={() => {
+                  setCreating(true);
+                }}
+              >
+                Criar grupo
+              </ActionButton>
+            )}
           </>
         }
         renderItem={({ item }) =>
           item.kind === "room" ? (
             <RoomRow
-              room={item.room}
+              item={item}
               selected={selectedRoom === item.room.id}
               onOpen={onOpenRoom}
             />
@@ -207,49 +274,28 @@ export function ConversationInbox({
           )
         }
         ListEmptyComponent={
-          !chats.isPending && !groups.isPending && !directs.isLoading ? (
+          !conversations.isPending && !conversations.isError ? (
             <InboxEmpty
               search={search}
               groups={filter === "Grupos"}
               people={filter === "Pessoas"}
-              configured={groups.data?.configured ?? false}
+              configured={page?.configured ?? false}
             />
           ) : null
         }
         ListFooterComponent={
           <View style={styles.feedback}>
             <InboxFeedback
-              loading={chats.isPending || groups.isPending || directs.isLoading}
-              error={Boolean(chats.error ?? groups.error ?? directs.error)}
-              onRetry={() => {
-                void chats.refetch();
-                void groups.refetch();
-                if (groups.data?.configured) void directs.refetch();
-              }}
+              loading={
+                conversations.isPending || conversations.isFetchingNextPage
+              }
+              error={conversations.isError}
+              onRetry={refresh}
             />
-            {directs.hasNextPage &&
-              (filter === "Todas" || filter === "Pessoas") &&
-              !archived && (
-                <ActionButton
-                  quiet
-                  disabled={directs.isFetchingNextPage}
-                  onPress={() => {
-                    void directs.fetchNextPage();
-                  }}
-                >
-                  Mais conversas com pessoas
-                </ActionButton>
-              )}
-            {chats.hasNextPage && showBots && (
-              <ActionButton
-                quiet
-                disabled={chats.isFetchingNextPage}
-                onPress={() => {
-                  void chats.fetchNextPage();
-                }}
-              >
-                Carregar mais
-              </ActionButton>
+            {page?.syncPending && (
+              <Text style={styles.caption}>
+                Atualizando o histórico das conversas…
+              </Text>
             )}
           </View>
         }
@@ -289,8 +335,8 @@ export function ConversationInbox({
         <CreateConversation
           data={rooms}
           cacheScope={cacheScope}
-          configured={groups.data?.configured ?? false}
-          mayManage={groups.data?.mayManage ?? false}
+          configured={page?.configured ?? false}
+          mayManage={page?.mayManage ?? false}
           avatarUri={avatarUri}
           onClose={() => {
             setComposing(false);
@@ -313,14 +359,15 @@ export function ConversationInbox({
   );
 }
 function RoomRow({
-  room,
+  item,
   selected,
   onOpen,
 }: {
-  readonly room: z.infer<typeof roomSchema>;
+  readonly item: Extract<z.infer<typeof inboxItemSchema>, { kind: "room" }>;
   readonly selected: boolean;
   readonly onOpen: (id: string) => void;
 }) {
+  const { room } = item;
   return (
     <Pressable
       accessibilityRole="button"
@@ -339,13 +386,34 @@ function RoomRow({
         <Text numberOfLines={1} style={styles.name}>
           {room.label}
         </Text>
-        <Text style={styles.caption}>
-          {room.kind === "group"
-            ? "Grupo"
-            : room.username
-              ? `@${room.username}`
-              : "Conversa direta"}
+        <Text numberOfLines={1} style={styles.caption}>
+          {item.preview ??
+            (item.summaryState === "unavailable"
+              ? "Prévia indisponível"
+              : room.kind === "group"
+                ? "Grupo"
+                : room.username
+                  ? `@${room.username}`
+                  : "Conversa direta")}
         </Text>
+      </View>
+      <View style={styles.rowMeta}>
+        {item.activityAt > 0 && (
+          <Text style={styles.time}>
+            {new Date(item.activityAt).toLocaleDateString([], {
+              day: "numeric",
+              month: "short",
+            })}
+          </Text>
+        )}
+        {item.unread !== null && item.unread > 0 && (
+          <Text
+            accessibilityLabel={`${item.unread} não lidas`}
+            style={styles.unread}
+          >
+            {item.unread > 99 ? "99+" : item.unread}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -419,7 +487,7 @@ function PinnedConversations({
   avatarUri,
   onOpen,
 }: Pick<ComponentProps<typeof ConversationInbox>, "avatarUri" | "onOpen"> & {
-  readonly chats: ReturnType<typeof useConversationLibrary>["items"];
+  readonly chats: z.infer<typeof inboxPageSchema>["pinned"];
 }) {
   return (
     <>
@@ -523,6 +591,18 @@ const styles = StyleSheet.create({
   selected: { backgroundColor: "#e8f2ff" },
   copy: { flex: 1, minWidth: 0, gap: 5 },
   name: { color: colors.ink, fontSize: 15, fontWeight: "600" },
+  rowMeta: { alignItems: "flex-end", gap: 7 },
+  time: { color: colors.muted, fontSize: 11 },
+  unread: {
+    color: "#fff",
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    textAlign: "center",
+    fontSize: 12,
+  },
   caption: { color: colors.muted, fontSize: 13, lineHeight: 20 },
   empty: { padding: 18, gap: 9 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },

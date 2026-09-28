@@ -1,3 +1,4 @@
+import { projectMatrixActivity } from "./activity";
 import { uploadMatrixMedia } from "./media/upload";
 import { directRoomMembers, findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
@@ -268,7 +269,7 @@ export const sendMatrixMessage = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   input: z.output<typeof roomSendSchema>
 ) {
-  return await withDatabaseTransaction(async () => {
+  const published = await withDatabaseTransaction(async () => {
     const room = await joinMatrixRoom(actor, input.id);
     await requireWorkspaceAccess(actor);
     if (input.rootId) {
@@ -334,9 +335,27 @@ export const sendMatrixMessage = async function (
         )
       );
     }
-    return await z.object({ event_id: z.string() }).parseAsync(sent[0]);
+    return { room, sent };
   });
+  // Commit membership mutations before taking activity locks also used by callbacks.
+  return projectPublishedMessages(published.room, published.sent);
 };
+
+async function projectPublishedMessages(
+  room: Awaited<ReturnType<typeof joinMatrixRoom>>,
+  sent: unknown[]
+) {
+  const receipt = z.object({ event_id: z.string() });
+  const published = z.tuple([receipt]).rest(receipt).parse(sent);
+  const config = await matrixConfiguration();
+  for (const item of published) {
+    const event = await readRoomMessage(room, item.event_id, true);
+    if (event.room_id !== room.roomId || event.sender !== room.matrixId)
+      throw new WorkspaceAccessDenied();
+    await projectMatrixActivity(config.serverName, event);
+  }
+  return published[0];
+}
 
 export const closeMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,

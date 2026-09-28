@@ -67,6 +67,14 @@
     "./composer": {
       "types": "./dist/composer/document.d.ts",
       "default": "./dist/composer/document.js"
+    },
+    "./recording": {
+      "types": "./dist/recording/schema.d.ts",
+      "default": "./dist/recording/schema.js"
+    },
+    "./inbox": {
+      "types": "./dist/chats/inbox-schema.d.ts",
+      "default": "./dist/chats/inbox-schema.js"
     }
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { useAudioRecording } from "./audio-recording";
 import { renderComposerEditor } from "./composer";
 import { linkPreviewSchema } from "@zoen/companion-ui/previews";
 import { renderMedia } from "./media";
@@ -99,6 +100,7 @@ export function App() {
 }
 
 function AccountCompanion() {
+  const startAudioRecording = useAudioRecording();
   const [client] = useState(
     () =>
       new QueryClient({
@@ -113,6 +115,7 @@ function AccountCompanion() {
             pick={pickAttachments}
             save={saveAttachment}
             renderMedia={renderMedia}
+            startAudioRecording={startAudioRecording}
           >
             <MobileCompanion
               onSignOut={async () => {

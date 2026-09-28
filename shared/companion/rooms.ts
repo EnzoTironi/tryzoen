@@ -19,6 +19,9 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async markRead(input) {
+      await rpc.mutation("workspaces.rooms.markRead", input);
+    },
     async deleteMessage(input) {
       await rpc.mutation("workspaces.rooms.deleteMessage", input);
     },

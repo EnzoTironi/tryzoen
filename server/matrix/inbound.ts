@@ -1,3 +1,4 @@
+import { projectMatrixActivity } from "./activity";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { operationSignal, withTimeout } from "../operations/async";
@@ -82,10 +83,13 @@ export const acceptMatrixTransaction = async function (
         throw new MatrixError({
           reason: "conflict",
         });
+      for (const event of transaction.events)
+        await projectMatrixActivity(config.serverName, event);
       return [];
     }
     const accepted: string[] = [];
     for (const event of transaction.events) {
+      await projectMatrixActivity(config.serverName, event);
       const received = await query(
         sql`INSERT INTO matrix_received_events(id) VALUES (${event.event_id}) ON CONFLICT DO NOTHING RETURNING id`
       );

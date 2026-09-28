@@ -3,6 +3,7 @@ import { setStringAsync } from "expo-clipboard";
 import { randomUUID } from "expo-crypto";
 import { ConversationInbox, RoomConversation } from "@zoen/companion-ui";
 import { companionChatData } from "../../../shared/companion/chats";
+import { companionInboxData } from "../../../shared/companion/inbox";
 import { companionRoomData } from "../../../shared/companion/rooms";
 import { rpc } from "./api";
 import { auth } from "./auth";
@@ -10,11 +11,12 @@ import { apiOrigin } from "./environment";
 import { exportConversation } from "./files/conversation";
 
 const chats = companionChatData(rpc);
+const inbox = companionInboxData(rpc);
 const rooms = companionRoomData(rpc, randomUUID);
 export function MobileInbox(
   props: Omit<
     ComponentProps<typeof ConversationInbox>,
-    "data" | "rooms" | "cacheScope" | "avatarUri" | "onExport"
+    "data" | "inbox" | "rooms" | "cacheScope" | "avatarUri" | "onExport"
   >
 ) {
   const account = auth.useSession();
@@ -22,6 +24,7 @@ export function MobileInbox(
     <ConversationInbox
       {...props}
       data={chats}
+      inbox={inbox}
       rooms={rooms}
       cacheScope={account.data?.user.id ?? "anonymous"}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}

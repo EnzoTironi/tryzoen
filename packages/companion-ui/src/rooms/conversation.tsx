@@ -18,6 +18,7 @@ import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
 import { useRoomReactions } from "./reactions";
+import { useRoomReadPosition } from "./read-position";
 import type {
   RoomData,
   roomMessageSchema,
@@ -78,6 +79,13 @@ export function RoomConversation({
         .map((message) => [message.id, message])
     ).values()
   );
+  const showReadMessages = useRoomReadPosition(
+    data,
+    cacheScope,
+    roomId,
+    timeline,
+    !messages.isError && !details && !profile && (!root || wide)
+  );
   return (
     <View style={styles.layout}>
       {(!root || wide || messages.isError) && (
@@ -101,7 +109,10 @@ export function RoomConversation({
               reactions.result.isError ? [] : (reactions.result.data ?? [])
             }
             onReact={reactions.setReaction}
-            onVisibleMessagesChange={reactions.showMessages}
+            onVisibleMessagesChange={(ids) => {
+              reactions.showMessages(ids);
+              showReadMessages(ids);
+            }}
             messages={timeline.filter((message) => !message.rootId)}
             onThread={setRoot}
             loading={messages.isPending}
@@ -165,6 +176,7 @@ export function RoomConversation({
             avatarUri={avatarUri}
             onCopyText={onCopyText}
             onProfile={setProfile}
+            visible={!details && !profile}
           />
         </View>
       )}
@@ -276,12 +288,14 @@ function RoomThread({
   avatarUri,
   onCopyText,
   onProfile,
+  visible,
 }: Pick<
   Parameters<typeof RoomConversation>[0],
   "data" | "cacheScope" | "roomId" | "avatarUri" | "onCopyText"
 > & {
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
+  readonly visible: boolean;
 }) {
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
   const reactions = useRoomReactions(data, cacheScope, roomId);
@@ -307,6 +321,14 @@ function RoomThread({
         .map((message) => [message.id, message])
     ).values()
   );
+  const showReadMessages = useRoomReadPosition(
+    data,
+    cacheScope,
+    roomId,
+    replies,
+    visible && !result.isError,
+    root.id
+  );
   return (
     <>
       <RoomMessages
@@ -322,7 +344,10 @@ function RoomThread({
           reactions.result.isError ? [] : (reactions.result.data ?? [])
         }
         onReact={reactions.setReaction}
-        onVisibleMessagesChange={reactions.showMessages}
+        onVisibleMessagesChange={(ids) => {
+          reactions.showMessages(ids);
+          showReadMessages(ids);
+        }}
         messages={
           result.isError
             ? []

@@ -1,4 +1,8 @@
 import {
+  AudioMessageRecorder,
+  type AudioRecorderHandle,
+} from "./recording/composer";
+import {
   ComposerEditorProvider,
   type ComposerEditorHandle,
 } from "./composer/editor";
@@ -21,11 +25,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ArrowUp, Square, X, Plus, FileText } from "lucide-react-native";
+import { ArrowUp, Square, X, Plus, FileText, Mic } from "lucide-react-native";
 import { useAttachments } from "./attachments/provider";
 import {
   requireAttachmentSizes,
   inlineAttachmentBytes,
+  attachmentLimits,
 } from "./attachments/limits";
 import type { ConversationDraft } from "./session/input";
 import { IconButton } from "./icon-button";
@@ -86,9 +91,12 @@ export function Composer({
     if (selectedFiles) onFilesChange?.(next.map(({ file }) => file));
     else setLocalFiles(next);
   };
-  const attachmentPicker = useAttachments()?.pick;
+  const attachmentAdapter = useAttachments();
+  const attachmentPicker = attachmentAdapter?.pick;
+  const audioRecorder = useRef<AudioRecorderHandle>(null);
   const pick = attachments ? attachmentPicker : undefined;
   const [picking, setPicking] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [localSending, setSending] = useState(false);
   const sending = localSending || sendStatus === "sending";
   const [error, setError] = useState<string>();
@@ -107,7 +115,7 @@ export function Composer({
     reference: editorAdapter ? reference : undefined,
     change,
     input,
-    disabled: disabled || sending || picking,
+    disabled: disabled || sending || picking || recording,
     onPick: pick ? () => void selectFiles() : undefined,
   });
   const canSend =
@@ -115,27 +123,31 @@ export function Composer({
     draft.length <= maxLength &&
     !disabled &&
     !sending &&
-    !picking;
+    !picking &&
+    !recording;
   useEffect(() => {
     onDraftChange?.({ text: draft, files: files.map(({ file }) => file) });
   }, [draft, files, onDraftChange]);
+  function addFiles(picked: ConversationDraft["files"]) {
+    const combined = [...files.map(({ file }) => file), ...picked];
+    requireAttachmentSizes(
+      combined.map((file) => inlineAttachmentBytes(file.url))
+    );
+    changeFiles([
+      ...files,
+      ...picked.map((file) => ({
+        file,
+        key: nextFile.current++ + files.length,
+      })),
+    ]);
+  }
   async function selectFiles() {
-    if (!pick || picking || sending) return;
+    if (!pick || picking || sending || recording) return;
     setPicking(true);
     setError(undefined);
     try {
       const picked = await pick();
-      const combined = [...files.map(({ file }) => file), ...picked];
-      requireAttachmentSizes(
-        combined.map((file) => inlineAttachmentBytes(file.url))
-      );
-      changeFiles([
-        ...files,
-        ...picked.map((file) => ({
-          file,
-          key: nextFile.current++ + files.length,
-        })),
-      ]);
+      addFiles(picked);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -172,9 +184,31 @@ export function Composer({
   return (
     <View style={styles.wrapper}>
       {sheet.content}
+      {attachments && (
+        <AudioMessageRecorder
+          triggerRef={audioRecorder}
+          disabled={
+            disabled ||
+            sending ||
+            picking ||
+            files.length >= attachmentLimits.count
+          }
+          maxBytes={
+            attachmentLimits.bytes -
+            files.reduce(
+              (sum, { file }) => sum + inlineAttachmentBytes(file.url),
+              0
+            )
+          }
+          onActive={setRecording}
+          onAttach={(file) => {
+            addFiles([file]);
+          }}
+        />
+      )}
       <AttachmentStrip
         files={files}
-        disabled={sending || picking}
+        disabled={sending || picking || recording}
         onRemove={(key) => {
           changeFiles(files.filter((item) => item.key !== key));
         }}
@@ -189,7 +223,7 @@ export function Composer({
           <IconButton
             icon={Plus}
             label="Adicionar à mensagem"
-            disabled={disabled || sending || picking}
+            disabled={disabled || sending || picking || recording}
             onPress={sheet.open}
           />
         )}
@@ -253,6 +287,23 @@ export function Composer({
         )}
 
         <View style={styles.footer}>
+          {attachments && attachmentAdapter?.startAudioRecording && (
+            <IconButton
+              icon={Mic}
+              label="Record voice message"
+              disabled={
+                disabled ||
+                sending ||
+                picking ||
+                recording ||
+                files.length >= attachmentLimits.count
+              }
+              onPress={() => {
+                audioRecorder.current?.start();
+              }}
+            />
+          )}
+
           {busy && onCancel && (
             <Pressable
               accessibilityRole="button"
@@ -301,15 +352,22 @@ function AttachmentStrip({
   readonly disabled: boolean;
   readonly onRemove: (key: number) => void;
 }) {
+  const renderMedia = useAttachments()?.renderMedia;
   if (!files.length) return null;
   return (
     <View style={styles.attachments}>
       {files.map(({ file, key }) => (
         <View key={key} style={styles.attachment}>
-          <FileText size={20} color={colors.muted} />
-          <Text style={styles.attachmentName} numberOfLines={1}>
-            {file.filename ?? "Attachment"}
-          </Text>
+          {file.mediaType.startsWith("audio/") && renderMedia ? (
+            renderMedia(file)
+          ) : (
+            <>
+              <FileText size={20} color={colors.muted} />
+              <Text style={styles.attachmentName} numberOfLines={1}>
+                {file.filename ?? "Attachment"}
+              </Text>
+            </>
+          )}
           <IconButton
             icon={X}
             label={`Remove ${file.filename ?? "attachment"}`}

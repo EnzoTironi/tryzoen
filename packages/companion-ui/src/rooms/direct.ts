@@ -17,7 +17,7 @@ export function useDirectConversation(
     },
     onSuccess: async (room) => {
       await client.invalidateQueries({
-        queryKey: ["matrix-directs", cacheScope],
+        queryKey: ["conversation-inbox", cacheScope],
       });
       onOpened(room.id);
     },

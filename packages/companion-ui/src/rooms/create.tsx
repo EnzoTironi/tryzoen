@@ -28,7 +28,7 @@ export function CreateRoom({
       }),
     onSuccess: async (room) => {
       await client.invalidateQueries({
-        queryKey: ["matrix-rooms", cacheScope],
+        queryKey: ["conversation-inbox", cacheScope],
       });
       onCreated(room.id);
     },

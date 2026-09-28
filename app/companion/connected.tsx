@@ -1,4 +1,5 @@
 "use client";
+import { startBrowserAudioRecording } from "@web/files/audio-recording";
 import { renderBrowserMedia } from "@web/files/media";
 import { api } from "@web/trpc/client";
 import { useState } from "react";
@@ -97,6 +98,7 @@ export function ConnectedCompanion({
           pick={pickBrowserAttachments}
           save={saveBrowserAttachment}
           renderMedia={renderBrowserMedia}
+          startAudioRecording={startBrowserAudioRecording}
         >
           <LinkPreviewProvider
             cacheScope={draftScope}

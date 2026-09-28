@@ -1,0 +1,1 @@
+ALTER TABLE "matrix_room_activity" ADD COLUMN "latest_edited" boolean DEFAULT false NOT NULL;

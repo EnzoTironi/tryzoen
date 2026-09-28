@@ -23,6 +23,7 @@ describe("root and worker capability boundaries", () => {
       "ask_question.ts",
       "bash.ts",
       "capabilities.ts",
+      "creator-interview.ts",
       "creator-library.ts",
       "creator-preview.ts",
       "creator-review.ts",

@@ -202,14 +202,22 @@ it("uses native Matrix thread relations and a stable transaction ID for sends", 
       sender: "@member:matrix.test",
       content: { body: "Plan" },
     })
-    .mockResolvedValueOnce({ event_id: "$sent" });
+    .mockResolvedValueOnce({ event_id: "$sent" })
+    .mockResolvedValueOnce({
+      event_id: "$sent",
+      room_id: "!room:matrix.test",
+      type: "m.room.message",
+      sender: "@member:matrix.test",
+      origin_server_ts: 100,
+      content: { body: "Ready" },
+    });
   await sendMatrixMessage(actor, {
     id: "binding",
     operationId: "deduplicated-operation",
     text: "Ready",
     rootId: "$root",
   });
-  expect(mocks.request).toHaveBeenLastCalledWith(
+  expect(mocks.request).toHaveBeenCalledWith(
     "PUT",
     expect.stringContaining("/send/m.room.message/deduplicated-operation"),
     {

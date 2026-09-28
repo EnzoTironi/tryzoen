@@ -1,9 +1,12 @@
+import { withSignal } from "../../server/operations/async";
 import {
   chatQuerySchema,
   chatPageSchema,
   chatChangeSchema,
 } from "@zoen/companion-ui/chats";
 import { listChatLibrary, changeChat } from "@db/services/chat-library";
+import { listConversationInbox } from "@db/services/inbox";
+import { inboxQuerySchema, inboxPageSchema } from "@zoen/companion-ui/inbox";
 import {
   feedCursorSchema,
   feedPageSchema,
@@ -65,6 +68,12 @@ import {
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  inbox: workspaceProcedure
+    .input(inboxQuerySchema)
+    .output(inboxPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listConversationInbox(ctx.actor, input))
+    ),
   reactions: workspaceProcedure
     .input(reactionReadSchema)
     .output(reactionPageSchema)

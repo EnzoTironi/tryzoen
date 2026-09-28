@@ -36,7 +36,12 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Zoen records voice messages only when you choose to use your microphone."
+      },
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist"
     },
     "win": {
       "target": [

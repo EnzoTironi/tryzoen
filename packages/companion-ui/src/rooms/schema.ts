@@ -68,6 +68,11 @@ export const roomDeleteSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
   operationId: z.uuid(),
 });
+export const roomReadPositionSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageId: roomThreadSchema.shape.rootId,
+  rootId: roomThreadSchema.shape.rootId.optional(),
+});
 export const roomMessageSchema = z.object({
   redacted: z.boolean().optional(),
   id: z.string(),
@@ -139,6 +144,7 @@ export const roomMediaReadSchema = z.object({
 });
 
 export interface RoomData {
+  markRead: (input: z.infer<typeof roomReadPositionSchema>) => Promise<void>;
   deleteMessage: (input: z.infer<typeof roomDeleteSchema>) => Promise<void>;
   people: (
     input: z.infer<typeof directPeopleSearchSchema>

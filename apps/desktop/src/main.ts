@@ -1,3 +1,4 @@
+import { registerAudioAccess } from "./audio-access.js";
 import {
   app,
   BrowserWindow,
@@ -80,12 +81,7 @@ function createWindow() {
   window.webContents.on("will-attach-webview", (event) => {
     event.preventDefault();
   });
-  window.webContents.session.setPermissionRequestHandler(
-    (_contents, _permission, callback) => {
-      callback(false);
-    }
-  );
-  window.webContents.session.setPermissionCheckHandler(() => false);
+  registerAudioAccess(window, startUrl.origin);
   void window.loadURL(startUrl.href).catch(showLoadError);
   return window;
 }
