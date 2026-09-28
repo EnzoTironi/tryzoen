@@ -22,6 +22,12 @@ export const creatorPilots = pgTable(
     creatorUserId: text("creator_user_id").notNull(),
     recipientUserId: text("recipient_user_id").notNull(),
     status: text("status").notNull().default("pending"),
+    feedback: text("feedback"),
+    feedbackRevision: uuid("feedback_revision"),
+    feedbackUpdatedAt: timestamp("feedback_updated_at", {
+      withTimezone: true,
+      precision: 3,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow(),
@@ -55,6 +61,13 @@ export const creatorPilots = pgTable(
     check(
       "creator_pilots_state_check",
       sql`${table.status} IN ('pending', 'active', 'declined', 'withdrawn') AND ${table.creatorUserId} <> ${table.recipientUserId}`
+    ),
+    check(
+      "creator_pilots_feedback_check",
+      sql`(${table.feedback} IS NULL AND ${table.feedbackRevision} IS NULL AND ${table.feedbackUpdatedAt} IS NULL) OR
+        (${table.feedback} IS NOT NULL AND length(trim(${table.feedback})) BETWEEN 1 AND 16000
+        AND ${table.feedbackRevision} IS NOT NULL AND ${table.feedbackUpdatedAt} IS NOT NULL
+        AND ${table.status} IN ('active', 'withdrawn'))`
     ),
   ]
 );

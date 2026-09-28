@@ -590,3 +590,57 @@ participant feedback, real creator-led pilots/outcome measures, cross-workspace
 distribution, public discovery/publication, entitlement/billing/cost accounting
 and contextual assistance remain open. No production migration or deployment was
 performed, and million-user capacity has not been measured.
+
+## Explicit participant reports — 2026-09-28
+
+Private pilots now expose a separate shared feedback document. The participant
+writes observations, context, failures and observed outcomes in the existing
+WYSIWYG editor and explicitly chooses “Share with [creator].” No private question,
+model answer, evaluation criterion or review is copied into that report. The
+creator can read and export only the submitted text with its pilot/release
+metadata, and cannot edit the participant's report. Ordinary invitation lists
+still contain bounded metadata, not all report bodies.
+
+Each pilot stores one current report of at most 16,000 characters. Identical
+response-loss retries preserve revision and timestamp; changed text requires the
+exact opening revision. Concurrent updates cannot silently overwrite each other.
+Writes require the named participant and an active grant. Closing the pilot
+freezes updates but retains read/export for both parties while both remain live
+workspace/organization members. Other workspace members, other workspaces,
+group actors and protocol tasks are rejected. Already exported copies cannot
+be recalled. Membership cascades retain the pilot's deletion behavior. This is
+a revision-protected current document, not an append-only study dataset or
+history of every report revision.
+
+Migration 0079 adds the nullable document/revision/timestamp and their database
+invariant without rewriting the applied chain. It has been applied only to the
+local review and isolated test databases. The partial personal-memory export /
+online-wipe descriptions now explicitly exclude creator releases and pilots;
+they do not claim a complete account export or deletion.
+
+Eight isolated pilot tests pass, including three new cases for explicit-only
+sharing, creator/other-member read-write boundaries, invalid content/consent,
+concurrent edits, retry stability, withdrawal and live membership revocation.
+All nine workspace checks pass (1,323 tests in 205 files), as do the production
+build, migration-chain check and Expo exports for web, iOS and Android. The
+structural delta retains 12 unsuppressed gating findings for typed-wrapper and
+query similarity and component/function growth, including increased complexity
+in the pilot invitation UI. This is not a clean structural gate.
+
+Chrome verification covered a failed submission with text retained, successful
+retry, reopened persisted content, exported receipt, desktop modal/mobile sheet,
+and a read-only report after withdrawal. A service-level read by the synthetic
+author matched the participant's exported document and rejected an author edit.
+Opening an existing report disables its actions while fresh access is being
+checked, preventing stale cached status from offering an editable document.
+Verified screenshots are attached with `gh --attach` to
+[PR 148](https://github.com/EnzoTironi/tryzoen/pull/148#issuecomment-5869809117).
+The content explicitly identifies itself as synthetic software verification;
+no real creator-led pilot or effectiveness outcome was evaluated.
+
+The HUMA/Tutor CoPilot path still requires real author-led iteration and outcome
+measurement, contextual human-assist suggestions, distribution/entitlements,
+public marketplace policy and billing/cost accounting. This report mechanism
+supports that process without automatically opening private conversations to
+a creator. Memory dreams/temporal completeness, native transports/devices and
+full Muse parity remain separate unfinished work.

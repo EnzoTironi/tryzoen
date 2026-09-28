@@ -21,12 +21,16 @@ import {
   creatorPilotSchema,
   creatorPilotListSchema,
   creatorPilotTeachingSchema,
+  creatorPilotFeedbackViewSchema,
+  creatorPilotFeedbackSaveSchema,
 } from "@zoen/companion-ui/creators";
 import {
   actOnCreatorPilot,
   inviteCreatorPilot,
   listCreatorPilots,
   readCreatorPilot,
+  readCreatorPilotFeedback,
+  saveCreatorPilotFeedback,
 } from "../../server/creators/pilots";
 import {
   CreatorReviewConflict,
@@ -55,6 +59,18 @@ import {
 } from "../../server/creators/previews";
 
 export const creatorsRouter = {
+  pilotFeedback: workspaceProcedure
+    .input(z.strictObject({ id: z.uuid() }))
+    .output(creatorPilotFeedbackViewSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readCreatorPilotFeedback(ctx.actor, input.id))
+    ),
+  savePilotFeedback: workspaceProcedure
+    .input(creatorPilotFeedbackSaveSchema)
+    .output(creatorPilotFeedbackViewSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => saveCreatorPilotFeedback(ctx.actor, input))
+    ),
   pilots: workspaceProcedure
     .output(creatorPilotListSchema)
     .query(({ ctx, signal }) =>

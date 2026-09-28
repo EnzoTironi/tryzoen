@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { CreatorStudioData } from "./studio";
 import { CreatorPilot } from "./pilot";
+import { CreatorPilotFeedback } from "./pilot-feedback";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { pageStyles } from "../page";
@@ -49,6 +50,7 @@ function PilotInvitations({
 }) {
   const [selected, setSelected] = useState<string>();
   const [ending, setEnding] = useState<string>();
+  const [feedback, setFeedback] = useState<string>();
   const pilots = useQuery({
     queryKey: ["creator-pilots", cacheScope],
     queryFn: data.pilots,
@@ -135,6 +137,16 @@ function PilotInvitations({
                 Open pilot
               </ActionButton>
             )}
+            {(pilot.status === "active" || pilot.status === "withdrawn") && (
+              <ActionButton
+                quiet
+                onPress={() => {
+                  setFeedback(pilot.id);
+                }}
+              >
+                Feedback shared with creator
+              </ActionButton>
+            )}
             {(pilot.status === "pending" || pilot.status === "active") && (
               <ActionButton
                 quiet
@@ -165,7 +177,9 @@ function PilotInvitations({
             The participant will no longer be able to open the teaching, read
             saved pilot results or start new runs. A result still being
             generated will not be saved after withdrawal. Copies already read or
-            exported cannot be recalled.
+            exported cannot be recalled. Feedback you explicitly submitted to
+            the creator remains readable while both people stay in this
+            workspace.
           </Text>
           <ActionButton
             disabled={action.isPending}
@@ -190,6 +204,16 @@ function PilotInvitations({
           onClose={() => {
             setSelected(undefined);
             void pilots.refetch();
+          }}
+        />
+      )}
+      {feedback && (
+        <CreatorPilotFeedback
+          id={feedback}
+          data={data}
+          cacheScope={cacheScope}
+          onClose={() => {
+            setFeedback(undefined);
           }}
         />
       )}

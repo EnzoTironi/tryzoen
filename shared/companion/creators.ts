@@ -13,6 +13,7 @@ import {
   creatorPilotListSchema,
   creatorPilotSchema,
   creatorPilotTeachingSchema,
+  creatorPilotFeedbackViewSchema,
 } from "@zoen/companion-ui/creators";
 
 export function companionCreatorData(
@@ -35,6 +36,26 @@ export function companionCreatorData(
   }
   return {
     newId,
+    async pilotFeedback(id) {
+      return creatorPilotFeedbackViewSchema.parse(
+        await rpc.query("workspaces.creators.pilotFeedback", { id })
+      );
+    },
+    async savePilotFeedback(input) {
+      return creatorPilotFeedbackViewSchema.parse(
+        await rpc.mutation("workspaces.creators.savePilotFeedback", input)
+      );
+    },
+    async exportPilotFeedback(id) {
+      const pilot = creatorPilotFeedbackViewSchema.parse(
+        await rpc.query("workspaces.creators.pilotFeedback", { id })
+      );
+      await exportJson(`zoen-pilot-feedback-${id}.json`, {
+        format: "zoen-creator-pilot-feedback",
+        version: 1,
+        pilot,
+      });
+    },
     async pilots() {
       return creatorPilotListSchema.parse(
         await rpc.query("workspaces.creators.pilots")

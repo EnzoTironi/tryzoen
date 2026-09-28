@@ -27,9 +27,18 @@ import type {
   creatorPilotSchema,
   creatorPilotListSchema,
   creatorPilotTeachingSchema,
+  creatorPilotFeedbackViewSchema,
+  creatorPilotFeedbackSaveSchema,
 } from "./schema";
 
 export interface CreatorStudioData {
+  pilotFeedback: (
+    id: string
+  ) => Promise<z.infer<typeof creatorPilotFeedbackViewSchema>>;
+  savePilotFeedback: (
+    input: z.infer<typeof creatorPilotFeedbackSaveSchema>
+  ) => Promise<z.infer<typeof creatorPilotFeedbackViewSchema>>;
+  exportPilotFeedback: (id: string) => Promise<void>;
   pilots: () => Promise<z.infer<typeof creatorPilotListSchema>>;
   pilot: (id: string) => Promise<z.infer<typeof creatorPilotTeachingSchema>>;
   invitePilot: (

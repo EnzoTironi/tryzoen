@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -7,6 +8,8 @@ import {
   creatorPilotListSchema,
   creatorPilotSchema,
   creatorPilotTeachingSchema,
+  creatorPilotFeedbackSaveSchema,
+  creatorPilotFeedbackViewSchema,
 } from "@zoen/companion-ui/creators";
 import { requireCreator } from "./drafts";
 import { readCreatorRelease } from "./releases";
@@ -174,5 +177,48 @@ export function actOnCreatorPilot(
       sql`UPDATE creator_pilots SET status = ${status} WHERE id = ${input.id}`
     );
     return creatorPilotSchema.parse({ ...pilot, status });
+  });
+}
+
+/** Submitted feedback is a separate shared document, never a private run/review export. */
+export function readCreatorPilotFeedback(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  id: string
+) {
+  return transaction(async () => {
+    await requireCreator(actor);
+    const [row] = await query(sql`SELECT ${pilotProjection(actor)},
+      CASE WHEN p.feedback IS NULL THEN NULL ELSE jsonb_build_object(
+        'revision', p.feedback_revision, 'content', p.feedback,
+        'updatedAt', extract(epoch FROM p.feedback_updated_at)::float8 * 1000) END AS feedback
+      ${pilotJoins} WHERE p.id = ${id} AND p.workspace_id = ${actor.workspaceId}
+      AND (p.creator_user_id = ${actor.userId} OR p.recipient_user_id = ${actor.userId})
+      FOR SHARE OF p, creator_org, recipient_org`);
+    if (!row) throw new WorkspaceAccessDenied();
+    return creatorPilotFeedbackViewSchema.parse(row);
+  });
+}
+
+export function saveCreatorPilotFeedback(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  raw: z.infer<typeof creatorPilotFeedbackSaveSchema>
+) {
+  const input = creatorPilotFeedbackSaveSchema.parse(raw);
+  return transaction(async () => {
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["creator-pilot-feedback", input.id])}, 0))`
+    );
+    await requireActiveCreatorPilot(actor, input.id);
+    const current = await readCreatorPilotFeedback(actor, input.id);
+    if (current.feedback?.content !== input.content) {
+      if ((current.feedback?.revision ?? null) !== input.expectedRevision)
+        throw new Error(
+          "This shared feedback changed elsewhere. Reopen it before sending your changes."
+        );
+      await query(sql`UPDATE creator_pilots SET feedback = ${input.content},
+        feedback_revision = ${randomUUID()}, feedback_updated_at = clock_timestamp()
+        WHERE id = ${input.id}`);
+    }
+    return readCreatorPilotFeedback(actor, input.id);
   });
 }

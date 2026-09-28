@@ -1,4 +1,7 @@
-import { creatorPilotInviteSchema } from "@zoen/companion-ui/creators";
+import {
+  creatorPilotInviteSchema,
+  creatorPilotFeedbackSaveSchema,
+} from "@zoen/companion-ui/creators";
 import { randomUUID } from "node:crypto";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -16,6 +19,8 @@ import {
   inviteCreatorPilot,
   listCreatorPilots,
   readCreatorPilot,
+  readCreatorPilotFeedback,
+  saveCreatorPilotFeedback,
 } from "../../server/creators/pilots";
 import {
   claimCreatorPreview,
@@ -337,4 +342,168 @@ test("pilot capacity includes closed invitations and concurrent invitation attem
     1
   );
   expect(await listCreatorPilots(workspace.guest)).toHaveLength(20);
+});
+
+test("only explicitly authored pilot feedback is shared with its creator", async () => {
+  await using workspace = await workspaceFixture();
+  const { pilot, request } = await invitedPilot(workspace);
+  expect(
+    (await readCreatorPilotFeedback(workspace.actor, pilot.id)).feedback
+  ).toBeNull();
+  const input = {
+    id: pilot.id,
+    expectedRevision: null,
+    content:
+      "Observed: the fictional group used the open question. Outcome was not measured.",
+    shareWithCreator: true as const,
+  };
+  await expect(
+    saveCreatorPilotFeedback(workspace.guest, input)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await actOnCreatorPilot(workspace.guest, { id: pilot.id, action: "accept" });
+  await createCreatorPreview(workspace.guest, request);
+  await expect(
+    saveCreatorPilotFeedback(workspace.actor, input)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(() =>
+    creatorPilotFeedbackSaveSchema.parse({ ...input, shareWithCreator: false })
+  ).toThrow("Invalid input: expected true");
+  expect(() =>
+    creatorPilotFeedbackSaveSchema.parse({ ...input, previewId: request.id })
+  ).toThrow("Unrecognized key");
+  expect(() =>
+    creatorPilotFeedbackSaveSchema.parse({ ...input, content: " " })
+  ).toThrow("Too small");
+  expect(() =>
+    creatorPilotFeedbackSaveSchema.parse({
+      ...input,
+      content: "x".repeat(16001),
+    })
+  ).toThrow("Too big");
+  const saved = await saveCreatorPilotFeedback(workspace.guest, input);
+  expect(saved.feedback?.content).toBe(input.content);
+  const read = await readCreatorPilotFeedback(workspace.actor, pilot.id);
+  expect(read.feedback).toEqual(saved.feedback);
+  expect(read.releaseId).toBe(pilot.releaseId);
+  expect(read.revision).toBe(pilot.revision);
+  expect(read).not.toHaveProperty("evidence");
+  expect(read).not.toHaveProperty("content");
+  expect(JSON.stringify(read)).not.toContain(request.question);
+  expect(
+    JSON.stringify(await listCreatorPilots(workspace.actor))
+  ).not.toContain(input.content);
+  await expect(
+    exportCreatorPreview(workspace.actor, request.id)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("shared feedback retries are idempotent and concurrent edits cannot overwrite a stale revision", async () => {
+  await using workspace = await workspaceFixture();
+  const { pilot } = await invitedPilot(workspace);
+  await actOnCreatorPilot(workspace.guest, { id: pilot.id, action: "accept" });
+  const input = {
+    id: pilot.id,
+    expectedRevision: null,
+    content: "First observation",
+    shareWithCreator: true as const,
+  };
+  const copies = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      saveCreatorPilotFeedback(workspace.guest, input)
+    )
+  );
+  expect(new Set(copies.map((value) => value.feedback?.revision)).size).toBe(1);
+  expect(new Set(copies.map((value) => value.feedback?.updatedAt)).size).toBe(
+    1
+  );
+  const first = copies[0]?.feedback;
+  if (!first) throw new Error("Expected submitted feedback");
+  const edits = await Promise.allSettled(
+    ["Observation A", "Observation B"].map((content) =>
+      saveCreatorPilotFeedback(workspace.guest, {
+        ...input,
+        content,
+        expectedRevision: first.revision,
+      })
+    )
+  );
+  expect(edits.filter((result) => result.status === "fulfilled")).toHaveLength(
+    1
+  );
+  expect(edits.filter((result) => result.status === "rejected")).toHaveLength(
+    1
+  );
+  const current = (await readCreatorPilotFeedback(workspace.guest, pilot.id))
+    .feedback;
+  if (!current) throw new Error("Expected current feedback");
+  expect(current.revision).not.toBe(first.revision);
+  await expect(
+    saveCreatorPilotFeedback(workspace.guest, {
+      ...input,
+      content: "Stale overwrite",
+      expectedRevision: first.revision,
+    })
+  ).rejects.toThrow("changed elsewhere");
+  expect(
+    (
+      await saveCreatorPilotFeedback(workspace.guest, {
+        ...input,
+        content: current.content,
+        expectedRevision: first.revision,
+      })
+    ).feedback
+  ).toEqual(current);
+});
+
+test("withdrawal freezes submitted feedback and live party membership still governs reads", async () => {
+  await using workspace = await workspaceFixture();
+  await using outsider = await workspaceFixture();
+  await query(sql`INSERT INTO organization_memberships (organization_id, user_id, role)
+    SELECT organization_id, ${outsider.actor.userId}, 'member' FROM workspaces WHERE id = ${workspace.actor.workspaceId}`);
+  await query(sql`INSERT INTO workspace_memberships (workspace_id, user_id, role)
+    VALUES (${workspace.actor.workspaceId}, ${outsider.actor.userId}, 'member')`);
+  const otherMember = {
+    ...outsider.actor,
+    workspaceId: workspace.actor.workspaceId,
+  };
+  const { pilot } = await invitedPilot(workspace);
+  await actOnCreatorPilot(workspace.guest, { id: pilot.id, action: "accept" });
+  const input = {
+    id: pilot.id,
+    expectedRevision: null,
+    content: "Explicitly shared report",
+    shareWithCreator: true as const,
+  };
+  await saveCreatorPilotFeedback(workspace.guest, input);
+  for (const actor of [
+    workspace.guestPersonal,
+    outsider.actor,
+    otherMember,
+    { ...workspace.guest, groupBindingId: randomUUID() },
+    { ...workspace.guest, protocolTaskId: randomUUID() },
+  ]) {
+    await expect(
+      readCreatorPilotFeedback(actor, pilot.id)
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    await expect(saveCreatorPilotFeedback(actor, input)).rejects.toBeInstanceOf(
+      WorkspaceAccessDenied
+    );
+  }
+  await actOnCreatorPilot(workspace.actor, {
+    id: pilot.id,
+    action: "withdraw",
+  });
+  await expect(
+    saveCreatorPilotFeedback(workspace.guest, input)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  for (const actor of [workspace.actor, workspace.guest])
+    expect(
+      (await readCreatorPilotFeedback(actor, pilot.id)).feedback?.content
+    ).toBe(input.content);
+  await query(
+    sql`DELETE FROM organization_memberships WHERE user_id = ${workspace.actor.userId}`
+  );
+  await expect(
+    readCreatorPilotFeedback(workspace.guest, pilot.id)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });

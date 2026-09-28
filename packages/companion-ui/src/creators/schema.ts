@@ -262,3 +262,18 @@ export const creatorPilotListSchema = z.array(creatorPilotSchema).max(100);
 export const creatorPilotTeachingSchema = creatorPilotSchema.extend({
   content: creatorDraftContentSchema,
 });
+
+export const creatorPilotFeedbackSchema = z.object({
+  revision: z.uuid(),
+  content: z.string().trim().min(1).max(16000),
+  updatedAt: z.number(),
+});
+export const creatorPilotFeedbackViewSchema = creatorPilotSchema.extend({
+  feedback: creatorPilotFeedbackSchema.nullable(),
+});
+export const creatorPilotFeedbackSaveSchema = z.strictObject({
+  id: z.uuid(),
+  expectedRevision: z.uuid().nullable(),
+  content: creatorPilotFeedbackSchema.shape.content,
+  shareWithCreator: z.literal(true),
+});
