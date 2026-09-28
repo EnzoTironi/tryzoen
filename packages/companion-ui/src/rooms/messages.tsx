@@ -1,4 +1,4 @@
-import { useRef, type ComponentProps } from "react";
+import { useRef, useEffect, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -6,13 +6,16 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewToken,
 } from "react-native";
 import { MessageCircle } from "lucide-react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { colors } from "../theme";
 import { ConversationAvatar } from "../chats/avatar";
-import { reactionTextFor } from "../session/reaction";
+import { MessageActions } from "../message-actions";
+import { AssistantMarkdown } from "../markdown";
+import type { roomReactionSummarySchema, roomMemberSchema } from "./schema";
 import type { roomMessageSchema } from "./schema";
 
 export function RoomMessages({
@@ -25,7 +28,21 @@ export function RoomMessages({
   loadingMore,
   onMore,
   avatarUri,
+  onCopy,
+  onReply,
+  onProfile,
+  members,
+  reactions,
+  onReact,
+  onVisibleMessagesChange,
 }: {
+  readonly onCopy?: (text: string) => Promise<void>;
+  readonly onReply: (message: z.infer<typeof roomMessageSchema>) => void;
+  readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
+  readonly members: z.infer<typeof roomMemberSchema>[];
+  readonly reactions: z.infer<typeof roomReactionSummarySchema>[];
+  readonly onReact: (id: string, emoji: string | null) => Promise<void>;
+  readonly onVisibleMessagesChange: (ids: string[]) => void;
   readonly avatarUri?: string;
   readonly messages: z.infer<typeof roomMessageSchema>[];
   readonly onThread?: (message: z.infer<typeof roomMessageSchema>) => void;
@@ -38,10 +55,25 @@ export function RoomMessages({
 }) {
   const list = useRef<FlatList<z.infer<typeof roomMessageSchema>>>(null);
   const nearBottom = useRef(true);
+  const visible = useRef(onVisibleMessagesChange);
+  useEffect(() => {
+    visible.current = onVisibleMessagesChange;
+  }, [onVisibleMessagesChange]);
+  const [onViewableItemsChanged] = useState(
+    () =>
+      ({
+        viewableItems,
+      }: {
+        viewableItems: ViewToken<z.infer<typeof roomMessageSchema>>[];
+      }) => {
+        visible.current(viewableItems.map(({ item }) => item.id));
+      }
+  );
   return (
     <FlatList
       ref={list}
       data={messages}
+      onViewableItemsChanged={onViewableItemsChanged}
       keyExtractor={(item) => item.id}
       style={styles.list}
       contentContainerStyle={styles.content}
@@ -102,14 +134,19 @@ export function RoomMessages({
               </Text>
             )}
           <View style={[styles.messageLine, item.mine && styles.outgoingLine]}>
-            {!item.mine && (
-              <ConversationAvatar
-                name={item.sender}
-                uri={item.bot ? avatarUri : undefined}
-                size={30}
-              />
-            )}
-            <RoomMessage item={item} onThread={onThread} />
+            <RoomMessage
+              item={item}
+              onThread={onThread}
+              avatarUri={avatarUri}
+              onCopy={onCopy}
+              onReply={onReply}
+              onProfile={onProfile}
+              members={members}
+              onReact={onReact}
+              reaction={reactions.find(
+                (reaction) => reaction.messageId === item.id
+              )}
+            />
           </View>
         </>
       )}
@@ -119,61 +156,158 @@ export function RoomMessages({
 function RoomMessage({
   item,
   onThread,
-}: {
+  avatarUri,
+  onCopy,
+  onReply,
+  onProfile,
+  members,
+  reaction,
+  onReact,
+}: Pick<
+  ComponentProps<typeof RoomMessages>,
+  | "onThread"
+  | "avatarUri"
+  | "onCopy"
+  | "onReply"
+  | "onProfile"
+  | "members"
+  | "onReact"
+> & {
   readonly item: z.infer<typeof roomMessageSchema>;
-  readonly onThread: ComponentProps<typeof RoomMessages>["onThread"];
+  readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const person = members.find((member) => member.id === item.senderId) ?? {
+    id: item.senderId,
+    name: item.sender,
+    bot: item.bot,
+    mine: item.mine,
+  };
+  const profile = () => {
+    onProfile(person);
+  };
   return (
-    <View style={[styles.row, item.mine && styles.outgoing]}>
-      <View style={styles.attribution}>
-        <Text style={styles.sender}>{item.mine ? "Você" : item.sender}</Text>
-        {item.bot && <Text style={styles.badge}>IA</Text>}
-        <Text style={styles.time}>
-          {item.timestamp
-            ? new Date(item.timestamp).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : ""}
-        </Text>
-      </View>
-      <View style={[styles.bubble, item.mine && styles.blue]}>
-        <Text selectable style={styles.text}>
-          {item.text}
-        </Text>
-      </View>
-      {item.reactions.length > 0 && (
-        <Text accessibilityLabel="Reações" style={styles.caption}>
-          {item.reactions
-            .map(
-              (reaction) =>
-                `${reactionTextFor(reaction.type)} ${reaction.count}`
-            )
-            .join(" · ")}
-        </Text>
-      )}
-      {onThread && (
+    <>
+      {!item.mine && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
-          onPress={() => {
-            onThread(item);
-          }}
-          style={styles.reply}
+          accessibilityLabel={`Perfil de ${person.name}`}
+          onPress={profile}
         >
-          <MessageCircle size={14} color={colors.accent} />
-          <Text style={styles.replyText}>
-            {item.replies
-              ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
-              : "Responder em thread"}
-          </Text>
+          <ConversationAvatar
+            name={person.name}
+            uri={person.bot ? avatarUri : (person.avatarUri ?? undefined)}
+            size={30}
+          />
         </Pressable>
       )}
-    </View>
+      <View style={[styles.row, item.mine && styles.outgoing]}>
+        <View style={styles.attribution}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Ver perfil de ${person.name}`}
+            onPress={profile}
+          >
+            <Text style={styles.sender}>
+              {item.mine ? "Você" : person.name}
+            </Text>
+          </Pressable>
+          {item.bot && <Text style={styles.badge}>IA</Text>}
+          <Text style={styles.time}>
+            {item.timestamp
+              ? new Date(item.timestamp).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : ""}
+          </Text>
+        </View>
+        <View style={[styles.bubble, item.mine && styles.blue]}>
+          {item.reply && (
+            <View style={styles.quote}>
+              <Text style={styles.sender}>{item.reply.sender}</Text>
+              <Text numberOfLines={3} style={styles.caption}>
+                {item.reply.text}
+              </Text>
+            </View>
+          )}
+          {item.bot ? (
+            <AssistantMarkdown text={item.text} />
+          ) : (
+            <Text selectable style={styles.text}>
+              {item.text}
+            </Text>
+          )}
+        </View>
+        {reaction && reaction.reactions.length > 0 && (
+          <View style={styles.reactions}>
+            {reaction.reactions
+              .filter((entry) => entry.emoji !== reaction.mine)
+              .map((entry) => (
+                <View key={entry.emoji} style={styles.reaction}>
+                  <Text
+                    accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
+                    style={styles.reactionText}
+                  >
+                    {entry.emoji} {entry.count}
+                    {reaction.complete ? "" : "+"}
+                  </Text>
+                </View>
+              ))}
+          </View>
+        )}
+        <MessageActions
+          text={item.text}
+          outgoing={item.mine}
+          onCopy={onCopy}
+          onReply={() => {
+            onReply(item);
+          }}
+          reaction={reaction?.mine}
+          reactionCount={
+            reaction?.reactions.find((entry) => entry.emoji === reaction.mine)
+              ?.count
+          }
+          onReact={(emoji) => onReact(item.id, emoji)}
+        />
+        {onThread && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
+            onPress={() => {
+              onThread(item);
+            }}
+            style={styles.reply}
+          >
+            <MessageCircle size={14} color={colors.accent} />
+            <Text style={styles.replyText}>
+              {item.replies
+                ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
+                : "Responder em thread"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  quote: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.accent,
+    paddingLeft: 10,
+    paddingVertical: 4,
+    marginBottom: 10,
+    gap: 4,
+  },
+  reactions: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  reaction: {
+    borderRadius: 16,
+    backgroundColor: colors.wash,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  reactionText: { fontSize: 13, color: colors.ink },
   list: { flex: 1, minHeight: 0 },
   content: { paddingHorizontal: 24, paddingVertical: 24, gap: 20 },
   messageLine: { flexDirection: "row", alignItems: "flex-start", gap: 10 },

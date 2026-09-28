@@ -58,7 +58,7 @@ beforeEach(() => {
   });
 });
 
-it("projects native Matrix reactions onto their message, counting each sender once", async () => {
+it("keeps native reactions separate from timeline messages", async () => {
   const message = {
     event_id: "$message",
     type: "m.room.message",
@@ -109,7 +109,8 @@ it("projects native Matrix reactions onto their message, counting each sender on
       bot: false,
       rootId: null,
       replies: 0,
-      reactions: [{ type: "heart", count: 2 }],
+      senderId: "@member:matrix.test",
+      reply: null,
     },
   ]);
   expect(mocks.request).toHaveBeenCalledWith(

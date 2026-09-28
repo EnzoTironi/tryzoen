@@ -8,7 +8,7 @@ import {
   type roomCreateSchema,
   type roomSendSchema,
 } from "@zoen/companion-ui/rooms";
-import { projectMatrixMessage } from "./messages";
+import { projectMatrixMessage, readRoomMessage } from "./messages";
 
 import {
   requireWorkspaceAccess,
@@ -25,7 +25,7 @@ import {
 import { ensureMatrixIdentity, registerVirtualUser } from "./identities";
 
 const roomResult = z.object({ room_id: z.string() });
-const requireMatrixRoom = async function (
+export const requireMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   id: string,
   manage = false
@@ -130,7 +130,7 @@ export const createMatrixRoom = async function (
 };
 
 /** Access is checked again before every read/send. Virtual users receive no bearer tokens. */
-const joinMatrixRoom = async function (
+export const joinMatrixRoom = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ) {
@@ -186,22 +186,8 @@ export const readMatrixMessages = async function (
     const room = await joinMatrixRoom(actor, id);
     await requireWorkspaceAccess(actor);
     const base = `rooms/${encodeURIComponent(room.roomId)}`;
-    const parent = rootId
-      ? MatrixEventSchema.parse(
-          await matrixRequest(
-            "GET",
-            `${base}/event/${encodeURIComponent(rootId)}`,
-            undefined,
-            room.matrixId
-          )
-        )
-      : undefined;
-    if (
-      parent &&
-      (parent.event_id !== rootId ||
-        parent.type !== "m.room.message" ||
-        parent.content["m.relates_to"]?.rel_type === "m.thread")
-    )
+    const parent = rootId ? await readRoomMessage(room, rootId) : undefined;
+    if (parent?.content["m.relates_to"]?.rel_type === "m.thread")
       throw new WorkspaceAccessDenied();
     const endpoint = rootId
       ? `${base}/relations/${encodeURIComponent(rootId)}/m.thread/m.room.message?dir=b&limit=100`
@@ -222,8 +208,8 @@ export const readMatrixMessages = async function (
       .parseAsync(response);
     const members = z.array(roomMemberSchema).parse(
       await query(sql`
-      SELECT i.matrix_id AS id, COALESCE(d.username, u.name) AS name,
-        i.user_id = ${actor.userId} AS mine, false AS bot
+      SELECT i.matrix_id AS id, u.name AS name, d.username,
+        i.user_id = ${actor.userId} AS mine, false AS bot, u.image AS "avatarUri"
       FROM matrix_identities i
       JOIN public.user u ON ('better-auth:' || u.id) = i.user_id
       LEFT JOIN user_directory d ON d.user_id = u.id
@@ -235,18 +221,18 @@ export const readMatrixMessages = async function (
     await requireMatrixRoom(actor, id);
     const config = await matrixConfiguration();
     const project = (event: z.infer<typeof MatrixEventSchema>) =>
-      projectMatrixMessage(
-        event,
-        events.chunk,
-        members,
-        room.matrixId,
-        config.botId
-      );
+      projectMatrixMessage(event, members, room.matrixId, config.botId);
     return {
       room,
       members: [
         ...members.slice(0, 99),
-        { id: config.botId, name: "Zoen", mine: false, bot: true },
+        {
+          id: config.botId,
+          name: "Zoen",
+          username: "zoen",
+          mine: false,
+          bot: true,
+        },
       ],
       membersTruncated: members.length > 99,
       nextCursor: (rootId ? events.next_batch : events.end) ?? null,
@@ -267,38 +253,40 @@ export const sendMatrixMessage = async function (
     const room = await joinMatrixRoom(actor, input.id);
     await requireWorkspaceAccess(actor);
     if (input.rootId) {
-      const parent = MatrixEventSchema.parse(
-        await matrixRequest(
-          "GET",
-          `rooms/${encodeURIComponent(room.roomId)}/event/${encodeURIComponent(input.rootId)}`,
-          undefined,
-          room.matrixId
-        )
-      );
-      if (
-        parent.event_id !== input.rootId ||
-        parent.type !== "m.room.message" ||
-        !parent.content.body ||
-        parent.content["m.relates_to"]?.rel_type === "m.thread"
-      )
+      const parent = await readRoomMessage(room, input.rootId);
+      if (parent.content["m.relates_to"]?.rel_type === "m.thread")
         throw new WorkspaceAccessDenied();
     }
+    const reply = input.replyTo
+      ? await readRoomMessage(room, input.replyTo)
+      : undefined;
+    const replyThread = reply?.content["m.relates_to"];
+    if (reply && reply.event_id !== input.rootId) {
+      const threadId =
+        replyThread?.rel_type === "m.thread" ? replyThread.event_id : undefined;
+      if (threadId !== input.rootId) throw new WorkspaceAccessDenied();
+    }
+    const replyTarget = reply?.event_id ?? input.rootId;
+    const relation = {
+      ...(input.rootId
+        ? {
+            rel_type: "m.thread",
+            event_id: input.rootId,
+            is_falling_back: !reply,
+          }
+        : {}),
+      ...(replyTarget ? { "m.in_reply_to": { event_id: replyTarget } } : {}),
+    };
+    const body = reply
+      ? `> <${reply.sender}> ${(reply.content.body ?? "").slice(0, 4000).replaceAll("\n", "\n> ")}\n\n${input.text}`
+      : input.text;
     const sent = await matrixRequest(
       "PUT",
       `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
       {
         msgtype: "m.text",
-        body: input.text,
-        ...(input.rootId
-          ? {
-              "m.relates_to": {
-                rel_type: "m.thread",
-                event_id: input.rootId,
-                is_falling_back: true,
-                "m.in_reply_to": { event_id: input.rootId },
-              },
-            }
-          : {}),
+        body,
+        ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
       },
       room.matrixId
     );

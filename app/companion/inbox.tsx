@@ -53,6 +53,7 @@ export function ConnectedRoom(
     <RoomConversation
       {...props}
       data={data}
+      onCopyText={(text) => navigator.clipboard.writeText(text)}
       avatarUri="/marketing/zoen-avatar.webp"
     />
   );

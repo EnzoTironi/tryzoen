@@ -215,7 +215,8 @@ async function creatorArchiveResponse(
   responseHeaders: Record<string, string>
 ) {
   const key = Id.parse(attachmentId);
-  const rows = await query(sql`SELECT id, revision, content,
+  const rows =
+    await query(sql`SELECT id, revision, (SELECT username FROM user_directory WHERE creator_draft_id = creator_drafts.id) AS username, content,
       CASE WHEN evaluation_cases IS NULL THEN NULL ELSE jsonb_build_object('revision', evaluation_revision,
         'cases', evaluation_cases, 'updatedAt', extract(epoch FROM evaluation_updated_at)::float8 * 1000) END AS evaluation,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",

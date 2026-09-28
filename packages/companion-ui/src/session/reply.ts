@@ -2,6 +2,7 @@ import type { EveMessage } from "eve/react";
 
 export type MessageReply = Pick<EveMessage, "id" | "role"> & {
   readonly text: string;
+  readonly sender?: string;
 };
 
 export function messageText(message: EveMessage) {

@@ -36,7 +36,9 @@ export function DiscoverBots({
   const available =
     pilots.data?.filter(
       (pilot) =>
-        pilot.status === "active" && !pilot.isCreator && match(pilot.title)
+        pilot.status === "active" &&
+        !pilot.isCreator &&
+        match(`${pilot.title} ${pilot.username ?? ""}`)
     ) ?? [];
   return (
     <CompanionPage
@@ -98,7 +100,10 @@ export function DiscoverBots({
             style={styles.card}
           >
             <ConversationAvatar name={pilot.title} size={56} />
-            <Text style={styles.title}>{pilot.title}</Text>
+            <Text style={styles.title}>{pilot.title} · IA</Text>
+            {pilot.username && (
+              <Text style={styles.byline}>@{pilot.username}</Text>
+            )}
             <Text style={styles.copy}>{pilot.description}</Text>
             <Text style={styles.byline}>
               Por {pilot.creatorName} · acesso por convite

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import emoji from "unicode-emoji-json/data-ordered-emoji.json";
+import emoji from "unicode-emoji-json/data-ordered-emoji.json" with { type: "json" };
 
 const supportedEmoji = new Set<string>(emoji);
 const identifier = z.string().min(1).max(200);

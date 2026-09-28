@@ -19,11 +19,15 @@ export function RoomDetails({
   avatarUri,
   onClose,
   onConversation,
+  onProfile,
 }: {
   readonly page: z.infer<typeof roomPageSchema>;
   readonly avatarUri?: string;
   readonly onClose: () => void;
   readonly onConversation: () => void;
+  readonly onProfile: (
+    person: z.infer<typeof roomPageSchema>["members"][number]
+  ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const people = page.members.filter((member) => !member.bot).length;
@@ -79,10 +83,18 @@ export function RoomDetails({
           </Text>
           <View style={styles.card}>
             {members.map((member, index) => (
-              <View key={member.id} style={styles.member}>
+              <Pressable
+                key={member.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Perfil de ${member.name}`}
+                onPress={() => {
+                  onProfile(member);
+                }}
+                style={styles.member}
+              >
                 <ConversationAvatar
                   name={member.name}
-                  uri={member.bot ? avatarUri : undefined}
+                  uri={member.bot ? avatarUri : (member.avatarUri ?? undefined)}
                   size={42}
                 />
                 <View
@@ -105,7 +117,7 @@ export function RoomDetails({
                         : "Membro do espaço"}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             ))}
             {page.members.length > 6 && !expanded && (
               <Pressable

@@ -42,6 +42,8 @@ export default {
         // Next resolves React Native imports to this web renderer.
         "react-native-web",
         "react-native-svg",
+        // Eve evaluates shared reaction schemas from root-authored module bundles.
+        "unicode-emoji-json",
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
         // Imported through the owning Tailwind stylesheet rather than TypeScript.

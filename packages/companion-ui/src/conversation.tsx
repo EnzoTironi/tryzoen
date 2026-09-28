@@ -26,6 +26,7 @@ import { AttachmentCard } from "./attachments/card";
 import { messageContent, type ConversationDraft } from "./session/input";
 import type { ChatAgent } from "./session/types";
 import {
+  messageText,
   readReplyMessage,
   replyMessage,
   type MessageReply,
@@ -169,9 +170,16 @@ export function Conversation({
               )}
             </View>
             <MessageActions
-              message={message}
+              text={messageText(message)}
+              outgoing={message.role === "user"}
               onCopy={onCopyText}
-              onReply={setReply}
+              onReply={() => {
+                setReply({
+                  id: message.id,
+                  role: message.role,
+                  text: messageText(message),
+                });
+              }}
               reaction={reactions?.get(message.id)}
               onReact={
                 onReact ? (emoji) => onReact(message.id, emoji) : undefined

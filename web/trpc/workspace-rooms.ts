@@ -1,5 +1,9 @@
 import {
   roomCreateSchema,
+  roomReactionsReadSchema,
+  roomReactionsPageSchema,
+  roomReactionWriteSchema,
+  roomReactionSummarySchema,
   roomSendSchema,
   roomReadSchema,
   roomThreadSchema,
@@ -17,7 +21,24 @@ import {
   sendMatrixMessage,
 } from "../../server/matrix/rooms";
 
+import {
+  readMatrixReactions,
+  setMatrixReaction,
+} from "../../server/matrix/reactions";
+
 export const workspaceRoomsRouter = {
+  reactions: workspaceProcedure
+    .input(roomReactionsReadSchema)
+    .output(roomReactionsPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readMatrixReactions(ctx.actor, input))
+    ),
+  react: workspaceProcedure
+    .input(roomReactionWriteSchema)
+    .output(roomReactionSummarySchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setMatrixReaction(ctx.actor, input))
+    ),
   list: workspaceProcedure.query(({ ctx, signal }) =>
     withSignal(signal, async () => listMatrixRooms(ctx.actor))
   ),

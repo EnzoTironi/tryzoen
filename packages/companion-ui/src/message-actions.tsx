@@ -7,25 +7,27 @@ import {
   View,
 } from "react-native";
 import { Check, Copy, Reply, SmilePlus, Ellipsis } from "lucide-react-native";
-import type { EveMessage } from "eve/react";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
-import { messageText, type MessageReply } from "./session/reply";
 import { ActionButton } from "./button";
 
 const ReactionPicker = lazy(() => import("./reactions/picker"));
 
 export function MessageActions({
-  message,
+  text,
+  outgoing,
   onCopy,
   onReply,
   reaction,
+  reactionCount,
   onReact,
 }: {
-  readonly message: EveMessage;
+  readonly text: string;
+  readonly outgoing: boolean;
   readonly onCopy?: (text: string) => Promise<void>;
-  readonly onReply: (reply: MessageReply) => void;
+  readonly onReply: () => void;
   readonly reaction?: string | null;
+  readonly reactionCount?: number;
   readonly onReact?: (emoji: string | null) => Promise<void>;
 }) {
   const [menu, setMenu] = useState(false);
@@ -38,24 +40,27 @@ export function MessageActions({
         (reaction ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Your reaction ${reaction}. Change or remove reaction`}
+            accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. Change or remove reaction`}
             onPress={() => {
               setMenu(true);
             }}
             style={styles.reaction}
           >
             <Text style={styles.emoji}>{reaction}</Text>
+            {reactionCount !== undefined && (
+              <Text style={styles.count}>{reactionCount}</Text>
+            )}
           </Pressable>
         ) : (
           <IconButton
-            icon={message.role === "user" ? Ellipsis : SmilePlus}
+            icon={outgoing ? Ellipsis : SmilePlus}
             label="React to message"
             onPress={() => {
               setMenu(true);
             }}
           />
         ))}
-      <TextMessageActions message={message} onCopy={onCopy} onReply={onReply} />
+      <TextMessageActions text={text} onCopy={onCopy} onReply={onReply} />
       {menu && onReact && (
         <Suspense
           fallback={
@@ -70,7 +75,7 @@ export function MessageActions({
             }}
           >
             <TextMessageActions
-              message={message}
+              text={text}
               onCopy={onCopy}
               onReply={onReply}
               expanded
@@ -83,24 +88,23 @@ export function MessageActions({
   );
 }
 function TextMessageActions({
-  message,
+  text,
   onCopy,
   onReply,
   expanded = false,
   onDone,
 }: Pick<
   ComponentProps<typeof MessageActions>,
-  "message" | "onCopy" | "onReply"
+  "text" | "onCopy" | "onReply"
 > & {
   readonly expanded?: boolean;
   readonly onDone?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
-  const text = messageText(message);
   if (!text.trim()) return null;
   const reply = () => {
-    onReply({ id: message.id, role: message.role, text });
+    onReply();
     onDone?.();
   };
   const copy = async () => {
@@ -158,7 +162,10 @@ const styles = StyleSheet.create({
   },
   menuActions: { gap: 2 },
   error: { fontSize: 13, color: colors.danger },
+  count: { color: colors.ink, fontSize: 12, fontWeight: "500" },
   reaction: {
+    flexDirection: "row",
+    gap: 4,
     minWidth: 44,
     minHeight: 36,
     paddingHorizontal: 10,

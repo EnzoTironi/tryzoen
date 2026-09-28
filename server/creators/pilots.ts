@@ -19,7 +19,7 @@ import {
 } from "../workspaces/access";
 
 function pilotProjection(actor: z.infer<typeof WorkspaceActorSchema>) {
-  return sql`p.id, p.release_id AS "releaseId", r.draft_id AS "draftId", r.revision,
+  return sql`(SELECT username FROM user_directory WHERE creator_draft_id = r.draft_id) AS username, p.id, p.release_id AS "releaseId", r.draft_id AS "draftId", r.revision,
     r.content->>'title' AS title, r.content->>'description' AS description,
     author.name AS "creatorName", recipient.name AS "recipientName",
     p.creator_user_id = ${actor.userId} AS "isCreator", p.status,

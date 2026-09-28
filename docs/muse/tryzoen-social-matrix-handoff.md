@@ -903,3 +903,56 @@ provided examples and participant-submitted reports. Dreaming does not imply
 permission to train on private pilots, edit authored SOUL/playbook instructions,
 publish a new approved version or change a recipient's selected teaching. Public
 distribution and real creator-led outcome measurement remain unfinished.
+
+## Registered identity and shared message actions — 2026-09-28
+
+People and creator bots now claim `@username` in one database namespace. Migration
+0081 generalizes the existing directory: a row has exactly one human, creator
+draft or registered system owner, and PostgreSQL derives its account type. There
+is no bot suffix rule. A person named `something_bot` remains a person; Zoen's
+registered system handle is reserved. Display names remain separate from handles.
+Existing accounts and private drafts without a chosen username remain unclaimed;
+there is no automatic renaming or imported-data backfill. The conversational
+creator tool can claim or rename a handle with ownership and stale-write checks.
+Private drafts and invitation-only specialists expose the chosen handle without
+making their teaching or conversations publicly discoverable.
+
+Groups and threads reuse private chat's reaction picker, copy and quote-reply
+controls. Reactions are native Matrix annotations/redactions, counted per sender
+and emoji; there is no parallel reaction database. Reads request at most twelve
+visible message IDs, one hundred annotations each and three concurrent requests.
+Truncated counts are explicit; the client refuses to edit a truncated set. Writes
+validate the target, bound relation pagination and redact only the caller's
+selected prior annotation. Retries reuse transaction IDs. Quote replies preserve
+native `m.in_reply_to` and thread relations; unrelated thread targets are rejected.
+
+Names, avatars and participant rows open a shared profile surface: bottom sheet
+on mobile and centered modal on desktop. Profiles show public identity and the
+shared conversation, never a participant's private memory or agent activity. The
+old workspace-room renderer was removed; that route uses the same shared UI and
+retains its administrator close-room control. The mobile navigation remains
+Conversations, Feed, Ideas, Goals, Library and Settings; discovery stays elsewhere.
+
+The visual target is the feel of a native Mac/iOS app across supported platforms:
+system typography, restrained separators, rounded grouped surfaces, consistent
+controls and platform-appropriate focus/keyboard behavior. Responsive Chrome
+verification is not a substitute for signed-app and real-device qualification.
+
+Remaining transport work includes native incremental Matrix sync, read receipts,
+typing, push and offline recovery. Timeline and reactions still use bounded
+foreground refreshes (10s and 30s), not a qualified million-user transport. Rich
+media/calls/hangouts, public marketplace distribution and full Muse parity remain
+unfinished. No production deployment or load-capacity claim accompanies this slice.
+
+Validation for this slice: all nine `pnpm check` tasks pass (1,340 tests in 209
+files), production build and Expo web/iOS/Android exports pass. Thirteen isolated
+PostgreSQL/Synapse/compiled-Eve cases verify username races and type invariants,
+creator ownership and conversational claims, former-account exports, reactions,
+thread routing and revocation. Migration 0081 was applied only to the local review
+and isolated test databases. Root authoring declares the same pinned Unicode
+catalog as the shared UI because Eve resolves bundled imports from the root;
+JSON imports carry the attribute required by Node 24. Browser proof includes
+persistent reactions/quotes, actual copy/paste and desktop/mobile profiles.
+Structural quality still reports 26 unsuppressed gating findings, dominated by
+recent edit churn, adapter similarities and component growth. This is not a
+clean structural-quality gate or complete production qualification.

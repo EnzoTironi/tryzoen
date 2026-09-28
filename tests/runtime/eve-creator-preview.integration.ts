@@ -341,6 +341,19 @@ test("the native conversational authoring tool persists private drafts and denie
     expect(JSON.stringify(events)).toContain("WorkspaceAccessDenied");
     expect(JSON.stringify(events)).not.toContain(draft.content.playbook);
     expect(await readCreatorDraft(workspace.actor, draft.id)).toEqual(saved);
+    const username = `interview_${draft.id.slice(0, 8)}`;
+    const identity = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        auth,
+        message: `creator-authoring ${JSON.stringify({ action: "username", id: draft.id, username, expectedUsername: null })}`,
+      })
+    );
+    await server.settled(identity.sessionId);
+    expect((await readCreatorDraft(workspace.actor, draft.id)).username).toBe(
+      username
+    );
   } finally {
     await server.stop();
   }

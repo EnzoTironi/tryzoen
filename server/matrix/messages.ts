@@ -1,22 +1,57 @@
 import type { z } from "zod";
-import {
-  addReactionToMessageOutputSchema,
-  reactionTextFor,
-} from "@zoen/companion-ui/messages";
 import type { roomMemberSchema } from "@zoen/companion-ui/rooms";
-import type { MatrixEventSchema } from "./client";
+import { MatrixEventSchema, matrixRequest } from "./client";
+import type { joinMatrixRoom } from "./rooms";
+import { WorkspaceAccessDenied } from "../workspaces/access";
+
+/** Fetch only a real message visible to the already-authorized room member. */
+export async function readRoomMessage(
+  room: Awaited<ReturnType<typeof joinMatrixRoom>>,
+  id: string
+) {
+  const message = MatrixEventSchema.parse(
+    await matrixRequest(
+      "GET",
+      `rooms/${encodeURIComponent(room.roomId)}/event/${encodeURIComponent(id)}`,
+      undefined,
+      room.matrixId
+    )
+  );
+  if (
+    message.event_id !== id ||
+    message.type !== "m.room.message" ||
+    !message.content.body ||
+    message.content["m.relates_to"]?.rel_type === "m.replace"
+  )
+    throw new WorkspaceAccessDenied();
+  return message;
+}
 
 export function projectMatrixMessage(
   event: z.infer<typeof MatrixEventSchema>,
-  events: z.infer<typeof MatrixEventSchema>[],
   people: z.infer<typeof roomMemberSchema>[],
   viewerId: string,
   botId: string
 ) {
   const relation = event.content["m.relates_to"];
+  const body = event.content.body ?? "Mensagem removida";
+  const replyId = relation?.["m.in_reply_to"]?.event_id;
+  const quote = replyId
+    ? /^> <([^>]+)> ([\s\S]*?)\n\n([\s\S]*)$/u.exec(body)
+    : null;
   return {
+    senderId: event.sender,
+    reply:
+      quote?.[1] && quote[2] !== undefined && replyId
+        ? {
+            id: replyId,
+            sender:
+              people.find((person) => person.id === quote[1])?.name ?? quote[1],
+            text: quote[2].replaceAll("\n> ", "\n"),
+          }
+        : null,
     id: event.event_id,
-    text: event.content.body ?? "Mensagem removida",
+    text: quote?.[3] ?? body,
     sender:
       event.sender === botId
         ? "Zoen"
@@ -28,23 +63,5 @@ export function projectMatrixMessage(
     rootId:
       relation?.rel_type === "m.thread" ? (relation.event_id ?? null) : null,
     replies: event.unsigned?.["m.relations"]?.["m.thread"]?.count ?? 0,
-    reactions: addReactionToMessageOutputSchema.shape.type.options
-      .map((type) => ({
-        type,
-        count: new Set(
-          events
-            .filter((candidate) => {
-              const reaction = candidate.content["m.relates_to"];
-              return (
-                candidate.type === "m.reaction" &&
-                reaction?.rel_type === "m.annotation" &&
-                reaction.event_id === event.event_id &&
-                reaction.key === reactionTextFor(type)
-              );
-            })
-            .map((candidate) => candidate.sender)
-        ).size,
-      }))
-      .filter((reaction) => reaction.count > 0),
   };
 }

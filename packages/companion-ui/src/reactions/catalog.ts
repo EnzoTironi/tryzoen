@@ -1,4 +1,4 @@
-import groups from "unicode-emoji-json/data-by-group.json";
+import groups from "unicode-emoji-json/data-by-group.json" with { type: "json" };
 
 const emoji = groups.flatMap((group) =>
   group.emojis.map((entry) => ({ ...entry, group: group.name }))

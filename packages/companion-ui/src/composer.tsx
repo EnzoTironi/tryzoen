@@ -138,9 +138,7 @@ export function Composer({
             <Text style={styles.quoteAuthor}>
               {reply.id.startsWith("feed:")
                 ? "Discussing a Feed post"
-                : reply.role === "user"
-                  ? "Replying to you"
-                  : "Replying to Zoen"}
+                : `Replying to ${reply.sender ?? (reply.role === "user" ? "you" : "Zoen")}`}
             </Text>
             <Text numberOfLines={3} style={styles.quoteExcerpt}>
               {reply.text}

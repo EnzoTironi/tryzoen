@@ -11,18 +11,34 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import { creatorDrafts } from "./creator-drafts";
 import { workspaces } from "./workspaces";
 
 export const userDirectory = pgTable(
   "user_directory",
   {
     userId: text("user_id")
-      .primaryKey()
+      .unique()
       .references(() => user.id, { onDelete: "cascade" }),
-    username: text("username").notNull().unique(),
+    username: text("username").primaryKey(),
+    creatorDraftId: uuid("creator_draft_id")
+      .unique()
+      .references(() => creatorDrafts.id, { onDelete: "cascade" }),
+    systemKey: text("system_key").unique(),
+    kind: text("kind", { enum: ["person", "bot"] }).generatedAlwaysAs(
+      sql`CASE WHEN user_id IS NOT NULL THEN 'person' ELSE 'bot' END`
+    ),
     discoverable: boolean("discoverable").notNull().default(false),
   },
   (table) => [
+    check(
+      "user_directory_owner_check",
+      sql`num_nonnulls(${table.userId}, ${table.creatorDraftId}, ${table.systemKey}) = 1`
+    ),
+    check(
+      "user_directory_system_check",
+      sql`${table.systemKey} IS NULL OR (${table.systemKey} = 'zoen' AND ${table.username} = 'zoen')`
+    ),
     check(
       "user_directory_username_check",
       sql`${table.username} ~ '^[a-z][a-z0-9_]{2,29}$'`

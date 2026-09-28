@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { setStringAsync } from "expo-clipboard";
 import { randomUUID } from "expo-crypto";
 import { ConversationInbox, RoomConversation } from "@zoen/companion-ui";
 import { companionChatData } from "../../../shared/companion/chats";
@@ -36,6 +37,9 @@ export function MobileRoom(
     <RoomConversation
       {...props}
       data={rooms}
+      onCopyText={async (text) => {
+        await setStringAsync(text);
+      }}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
       cacheScope={account.data?.user.id ?? "anonymous"}
     />

@@ -138,6 +138,7 @@ export const MatrixEventSchema = z.object({
   type: z.string(),
   sender: z.string(),
   state_key: z.optional(z.string()),
+  "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
   origin_server_ts: z.optional(z.number()),
   unsigned: z
     .object({
@@ -159,6 +160,7 @@ export const MatrixEventSchema = z.object({
         rel_type: z.optional(z.string()),
         event_id: z.optional(z.string()),
         key: z.optional(z.string()),
+        "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
       })
     ),
   }),

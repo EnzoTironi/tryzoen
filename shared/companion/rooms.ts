@@ -1,5 +1,7 @@
 import {
   roomListSchema,
+  roomReactionsPageSchema,
+  roomReactionSummarySchema,
   roomSchema,
   roomPageSchema,
   roomThreadPageSchema,
@@ -14,6 +16,16 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async reactions(input) {
+      return roomReactionsPageSchema.parse(
+        await rpc.query("workspaces.rooms.reactions", input)
+      );
+    },
+    async react(input) {
+      return roomReactionSummarySchema.parse(
+        await rpc.mutation("workspaces.rooms.react", input)
+      );
+    },
     async list() {
       return roomListSchema.parse(await rpc.query("workspaces.rooms.list"));
     },

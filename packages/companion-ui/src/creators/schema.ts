@@ -60,6 +60,7 @@ export const creatorEvaluationSnapshotSchema = z.strictObject({
 });
 
 export const creatorDraftSchema = z.object({
+  username: z.string().nullable(),
   id: z.uuid(),
   revision: z.uuid(),
   content: creatorDraftContentSchema,
@@ -245,6 +246,7 @@ export const creatorPilotActionSchema = z.strictObject({
 });
 
 export const creatorPilotSchema = z.object({
+  username: z.string().nullable(),
   id: z.uuid(),
   releaseId: z.uuid(),
   draftId: z.uuid(),

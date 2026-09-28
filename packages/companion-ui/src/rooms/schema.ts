@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addReactionToMessageOutputSchema } from "../session/messages";
+import { messageReactionSchema } from "../reactions/schema";
 
 export const roomSchema = z.object({
   id: z.string(),
@@ -28,6 +28,7 @@ export const roomSendSchema = z.object({
   operationId: z.uuid(),
   text: z.string().trim().min(1).max(8000),
   rootId: roomThreadSchema.shape.rootId.optional(),
+  replyTo: roomThreadSchema.shape.rootId.optional(),
 });
 export const roomMessageSchema = z.object({
   id: z.string(),
@@ -38,18 +39,18 @@ export const roomMessageSchema = z.object({
   timestamp: z.number(),
   rootId: z.string().nullable(),
   replies: z.number().int().nonnegative(),
-  reactions: z.array(
-    z.object({
-      type: addReactionToMessageOutputSchema.shape.type,
-      count: z.number(),
-    })
-  ),
+  senderId: z.string(),
+  reply: z
+    .object({ id: z.string(), text: z.string(), sender: z.string() })
+    .nullable(),
 });
 export const roomMemberSchema = z.object({
   id: z.string(),
   name: z.string(),
   mine: z.boolean(),
   bot: z.boolean(),
+  avatarUri: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
 });
 export const roomPageSchema = z.object({
   room: roomSchema,
@@ -62,7 +63,37 @@ export const roomThreadPageSchema = roomPageSchema.extend({
   parent: roomMessageSchema,
 });
 
+export const roomReactionsReadSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageIds: z.array(roomThreadSchema.shape.rootId).min(1).max(12),
+});
+export const roomReactionWriteSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageId: roomThreadSchema.shape.rootId,
+  emoji: messageReactionSchema.shape.emoji,
+  previousEventId: roomThreadSchema.shape.rootId.optional(),
+  operationId: z.uuid(),
+});
+export const roomReactionSummarySchema = z.object({
+  messageId: z.string(),
+  mine: z.string().nullable(),
+  mineEventId: z.string().nullable(),
+  reactions: z.array(
+    z.object({ emoji: z.string(), count: z.number().int().positive() })
+  ),
+  complete: z.boolean(),
+});
+export const roomReactionsPageSchema = z
+  .array(roomReactionSummarySchema)
+  .max(12);
+
 export interface RoomData {
+  reactions: (
+    input: z.infer<typeof roomReactionsReadSchema>
+  ) => Promise<z.infer<typeof roomReactionsPageSchema>>;
+  react: (
+    input: z.infer<typeof roomReactionWriteSchema>
+  ) => Promise<z.infer<typeof roomReactionSummarySchema>>;
   operationId: () => string;
   list: () => Promise<z.infer<typeof roomListSchema>>;
   create: (
