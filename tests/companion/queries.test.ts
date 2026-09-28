@@ -333,59 +333,32 @@ it("keeps goal revisions atomic, paginates history and erases it with a forgotte
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
-it("pages useful feed updates and never links a different user's conversation", async () => {
-  await database.insert(schema.agentSessions).values({
-    sessionId: "bob-session",
-    workspaceId: bob.workspaceId,
-    createdByUserId: bob.userId,
+it("pages private publications and isolates reactions and deletion from another member", async () => {
+  await database.insert(schema.workspaceMemberships).values({
+    workspaceId: alice.workspaceId,
+    userId: bob.userId,
+    role: "member",
   });
-  const jobId = randomUUID();
-  const foreignJobId = randomUUID();
-  await database.insert(schema.scheduledAgentJobs).values([
-    {
-      id: jobId,
-      workspaceId: alice.workspaceId,
-      createdByUserId: alice.userId,
-      prompt: "Daily reading",
-      conversationChannel: "eve",
-      conversationId: "bob-session",
-      timing: {},
-    },
-    {
-      id: foreignJobId,
-      workspaceId: bob.workspaceId,
-      createdByUserId: bob.userId,
-      prompt: "Private briefing",
-      conversationChannel: "eve",
-      conversationId: "bob-session",
-      timing: {},
-    },
-  ]);
-  const outcome = {
-    kind: "result",
-    summary: "Reading update",
-    urgency: "normal",
+  const content = {
+    key: "reading",
+    title: "Daily reading",
+    content: "A short reading routine.",
+    rationale: "Requested by the reader.",
+    sources: [],
   };
-  await database.insert(schema.scheduledAgentRuns).values([
+  await database.insert(schema.personalFeedPosts).values([
     ...Array.from({ length: 21 }, (_, index) => ({
-      jobId,
-      scheduledFor: new Date(Date.UTC(2026, 8, index + 1)),
-      status: "completed" as const,
-      outcome,
+      ...alice,
+      key: `reading-${index}`,
+      content,
+      createdAt: new Date("2026-09-27T12:00:00Z"),
     })),
     {
-      jobId,
-      scheduledFor: new Date("2026-09-25"),
-      status: "completed",
-      outcome: { kind: "nothing_to_report", reason: "Nothing new" },
+      ...bob,
+      key: "private",
+      content: { ...content, title: "Private briefing" },
     },
-    { jobId, scheduledFor: new Date("2026-09-26"), status: "running" },
-    {
-      jobId: foreignJobId,
-      scheduledFor: new Date("2026-09-27"),
-      status: "completed",
-      outcome,
-    },
+    { ...alice, key: "deleted", content: null },
   ]);
   const api = caller(alice);
   const first = await api.feed({});
@@ -398,9 +371,24 @@ it("pages useful feed updates and never links a different user's conversation", 
   ).toBe(21);
   expect(
     [...first.items, ...last.items].every(
-      (item) => item.sessionId === null && item.title === "Daily reading"
+      (item) => item.title === "Daily reading"
     )
   ).toBe(true);
+  const id = first.items[0]?.id;
+  if (!id) throw new Error("Feed returned no post");
+  for (const scope of [bob, { ...bob, workspaceId: alice.workspaceId }]) {
+    const other = caller(scope);
+    await expect(other.likePost({ id, liked: true })).rejects.toThrow(
+      "Feed post not found"
+    );
+    await other.deletePost({ id });
+  }
+  await caller(alice).likePost({ id, liked: true });
+  expect(
+    (await caller(alice).feed({})).items.find((item) => item.id === id)?.liked
+  ).toBe(true);
+  await caller(alice).deletePost({ id });
+  expect((await caller(alice).feed({})).items).toHaveLength(20);
 });
 
 it("rechecks workspace access for every product query", async () => {
@@ -411,6 +399,12 @@ it("rechecks workspace access for every product query", async () => {
   await expect(api.chats({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(api.goals()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(api.feed({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    api.likePost({ id: randomUUID(), liked: true })
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(api.deletePost({ id: randomUUID() })).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
   await expect(api.identity()).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 

@@ -2,7 +2,6 @@ import { createTRPCUntypedClient, httpBatchLink } from "@trpc/client";
 import type { z } from "zod";
 import {
   companionChatsSchema,
-  companionFeedSchema,
   companionFilesSchema,
 } from "../../../shared/companion/schema";
 import { accountHeaders } from "./auth";
@@ -24,8 +23,6 @@ export const queries = {
     companionChatsSchema.parse(
       await rpc.query("companion.chats", { query, cursor })
     ),
-  feed: async (cursor?: z.output<typeof companionFeedSchema>["nextCursor"]) =>
-    companionFeedSchema.parse(await rpc.query("companion.feed", { cursor })),
   files: async (path?: string) =>
     companionFilesSchema.parse(await rpc.query("workspaces.files", { path })),
 };

@@ -1,6 +1,12 @@
 "use client";
 import { browserSessionClient } from "@web/eve/client";
 import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
+import {
+  writeConversationDraft,
+  readConversationDraft,
+  forgetConversationDraft,
+} from "./drafts";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -47,9 +53,11 @@ function renderMarkdownEditor(props: MarkdownEditorProps) {
 export function ConnectedCompanion({
   sessionId,
   title,
+  draftScope,
 }: {
   readonly sessionId?: string;
   readonly title?: string;
+  readonly draftScope: string;
 }) {
   const router = useRouter();
   const { mutateAsync: saveChat } = api.chats.save.useMutation();
@@ -57,12 +65,34 @@ export function ConnectedCompanion({
   const workspaceId = params.get("space");
   const view = params.get("view");
   const section = sections.find((candidate) => candidate === view) ?? "chat";
-  const draft = (params.get("draft") ?? "").slice(0, 10000);
+  const token = params.get("draft");
+  const draft = useMemo(
+    () => readConversationDraft(draftScope, token),
+    [draftScope, token]
+  );
+  const [draftError, setDraftError] = useState(false);
+  useEffect(() => {
+    forgetConversationDraft(draftScope, token);
+  }, [draftScope, token]);
   const navigate = (path: string) => {
     router.push(workspaceHref(path, workspaceId));
   };
+  const stagePrompt = (prompt: string) => {
+    try {
+      const draftToken = writeConversationDraft(draftScope, prompt);
+      setDraftError(false);
+      navigate(`/companion?draft=${draftToken}`);
+    } catch {
+      setDraftError(true);
+    }
+  };
   return (
     <div className={styles.viewport}>
+      {draftError && (
+        <p role="alert">
+          Couldn’t open the draft. Allow storage for this site and try again.
+        </p>
+      )}
       <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
         <MarkdownEditorProvider value={renderMarkdownEditor}>
           <CompanionShell
@@ -78,7 +108,7 @@ export function ConnectedCompanion({
                 tab={tab}
                 onPrompt={(prompt) => {
                   close();
-                  navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
+                  stagePrompt(prompt);
                 }}
                 onConversation={(id) => {
                   close();
@@ -98,9 +128,7 @@ export function ConnectedCompanion({
             {section !== "chat" ? (
               <ConnectedSections
                 section={section}
-                onPrompt={(prompt) => {
-                  navigate(`/companion?draft=${encodeURIComponent(prompt)}`);
-                }}
+                onPrompt={stagePrompt}
                 onConversation={(id) => {
                   navigate(
                     id ? `/companion/${encodeURIComponent(id)}` : "/companion"
@@ -116,15 +144,18 @@ export function ConnectedCompanion({
               />
             ) : (
               <NewConversation
-                key={draft}
+                key={token}
                 client={browserSessionClient}
                 avatarUri="/marketing/zoen-avatar.webp"
                 save={(id, name) => saveChat({ sessionId: id, title: name })}
                 initialDraft={draft}
                 onCreated={(id, retainedDraft) => {
+                  const retainedToken = retainedDraft
+                    ? writeConversationDraft(draftScope, retainedDraft)
+                    : undefined;
                   router.replace(
                     workspaceHref(
-                      `/companion/${encodeURIComponent(id)}${retainedDraft ? `?draft=${encodeURIComponent(retainedDraft)}` : ""}`,
+                      `/companion/${encodeURIComponent(id)}${retainedToken ? `?draft=${retainedToken}` : ""}`,
                       workspaceId
                     )
                   );

@@ -23,6 +23,7 @@ describe("root and worker capability boundaries", () => {
       "ask_question.ts",
       "bash.ts",
       "capabilities.ts",
+      "feed.ts",
       "ideas.ts",
       "messaging.ts",
       "read_file.ts",

@@ -1,6 +1,7 @@
 import { useRef, type ComponentProps } from "react";
 import type { Client, ClientSession } from "eve/client";
 import { Welcome } from "./welcome";
+import { readReplyMessage } from "./session/reply";
 
 /** Start the first turn atomically so Eve can establish the session's owner. */
 export function NewConversation({
@@ -26,7 +27,14 @@ export function NewConversation({
         };
         const id = accepted.current.session.state.sessionId;
         // A failed title write can be retried without replaying the accepted turn.
-        await save(id, accepted.current.message.slice(0, 240));
+        const quoted = readReplyMessage(accepted.current.message);
+        await save(
+          id,
+          (quoted && quoted.text.length > 0
+            ? quoted.text
+            : (quoted?.quote ?? accepted.current.message)
+          ).slice(0, 240)
+        );
         onCreated(
           id,
           message === accepted.current.message ? undefined : message

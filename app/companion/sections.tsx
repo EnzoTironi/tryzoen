@@ -7,13 +7,14 @@ import { companionGoalsData } from "@shared/companion/goals";
 import {
   IdeaCollection,
   GoalCollection,
-  Feed,
+  FeedCollection,
   Library,
   CompanionPage,
   ActionButton,
   type CompanionSection,
 } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
+import { companionFeedData } from "@shared/companion/feed";
 import { companionIdeasData } from "@shared/companion/ideas";
 import { browserSessionClient } from "@web/eve/client";
 import { FileEditor } from "@app/(authenticated)/space/(overview)/_components/file-editor";
@@ -38,10 +39,7 @@ export function ConnectedSections({
   if (section === "search")
     return <ConnectedSearch onConversation={onConversation} />;
   if (section === "library") return <ConnectedLibrary onPrompt={onPrompt} />;
-  if (section === "feed")
-    return (
-      <ConnectedFeed onPrompt={onPrompt} onConversation={onConversation} />
-    );
+  if (section === "feed") return <ConnectedFeed onPrompt={onPrompt} />;
   return <ConnectedSettings onPrompt={onPrompt} />;
 }
 
@@ -166,56 +164,20 @@ function ConnectedLibrary({
 
 function ConnectedFeed({
   onPrompt,
-  onConversation,
 }: {
   readonly onPrompt: (text: string) => void;
-  readonly onConversation: (id?: string) => void;
 }) {
-  const feed = api.companion.feed.useInfiniteQuery(
-    {},
-    { getNextPageParam: (last) => last.nextCursor }
+  const { client } = api.useUtils();
+  const params = useSearchParams();
+  const data = useMemo(
+    () => companionFeedData(getUntypedClient(client)),
+    [client]
   );
-  const items = feed.data?.pages.flatMap((page) => page.items) ?? [];
   return (
-    <Feed
-      items={items
-        .filter((item) => item.outcome.kind !== "nothing_to_report")
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          content:
-            item.outcome.kind === "result"
-              ? [item.outcome.summary, item.outcome.details]
-                  .filter(Boolean)
-                  .join("\n\n")
-              : item.outcome.kind === "blocked"
-                ? `${item.outcome.summary}\n\n${item.outcome.userActionNeeded}`
-                : item.outcome.reason,
-          date: new Date(item.date).toLocaleString(),
-        }))}
-      onDiscuss={(id) => {
-        const item = items.find((post) => post.id === id);
-        if (item?.sessionId) onConversation(item.sessionId);
-        else if (item)
-          onPrompt(`Let's discuss my scheduled update: ${item.title}`);
-      }}
-      onCustomize={() => {
-        onPrompt(
-          "Help me set up a personal feed of scheduled briefings. Ask about my interests, sources, frequency, and timezone. Show the plan and confirm it before creating a schedule."
-        );
-      }}
-      loading={feed.isPending || feed.isFetchingNextPage}
-      error={feed.error?.message}
-      onRetry={() => {
-        void feed.refetch();
-      }}
-      onLoadMore={
-        feed.hasNextPage
-          ? () => {
-              void feed.fetchNextPage();
-            }
-          : undefined
-      }
+    <FeedCollection
+      data={data}
+      cacheScope={params.get("space") ?? "personal"}
+      onPrompt={onPrompt}
     />
   );
 }

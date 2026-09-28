@@ -14,6 +14,7 @@ const ConnectedCompanion = dynamic(
 export function CompanionClient(props: {
   readonly sessionId?: string;
   readonly title?: string;
+  readonly draftScope: string;
 }) {
   return (
     <TRPCProvider>

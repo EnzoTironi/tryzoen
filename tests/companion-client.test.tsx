@@ -31,7 +31,9 @@ beforeEach(() => {
   mocks.save.mockResolvedValue(undefined);
 });
 it("opens saved conversations without losing the selected workspace", async () => {
-  expect(renderToStaticMarkup(<ConnectedCompanion />)).toContain("Welcome");
+  expect(
+    renderToStaticMarkup(<ConnectedCompanion draftScope="test/team" />)
+  ).toContain("Welcome");
   await mocks.conversation?.save("session/one", "Plan tomorrow");
   mocks.conversation?.onCreated("session/one");
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith({

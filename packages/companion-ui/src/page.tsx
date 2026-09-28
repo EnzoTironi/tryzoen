@@ -19,6 +19,7 @@ export function CompanionPage({
   error,
   onRetry,
   hideTitle = false,
+  contentMaxWidth,
 }: {
   readonly title: string;
   readonly children: ReactNode;
@@ -27,6 +28,7 @@ export function CompanionPage({
   readonly error?: string;
   readonly onRetry?: () => void;
   readonly hideTitle?: boolean;
+  readonly contentMaxWidth?: number;
 }) {
   const window = useWindowDimensions();
   const [width, setWidth] = useState(window.width);
@@ -43,7 +45,14 @@ export function CompanionPage({
         compact && Platform.OS === "web" && styles.compactWeb,
       ]}
     >
-      <View style={styles.page}>
+      <View
+        style={[
+          styles.page,
+          contentMaxWidth
+            ? { maxWidth: contentMaxWidth, alignSelf: "center" }
+            : undefined,
+        ]}
+      >
         {(!hideTitle || actions) && (
           <View style={styles.header}>
             <Text

@@ -2,17 +2,18 @@ import { SearchSection } from "./search";
 import { randomUUID } from "expo-crypto";
 import { useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionPage,
   DocumentEditor,
-  Feed,
+  FeedCollection,
   GoalCollection,
   IdeaCollection,
   Library,
   type CompanionSection,
 } from "@zoen/companion-ui";
+import { companionFeedData } from "../../../shared/companion/feed";
 import { companionIdeasData } from "../../../shared/companion/ideas";
 import { client } from "./conversation";
 import { queries, rpc } from "./api";
@@ -37,8 +38,7 @@ export function MobileSections({
   if (section === "search")
     return <SearchSection onConversation={onConversation} />;
   if (section === "goals") return <GoalsSection onPrompt={onPrompt} />;
-  if (section === "feed")
-    return <FeedSection onPrompt={onPrompt} onConversation={onConversation} />;
+  if (section === "feed") return <FeedSection onPrompt={onPrompt} />;
   if (section === "library") return <LibrarySection onPrompt={onPrompt} />;
   return <SettingsSection onSignOut={onSignOut} onPrompt={onPrompt} />;
 }
@@ -79,61 +79,20 @@ const mobileGoals = companionGoalsData(rpc, randomUUID);
 
 function FeedSection({
   onPrompt,
-  onConversation,
 }: {
   readonly onPrompt: (text: string) => void;
-  readonly onConversation: (id?: string) => void;
 }) {
-  const feed = useInfiniteQuery({
-    queryKey: ["feed"],
-    queryFn: ({ pageParam }) => queries.feed(pageParam),
-    initialPageParam: null as Parameters<typeof queries.feed>[0],
-    getNextPageParam: (last) => last.nextCursor,
-  });
-  const items = feed.data?.pages.flatMap((page) => page.items) ?? [];
+  const session = auth.useSession();
   return (
-    <Feed
-      items={items
-        .filter((item) => item.outcome.kind !== "nothing_to_report")
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          content:
-            item.outcome.kind === "result"
-              ? [item.outcome.summary, item.outcome.details]
-                  .filter(Boolean)
-                  .join("\n\n")
-              : item.outcome.kind === "blocked"
-                ? `${item.outcome.summary}\n\n${item.outcome.userActionNeeded}`
-                : item.outcome.reason,
-          date: new Date(item.date).toLocaleString(),
-        }))}
-      onDiscuss={(id) => {
-        const item = items.find((post) => post.id === id);
-        if (item?.sessionId) onConversation(item.sessionId);
-        else if (item)
-          onPrompt(`Let's discuss my scheduled update: ${item.title}`);
-      }}
-      onCustomize={() => {
-        onPrompt(
-          "Help me set up a personal feed of scheduled briefings. Ask about my interests, sources, frequency, and timezone. Show the plan and confirm it before creating a schedule."
-        );
-      }}
-      loading={feed.isPending || feed.isFetchingNextPage}
-      error={feed.error?.message}
-      onRetry={() => {
-        void feed.refetch();
-      }}
-      onLoadMore={
-        feed.hasNextPage
-          ? () => {
-              void feed.fetchNextPage();
-            }
-          : undefined
-      }
+    <FeedCollection
+      data={mobileFeed}
+      cacheScope={session.data?.user.id ?? "anonymous"}
+      onPrompt={onPrompt}
     />
   );
 }
+const mobileFeed = companionFeedData(rpc);
+
 function LibrarySection({
   onPrompt,
 }: {

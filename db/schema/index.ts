@@ -22,6 +22,7 @@ export * from "./user-directory";
 export * from "./workstreams";
 export * from "./goal-preferences";
 export * from "./ideas";
+export * from "./feed";
 export * from "./workspace-agents";
 export * from "./personal-trust";
 export * from "./matrix";

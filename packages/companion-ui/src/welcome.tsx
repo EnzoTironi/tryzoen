@@ -15,6 +15,11 @@ import {
 import { useState, type ComponentProps } from "react";
 import { Composer } from "./composer";
 import { colors } from "./theme";
+import {
+  readReplyMessage,
+  replyMessage,
+  type MessageReply,
+} from "./session/reply";
 
 const suggestions = [
   {
@@ -51,8 +56,14 @@ export function Welcome({
   readonly initialDraft?: string;
   readonly avatarUri?: string;
 }) {
+  const staged = readReplyMessage(initialDraft);
+  const [reply, setReply] = useState<MessageReply | undefined>(() =>
+    staged
+      ? { id: staged.id, role: staged.role, text: staged.quote }
+      : undefined
+  );
   const [suggestion, setSuggestion] = useState({
-    draft: initialDraft,
+    draft: staged?.text ?? initialDraft,
     revision: 0,
   });
   return (
@@ -81,7 +92,14 @@ export function Welcome({
         <Composer
           key={suggestion.revision}
           initialDraft={suggestion.draft}
-          onSend={onSend}
+          reply={reply}
+          onRemoveReply={() => {
+            setReply(undefined);
+          }}
+          onSend={async (text) => {
+            await onSend(replyMessage(text, reply));
+            setReply(undefined);
+          }}
           disabled={disabled}
         />
         <View style={styles.suggestions}>

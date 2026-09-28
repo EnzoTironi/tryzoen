@@ -50,7 +50,12 @@ export function Conversation({
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: string;
 }) {
-  const [reply, setReply] = useState<MessageReply>();
+  const staged = readReplyMessage(initialDraft ?? "");
+  const [reply, setReply] = useState<MessageReply | undefined>(() =>
+    staged
+      ? { id: staged.id, role: staged.role, text: staged.quote }
+      : undefined
+  );
   const scroll = useRef<FlatList<EveMessage>>(null);
   const nearBottom = useRef(true);
   const positioned = useRef(false);
@@ -177,7 +182,7 @@ export function Conversation({
       <View style={styles.composer}>
         <View style={styles.column}>
           <Composer
-            initialDraft={initialDraft}
+            initialDraft={staged?.text ?? initialDraft}
             onSend={async (text) => {
               await onSend(replyMessage(text, reply));
               setReply((current) =>
@@ -210,7 +215,11 @@ function UserMessage({ text }: { readonly text: string }) {
     <View style={styles.quotedMessage}>
       <View style={styles.quote}>
         <Text style={styles.caption}>
-          {quoted.role === "assistant" ? "Replying to Zoen" : "Replying to you"}
+          {quoted.id.startsWith("feed:")
+            ? "Discussing a Feed post"
+            : quoted.role === "assistant"
+              ? "Replying to Zoen"
+              : "Replying to you"}
         </Text>
         <Text selectable numberOfLines={4} style={styles.caption}>
           {quoted.quote}

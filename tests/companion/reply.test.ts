@@ -49,6 +49,26 @@ it("bounds long quoted context without trimming the user's response", () => {
   expect(result.endsWith("My whole answer")).toBe(true);
 });
 
+it("stages a removable Feed quotation without inventing a user question", () => {
+  const quote = {
+    id: "feed:9c69b04e-089f-4a87-b171-2ed558c1e01f",
+    role: "assistant" as const,
+    text: "A little reading, every evening",
+  };
+  const staged = readReplyMessage(replyMessage("", quote));
+  expect(staged).toEqual({
+    id: quote.id,
+    role: "assistant",
+    quote: quote.text,
+    text: "",
+  });
+  expect(
+    readReplyMessage(replyMessage("What if I only have five minutes?", quote))
+      ?.text
+  ).toBe("What if I only have five minutes?");
+  expect(replyMessage("Keep my question", undefined)).toBe("Keep my question");
+});
+
 it("copies visible message text without tool payloads or authorization values", () => {
   expect(
     messageText({

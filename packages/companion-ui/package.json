@@ -16,6 +16,10 @@
       "types": "./dist/editor/markdown.d.ts",
       "default": "./dist/editor/markdown.js"
     },
+    "./feed": {
+      "types": "./dist/feed/schema.d.ts",
+      "default": "./dist/feed/schema.js"
+    },
     "./ideas": {
       "types": "./dist/ideas/schema.d.ts",
       "default": "./dist/ideas/schema.js"

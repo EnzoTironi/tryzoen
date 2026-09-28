@@ -2,6 +2,7 @@ import { Client } from "eve/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NewConversation } from "./new-conversation";
+import { replyMessage } from "./session/reply";
 const mocks = vi.hoisted(() => ({
   create: vi.fn<(input: { message: string }) => Promise<unknown>>(),
   send: vi.fn<(message: string) => Promise<unknown>>(),
@@ -38,6 +39,19 @@ beforeEach(() => {
 it("does not create a session until the user submits", () => {
   expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.save).not.toHaveBeenCalled();
+});
+it("keeps a Feed reference in the turn while naming the conversation after the user's question", async () => {
+  const message = replyMessage("Can I read for five minutes?", {
+    id: "feed:123",
+    role: "assistant",
+    text: "A reading routine",
+  });
+  await mocks.submit?.(message);
+  expect(mocks.create).toHaveBeenCalledExactlyOnceWith({ message });
+  expect(mocks.save).toHaveBeenCalledExactlyOnceWith(
+    "test-session",
+    "Can I read for five minutes?"
+  );
 });
 it("creates the first turn with its session before saving the title and navigating", async () => {
   await mocks.submit?.("Plan tomorrow");

@@ -15,7 +15,8 @@ export default async function CompanionPage({
   const chat = sessionId ? await readChat(scope, sessionId) : undefined;
   return (
     <CompanionClient
-      key={`${scope.workspaceId}:${sessionId ?? "new"}`}
+      key={`${scope.workspaceId}:${scope.userId}:${sessionId ?? "new"}`}
+      draftScope={JSON.stringify([scope.workspaceId, scope.userId])}
       sessionId={sessionId}
       title={chat?.title}
     />

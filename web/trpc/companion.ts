@@ -1,4 +1,16 @@
-import { and, desc, eq, ilike, isNotNull, lt, or, sql } from "drizzle-orm";
+import {
+  feedCursorSchema,
+  feedPageSchema,
+  feedInstructionsSchema,
+} from "@zoen/companion-ui/feed";
+import {
+  listFeedPosts,
+  likeFeedPost,
+  deleteFeedPost,
+  readFeedInstructions,
+  saveFeedInstructions,
+} from "@db/services/feed";
+import { and, desc, eq, ilike, isNotNull, lt, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { agentSessions, chats, db, workstreams } from "@db";
@@ -13,11 +25,9 @@ import {
   workstreamIdSchema,
   saveWorkstreamSchema,
 } from "@shared/workstreams/schema";
-import { scheduledRunOutcomeSchema } from "@shared/schedules/outcome";
 import {
   companionChatsSchema,
   companionGoalsSchema,
-  companionFeedSchema,
   companionIdentitySchema,
   companionGoalHistorySchema,
 } from "@shared/companion/schema";
@@ -40,6 +50,13 @@ import {
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  feedInstructions: workspaceProcedure
+    .output(feedInstructionsSchema)
+    .query(({ ctx }) => readFeedInstructions(ctx.actor)),
+  saveFeedInstructions: workspaceProcedure
+    .input(feedInstructionsSchema)
+    .output(feedInstructionsSchema)
+    .mutation(({ ctx, input }) => saveFeedInstructions(ctx.actor, input)),
   ideas: workspaceProcedure
     .input(z.object({ cursor: ideaCursorSchema.nullish() }))
     .output(ideaPageSchema)
@@ -275,50 +292,15 @@ export const companionRouter = {
       });
     }),
   feed: workspaceProcedure
-    .input(
-      z.object({
-        cursor: z.object({ date: z.iso.datetime(), id: z.uuid() }).nullish(),
-      })
-    )
-    .output(companionFeedSchema)
-    .query(async ({ ctx, input }) => {
-      const result = await db.execute(sql`
-      SELECT r.id, j.prompt AS title, r.outcome, r.scheduled_for AS date,
-        CASE WHEN j.conversation_channel = 'eve' AND EXISTS (
-          SELECT 1 FROM agent_sessions s WHERE s.session_id = j.conversation_id
-          AND s.workspace_id = ${ctx.scope.workspaceId} AND s.created_by_user_id = ${ctx.scope.userId}
-        ) THEN j.conversation_id ELSE NULL END AS "sessionId"
-      FROM scheduled_agent_runs r JOIN scheduled_agent_jobs j ON j.id = r.job_id
-      INNER JOIN workspace_memberships m ON m.workspace_id = j.workspace_id AND m.user_id = j.created_by_user_id
-      WHERE j.workspace_id = ${ctx.scope.workspaceId} AND j.created_by_user_id = ${ctx.scope.userId}
-        AND r.status = 'completed' AND r.outcome IS NOT NULL
-        AND r.outcome->>'kind' <> 'nothing_to_report'
-        ${input.cursor ? sql`AND (r.scheduled_for, r.id) < (${input.cursor.date}::timestamptz, ${input.cursor.id})` : sql``}
-      ORDER BY r.scheduled_for DESC, r.id DESC LIMIT 21`);
-      const rows = z
-        .array(
-          z.object({
-            id: z.string(),
-            title: z.string(),
-            outcome: scheduledRunOutcomeSchema,
-            date: z.coerce.date(),
-            sessionId: z.string().nullable(),
-          })
-        )
-        .parse(result.rows);
-      const last = rows[19];
-      return {
-        items: rows.slice(0, 20).map((row) => ({
-          id: row.id,
-          title: row.title,
-          outcome: row.outcome,
-          sessionId: row.sessionId,
-          date: row.date.toISOString(),
-        })),
-        nextCursor:
-          rows.length > 20 && last
-            ? { date: last.date.toISOString(), id: last.id }
-            : null,
-      };
-    }),
+    .input(z.object({ cursor: feedCursorSchema.nullish() }))
+    .output(feedPageSchema)
+    .query(({ ctx, input }) => listFeedPosts(ctx.actor, input.cursor)),
+  likePost: workspaceProcedure
+    .input(z.object({ id: z.uuid(), liked: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      likeFeedPost(ctx.actor, input.id, input.liked)
+    ),
+  deletePost: workspaceProcedure
+    .input(z.object({ id: z.uuid() }))
+    .mutation(({ ctx, input }) => deleteFeedPost(ctx.actor, input.id)),
 };

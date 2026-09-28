@@ -28,9 +28,11 @@ export function readReplyMessage(content: string) {
       content
     );
   if (!match) return undefined;
+  const id = match[2];
+  if (!id) return undefined;
   return {
-    role: match[1],
-    id: match[2],
+    role: match[1] === "assistant" ? ("assistant" as const) : ("user" as const),
+    id,
     quote:
       match[3]
         ?.trimEnd()

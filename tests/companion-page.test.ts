@@ -50,7 +50,10 @@ describe("companion route authorization", () => {
       searchParams: Promise.resolve({}),
     });
     expect(readChat).toHaveBeenCalledExactlyOnceWith(scope, "owned-session");
-    expect(page.key).toBe(`${scope.workspaceId}:owned-session`);
+    expect(page.key).toBe(`${scope.workspaceId}:${scope.userId}:owned-session`);
+    expect(page.props).toMatchObject({
+      draftScope: JSON.stringify([scope.workspaceId, scope.userId]),
+    });
   });
 
   it("does not read any conversation for the new-conversation route", async () => {

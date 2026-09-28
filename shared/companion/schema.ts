@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { saveWorkstreamSchema } from "../workstreams/schema";
-import { scheduledRunOutcomeSchema } from "../schedules/outcome";
 
 export const companionChatsSchema = z.object({
   items: z.array(
@@ -32,18 +31,6 @@ export const companionGoalHistorySchema = z.object({
     })
   ),
   nextRevision: z.number().int().positive().nullable(),
-});
-export const companionFeedSchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      outcome: scheduledRunOutcomeSchema,
-      date: z.iso.datetime(),
-      sessionId: z.string().nullable(),
-    })
-  ),
-  nextCursor: z.object({ date: z.iso.datetime(), id: z.string() }).nullable(),
 });
 export const companionFilesSchema = z.object({
   canEdit: z.boolean(),
