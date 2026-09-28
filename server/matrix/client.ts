@@ -1,6 +1,7 @@
 import { operationSignal, withTimeout } from "../operations/async";
 import { TimeoutError } from "../operations/async";
 import { z } from "zod";
+import { readBody } from "../http/body";
 import { env } from "@shared/environment";
 export class MatrixError extends Error {
   readonly _tag = "MatrixError";
@@ -42,10 +43,13 @@ export const matrixRequest = async function (
   path: string,
   body?: z.core.util.JSONType,
   userId?: string,
-  version: "v1" | "v3" = "v3"
+  requestOptions: { version?: "v1" | "v3"; maxResponseBytes?: number } = {}
 ) {
   const config = await matrixConfiguration();
-  const url = new URL(`/_matrix/client/${version}/${path}`, config.url);
+  const url = new URL(
+    `/_matrix/client/${requestOptions.version ?? "v3"}/${path}`,
+    config.url
+  );
   if (userId) url.searchParams.set("user_id", userId);
   return await withTimeout(async () => {
     try {
@@ -62,17 +66,24 @@ export const matrixRequest = async function (
         if (body !== undefined && method !== "GET")
           options.body = JSON.stringify(body);
         const response = await fetch(url, options);
+        const payload: unknown = requestOptions.maxResponseBytes
+          ? JSON.parse(
+              (
+                await readBody(response.body, requestOptions.maxResponseBytes)
+              ).toString("utf8")
+            )
+          : await response.json();
         if (!response.ok) {
           const error = z
             .object({
               errcode: z.optional(z.string()),
             })
-            .parse(await response.json());
+            .parse(payload);
           throw new MatrixError({
             reason: matrixFailureReason(error.errcode, response.status),
           });
         }
-        return z.json().parse(await response.json());
+        return z.json().parse(payload);
       })(operationSignal());
     } catch (error) {
       throw error instanceof MatrixError

@@ -33,6 +33,7 @@ import type { RoomData } from "../rooms/schema";
 import type { z } from "zod";
 import { CreateRoom } from "../rooms/create";
 import { CreateConversation } from "./create";
+import { useInboxSync } from "./sync";
 
 function useConversationInbox(
   inbox: InboxData,
@@ -49,11 +50,14 @@ function useConversationInbox(
       input.filter,
     ],
     initialPageParam: null as z.infer<typeof inboxPageSchema>["nextCursor"],
-    queryFn: ({ pageParam }) =>
-      inbox.list({
-        ...input,
-        cursor: pageParam,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      inbox.list(
+        {
+          ...input,
+          cursor: pageParam,
+        },
+        signal
+      ),
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor &&
       !cursors.some(
@@ -65,6 +69,9 @@ function useConversationInbox(
         ? last.nextCursor
         : undefined,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
     gcTime: 60_000,
     retry: 1,
   });
@@ -117,6 +124,7 @@ export function ConversationInbox({
   const [archived, setArchived] = useState(false);
   const [creating, setCreating] = useState(false);
   const [composing, setComposing] = useState(false);
+  const [nearHead, setNearHead] = useState(true);
   const client = useQueryClient();
   const filterKind = {
     Todas: "all",
@@ -132,6 +140,16 @@ export function ConversationInbox({
   const pages = conversations.isError ? [] : (conversations.data?.pages ?? []);
   const page = pages[0];
   const pinned = page?.pinned ?? [];
+  const sync = useInboxSync(
+    inbox,
+    cacheScope,
+    { query: search, archived, filter: filterKind[filter] },
+    !archived &&
+      filter !== "Bots" &&
+      conversations.data?.pages[0]?.configured === true,
+    nearHead,
+    selectedRoom
+  );
   const rows = Array.from(
     new Map(
       pages
@@ -213,7 +231,21 @@ export function ConversationInbox({
           </Pressable>
         ))}
       </View>
+      {sync.pending && (
+        <ActionButton quiet onPress={sync.apply}>
+          Novas conversas · Atualizar
+        </ActionButton>
+      )}
+      {sync.reconnecting && (
+        <Text accessibilityLiveRegion="polite" style={styles.caption}>
+          Reconectando… As conversas podem estar desatualizadas.
+        </Text>
+      )}
       <FlatList
+        onScroll={({ nativeEvent }) => {
+          setNearHead(nativeEvent.contentOffset.y < 80);
+        }}
+        scrollEventThrottle={100}
         data={rows}
         keyExtractor={(item) =>
           item.kind === "room"

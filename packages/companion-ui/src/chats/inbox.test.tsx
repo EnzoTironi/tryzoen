@@ -105,7 +105,10 @@ function render() {
           list: vi.fn<ChatData["list"]>(),
           change: vi.fn<ChatData["change"]>(),
         }}
-        inbox={{ list: vi.fn<InboxData["list"]>() }}
+        inbox={{
+          list: vi.fn<InboxData["list"]>(),
+          sync: vi.fn<InboxData["sync"]>(),
+        }}
         rooms={rooms}
         onOpen={vi.fn<
           NonNullable<ComponentProps<typeof ConversationInbox>["onOpen"]>

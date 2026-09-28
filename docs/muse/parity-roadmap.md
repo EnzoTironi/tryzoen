@@ -150,6 +150,20 @@ Chrome no build final: envio em DM atualizou a prévia e moveu a conversa para o
 
 Revisão estrutural comparada ao commit anterior `f8f5498`: 56 observações, 26 marcadas como gating pelo scanner, sem supressões. Incluem churn, scaffolding repetido de testes, falsos candidatos a código morto e crescimento/tamanho real do compositor e ciclos de gravação. A consulta da inbox e o consentimento Electron ganharam responsáveis coesos separados; o restante não está declarado resolvido. Essa rodada não conclui paridade nem qualificação de lançamento.
 
+### Terceira rodada — sincronização da inbox — 28/09/2026
+
+- **COMM-01:** a inbox visível consulta o cursor nativo Matrix a cada 10 segundos, com espera progressiva de até 60 segundos em falhas. Conta, sessão autenticada, workspace, filtro e seleção delimitam o cursor criptografado. A assinatura cobre os primeiros 30 resultados globais e, no desktop, até uma conversa focada adicional.
+- App em segundo plano, desmontagem e troca de escopo cancelam consultas. Retorno ao primeiro plano e reconexão atualizam também Bots, Arquivadas e instalações sem Matrix. O transporte tRPC propaga o AbortSignal até o fetch real.
+- Novidades invalidam as páginas do mesmo escopo sem refazer toda a cadeia de paginação. No topo, a primeira página é atualizada; abaixo dele, um aviso permite aplicar as novidades sem deslocamento automático. Gerações de atualização impedem uma resposta antiga de apagar uma mudança mais recente; falhas preservam o cursor e a atualização pendente.
+- O protocolo entrega apenas identificadores e sinais de mudança/reset/gap. As prévias continuam lendo eventos exatos autorizados; não há segunda cópia das mensagens nem contagem fictícia de não lidas. Um dispositivo lógico de infraestrutura por identidade evita acumular dispositivos por login.
+- O cursor vive enquanto o hook está montado; recarregar o aplicativo reinicia uma leitura limitada. Duas sessões podem consumir uma resposta intermediária em cache e alcançar a mudança na consulta seguinte. Histórico de conversa/thread ainda usa seu polling anterior: merge de gaps, edições históricas, push, offline persistente e E2EE pessoal continuam pendentes.
+
+Validação integrada: `pnpm check` passou com 231 arquivos e 1.447 testes; `pnpm build` e exports Expo para iOS, Android e web passaram. Sete testes isolados PostgreSQL/Synapse cobrem o cursor, dispositivo nativo, descoberta fora da página, replay, leitura e envio. Outros nove testes isolados cobrem grupos Eve, ingresso e rede Matrix. Os dez testes do ciclo de atualização incluem concorrência, retry, background, troca de escopo e reconexão; dois testes comprovam cancelamento no transporte tRPC real.
+
+No Chrome com build final e conta sintética, uma mensagem recebida em outro grupo atualizou automaticamente a prévia e moveu o grupo ao topo enquanto a DM aberta permaneceu selecionada. A inbox mobile a 390 × 844 manteve a barra inferior. A perda de conexão emulada exibiu o aviso de reconexão preservando a lista; a rede foi restaurada após o teste. A revisão visual não qualifica aparelhos físicos, push ou rolagem com muitos itens; a atualização diferida durante rolagem é coberta pelos testes do hook.
+
+Revisão estrutural desta rodada: 23 observações, 17 gating, sem supressões. Permanecem o tamanho/complexidade do ciclo de sync e da inbox, padrões repetidos nos adapters e testes, e churn do cliente Matrix. Os testes de regressão validam o comportamento; não tornam essa dívida inexistente nem comprovam capacidade de produção.
+
 ### Critérios para cada rodada
 
 - Testes específicos cobrem usuário correto/incorreto, revogação concorrente, falha/retry e persistência.

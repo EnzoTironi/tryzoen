@@ -211,7 +211,7 @@ export const readMatrixMessages = async function (
       endpoint + (from ? `&from=${encodeURIComponent(from)}` : ""),
       undefined,
       room.matrixId,
-      rootId ? "v1" : "v3"
+      { version: rootId ? "v1" : "v3" }
     );
     const events = await z
       .object({

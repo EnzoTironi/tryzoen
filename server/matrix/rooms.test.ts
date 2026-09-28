@@ -124,7 +124,7 @@ it("keeps native reactions separate from timeline messages", async () => {
     ),
     undefined,
     "@member:matrix.test",
-    "v3"
+    { version: "v3" }
   );
   expect(mocks.access).toHaveBeenCalledTimes(4);
 });
@@ -190,7 +190,7 @@ it("reads a thread through the authorized room and preserves pagination", async 
     ),
     undefined,
     "@member:matrix.test",
-    "v1"
+    { version: "v1" }
   );
 });
 

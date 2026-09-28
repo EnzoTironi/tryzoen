@@ -30,7 +30,7 @@ async function reactionEvents(
         `rooms/${encodeURIComponent(room.roomId)}/relations/${encodeURIComponent(messageId)}/m.annotation/m.reaction?limit=100${cursor ? `&from=${encodeURIComponent(cursor)}` : ""}`,
         undefined,
         room.matrixId,
-        "v1"
+        { version: "v1" }
       )
     );
     events.push(

@@ -36,8 +36,27 @@ export const inboxPageSchema = z.object({
   mayManage: z.boolean(),
   syncPending: z.boolean(),
 });
+export const inboxSyncQuerySchema = inboxQuerySchema
+  .omit({ cursor: true })
+  .extend({
+    cursor: z.string().min(1).max(16_384).optional(),
+    focusedRoomId: z.uuid().optional(),
+  });
+export const inboxSyncPageSchema = z.object({
+  status: z.enum(["ready", "unavailable"]),
+  cursor: z.string().max(16_384).nullable(),
+  inboxChanged: z.boolean(),
+  changedRoomIds: z.array(z.uuid()).max(31),
+  gapRoomIds: z.array(z.uuid()).max(31),
+  reset: z.boolean(),
+});
 export interface InboxData {
   list: (
-    input: z.input<typeof inboxQuerySchema>
+    input: z.input<typeof inboxQuerySchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof inboxPageSchema>>;
+  sync: (
+    input: z.input<typeof inboxSyncQuerySchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof inboxSyncPageSchema>>;
 }
