@@ -10,18 +10,21 @@ import { recordCreatorPreviewModel } from "../../server/creators/execution";
 import { saveCreatorPreviewReview } from "../../server/creators/reviews";
 
 export async function reviewedCreatorVersion(
-  actor: Parameters<typeof saveCreatorDraft>[0]
+  actor: Parameters<typeof saveCreatorDraft>[0],
+  authored?: Awaited<ReturnType<typeof saveCreatorDraft>>
 ) {
-  const draft = await saveCreatorDraft(actor, {
-    id: randomUUID(),
-    expectedRevision: null,
-    content: {
-      title: "Synthetic release coach",
-      description: "Fictional",
-      playbook: "Ask an open question; never invent quotations.",
-      examples: [],
-    },
-  });
+  const draft =
+    authored ??
+    (await saveCreatorDraft(actor, {
+      id: randomUUID(),
+      expectedRevision: null,
+      content: {
+        title: "Synthetic release coach",
+        description: "Fictional",
+        playbook: "Ask an open question; never invent quotations.",
+        examples: [],
+      },
+    }));
   const item = {
     id: randomUUID(),
     title: "Invented quotation",

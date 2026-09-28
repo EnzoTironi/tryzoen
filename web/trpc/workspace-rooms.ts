@@ -1,3 +1,21 @@
+import {
+  readSavedMessageState,
+  readSavedCleanupState,
+  clearUnavailableSavedMessages,
+  listSavedMatrixMessages,
+  setSavedMatrixMessage,
+} from "../../server/matrix/saved";
+import { readMatrixContext } from "../../server/matrix/context";
+import {
+  savedCleanupSchema,
+  savedCleanupStateSchema,
+  savedMessageStateSchema,
+  savedMessagesQuerySchema,
+  savedMessagesPageSchema,
+  saveMessageSchema,
+  saveMessageResultSchema,
+  roomContextSchema,
+} from "@zoen/companion-ui/rooms";
 import { editMatrixMessage } from "../../server/matrix/edits";
 import { roomEditSchema, roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
@@ -47,6 +65,41 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  savedCleanupState: workspaceProcedure
+    .output(savedCleanupStateSchema)
+    .query(({ ctx, signal }) =>
+      withSignal(signal, () => readSavedCleanupState(ctx.actor))
+    ),
+  clearUnavailableSavedMessages: workspaceProcedure
+    .input(savedCleanupSchema)
+    .output(saveMessageResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => clearUnavailableSavedMessages(ctx.actor, input))
+    ),
+  savedMessageState: workspaceProcedure
+    .input(roomMediaReadSchema)
+    .output(savedMessageStateSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readSavedMessageState(ctx.actor, input))
+    ),
+  savedMessages: workspaceProcedure
+    .input(savedMessagesQuerySchema)
+    .output(savedMessagesPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listSavedMatrixMessages(ctx.actor, input))
+    ),
+  saveMessage: workspaceProcedure
+    .input(saveMessageSchema)
+    .output(saveMessageResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setSavedMatrixMessage(ctx.actor, input))
+    ),
+  context: workspaceProcedure
+    .input(roomMediaReadSchema)
+    .output(roomContextSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readMatrixContext(ctx.actor, input))
+    ),
   markRead: workspaceProcedure
     .input(roomReadPositionSchema)
     .mutation(({ ctx, input, signal }) =>

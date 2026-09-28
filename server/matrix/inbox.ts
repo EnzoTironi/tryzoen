@@ -19,7 +19,8 @@ import { mapAsync } from "../operations/async";
 
 /** SQL ownership boundary for the unified inbox; never paginate this fragment alone. */
 export async function authorizedInboxRooms(
-  actor: z.infer<typeof WorkspaceActorSchema>
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  scope: "workspace" | "account" = "workspace"
 ) {
   await requireWorkspaceAccess(actor);
   if (!actor.authSessionId) throw new WorkspaceAccessDenied();
@@ -27,15 +28,15 @@ export async function authorizedInboxRooms(
   return sql`
     SELECT r.*, COALESCE(a.latest_at, 0)::double precision AS "activityAt", a.latest_event_id AS "latestEventId", COALESCE(a.latest_edited, false) AS "latestEdited", a.reconciled_at IS NOT NULL AS ready
     FROM (
-      SELECT b.id::text, b.conversation_id AS "roomId", b.epoch::text, b.label, 'group'::text AS kind,
+      SELECT b.workspace_id AS "workspaceId", b.id::text, b.conversation_id AS "roomId", b.epoch::text, b.label, 'group'::text AS kind,
         NULL::text AS username, NULL::text AS "avatarUri"
       FROM workspace_group_bindings b
       JOIN workspace_memberships wm ON wm.workspace_id = b.workspace_id AND wm.user_id = ${actor.userId}
       JOIN workspaces w ON w.id = b.workspace_id
       JOIN organization_memberships om ON om.organization_id = w.organization_id AND om.user_id = ${actor.userId}
-      WHERE b.workspace_id = ${actor.workspaceId} AND b.channel = 'matrix' AND b.installation_id = ${config.serverName} AND b.revoked_at IS NULL
+      WHERE ${scope === "workspace" ? sql`b.workspace_id = ${actor.workspaceId}` : sql`TRUE`} AND b.channel = 'matrix' AND b.installation_id = ${config.serverName} AND b.revoked_at IS NULL
       UNION ALL
-      SELECT d.id::text, d.room_id AS "roomId", d.id::text AS epoch, u.name AS label, 'direct'::text AS kind,
+      SELECT d.workspace_id AS "workspaceId", d.id::text, d.room_id AS "roomId", d.id::text AS epoch, u.name AS label, 'direct'::text AS kind,
         n.username, u.image AS "avatarUri"
       FROM matrix_direct_rooms d JOIN workspaces w ON w.id = d.workspace_id
       JOIN workspace_memberships first_member ON first_member.workspace_id = d.workspace_id AND first_member.user_id = d.first_user_id
@@ -44,7 +45,7 @@ export async function authorizedInboxRooms(
       JOIN organization_memberships second_org ON second_org.organization_id = w.organization_id AND second_org.user_id = d.second_user_id
       JOIN public.user u ON ('better-auth:' || u.id) = CASE WHEN d.first_user_id = ${actor.userId} THEN d.second_user_id ELSE d.first_user_id END
       LEFT JOIN user_directory n ON n.user_id = u.id
-      WHERE d.workspace_id = ${actor.workspaceId} AND d.server_name = ${config.serverName} AND ${actor.userId} IN (d.first_user_id, d.second_user_id)
+      WHERE ${scope === "workspace" ? sql`d.workspace_id = ${actor.workspaceId}` : sql`TRUE`} AND d.server_name = ${config.serverName} AND ${actor.userId} IN (d.first_user_id, d.second_user_id)
     ) r LEFT JOIN matrix_room_activity a ON a.server_name = ${config.serverName} AND a.room_id = r."roomId"
   `;
 }

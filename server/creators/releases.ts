@@ -1,3 +1,4 @@
+import { freezeCreatorCorpus } from "./corpus/manifest";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -104,6 +105,7 @@ export function approveCreatorRelease(
       ${JSON.stringify(candidate.draft.content)}::jsonb, ${JSON.stringify(candidate.evidence)}::jsonb, ${input.notes})
       ON CONFLICT (id) DO NOTHING RETURNING id`);
     if (!created) throw new WorkspaceAccessDenied();
+    await freezeCreatorCorpus(actor, input.id, candidate.draft);
     return readCreatorRelease(actor, input.id);
   });
 }

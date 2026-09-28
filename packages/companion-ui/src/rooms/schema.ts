@@ -154,6 +154,22 @@ export const roomMediaReadSchema = z.object({
 });
 
 export interface RoomData {
+  savedCleanupState: () => Promise<z.infer<typeof savedCleanupStateSchema>>;
+  clearUnavailableSavedMessages: (
+    input: z.infer<typeof savedCleanupSchema>
+  ) => Promise<z.infer<typeof saveMessageResultSchema>>;
+  savedMessageState: (
+    input: z.infer<typeof roomMediaReadSchema>
+  ) => Promise<z.infer<typeof savedMessageStateSchema>>;
+  savedMessages: (
+    input: z.infer<typeof savedMessagesQuerySchema>
+  ) => Promise<z.infer<typeof savedMessagesPageSchema>>;
+  saveMessage: (
+    input: z.infer<typeof saveMessageSchema>
+  ) => Promise<z.infer<typeof saveMessageResultSchema>>;
+  context: (
+    input: z.infer<typeof roomMediaReadSchema>
+  ) => Promise<z.infer<typeof roomContextSchema>>;
   editMessage: (
     input: z.infer<typeof roomEditSchema>
   ) => Promise<z.infer<typeof roomEditResultSchema>>;
@@ -190,3 +206,50 @@ export interface RoomData {
   ) => Promise<z.infer<typeof roomThreadPageSchema>>;
   send: (input: z.infer<typeof roomSendSchema>) => Promise<void>;
 }
+
+export const savedMessageCursorSchema = z.object({
+  revision: z.string().length(64),
+  after: z.uuid(),
+});
+export const savedMessagesQuerySchema = z.object({
+  cursor: savedMessageCursorSchema.nullish(),
+});
+export const savedMessageItemSchema = z.object({
+  key: z.uuid(),
+  reference: roomMediaReadSchema,
+  room: roomSchema.nullable(),
+  message: roomMessageSchema.nullable(),
+  savedAt: z.number().int().nonnegative(),
+});
+export const savedMessagesPageSchema = z.object({
+  revision: z.string().length(64),
+  items: z.array(savedMessageItemSchema).max(20),
+  nextCursor: savedMessageCursorSchema.nullable(),
+  reset: z.boolean(),
+});
+export const saveMessageSchema = roomMediaReadSchema.extend({
+  saved: z.boolean(),
+  expectedRevision: z.string().length(64),
+});
+export const saveMessageResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  revision: z.string().length(64),
+});
+export const roomContextSchema = z.object({
+  room: roomSchema,
+  target: roomMessageSchema,
+  messages: z.array(roomMessageSchema).max(41),
+  root: roomMessageSchema.nullable(),
+});
+export const savedMessageStateSchema = z.object({
+  saved: z.boolean(),
+  revision: z.string().length(64),
+});
+
+export const savedCleanupStateSchema = z.object({
+  revision: z.string().length(64),
+  count: z.number().int().min(0).max(100),
+});
+export const savedCleanupSchema = savedCleanupStateSchema.pick({
+  revision: true,
+});

@@ -31,8 +31,6 @@ export default {
         "taze.config.ts",
         // Standalone real PostgreSQL check invoked by test:google-membership.
         "server/google-workspace/membership.integration.ts",
-        // Standalone real account/channel controls check invoked by test:account-channels.
-        "server/accounts/controls.integration.ts",
         // Live TG group mention e2e (manual /env.local); fixture harness is CI proof.
         "scripts/groups-live-e2e.ts",
         // Launched in a separate process before web/worker traffic is admitted.

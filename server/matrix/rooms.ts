@@ -1,13 +1,13 @@
+import { readRoomMembers } from "./members";
 import { projectMatrixActivity } from "./activity";
 import { uploadMatrixMedia } from "./media/upload";
-import { directRoomMembers, findDirectRoom } from "./direct";
+import { findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import {
   roomSchema,
-  roomMemberSchema,
   type roomCreateSchema,
   type roomSendSchema,
 } from "@zoen/companion-ui/rooms";
@@ -220,21 +220,7 @@ export const readMatrixMessages = async function (
         next_batch: z.string().optional(),
       })
       .parseAsync(response);
-    const members =
-      room.kind === "direct"
-        ? await directRoomMembers(actor, id)
-        : z.array(roomMemberSchema).parse(
-            await query(sql`
-      SELECT i.matrix_id AS id, u.name AS name, d.username,
-        i.user_id = ${actor.userId} AS mine, false AS bot, u.image AS "avatarUri"
-      FROM matrix_identities i
-      JOIN public.user u ON ('better-auth:' || u.id) = i.user_id
-      LEFT JOIN user_directory d ON d.user_id = u.id
-      JOIN matrix_room_members m ON m.user_id = i.user_id
-      JOIN workspace_memberships w ON w.user_id = i.user_id AND w.workspace_id = ${actor.workspaceId}
-      WHERE m.binding_id = ${id} ORDER BY i.matrix_id LIMIT 100
-    `)
-          );
+    const members = await readRoomMembers(actor, id, room.kind);
     await requireMatrixRoom(actor, id);
     const config = await matrixConfiguration();
     const project = (event: z.infer<typeof MatrixEventSchema>) =>

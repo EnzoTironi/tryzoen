@@ -75,8 +75,11 @@ export default function ReactionPicker({
     <CompanionOverlay title="Message reactions" onClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss reactions"
+          accessible={false}
+          tabIndex={-1}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           onPress={onClose}
           style={StyleSheet.absoluteFill}
         />

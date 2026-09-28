@@ -1,3 +1,4 @@
+import { ChannelSettingsButton } from "./settings/channels";
 import { SearchSection } from "./search";
 import { PermissionSettingsButton } from "./settings/permissions";
 import { SessionSettingsButton } from "./settings/sessions";
@@ -265,6 +266,7 @@ function SettingsSection({
         >
           Connections and preferences
         </ActionButton>
+        <ChannelSettingsButton />
         <PermissionSettingsButton />
         <SessionSettingsButton />
         <ActionButton

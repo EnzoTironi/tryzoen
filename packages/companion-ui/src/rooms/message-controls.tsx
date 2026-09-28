@@ -1,3 +1,4 @@
+import { SaveRoomMessage } from "./save-message";
 import { useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MessageCircle } from "lucide-react-native";
@@ -32,24 +33,26 @@ export function RoomMessageControls({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [action, setAction] = useState<"save" | "edit" | "delete">();
   return (
     <>
       <RoomReactionSummary reaction={item.redacted ? undefined : reaction} />
       {!item.redacted && (
         <MessageActions
+          onSave={() => {
+            setAction("save");
+          }}
           onEdit={
             item.mine && !item.media
               ? () => {
-                  setEditing(true);
+                  setAction("edit");
                 }
               : undefined
           }
           onDelete={
             item.mine
               ? () => {
-                  setDeleting(true);
+                  setAction("delete");
                 }
               : undefined
           }
@@ -67,25 +70,15 @@ export function RoomMessageControls({
           onReact={(emoji) => onReact(item.id, emoji)}
         />
       )}
-      {editing && (
-        <EditRoomMessage
+      {action && (
+        <RoomMessageDialog
+          action={action}
           data={data}
-          roomId={roomId}
           cacheScope={cacheScope}
+          roomId={roomId}
           item={item}
           onClose={() => {
-            setEditing(false);
-          }}
-        />
-      )}
-      {deleting && (
-        <DeleteRoomMessage
-          data={data}
-          roomId={roomId}
-          cacheScope={cacheScope}
-          messageId={item.id}
-          onClose={() => {
-            setDeleting(false);
+            setAction(undefined);
           }}
         />
       )}
@@ -100,7 +93,6 @@ function RoomThreadAction({
 }: Pick<ComponentProps<typeof RoomMessageControls>, "item" | "onThread">) {
   return (
     <>
-      {" "}
       {onThread && (
         <Pressable
           accessibilityRole="button"
@@ -162,3 +154,39 @@ const styles = StyleSheet.create({
   },
   replyText: { color: colors.accent, fontSize: 12 },
 });
+
+function RoomMessageDialog({
+  action,
+  data,
+  cacheScope,
+  roomId,
+  item,
+  onClose,
+}: Pick<
+  ComponentProps<typeof RoomMessageControls>,
+  "data" | "cacheScope" | "roomId" | "item"
+> & {
+  readonly action: "save" | "edit" | "delete";
+  readonly onClose: () => void;
+}) {
+  if (action === "edit")
+    return (
+      <EditRoomMessage
+        data={data}
+        cacheScope={cacheScope}
+        roomId={roomId}
+        item={item}
+        onClose={onClose}
+      />
+    );
+  const Dialog = action === "save" ? SaveRoomMessage : DeleteRoomMessage;
+  return (
+    <Dialog
+      data={data}
+      cacheScope={cacheScope}
+      roomId={roomId}
+      messageId={item.id}
+      onClose={onClose}
+    />
+  );
+}

@@ -21,22 +21,23 @@ export function SheetSurface({
   children,
   panelStyle,
   maxWidth = 740,
-  dismissLabel,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly panelStyle?: StyleProp<ViewStyle>;
   readonly maxWidth?: number;
-  readonly dismissLabel?: string;
 }) {
   const compact = useWindowDimensions().width < 720;
   return (
     <CompanionOverlay title={title} onClose={onClose}>
       <View style={[styles.backdrop, !compact && styles.desktopBackdrop]}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={dismissLabel ?? `Dismiss ${title.toLowerCase()}`}
+          accessible={false}
+          tabIndex={-1}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           onPress={onClose}
           style={StyleSheet.absoluteFill}
         />

@@ -23,7 +23,9 @@ export function MessageActions({
   onReact,
   onDelete,
   onEdit,
+  onSave,
 }: {
+  readonly onSave?: () => void;
   readonly onEdit?: () => void;
   readonly onDelete?: () => void;
   readonly text: string;
@@ -86,6 +88,7 @@ export function MessageActions({
               onDone={close}
             />
             <MessageMutationActions
+              onSave={onSave}
               onEdit={onEdit}
               onDelete={onDelete}
               onDone={close}
@@ -187,14 +190,29 @@ const styles = StyleSheet.create({
 });
 
 function MessageMutationActions({
+  onSave,
   onEdit,
   onDelete,
   onDone,
-}: Pick<ComponentProps<typeof MessageActions>, "onEdit" | "onDelete"> & {
+}: Pick<
+  ComponentProps<typeof MessageActions>,
+  "onEdit" | "onDelete" | "onSave"
+> & {
   readonly onDone: () => void;
 }) {
   return (
     <>
+      {onSave && (
+        <ActionButton
+          quiet
+          onPress={() => {
+            onDone();
+            onSave();
+          }}
+        >
+          Salvar mensagem
+        </ActionButton>
+      )}
       {onEdit && (
         <ActionButton
           quiet

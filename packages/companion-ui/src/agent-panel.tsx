@@ -31,7 +31,6 @@ export function AgentPanel({
       onClose={onClose}
       panelStyle={styles.panel}
       maxWidth={560}
-      dismissLabel="Close agent panel"
     >
       {!compact && (
         <>
@@ -64,7 +63,9 @@ export function AgentPanel({
             </Pressable>
           ))}
         </View>
-        {compact && <IconButton label="Close" icon={X} onPress={onClose} />}
+        {compact && (
+          <IconButton label="Close agent panel" icon={X} onPress={onClose} />
+        )}
       </View>
       <View style={styles.content}>{children(tab)}</View>
     </SheetSurface>

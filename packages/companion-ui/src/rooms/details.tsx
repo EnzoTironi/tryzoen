@@ -36,7 +36,6 @@ export function RoomDetails({
   return (
     <SheetSurface
       title="Informações do grupo"
-      dismissLabel="Fechar informações do grupo"
       onClose={onClose}
       maxWidth={480}
       panelStyle={styles.panel}

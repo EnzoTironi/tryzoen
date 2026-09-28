@@ -1,3 +1,10 @@
+import {
+  savedCleanupStateSchema,
+  savedMessageStateSchema,
+  savedMessagesPageSchema,
+  saveMessageResultSchema,
+  roomContextSchema,
+} from "@zoen/companion-ui/rooms";
 import { roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 import {
@@ -20,6 +27,39 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async savedCleanupState() {
+      return savedCleanupStateSchema.parse(
+        await rpc.query("workspaces.rooms.savedCleanupState")
+      );
+    },
+    async clearUnavailableSavedMessages(input) {
+      return saveMessageResultSchema.parse(
+        await rpc.mutation(
+          "workspaces.rooms.clearUnavailableSavedMessages",
+          input
+        )
+      );
+    },
+    async savedMessageState(input) {
+      return savedMessageStateSchema.parse(
+        await rpc.query("workspaces.rooms.savedMessageState", input)
+      );
+    },
+    async savedMessages(input) {
+      return savedMessagesPageSchema.parse(
+        await rpc.query("workspaces.rooms.savedMessages", input)
+      );
+    },
+    async saveMessage(input) {
+      return saveMessageResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.saveMessage", input)
+      );
+    },
+    async context(input) {
+      return roomContextSchema.parse(
+        await rpc.query("workspaces.rooms.context", input)
+      );
+    },
     async markRead(input) {
       await rpc.mutation("workspaces.rooms.markRead", input);
     },

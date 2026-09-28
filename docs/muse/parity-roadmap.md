@@ -178,6 +178,20 @@ Chrome no build corrente: edição desktop atualizou mensagem e inbox sem perder
 
 Revisão estrutural comparada ao commit `e23b3ea`: 61 observações, 30 gating, sem supressões. O scanner encontra churn, repetição de adapters/testes e componentes novos extensos. A revisão cruzada corrigiu replay incorreto, colisões de identidade de fontes, normalização silenciosa de conteúdo e a leitura de permissões fora da transação. Esses testes não comprovam escala nem paridade total. O backdrop dos modais ainda aparece como um alvo acessível de fechamento além do X; uma correção coesa do primitive precisa preservar um controle acessível em todos os breakpoints.
 
+### Quinta rodada — mensagens salvas e conhecimento aprovado — 28/09/2026
+
+Mensagens salvas usam uma coleção privada de referências no account data nativo do Matrix, limitada a 100 itens por identidade. A lista do espaço pagina de 20 em 20; edições e exclusões vêm do evento original. O contexto busca diretamente o evento selecionado e até 40 vizinhos, sem percorrer todo o histórico. O conteúdo fica oculto após perder acesso. Uma limpeza explícita remove referências de espaços/conversas que a pessoa não pode mais acessar. Escritores Zoen usam revisão e serialização; clientes Matrix externos ainda não têm CAS compartilhado com essa operação.
+
+A aprovação de uma versão de criador agora congela um manifesto tipado de fontes. Indexação e busca usam o Akita real em diretório separado por versão, com validação dos arquivos, digests e proveniência. Pilotos aceitos podem consultar somente a versão compartilhada. A indexação interrompida pode continuar; perda de armazenamento aceito falha sem reconstrução silenciosa, e exclusão usa a fila durável existente. A busca é lexical e não muda o modo atual das respostas do especialista. Avaliação de respostas com recuperação de evidências, YouTube e publicação pública continuam pendentes.
+
+Expo ganhou gerenciamento dos canais de mensagens vinculados. A confirmação explica que desvincular encerra todas as sessões; o último canal é preservado. Consulta e revogação mantêm a autorização dentro da transação. Sessões, permissões e canais reutilizam a mesma abertura de painel com escopo por sessão. A revisão também removeu fundos invisíveis da navegação por teclado, preservando fechamento visível nos painéis e no menu de reações.
+
+Verificação de comportamento: seis testes isolados Matrix (salvas/contexto e sincronização), dez de corpus Akita/versões e três de canais passaram. Incluem mensagem anterior a 105 mensagens novas, capacidade e paginação das 100 referências, perda de membership, indexação interrompida, isolamento de pilotos, erasure, concorrência na revogação e preservação do último acesso. O teste antigo de prévia editada foi atualizado para exigir o texto autorizado atual e conservar o ID original; a cobertura de exclusão permanece.
+
+Gate integrado: `pnpm check` passou com 239 arquivos e 1.496 testes, além de tipos, lint e build Electron; `pnpm build`, `pnpm db:check` e exports Expo para iOS/Android/web passaram. Chrome no build real comprovou salvar → recarregar → abrir contexto → voltar à conversa com rascunho preservado, lista em modal desktop/sheet de 390 px, foco no X, Escape e fechamento de configurações. Expo web comprovou manter os canais ao cancelar e encerrar o login ao desvincular uma identidade sintética; não é qualificação em aparelho físico. Imagens e vídeo de sequência de capturas são anexados ao PR 152.
+
+Revisão estrutural contra `cb066a6`: 69 observações, 31 gating, sem supressões. Permanecem crescimento da inbox, componentes extensos, churn e padrões repetidos de adapters/testes. A revisão visual reduziu ações secundárias dominantes na lista salva; a revisão cruzada não identificou nova falha concreta nos contratos de autorização. Esses resultados não qualificam escala, E2EE, offline, importação de YouTube ou paridade total.
+
 ### Critérios para cada rodada
 
 - Testes específicos cobrem usuário correto/incorreto, revogação concorrente, falha/retry e persistência.

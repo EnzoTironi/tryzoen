@@ -10,6 +10,8 @@ import { z } from "zod";
 import type { MemoryCorpus } from "@db/services/memory-corpora";
 import { privateMemoryDirectory } from "../session-files";
 
+type CorpusDirectory = MemoryCorpus | "creator-knowledge";
+
 const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
 
 // Run in a separate Node process: IPC disconnect still fires if the application
@@ -83,7 +85,7 @@ async function verifyMemoryIndex(data: string, requireExisting: boolean) {
 async function prepareSessionMemory(
   root: string,
   namespaceId: string,
-  corpus: MemoryCorpus,
+  corpus: CorpusDirectory,
   requireExisting: boolean
 ) {
   const namespace = z.uuid().parse(namespaceId);
@@ -289,7 +291,7 @@ export async function openMemoryEngine(
   binary: string,
   root: string,
   namespaceId: string,
-  corpus: MemoryCorpus,
+  corpus: CorpusDirectory,
   options: { requireExisting: boolean }
 ) {
   const data = await prepareSessionMemory(

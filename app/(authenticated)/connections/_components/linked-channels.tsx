@@ -3,6 +3,8 @@
 import { useI18n } from "@web/i18n/context";
 
 import { useState } from "react";
+import type { z } from "zod";
+import type { linkedChannelIdentitySchema } from "@shared/identity/channel-auth";
 import { authClient } from "@web/auth/client";
 import { api } from "@web/trpc/client";
 import { Alert, AlertDescription } from "@web/components/ui/alert";
@@ -11,16 +13,10 @@ import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { ConnectionIcon } from "./connection-icon";
 import styles from "../../_components/connections.module.css";
 
-interface LinkedChannelIdentity {
-  readonly id: string;
-  readonly channel: "telegram" | "kapso";
-  readonly senderId: string;
-}
-
 export function LinkedChannels({
   identities,
 }: {
-  readonly identities: readonly LinkedChannelIdentity[];
+  readonly identities: readonly z.infer<typeof linkedChannelIdentitySchema>[];
 }) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<string>();
@@ -137,7 +133,7 @@ function LinkedChannelRow({
   busy,
   onClick,
 }: {
-  readonly identity: LinkedChannelIdentity;
+  readonly identity: z.infer<typeof linkedChannelIdentitySchema>;
   readonly expanded: boolean;
   readonly busy: boolean;
   readonly onClick: () => void;

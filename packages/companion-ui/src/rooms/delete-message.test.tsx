@@ -21,6 +21,13 @@ vi.mock("../button", () => ({
 }));
 const data: RoomData = {
   markRead: vi.fn<RoomData["markRead"]>(),
+  savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
+  clearUnavailableSavedMessages:
+    vi.fn<RoomData["clearUnavailableSavedMessages"]>(),
+  savedMessageState: vi.fn<RoomData["savedMessageState"]>(),
+  savedMessages: vi.fn<RoomData["savedMessages"]>(),
+  saveMessage: vi.fn<RoomData["saveMessage"]>(),
+  context: vi.fn<RoomData["context"]>(),
   editMessage: vi.fn<RoomData["editMessage"]>(),
   deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
   operationId: () => "operation",

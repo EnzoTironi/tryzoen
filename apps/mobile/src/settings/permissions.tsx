@@ -1,3 +1,4 @@
+import { SettingsEntry } from "./entry";
 import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,27 +9,10 @@ import { auth } from "../auth";
 import { rpc } from "../api";
 
 export function PermissionSettingsButton() {
-  const [open, setOpen] = useState(false);
-  const account = auth.useSession();
   return (
-    <>
-      <ActionButton
-        quiet
-        onPress={() => {
-          setOpen(true);
-        }}
-      >
-        Permissions
-      </ActionButton>
-      {open && (
-        <CredentialPermissions
-          key={account.data?.session.id ?? "signed-out"}
-          onClose={() => {
-            setOpen(false);
-          }}
-        />
-      )}
-    </>
+    <SettingsEntry label="Permissions">
+      {(close) => <CredentialPermissions onClose={close} />}
+    </SettingsEntry>
   );
 }
 

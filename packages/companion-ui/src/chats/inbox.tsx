@@ -1,3 +1,4 @@
+import { SavedRoomMessages } from "../rooms/saved";
 import { useDeferredValue, useState, type ComponentProps } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 import {
+  Bookmark,
   Archive,
   Compass,
   Search,
@@ -118,6 +120,7 @@ export function ConversationInbox({
   readonly onDiscover: () => void;
   readonly onExport: (id: string) => Promise<void>;
 }) {
+  const [saved, setSaved] = useState(false);
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
   const [filter, setFilter] = useState<(typeof filters)[number]>("Todas");
@@ -175,10 +178,27 @@ export function ConversationInbox({
   };
   return (
     <View style={styles.inbox}>
+      {saved && (
+        <SavedRoomMessages
+          data={rooms}
+          cacheScope={cacheScope}
+          onClose={() => {
+            setSaved(false);
+          }}
+          onOpenRoom={onOpenRoom}
+        />
+      )}
       <View style={styles.heading}>
         <Text accessibilityRole="header" style={styles.title}>
           {archived ? "Arquivadas" : "Conversas"}
         </Text>
+        <IconButton
+          icon={Bookmark}
+          label="Mensagens salvas"
+          onPress={() => {
+            setSaved(true);
+          }}
+        />
         <IconButton
           icon={RefreshCw}
           label="Atualizar conversas"

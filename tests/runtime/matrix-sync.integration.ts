@@ -143,7 +143,7 @@ test(
           (await readMatrixInboxSummaries(fixture.guest, [room.id])).get(
             room.id
           )?.preview
-        ).toBe("Mensagem editada");
+        ).toBe("Changed");
       },
       { timeout: 10000 }
     );
@@ -154,7 +154,12 @@ test(
     expect(
       (await readMatrixInboxSummaries(fixture.guest, [room.id])).get(room.id)
         ?.preview
-    ).toBe("Mensagem editada");
+    ).toBe("Changed");
+    expect(
+      await query(
+        sql`SELECT latest_event_id, latest_edited FROM matrix_room_activity WHERE room_id = ${room.roomId}`
+      )
+    ).toEqual([{ latest_event_id: message.event_id, latest_edited: true }]);
     await deleteMatrixMessage(fixture.actor, {
       id: room.id,
       messageId: message.event_id,

@@ -1,3 +1,4 @@
+import { SettingsEntry } from "./entry";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,27 +7,10 @@ import { CompanionSheet } from "@zoen/companion-ui/sheet";
 import { auth } from "../auth";
 
 export function SessionSettingsButton() {
-  const [open, setOpen] = useState(false);
-  const account = auth.useSession();
   return (
-    <>
-      <ActionButton
-        quiet
-        onPress={() => {
-          setOpen(true);
-        }}
-      >
-        Signed-in sessions
-      </ActionButton>
-      {open && (
-        <SignedInSessions
-          key={account.data?.session.id ?? "signed-out"}
-          onClose={() => {
-            setOpen(false);
-          }}
-        />
-      )}
-    </>
+    <SettingsEntry label="Signed-in sessions">
+      {(close) => <SignedInSessions onClose={close} />}
+    </SettingsEntry>
   );
 }
 

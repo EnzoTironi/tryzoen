@@ -144,7 +144,6 @@ function GoalActionMenu({
       onClose={onClose}
       panelStyle={styles.sheet}
       maxWidth={420}
-      dismissLabel="Close goal actions"
     >
       {error && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -176,6 +175,9 @@ function GoalActionMenu({
           </Text>
         </Pressable>
       ))}
+      <ActionButton quiet disabled={pending} onPress={onClose}>
+        Cancel
+      </ActionButton>
     </SheetSurface>
   );
 }
