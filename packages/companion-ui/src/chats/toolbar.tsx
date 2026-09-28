@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Archive, ArrowLeft, Plus, Ellipsis, X } from "lucide-react-native";
 import { pageStyles } from "../page";
 import { IconButton } from "../icon-button";
@@ -26,8 +26,6 @@ export function ConversationToolbar({
   readonly onCreate?: () => void;
   readonly panel?: {
     readonly onClose: () => void;
-    readonly keepVisible?: boolean;
-    readonly onKeepVisibleChange?: (keep: boolean) => void;
   };
 }) {
   const [options, setOptions] = useState(false);
@@ -111,21 +109,6 @@ export function ConversationToolbar({
             setOptions(false);
           }}
         >
-          {panel?.onKeepVisibleChange && (
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityLabel="Keep panel visible"
-              aria-checked={panel.keepVisible ?? false}
-              onPress={() => {
-                panel.onKeepVisibleChange?.(!panel.keepVisible);
-              }}
-              style={pageStyles.row}
-            >
-              <Text style={pageStyles.rowTitle}>
-                {panel.keepVisible ? "✓ " : ""}Keep panel visible
-              </Text>
-            </Pressable>
-          )}
           <ActionButton quiet onPress={showArchive}>
             Show archived conversations
           </ActionButton>

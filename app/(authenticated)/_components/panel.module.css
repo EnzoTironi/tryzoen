@@ -564,7 +564,16 @@
 }
 
 .drawerPanel {
-  --drawer-bleed-background: #102139;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+  max-width: none;
+  inset-inline: 0;
+  top: auto;
+  bottom: 0;
+  transform: none;
+  translate: none;
   isolation: isolate;
   overflow: hidden;
   margin: 0 auto;
@@ -585,17 +594,13 @@
 .drawerPanel.wideFrame {
   width: min(100%, 960px);
 }
-.drawerPanel :global([data-slot="drawer-content"]) {
-  position: static;
-  border-radius: 0;
-}
-.drawerPanel :global([data-slot="drawer-swipe-handle"]) {
-  height: 20px;
-}
-.drawerPanel :global([data-slot="drawer-swipe-handle"])::after {
+.swipeHandle {
   width: 36px;
   height: 4px;
+  border-radius: 4px;
   background: #ffffff50;
+  margin: 12px auto 4px;
+  flex-shrink: 0;
 }
 .drawerPanel .content {
   overflow-y: auto;
@@ -633,6 +638,27 @@
 }
 .drawerConversation .content {
   overflow: hidden;
+}
+@media (min-width: 720px) {
+  .drawerPanel {
+    inset-inline: auto;
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    border-radius: 28px;
+    border-bottom: 1px solid #ffffff28;
+    width: min(calc(100% - 64px), 680px);
+  }
+  .drawerPanel.wideFrame {
+    width: min(calc(100% - 64px), 960px);
+  }
+  .swipeHandle {
+    display: none;
+  }
+  .sheetChrome {
+    margin-top: 16px;
+  }
 }
 @media (max-width: 760px) {
   .drawerPanel {

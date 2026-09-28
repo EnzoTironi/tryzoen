@@ -1,11 +1,4 @@
-import {
-  createContext,
-  Fragment,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, useContext, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { CompanionPage, pageStyles } from "./page";
 import { ActionButton } from "./button";
@@ -16,11 +9,6 @@ import {
   MarkdownEditorProvider,
   type MarkdownEditorHandle,
 } from "./markdown-editor";
-
-// Keep an editor mounted when its surrounding panel changes presentation.
-export const DocumentEditing = createContext<
-  ((editing: boolean) => void) | undefined
->(undefined);
 
 export function DocumentEditor({
   title,
@@ -49,15 +37,8 @@ export function DocumentEditor({
   readonly onSave: (text: string) => Promise<void>;
   readonly onClose: () => void;
 }) {
-  const reportEditing = useContext(DocumentEditing);
   const renderMarkdown = useContext(MarkdownEditorProvider);
   const editor = useRef<MarkdownEditorHandle>(null);
-  useEffect(() => {
-    reportEditing?.(true);
-    return () => {
-      reportEditing?.(false);
-    };
-  }, [reportEditing]);
   const [text, setText] = useState(initialText);
   const [editorSeed, setEditorSeed] = useState({
     text: initialText,

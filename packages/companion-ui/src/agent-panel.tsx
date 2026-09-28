@@ -4,8 +4,7 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { List, ShieldCheck, Clock3, Fingerprint, X } from "lucide-react-native";
 import { colors } from "./theme";
 import { IconButton } from "./icon-button";
-import { CompanionOverlay } from "./overlay";
-import { DocumentEditing } from "./document-editor";
+import { SheetSurface } from "./sheet";
 
 export type AgentPanelTab = "activity" | "approvals" | "upcoming" | "identity";
 const tabs = [
@@ -25,16 +24,16 @@ export function AgentPanel({
   readonly children: (tab: AgentPanelTab) => ReactNode;
 }) {
   const [tab, setTab] = useState<AgentPanelTab>("activity");
-  const requestedCompact = useWindowDimensions().width < 720;
-  const [editing, setEditing] = useState(false);
-  const [compact, setCompact] = useState(requestedCompact);
-  // Reparenting a modal during an edit would discard its unsaved draft.
-  if (!editing && compact !== requestedCompact) setCompact(requestedCompact);
-  const panel = (
-    <View style={[styles.panel, compact && styles.compactPanel]}>
-      {compact ? (
-        <View style={styles.handle} />
-      ) : (
+  const compact = useWindowDimensions().width < 720;
+  return (
+    <SheetSurface
+      title="Agent activity and memory"
+      onClose={onClose}
+      panelStyle={styles.panel}
+      maxWidth={560}
+      dismissLabel="Close agent panel"
+    >
+      {!compact && (
         <>
           <View style={styles.close}>
             <IconButton label="Close agent panel" icon={X} onPress={onClose} />
@@ -68,63 +67,12 @@ export function AgentPanel({
         {compact && <IconButton label="Close" icon={X} onPress={onClose} />}
       </View>
       <View style={styles.content}>{children(tab)}</View>
-    </View>
-  );
-  return (
-    <DocumentEditing value={setEditing}>
-      {compact ? (
-        <CompanionOverlay title="Agent activity and memory" onClose={onClose}>
-          <View style={styles.compactOverlay}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close agent panel"
-              onPress={onClose}
-              style={StyleSheet.absoluteFill}
-            />
-            {panel}
-          </View>
-        </CompanionOverlay>
-      ) : (
-        panel
-      )}
-    </DocumentEditing>
+    </SheetSurface>
   );
 }
 const styles = StyleSheet.create({
-  compactOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(252,252,252,0.55)",
-    justifyContent: "flex-end",
-  },
-  close: { alignItems: "flex-end", padding: 8 },
-  panel: {
-    backgroundColor: colors.canvas,
-    width: "30%",
-    minWidth: 320,
-    maxWidth: 480,
-    height: "100%",
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.line,
-    overflow: "hidden",
-  },
-  compactPanel: {
-    width: "100%",
-    minWidth: 0,
-    maxWidth: undefined,
-    height: "85%",
-    borderLeftWidth: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    boxShadow: "0 8px 60px rgba(0,0,0,0.12)",
-  },
-  handle: {
-    width: 48,
-    height: 4,
-    backgroundColor: colors.wash,
-    borderRadius: 4,
-    alignSelf: "center",
-    marginTop: 12,
-  },
+  close: { alignItems: "flex-end", paddingHorizontal: 16 },
+  panel: { height: "85%", maxHeight: 780 },
   toolbar: { flexDirection: "row", alignItems: "center", gap: 8, padding: 16 },
   tabs: {
     flexDirection: "row",

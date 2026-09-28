@@ -7,18 +7,17 @@ import { ListTreeIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@web/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@web/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@web/components/ui/dialog";
 import {
   collectSubagentSessions,
   getSubagentStatus,
 } from "@app/_lib/subagent-sessions";
 import type { ChatUsage } from "@shared/chat/schema";
-import { cn } from "@web/components/class-names";
 import type { TraceView } from "../../_lib/trace-view";
 import { ActivityCard } from "./card";
 import { TracePreview } from "./preview";
@@ -43,7 +42,7 @@ export function SubagentPanel({
 }) {
   const { t } = useI18n();
   const [selectedId, setSelectedId] = useState<string>();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const traceCloseButton = useRef<HTMLButtonElement>(null);
   const restoreFocusId = useRef<string | undefined>(undefined);
   const sessions = useMemo(() => collectSubagentSessions(events), [events]);
@@ -55,7 +54,6 @@ export function SubagentPanel({
   });
 
   useEffect(() => {
-    if (!window.matchMedia("(min-width: 48rem)").matches) return undefined;
     if (!selectedId) {
       const taskId = restoreFocusId.current;
       if (!taskId) return undefined;
@@ -125,30 +123,11 @@ export function SubagentPanel({
 
   return (
     <>
-      <aside
-        aria-hidden={selected !== undefined}
-        className={cn(
-          "relative hidden h-full shrink-0 overflow-hidden transition-[width] duration-200 ease-linear md:block",
-          selected ? "w-0" : "w-80"
-        )}
-      >
-        <div
-          className={cn(
-            "absolute inset-y-0 right-0 flex w-80 items-start p-3 transition-[opacity,transform] duration-200",
-            selected
-              ? "pointer-events-none translate-x-6 opacity-0"
-              : "translate-x-0 opacity-100"
-          )}
-        >
-          {activity}
-        </div>
-      </aside>
-
       <Button
         aria-label={t("Open activity panel")}
-        className="absolute top-2 right-3 z-30 md:hidden"
+        className="absolute top-2 right-3 z-30"
         onClick={() => {
-          setMobileOpen(true);
+          setOpen(true);
         }}
         size="icon-sm"
         type="button"
@@ -157,21 +136,32 @@ export function SubagentPanel({
         <ListTreeIcon />
       </Button>
 
-      <aside
-        aria-hidden={!selected}
-        className={cn(
-          "relative hidden h-full shrink-0 overflow-hidden border-l bg-background transition-[width] duration-200 ease-linear md:block",
-          selected ? "w-1/2 min-w-80" : "w-0 border-l-0"
-        )}
+      <Dialog
+        onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) closeTask();
+        }}
+        open={open}
       >
-        <div
-          className={cn(
-            "absolute inset-y-0 right-0 flex w-full min-w-80 flex-col transition-[opacity,transform] duration-200",
-            selected
-              ? "translate-x-0 opacity-100"
-              : "pointer-events-none translate-x-6 opacity-0"
-          )}
+        <DialogContent
+          className="flex h-[85svh] w-full flex-col gap-0 overflow-hidden p-0"
+          variant="responsive"
         >
+          <DialogHeader className="sr-only">
+            <DialogTitle>
+              {selected
+                ? t("{name}: {status}", {
+                    name: selected.name,
+                    status: t("Atividade"),
+                  })
+                : t("Agent activity")}
+            </DialogTitle>
+            <DialogDescription>
+              {selected
+                ? t("Full trace for the selected subagent")
+                : t("Conversation views, sources, and live task statuses")}
+            </DialogDescription>
+          </DialogHeader>
           {selected ? (
             <TracePreview
               closeButtonRef={traceCloseButton}
@@ -179,47 +169,11 @@ export function SubagentPanel({
               onClose={closeTask}
               session={selected}
             />
-          ) : null}
-        </div>
-      </aside>
-
-      <Sheet
-        onOpenChange={(open) => {
-          setMobileOpen(open);
-          if (!open) closeTask();
-        }}
-        open={mobileOpen}
-      >
-        <SheetContent
-          className="h-[85svh] w-full gap-0 p-0 sm:max-w-none"
-          side="bottom"
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>
-              {selected
-                ? t("{name}: {status}", {
-                    name: selected.name,
-                    status: t("Atividade"),
-                  })
-                : t("Agent activity")}
-            </SheetTitle>
-            <SheetDescription>
-              {selected
-                ? t("Full trace for the selected subagent")
-                : t("Conversation views, sources, and live task statuses")}
-            </SheetDescription>
-          </SheetHeader>
-          {selected ? (
-            <TracePreview
-              key={selected.childSessionId}
-              onClose={closeTask}
-              session={selected}
-            />
           ) : (
             activity
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

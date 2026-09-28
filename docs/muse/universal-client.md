@@ -207,3 +207,9 @@ The menu reuses copy/reply and adds six quick reactions plus eight emoji categor
 Browser verification covered persistence, replacement, removal, reload, copy/reply and failed-save recovery in synthetic conversations, with 320- and 390-pixel layouts. The shared implementation is available to web, Electron and Expo; signed builds and physical-device verification remain release gates. These changes do not establish full Muse parity, production load capacity or complete account exports.
 
 Reaction checkpoint validation: `pnpm check` passed 1,314 tests in 202 files; `pnpm build`, Expo exports for web/iOS/Android, migration-chain validation and three isolated PostgreSQL tests passed. The structural quality delta still has 10 gating findings (including JSX size/churn and SQL-shape duplication across distinct owners); this checkpoint is not a clean structural-quality or production-readiness claim.
+
+## Responsive overlay rule — 2026-09-28
+
+Per the user's explicit direction, mobile sheets become centered desktop modals at the shared 720px breakpoint. `SheetSurface` owns this presentation for settings, goal details and actions, generic action sheets, conversations, and the agent activity/identity panel. A stable component tree preserves open Markdown drafts while crossing the breakpoint. Web dialogs retain focus containment and Escape behavior through the existing Base UI adapter; native overlays use slide on compact screens and fade on larger screens. Desktop sheet handles are hidden.
+
+The old pinned/resizable conversation panel and its saved visibility preference were removed with their callers and unused resizer dependency. The account/workspace panel and the older chat activity surface also use dialogs on desktop. Full-screen document editing remains full-screen; it is not a mobile sheet. This change does not assert completed native settings adapters or full Muse parity.

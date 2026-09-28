@@ -53,8 +53,6 @@ export function CompanionShell({
   renderAgentPanel,
   renderAgentHeader,
   renderConversations,
-  keepConversationsVisible,
-  renderConversationLayout,
 }: {
   readonly children: ReactNode;
   readonly section?: CompanionSection;
@@ -70,9 +68,7 @@ export function CompanionShell({
   readonly renderAgentHeader?: (onEdit: () => void) => ReactNode;
 } & Pick<
   ComponentProps<typeof ConversationNavigation>,
-  | "renderConversations"
-  | "keepConversationsVisible"
-  | "renderConversationLayout"
+  "renderConversations"
 >) {
   const compact = useWindowDimensions().width < 720;
   const [showAgent, setShowAgent] = useState(false);
@@ -118,11 +114,8 @@ export function CompanionShell({
         </View>
       )}
       <ConversationNavigation
-        compact={compact}
         active={section === "chat"}
-        keepConversationsVisible={keepConversationsVisible}
         renderConversations={renderConversations}
-        renderConversationLayout={renderConversationLayout}
       >
         {(toggle) => (
           <View style={styles.body}>

@@ -19,11 +19,11 @@ import { Button } from "@web/components/ui/button";
 import { Logo } from "@web/components/ui/logo";
 import { cn } from "@web/components/class-names";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerTitle,
-} from "@web/components/ui/drawer";
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@web/components/ui/dialog";
 import { useLocalTime } from "@web/components/sky/use-local-time";
 import { getLocalDay } from "@web/components/sky/local-day";
 import { Sky } from "@web/components/sky/sky";
@@ -110,19 +110,21 @@ export function PanelShell({
         <p className={styles.signature} aria-hidden={!home || undefined}>
           {t("Menos na cabeça. Mais na vida.")}
         </p>
-        <Drawer
+        <Dialog
           open={open}
           onOpenChangeComplete={(isOpen) => {
             if (!isOpen && dismissed && !home)
               router.push(workspaceHref("/", workspaceId), { scroll: false });
           }}
-          showSwipeHandle
           onOpenChange={(isOpen) => {
             if (!isOpen) setDismissed(true);
           }}
         >
-          <DrawerContent
+          <DialogContent
+            showCloseButton={false}
+            aria-describedby={undefined}
             className={cn(
+              "translate-0",
               styles.innerFrame,
               styles.drawerPanel,
               (pathname === "/recipes" || conversation) && styles.wideFrame,
@@ -130,10 +132,11 @@ export function PanelShell({
             )}
             lang={locale}
           >
+            <div className={styles.swipeHandle} aria-hidden="true" />
             <Sky phase={sky} embedded />
-            <DrawerTitle className="sr-only">
+            <DialogTitle className="sr-only">
               {t("Seu espaço Zoen")}
-            </DrawerTitle>
+            </DialogTitle>
             <div className={styles.sheetChrome}>
               {accountDetail && (
                 <Button
@@ -180,7 +183,7 @@ export function PanelShell({
                   <HistoryIcon aria-hidden="true" />
                 </Button>
               )}
-              <DrawerClose
+              <DialogClose
                 render={
                   <Button
                     aria-label={t("Fechar painel")}
@@ -191,7 +194,7 @@ export function PanelShell({
                 }
               >
                 <XIcon aria-hidden="true" />
-              </DrawerClose>
+              </DialogClose>
             </div>
             <div
               className={styles.content}
@@ -201,8 +204,8 @@ export function PanelShell({
             >
               {!home && children}
             </div>
-          </DrawerContent>
-        </Drawer>
+          </DialogContent>
+        </Dialog>
       </div>
     </PanelNavigationContext>
   );

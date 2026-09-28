@@ -2,7 +2,6 @@ import { useState, type ReactNode, type ComponentProps } from "react";
 import type { GoalRow } from "./row";
 import { Ellipsis, X } from "lucide-react-native";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { IconButton } from "../icon-button";
-import { CompanionOverlay } from "../overlay";
+import { SheetSurface } from "../sheet";
 import { pageStyles } from "../page";
 import { colors } from "../theme";
 import type { GoalsData } from "./collection";
@@ -42,107 +41,71 @@ export function GoalDetail({
   const [menu, setMenu] = useState(false);
   const compact = useWindowDimensions().width < 720;
   return (
-    <CompanionOverlay title={goal.title} onClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close goal"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.sheet, compact && styles.compactSheet]}>
-          <View style={styles.handle} />
-          <View style={[styles.header, compact && styles.compactHeader]}>
-            <Text
-              accessibilityRole="header"
-              style={[styles.heading, compact && styles.compactHeading]}
-            >
-              {goal.title}
-            </Text>
-            <View style={styles.roundControl}>
-              <IconButton
-                label="Goal actions"
-                icon={Ellipsis}
-                onPress={() => {
-                  setMenu(true);
-                }}
-              />
-            </View>
-            <View style={styles.roundControl}>
-              <IconButton
-                label="Close goal details"
-                icon={X}
-                onPress={onClose}
-              />
-            </View>
-          </View>
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text
-              style={[styles.objective, compact && styles.compactObjective]}
-            >
-              {goal.objective}
-            </Text>
-            {Boolean(subgoals?.length) && (
-              <View>
-                <Text style={pageStyles.heading}>Subgoals</Text>
-                {subgoals}
-              </View>
-            )}
-            <GoalActivity
-              data={data}
-              id={goal.id}
-              revision={goal.revision}
-              cacheScope={cacheScope}
-            />
-          </ScrollView>
-        </View>
-        {menu && (
-          <GoalActions
-            goal={goal}
-            data={data}
-            onChanged={onChanged}
-            onClose={() => {
-              setMenu(false);
-            }}
-            onPrompt={(prompt) => {
-              onClose();
-              onPrompt(prompt);
+    <SheetSurface
+      title={goal.title}
+      onClose={onClose}
+      panelStyle={compact && styles.compactSheet}
+      dismissLabel="Close goal"
+    >
+      <View style={[styles.header, compact && styles.compactHeader]}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.heading, compact && styles.compactHeading]}
+        >
+          {goal.title}
+        </Text>
+        <View style={styles.roundControl}>
+          <IconButton
+            label="Goal actions"
+            icon={Ellipsis}
+            onPress={() => {
+              setMenu(true);
             }}
           />
-        )}
+        </View>
+        <View style={styles.roundControl}>
+          <IconButton label="Close goal details" icon={X} onPress={onClose} />
+        </View>
       </View>
-    </CompanionOverlay>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.objective, compact && styles.compactObjective]}>
+          {goal.objective}
+        </Text>
+        {Boolean(subgoals?.length) && (
+          <View>
+            <Text style={pageStyles.heading}>Subgoals</Text>
+            {subgoals}
+          </View>
+        )}
+        <GoalActivity
+          data={data}
+          id={goal.id}
+          revision={goal.revision}
+          cacheScope={cacheScope}
+        />
+      </ScrollView>
+      {menu && (
+        <GoalActions
+          goal={goal}
+          data={data}
+          onChanged={onChanged}
+          onClose={() => {
+            setMenu(false);
+          }}
+          onPrompt={(prompt) => {
+            onClose();
+            onPrompt(prompt);
+          }}
+        />
+      )}
+    </SheetSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(252,252,252,0.65)",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  sheet: {
-    width: "100%",
-    maxWidth: 740,
-    maxHeight: "90%",
-    backgroundColor: colors.canvas,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  handle: {
-    width: 48,
-    height: 4,
-    backgroundColor: colors.line,
-    borderRadius: 3,
-    alignSelf: "center",
-    marginTop: 12,
-  },
   header: { flexDirection: "row", alignItems: "center", padding: 24, gap: 12 },
   heading: {
     flex: 1,

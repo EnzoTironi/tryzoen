@@ -1,11 +1,10 @@
 import { useRef, useState, type ComponentProps } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Pencil, PlusSquare, SquareCheck, Trash2 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { ActionButton } from "../button";
-import { CompanionOverlay } from "../overlay";
 import { pageStyles } from "../page";
-import { CompanionSheet } from "../sheet";
+import { CompanionSheet, SheetSurface } from "../sheet";
 import { colors } from "../theme";
 import type { GoalDetail } from "./detail";
 import { GoalRename } from "./rename";
@@ -140,77 +139,49 @@ function GoalActionMenu({
     { id: "delete", label: "Delete", icon: Trash2 },
   ] as const;
   return (
-    <CompanionOverlay title="Goal actions" onClose={onClose}>
-      <View style={styles.backdrop}>
+    <SheetSurface
+      title="Goal actions"
+      onClose={onClose}
+      panelStyle={styles.sheet}
+      maxWidth={420}
+      dismissLabel="Close goal actions"
+    >
+      {error && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      )}
+      {actions.map(({ id, label, icon: Icon }) => (
         <Pressable
+          key={id}
           accessibilityRole="button"
-          accessibilityLabel="Close goal actions"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          {error && (
-            <Text accessibilityRole="alert" style={styles.error}>
-              {error}
-            </Text>
-          )}
-          {actions.map(({ id, label, icon: Icon }) => (
-            <Pressable
-              key={id}
-              accessibilityRole="button"
-              disabled={pending}
-              accessibilityState={{ disabled: pending }}
-              onPress={() => {
-                onAction(id);
-              }}
-              style={[
-                styles.row,
-                id === "delete" && styles.destructive,
-                pending && styles.pending,
-              ]}
-            >
-              <Icon
-                size={18}
-                strokeWidth={1.7}
-                color={id === "delete" ? colors.danger : colors.ink}
-              />
-              <Text style={[styles.label, id === "delete" && styles.danger]}>
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </CompanionOverlay>
+          disabled={pending}
+          accessibilityState={{ disabled: pending }}
+          onPress={() => {
+            onAction(id);
+          }}
+          style={[
+            styles.row,
+            id === "delete" && styles.destructive,
+            pending && styles.pending,
+          ]}
+        >
+          <Icon
+            size={18}
+            strokeWidth={1.7}
+            color={id === "delete" ? colors.danger : colors.ink}
+          />
+          <Text style={[styles.label, id === "delete" && styles.danger]}>
+            {label}
+          </Text>
+        </Pressable>
+      ))}
+    </SheetSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    backgroundColor: "rgba(252,252,252,0.45)",
-  },
-  sheet: {
-    width: "100%",
-    maxWidth: 740,
-    padding: 24,
-    paddingTop: 12,
-    paddingBottom: 24,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: colors.canvas,
-  },
-  handle: {
-    width: 48,
-    height: 4,
-    backgroundColor: colors.line,
-    borderRadius: 3,
-    alignSelf: "center",
-    marginBottom: 20,
-  },
+  sheet: { paddingHorizontal: 24, paddingBottom: 24 },
   row: {
     minHeight: 46,
     flexDirection: "row",

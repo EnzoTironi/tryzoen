@@ -1,9 +1,59 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { CompanionOverlay } from "./overlay";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
+
+/** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
+export function SheetSurface({
+  title,
+  onClose,
+  children,
+  panelStyle,
+  maxWidth = 740,
+  dismissLabel,
+}: {
+  readonly title: string;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+  readonly panelStyle?: StyleProp<ViewStyle>;
+  readonly maxWidth?: number;
+  readonly dismissLabel?: string;
+}) {
+  const compact = useWindowDimensions().width < 720;
+  return (
+    <CompanionOverlay title={title} onClose={onClose}>
+      <View style={[styles.backdrop, !compact && styles.desktopBackdrop]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={dismissLabel ?? `Dismiss ${title.toLowerCase()}`}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            styles.sheet,
+            panelStyle,
+            !compact && [styles.desktopPanel, { maxWidth }],
+          ]}
+        >
+          {compact && <View style={styles.handle} />}
+          {children}
+        </View>
+      </View>
+    </CompanionOverlay>
+  );
+}
 
 export function CompanionSheet({
   title,
@@ -15,35 +65,24 @@ export function CompanionSheet({
   readonly children: ReactNode;
 }) {
   return (
-    <CompanionOverlay title={title} onClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Dismiss ${title.toLowerCase()}`}
+    <SheetSurface title={title} onClose={onClose}>
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={styles.title}>
+          {title}
+        </Text>
+        <IconButton
+          label={`Close ${title.toLowerCase()}`}
+          icon={X}
           onPress={onClose}
-          style={StyleSheet.absoluteFill}
         />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>
-              {title}
-            </Text>
-            <IconButton
-              label={`Close ${title.toLowerCase()}`}
-              icon={X}
-              onPress={onClose}
-            />
-          </View>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.content}
-          >
-            {children}
-          </ScrollView>
-        </View>
       </View>
-    </CompanionOverlay>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}
+      >
+        {children}
+      </ScrollView>
+    </SheetSurface>
   );
 }
 
@@ -56,12 +95,19 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: "100%",
-    maxWidth: 740,
     maxHeight: "86%",
     backgroundColor: colors.canvas,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 12,
+    overflow: "hidden",
+  },
+  desktopBackdrop: { justifyContent: "center", padding: 32 },
+  desktopPanel: {
+    borderRadius: 28,
+    maxHeight: "90%",
+    paddingTop: 20,
+    boxShadow: "0 8px 48px rgba(0,0,0,0.12)",
   },
   handle: {
     width: 48,
