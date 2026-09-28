@@ -35,6 +35,11 @@ export const agentSessions = pgTable(
       table.workspaceId,
       table.createdAt.desc().nullsFirst()
     ),
+    index("agent_sessions_owner_idx").on(
+      table.workspaceId,
+      table.createdByUserId,
+      table.sessionId
+    ),
   ]
 );
 

@@ -1,18 +1,6 @@
 import { z } from "zod";
 import { saveWorkstreamSchema } from "../workstreams/schema";
 
-export const companionChatsSchema = z.object({
-  items: z.array(
-    z.object({
-      sessionId: z.string(),
-      title: z.string(),
-      updatedAt: z.iso.datetime(),
-    })
-  ),
-  nextCursor: z
-    .object({ updatedAt: z.iso.datetime(), sessionId: z.string() })
-    .nullable(),
-});
 export const companionGoalsSchema = z.array(
   z.object({
     id: z.string(),

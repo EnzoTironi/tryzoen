@@ -10,7 +10,7 @@ export { Goals } from "./goals";
 export { GoalCollection, type GoalsData } from "./goals/collection";
 export { Library } from "./library";
 export { FeedCollection, type FeedData } from "./feed/collection";
-export { ConversationSearch } from "./search";
+export { ConversationSearch } from "./chats/collection";
 export { CompanionPage } from "./page";
 export { NewConversation } from "./new-conversation";
 export { SessionConversation } from "./session-conversation";

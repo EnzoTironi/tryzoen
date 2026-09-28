@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./chats": {
+      "types": "./dist/chats/schema.d.ts",
+      "default": "./dist/chats/schema.js"
+    },
     "./reactions": {
       "types": "./dist/reactions/schema.d.ts",
       "default": "./dist/reactions/schema.js"

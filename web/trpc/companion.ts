@@ -1,4 +1,10 @@
 import {
+  chatQuerySchema,
+  chatPageSchema,
+  chatChangeSchema,
+} from "@zoen/companion-ui/chats";
+import { listChatLibrary, changeChat } from "@db/services/chat-library";
+import {
   feedCursorSchema,
   feedPageSchema,
   feedInstructionsSchema,
@@ -20,10 +26,10 @@ import {
   readFeedInstructions,
   saveFeedInstructions,
 } from "@db/services/feed";
-import { and, desc, eq, ilike, isNotNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { agentSessions, chats, db, workstreams } from "@db";
+import { db, workstreams } from "@db";
 import {
   readWorkstream,
   saveWorkstream,
@@ -36,7 +42,6 @@ import {
   saveWorkstreamSchema,
 } from "@shared/workstreams/schema";
 import {
-  companionChatsSchema,
   companionGoalsSchema,
   companionIdentitySchema,
   companionGoalHistorySchema,
@@ -100,62 +105,12 @@ export const companionRouter = {
       canEdit: ctx.actor.role !== "member",
     })),
   chats: workspaceProcedure
-    .input(
-      z.object({
-        query: z.string().trim().max(200).default(""),
-        cursor: z
-          .object({
-            updatedAt: z.iso.datetime(),
-            sessionId: z.string().min(1).max(200),
-          })
-          .nullish(),
-      })
-    )
-    .output(companionChatsSchema)
-    .query(async ({ ctx, input }) => {
-      const cursor = input.cursor;
-      const pattern = `%${input.query.replace(/[\\%_]/gu, "\\$&")}%`;
-      const rows = await db
-        .select({
-          sessionId: chats.sessionId,
-          title: chats.title,
-          updatedAt: chats.updatedAt,
-        })
-        .from(chats)
-        .innerJoin(agentSessions, eq(agentSessions.sessionId, chats.sessionId))
-        .where(
-          and(
-            eq(chats.workspaceId, ctx.scope.workspaceId),
-            eq(agentSessions.workspaceId, ctx.scope.workspaceId),
-            eq(agentSessions.createdByUserId, ctx.scope.userId),
-            input.query ? ilike(chats.title, pattern) : undefined,
-            cursor
-              ? or(
-                  lt(chats.updatedAt, new Date(cursor.updatedAt)),
-                  and(
-                    eq(chats.updatedAt, new Date(cursor.updatedAt)),
-                    lt(chats.sessionId, cursor.sessionId)
-                  )
-                )
-              : undefined
-          )
-        )
-        .orderBy(desc(chats.updatedAt), desc(chats.sessionId))
-        .limit(31);
-      const items = rows.slice(0, 30).map((row) => ({
-        sessionId: row.sessionId,
-        title: row.title,
-        updatedAt: row.updatedAt.toISOString(),
-      }));
-      const last = items.at(-1);
-      return {
-        items,
-        nextCursor:
-          rows.length > 30 && last
-            ? { updatedAt: last.updatedAt, sessionId: last.sessionId }
-            : null,
-      };
-    }),
+    .input(chatQuerySchema)
+    .output(chatPageSchema)
+    .query(({ ctx, input }) => listChatLibrary(ctx.scope, input)),
+  changeChat: workspaceProcedure
+    .input(chatChangeSchema)
+    .mutation(({ ctx, input }) => changeChat(ctx.scope, input)),
   goals: workspaceProcedure
     .output(companionGoalsSchema)
     .query(async ({ ctx }) => {

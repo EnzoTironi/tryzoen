@@ -449,6 +449,13 @@
       "when": 1790558766958,
       "tag": "0063_message-reactions",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790560102688,
+      "tag": "0064_chat-library",
+      "breakpoints": true
     }
   ]
 }

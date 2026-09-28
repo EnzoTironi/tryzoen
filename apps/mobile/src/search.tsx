@@ -1,8 +1,9 @@
 "use client";
-import { useDeferredValue, useState } from "react";
 import { ConversationSearch } from "@zoen/companion-ui";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { queries } from "./api";
+import { companionChatData } from "../../../shared/companion/chats";
+import { rpc } from "./api";
+import { auth } from "./auth";
+const data = companionChatData(rpc);
 export function SearchSection({
   onConversation,
   title,
@@ -14,46 +15,18 @@ export function SearchSection({
   readonly intro?: string;
   readonly allowCreate?: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const search = useDeferredValue(query);
-  const chats = useInfiniteQuery({
-    queryKey: ["chats", search],
-    queryFn: ({ pageParam }) => queries.chats(search, pageParam),
-    initialPageParam: null as Parameters<typeof queries.chats>[1],
-    getNextPageParam: (last) => last.nextCursor,
-  });
+  const account = auth.useSession();
   return (
     <ConversationSearch
+      data={data}
+      cacheScope={account.data?.user.id ?? "anonymous"}
       title={title}
       intro={intro}
-      query={query}
-      onQuery={setQuery}
-      items={
-        chats.data?.pages.flatMap((page) =>
-          page.items.map((chat) => ({
-            id: chat.sessionId,
-            title: chat.title,
-            description: new Date(chat.updatedAt).toLocaleString(),
-          }))
-        ) ?? []
-      }
       onOpen={onConversation}
       onCreate={
         allowCreate
           ? () => {
               onConversation();
-            }
-          : undefined
-      }
-      loading={chats.isPending || chats.isFetchingNextPage}
-      error={chats.error?.message}
-      onRetry={() => {
-        void chats.refetch();
-      }}
-      onLoadMore={
-        chats.hasNextPage
-          ? () => {
-              void chats.fetchNextPage();
             }
           : undefined
       }

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import type { AccessScope } from "@shared/identity/access-scope";
 import {
@@ -50,6 +50,8 @@ export async function listChats(scope: AccessScope) {
       .where(
         and(
           eq(chats.workspaceId, scope.workspaceId),
+          eq(chats.archived, false),
+          eq(agentSessions.workspaceId, scope.workspaceId),
           eq(agentSessions.createdByUserId, scope.userId)
         )
       )
@@ -60,11 +62,14 @@ export async function listChats(scope: AccessScope) {
 
 export async function readChat(scope: AccessScope, sessionId: string) {
   const rows = await db
-    .select()
+    .select(getTableColumns(chats))
     .from(chats)
+    .innerJoin(agentSessions, eq(agentSessions.sessionId, chats.sessionId))
     .where(
       and(
         eq(chats.workspaceId, scope.workspaceId),
+        eq(agentSessions.workspaceId, scope.workspaceId),
+        eq(agentSessions.createdByUserId, scope.userId),
         eq(chats.sessionId, sessionId)
       )
     )

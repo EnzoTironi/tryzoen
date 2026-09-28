@@ -1,5 +1,9 @@
 "use client";
-import { useDeferredValue, useState } from "react";
+import { useMemo } from "react";
+import { getUntypedClient } from "@trpc/client";
+import { companionChatData } from "@shared/companion/chats";
+import { useSearchParams } from "next/navigation";
+import { authClient } from "@web/auth/client";
 import { ConversationSearch } from "@zoen/companion-ui";
 import { api } from "@web/trpc/client";
 export function ConnectedSearch({
@@ -13,44 +17,24 @@ export function ConnectedSearch({
   readonly intro?: string;
   readonly allowCreate?: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const chats = api.companion.chats.useInfiniteQuery(
-    { query: deferredQuery },
-    { getNextPageParam: (last) => last.nextCursor }
+  const { client } = api.useUtils();
+  const data = useMemo(
+    () => companionChatData(getUntypedClient(client)),
+    [client]
   );
+  const account = authClient.useSession();
+  const params = useSearchParams();
   return (
     <ConversationSearch
+      data={data}
+      cacheScope={`${account.data?.user.id ?? "anonymous"}:${params.get("space") ?? "personal"}`}
       title={title}
       intro={intro}
-      query={query}
-      onQuery={setQuery}
-      items={
-        chats.data?.pages.flatMap((page) =>
-          page.items.map((chat) => ({
-            id: chat.sessionId,
-            title: chat.title,
-            description: new Date(chat.updatedAt).toLocaleString(),
-          }))
-        ) ?? []
-      }
       onOpen={onConversation}
       onCreate={
         allowCreate
           ? () => {
               onConversation();
-            }
-          : undefined
-      }
-      loading={chats.isPending || chats.isFetchingNextPage}
-      error={chats.error?.message}
-      onRetry={() => {
-        void chats.refetch();
-      }}
-      onLoadMore={
-        chats.hasNextPage
-          ? () => {
-              void chats.fetchNextPage();
             }
           : undefined
       }
