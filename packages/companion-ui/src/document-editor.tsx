@@ -1,13 +1,15 @@
 import { Fragment, useContext, useRef, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { StyleSheet, Text, View } from "react-native";
+import { pageStyles } from "./page";
 import { ActionButton } from "./button";
 import { CompanionOverlay } from "./overlay";
 import { colors } from "./theme";
 import { DocumentHistory, type DocumentHistoryData } from "./document-history";
+import { MarkdownSourceEditor } from "./editor/source";
 import {
   MarkdownEditorProvider,
   type MarkdownEditorHandle,
+  type MarkdownEditorProps,
 } from "./markdown-editor";
 
 export function DocumentEditor({
@@ -38,6 +40,19 @@ export function DocumentEditor({
   readonly onClose: () => void;
 }) {
   const renderMarkdown = useContext(MarkdownEditorProvider);
+  const renderEditor =
+    markdown && renderMarkdown
+      ? renderMarkdown
+      : (props: MarkdownEditorProps) => (
+          <MarkdownSourceEditor
+            {...props}
+            notice={
+              markdown
+                ? "Visual editing is unavailable. Edit Markdown here to preserve its formatting."
+                : ""
+            }
+          />
+        );
   const editor = useRef<MarkdownEditorHandle>(null);
   const [text, setText] = useState(initialText);
   const [editorSeed, setEditorSeed] = useState({
@@ -60,8 +75,7 @@ export function DocumentEditor({
     setSaving(true);
     setError(undefined);
     try {
-      const content =
-        markdown && renderMarkdown ? await editor.current?.read() : text;
+      const content = await editor.current?.read();
       if (content === undefined)
         throw new Error("The editor is still loading. Try again.");
       if (content.length > maxLength)
@@ -99,120 +113,81 @@ export function DocumentEditor({
   return (
     <CompanionOverlay title={title} onClose={close}>
       <View style={styles.surface}>
-        {markdown && renderMarkdown ? (
-          <>
-            <View style={styles.documentHeader}>
-              <Text
-                accessibilityRole="header"
-                numberOfLines={1}
-                style={styles.filename}
-              >
-                {title}
-              </Text>
-              <View style={styles.headerActions}>
-                {history && (
-                  <ActionButton
-                    quiet
-                    disabled={saving}
-                    onPress={() => {
-                      setShowHistory(!showHistory);
-                    }}
-                  >
-                    {showHistory ? "Hide history" : "History"}
-                  </ActionButton>
-                )}
-                {!readOnly && (
-                  <ActionButton
-                    quiet
-                    disabled={(!dirty && !allowUnchanged) || saving}
-                    onPress={() => {
-                      void save();
-                    }}
-                  >
-                    {saving ? "Saving…" : (saveLabel ?? "Save")}
-                  </ActionButton>
-                )}
-                <ActionButton quiet disabled={saving} onPress={close}>
-                  Close
-                </ActionButton>
-              </View>
-            </View>
-            {error && (
-              <Text accessibilityRole="alert" style={styles.error}>
-                {error}
-              </Text>
-            )}
-            {discardConfirmation}
-            {showHistory && history && (
-              <DocumentHistory
-                data={history}
-                readOnly={readOnly || saving}
-                onRestore={(value) => {
-                  setText(value);
-                  setUnreadChanges(false);
-                  setEditorSeed((current) => ({
-                    text: value,
-                    revision: current.revision + 1,
-                  }));
-                  setShowHistory(false);
-                }}
-              />
-            )}
-            <Fragment key={editorSeed.revision}>
-              {renderMarkdown({
-                ref: editor,
-                filename: title,
-                initialMarkdown: editorSeed.text,
-                label,
-                description,
-                editable: !saving && !readOnly,
-                onChange: (value) => {
-                  setText(value);
-                  setUnreadChanges(false);
-                },
-                onDirty: () => {
-                  setUnreadChanges(true);
-                },
-                onError: setError,
-              })}
-            </Fragment>
-          </>
-        ) : (
-          <CompanionPage
-            title={title}
-            error={error}
-            actions={
-              <ActionButton quiet disabled={saving} onPress={close}>
-                Close
-              </ActionButton>
-            }
+        <View style={styles.documentHeader}>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={styles.filename}
           >
-            <Text style={pageStyles.copy}>{description}</Text>
-            <TextInput
-              accessibilityLabel={label}
-              multiline
-              value={text}
-              onChangeText={setText}
-              maxLength={maxLength}
-              editable={!saving && !readOnly}
-              style={[pageStyles.field, styles.editor]}
-            />
-            <Text style={pageStyles.copy}>{text.length} characters</Text>
-            {!readOnly && (
-              <View style={styles.actions}>
-                <ActionButton
-                  disabled={(!dirty && !allowUnchanged) || saving}
-                  onPress={() => {
-                    void save();
-                  }}
-                >
-                  {saving ? "Saving…" : (saveLabel ?? "Save changes")}
-                </ActionButton>
-              </View>
+            {title}
+          </Text>
+          <View style={styles.headerActions}>
+            {history && (
+              <ActionButton
+                quiet
+                disabled={saving}
+                onPress={() => {
+                  setShowHistory(!showHistory);
+                }}
+              >
+                {showHistory ? "Hide history" : "History"}
+              </ActionButton>
             )}
-            {discardConfirmation}
-          </CompanionPage>
+            {!readOnly && (
+              <ActionButton
+                quiet
+                disabled={(!dirty && !allowUnchanged) || saving}
+                onPress={() => {
+                  void save();
+                }}
+              >
+                {saving ? "Saving…" : (saveLabel ?? "Save")}
+              </ActionButton>
+            )}
+            <ActionButton quiet disabled={saving} onPress={close}>
+              Close
+            </ActionButton>
+          </View>
+        </View>
+        {error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
         )}
+        {discardConfirmation}
+        {showHistory && history && (
+          <DocumentHistory
+            data={history}
+            readOnly={readOnly || saving}
+            onRestore={(value) => {
+              setText(value);
+              setUnreadChanges(false);
+              setEditorSeed((current) => ({
+                text: value,
+                revision: current.revision + 1,
+              }));
+              setShowHistory(false);
+            }}
+          />
+        )}
+        <Fragment key={editorSeed.revision}>
+          {renderEditor({
+            ref: editor,
+            filename: title,
+            initialMarkdown: editorSeed.text,
+            label,
+            description,
+            editable: !saving && !readOnly,
+            onChange: (value) => {
+              setText(value);
+              setUnreadChanges(false);
+            },
+            onDirty: () => {
+              setUnreadChanges(true);
+            },
+            onError: setError,
+          })}
+        </Fragment>
       </View>
     </CompanionOverlay>
   );
@@ -238,12 +213,6 @@ const styles = StyleSheet.create({
   },
   headerActions: { flexDirection: "row", gap: 8 },
   error: { color: colors.danger, padding: 16 },
-  editor: {
-    marginTop: 20,
-    minHeight: 300,
-    textAlignVertical: "top",
-    lineHeight: 24,
-  },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
   discard: {
     gap: 8,

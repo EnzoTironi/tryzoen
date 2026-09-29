@@ -481,3 +481,37 @@ Duas capturas e um vídeo composto dessas capturas foram anexados via `gh --atta
 Esta rodada não mudou a UI de memória. A revisão estrutural apontou três
 observações, duas gating: formato repetido dos schedules e churn; não foram
 introduzidas supressões nem uma abstração genérica para esconder a repetição.
+
+### Décima terceira rodada — cartões de memória e editor único — 29/09/2026
+
+Notas pessoais, memórias aprendidas e trechos históricos agora compartilham os
+cartões de documento e renderizam Markdown. Editar, relacionar e remover continuam
+com seus contratos e confirmações existentes. Prévias privadas não carregam
+imagens de terceiros automaticamente; URLs não seguras não chegam ao renderer.
+
+As notas pessoais passaram ao editor visual. O painel legado com textarea foi
+removido de `DocumentEditor`: arquivos de texto e a ausência do adapter visual
+usam o editor de código existente dentro do mesmo shell, com histórico, limite
+no salvamento, leitura exata do conteúdo e proteção de alterações não salvas.
+Todos os documentos Markdown mantêm o editor visual nas plataformas suportadas.
+
+Validação: `pnpm check` passou com 267 arquivos e 1.624 testes; `pnpm build` e os
+exports Expo web/iOS/Android passaram. Dez cenários novos cobrem URLs de prévias,
+leitura do editor visual, preservação do texto bruto, limite e leitura de versões.
+Esta rodada não alterou banco nem runtime; a última suíte completa continua sendo
+os 420 testes isolados da rodada 12.
+
+No build de produção em execução, foram conferidos modal desktop, sheet mobile,
+editor e descarte sem salvar. A busca real Akita em 28/09/2026 às 03:40 trouxe o
+trecho anterior de Cedarbay sem a entrada norte, enquanto fechar o histórico
+preservou a nota atual. Somente dados sintéticos de revisão foram utilizados.
+Quatro capturas e uma sequência de aproximadamente 15 segundos foram anexadas ao
+PR via `gh --attach`; o vídeo não é gravação contínua.
+
+A revisão estrutural apontou oito observações, cinco gating, ligadas a churn e
+semelhança estrutural de JSX; o scanner também marcou como mortos usos via JSX e
+callbacks de biblioteca. Não foram adicionadas supressões. Paridade completa,
+qualificação em aparelhos e capacidade para um milhão de usuários permanecem
+como gates abertos.
+
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883699640

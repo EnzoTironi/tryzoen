@@ -1338,3 +1338,25 @@ a synthetic marker and restarting the app, without changing retry timestamps.
 The existing account's learned notes remained available in both browser sizes;
 [screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883517046)
 were attached with `gh --attach`. No new memory UI was introduced in wave 12.
+
+### Shared memory cards and document editor — wave 13
+
+Personal notes, learned memories and historical excerpts reuse the shared resource
+card and Markdown renderer. Private previews disable remote images; unsafe URLs
+remain non-interactive text. Existing authorization, confirmation, relationship
+and history behavior is retained.
+
+Personal notes now use the visual editor. The old plain textarea screen has been
+removed from `DocumentEditor`; non-Markdown files and a missing visual adapter
+use the existing source editor within the same shell. Save reads the current
+editor handle, validates length and closes only after successful persistence.
+
+Verified production UI at desktop and mobile viewport sizes, visual editing and
+unsaved-change discard. A real Akita query returned an earlier synthetic memory
+excerpt, then closing history restored the current note. `pnpm check` passed
+267 files / 1,624 tests, `pnpm build` passed, and Expo exported all platforms.
+This client-only change does not rerun or replace wave 12's 420 runtime checks.
+Screenshots and a labelled screenshot-sequence video were attached with `gh --attach`.
+Native-device and production-capacity qualification remain open.
+
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883699640
