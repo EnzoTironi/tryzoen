@@ -41,6 +41,7 @@ const actor = {
 const room = {
   id: randomUUID(),
   roomId: "!room:test",
+  workspaceId: "workspace",
   epoch: "epoch",
   label: "Room",
   kind: "group" as const,

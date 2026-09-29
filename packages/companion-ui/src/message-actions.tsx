@@ -12,6 +12,7 @@ import {
   Smile,
   Pin,
   Mail,
+  Link,
   type LucideIcon,
 } from "lucide-react-native";
 import { colors } from "./theme";
@@ -35,7 +36,9 @@ export function MessageActions({
   onViewReactions,
   onPin,
   onUnread,
+  messageLink,
 }: {
+  readonly messageLink?: string;
   readonly onForward?: () => void;
   readonly onSave?: () => void;
   readonly onEdit?: () => void;
@@ -57,18 +60,17 @@ export function MessageActions({
   const [copyError, setCopyError] = useState(false);
   if (!interaction) return null;
   const { anchor, open, close } = interaction;
-  const copy =
-    onCopy && text.trim()
-      ? async () => {
-          setCopyError(false);
-          try {
-            await onCopy(text);
-            close();
-          } catch {
-            setCopyError(true);
-          }
+  const copy = onCopy
+    ? async (value: string) => {
+        setCopyError(false);
+        try {
+          await onCopy(value);
+          close();
+        } catch {
+          setCopyError(true);
         }
-      : undefined;
+      }
+    : undefined;
   return (
     <View style={styles.actions}>
       <Pressable
@@ -134,12 +136,21 @@ export function MessageActions({
               />
             </View>
             <View style={styles.group}>
-              {copy && (
+              {copy && text.trim() && (
                 <MessageMenuItem
                   icon={Copy}
                   label="Copiar texto"
                   onPress={() => {
-                    void copy();
+                    void copy(text);
+                  }}
+                />
+              )}
+              {copy && messageLink && (
+                <MessageMenuItem
+                  icon={Link}
+                  label="Copiar link da mensagem"
+                  onPress={() => {
+                    void copy(messageLink);
                   }}
                 />
               )}

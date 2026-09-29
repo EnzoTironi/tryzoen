@@ -1829,3 +1829,25 @@ MSC4306 thread subscriptions are present but disabled in the running homeserver.
 Follow-thread notification parity remains open; do not call a bookmark a native
 subscription or present its controls as active without a tested server rollout.
 No database migration, new dependency, or production deployment in this wave.
+
+### Private message links — wave 29
+
+Shared `rooms/links.ts` owns a validated canonical web locator containing the
+room UUID, exact Matrix event and workspace. The room schema and every SQL
+projection now carry workspaceId; the real inbox integration asserts it.
+Compact message actions copy the link only for committed, non-redacted messages.
+Web and Expo supply their application origin through the existing adapters.
+
+`app/companion/connected.tsx` rejects ambiguous query parameters and opens the
+existing authorized `RoomMessageContext`, including the thread-root affordance.
+Closing removes the message parameter through native history without reloading
+or discarding the room draft. Auth callbacks retain the destination query. No
+URL provides a public capability and no new read endpoint bypasses membership.
+
+Check: 275 files / 1,721 tests, nine tasks. Build passed. Separate isolated real
+Postgres/Synapse runs cover context authorization and inbox workspace projection
+(two files / two tests). Browser desktop/mobile verified exact event targeting,
+thread root navigation, clean sidebar and retained draft; zero console errors.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892527473) includes screenshots and a labelled screenshot sequence.
+Structural delta: 23 observations / 11 gates, zero acknowledgements.
+OS-level universal/app links and private Eve message links remain open.

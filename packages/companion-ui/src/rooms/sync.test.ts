@@ -443,6 +443,7 @@ function observeMessages(kind: string, rootId?: string) {
       id: "room",
       roomId: "!room:test",
       label: "Room",
+      workspaceId: "workspace",
       epoch: "epoch",
       kind: "group",
     },

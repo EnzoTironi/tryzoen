@@ -101,7 +101,7 @@ test(
     expect(people.items).toHaveLength(1);
     expect(people.items[0]).toMatchObject({
       kind: "room",
-      room: { id: direct.id },
+      room: { id: direct.id, workspaceId: actor.workspaceId },
       preview: "Private direct preview",
     });
     expect((await listConversationInbox(actor, { query: "%_" })).items).toEqual(

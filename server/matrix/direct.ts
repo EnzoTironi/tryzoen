@@ -51,7 +51,7 @@ export async function findDirectRoom(
   if (!actor.authSessionId) throw new WorkspaceAccessDenied();
   const config = await matrixConfiguration();
   const rows = await query(sql`
-    SELECT d.id, d.room_id AS "roomId", d.id AS epoch, 'direct' AS kind,
+    SELECT d.id, d.workspace_id AS "workspaceId", d.room_id AS "roomId", d.id AS epoch, 'direct' AS kind,
       u.name AS label, u.image AS "avatarUri", n.username
     FROM matrix_direct_rooms d
     JOIN workspaces w ON w.id = d.workspace_id
@@ -76,7 +76,7 @@ export async function listDirectRooms(
     if (!actor.authSessionId) throw new WorkspaceAccessDenied();
     const config = await matrixConfiguration();
     const rows = await query(sql`
-      SELECT d.id, d.room_id AS "roomId", d.id AS epoch, 'direct' AS kind,
+      SELECT d.id, d.workspace_id AS "workspaceId", d.room_id AS "roomId", d.id AS epoch, 'direct' AS kind,
         u.name AS label, u.image AS "avatarUri", n.username
       FROM matrix_direct_rooms d
       JOIN workspaces w ON w.id = d.workspace_id

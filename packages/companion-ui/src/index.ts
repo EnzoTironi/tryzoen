@@ -43,6 +43,7 @@ export type { DocumentHistoryData } from "./document-history";
 
 export { ConversationInbox } from "./chats/inbox";
 export { RoomConversation } from "./rooms/conversation";
+export { roomMessageUrl, parseRoomMessageLocation } from "./rooms/links";
 export { DiscoverBots } from "./creators/discover";
 
 export { ComposerReferenceProvider } from "./references/provider";

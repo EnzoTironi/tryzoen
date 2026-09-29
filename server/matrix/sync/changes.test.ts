@@ -29,6 +29,7 @@ const room = {
   id: "room",
   roomId: "!room:test",
   matrixId: "@viewer:test",
+  workspaceId: "workspace",
   epoch: "epoch",
   label: "Room",
   kind: "group" as const,

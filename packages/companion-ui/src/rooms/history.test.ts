@@ -20,6 +20,7 @@ const page = {
     id: "room",
     roomId: "!room:test",
     label: "Room",
+    workspaceId: "workspace",
     epoch: "epoch",
     kind: "group" as const,
   },

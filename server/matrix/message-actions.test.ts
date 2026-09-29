@@ -132,6 +132,7 @@ it("keeps a redacted root readable for thread navigation but denies content cons
   const room: Parameters<typeof readRoomMessage>[0] = {
     id: input.id,
     label: "Synthetic",
+    workspaceId: "workspace",
     epoch: input.id,
     kind: "group",
     roomId: "!room:test",

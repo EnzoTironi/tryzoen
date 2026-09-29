@@ -1,0 +1,51 @@
+{
+  "date": "2026-09-29",
+  "wave": 29,
+  "scope": [
+    "private exact-event Matrix links",
+    "workspace-bound inbox projection",
+    "authorized context with thread root navigation"
+  ],
+  "checks": {
+    "check": {
+      "tasks": 9,
+      "files": 275,
+      "tests": 1721,
+      "result": "passed"
+    },
+    "build": "passed",
+    "isolatedPostgresSynapse": {
+      "files": 2,
+      "tests": 2,
+      "result": "passed"
+    },
+    "browser": {
+      "desktop": "1440x900",
+      "mobile": "390x844",
+      "consoleErrors": 0,
+      "cases": [
+        "copy and open exact group event",
+        "copy and open thread reply",
+        "navigate to thread root",
+        "return with draft preserved",
+        "inbox workspace projection renders without error"
+      ]
+    }
+  },
+  "structuralReview": {
+    "observations": 23,
+    "gates": 11,
+    "minor": 12,
+    "newSymbols": 0,
+    "acknowledgements": 0,
+    "remaining": "Existing JSX owner size and churn remain structural debt."
+  },
+  "evidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892527473",
+  "video": "verified screenshot sequence, not continuous recording",
+  "limits": [
+    "native app/universal link routing is not configured or qualified",
+    "private Eve message links remain open",
+    "physical devices and million-user capacity are not qualified"
+  ],
+  "productionDeployed": false
+}

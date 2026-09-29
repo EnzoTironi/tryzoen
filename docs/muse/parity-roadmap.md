@@ -1051,3 +1051,29 @@ Validação: `pnpm check` passou com 274 arquivos / 1.717 testes e nove tarefas;
 Criadores permanecem adiados. Push, E2EE, chamadas, início totalmente offline,
 execução em segundo plano e qualificação para um milhão de pessoas continuam
 pendentes; esta rodada não declara toda a paridade concluída.
+
+### Vigésima nona rodada — links privados de mensagens — 29/09/2026
+
+DMs, grupos e respostas de threads oferecem “Copiar link da mensagem” no menu
+compacto. O endereço leva somente identificadores de conversa, evento e espaço;
+o destino reaplica login e autorização. Parâmetros duplicados/inválidos são
+recusados. O contexto exato abre em modal desktop/sheet mobile, com retorno à
+origem da thread e à conversa preservando o rascunho. Nenhuma varredura de
+histórico, token público, tabela ou serviço paralelo foi introduzido.
+
+O workspace passa a fazer parte do contrato de sala e da projeção unificada da
+inbox. Um teste com PostgreSQL real cobre a projeção; o teste Synapse confirma
+contexto autorizado e recusa de conta externa. `pnpm check` passou (275 arquivos /
+1.721 testes, nove tarefas), `pnpm build` passou. Uma tentativa de check encontrou
+disco cheio; após remover apenas cache Next regenerável a execução completa passou.
+
+Desktop 1440×900 e mobile 390×844: copiar/abrir a mensagem exata, resposta de
+thread, navegar à raiz e voltar sem perder o rascunho; zero erros de console.
+[Imagens e sequência de capturas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892527473) anexadas com `gh --attach`.
+Registro: `docs/muse/evidence/message-links-2026-09-29.json`.
+
+Revisão estrutural: 23 observações / 11 gates, sem acknowledgements; tamanho dos
+donos JSX e churn continuam dívida explícita. Links do chat privado Eve e
+Universal Links/App Links para abrir o app nativo permanecem pendentes. O cliente
+Expo copia o endereço web canônico. Esta rodada não altera produção nem conclui
+push, E2EE, chamadas ou qualificação para um milhão de pessoas.

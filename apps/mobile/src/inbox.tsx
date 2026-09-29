@@ -40,6 +40,7 @@ export function MobileRoom(
     <RoomConversation
       {...props}
       data={rooms}
+      linkOrigin={apiOrigin}
       onCopyText={async (text) => {
         await setStringAsync(text);
       }}

@@ -33,6 +33,7 @@ it("drops source metadata if membership disappears during exact-event hydration"
     roomId: "!room:test",
     label: "Private team",
     kind: "group",
+    workspaceId: "workspace",
     epoch: randomUUID(),
   };
   mocks.query.mockResolvedValueOnce([room]).mockResolvedValueOnce([]);

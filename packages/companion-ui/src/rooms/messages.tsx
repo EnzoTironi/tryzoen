@@ -54,6 +54,7 @@ export function RoomMessages({
   onMore,
   avatarUri,
   onCopy,
+  messageLink,
   onReply,
   onProfile,
   members,
@@ -65,6 +66,7 @@ export function RoomMessages({
   readonly roomId: string;
   readonly cacheScope: string;
   readonly onCopy?: (text: string) => Promise<void>;
+  readonly messageLink?: (id: string) => string;
   readonly onReply: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly members: z.infer<typeof roomMemberSchema>[];
@@ -237,6 +239,7 @@ export function RoomMessages({
                 }
                 avatarUri={avatarUri}
                 onCopy={onCopy}
+                messageLink={messageLink}
                 onReply={onReply}
                 onProfile={onProfile}
                 members={members}
@@ -303,6 +306,7 @@ function RoomMessage({
   onUnread,
   avatarUri,
   onCopy,
+  messageLink,
   onReply,
   onProfile,
   members,
@@ -320,6 +324,7 @@ function RoomMessage({
   | "onRetrySend"
   | "avatarUri"
   | "onCopy"
+  | "messageLink"
   | "onReply"
   | "onProfile"
   | "members"
@@ -410,6 +415,7 @@ function RoomMessage({
               />
             ) : (
               <RoomMessageControls
+                messageLink={messageLink}
                 onProfile={onProfile}
                 data={data}
                 roomId={roomId}

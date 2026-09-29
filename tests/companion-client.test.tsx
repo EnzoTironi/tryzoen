@@ -1,5 +1,5 @@
 import type { ReactNode, ComponentProps } from "react";
-import type { NewConversation } from "@zoen/companion-ui";
+import type { NewConversation, RoomConversation } from "@zoen/companion-ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConnectedCompanion } from "@app/companion/connected";
@@ -7,10 +7,12 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn<(path: string) => void>(),
   save: vi.fn<(input: { sessionId: string; title: string }) => Promise<void>>(),
   conversation: undefined as ComponentProps<typeof NewConversation> | undefined,
+  room: undefined as ComponentProps<typeof RoomConversation> | undefined,
+  search: "space=team-test",
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
-  useSearchParams: () => new URLSearchParams("space=team-test"),
+  useSearchParams: () => new URLSearchParams(mocks.search),
 }));
 vi.mock("@web/trpc/client", () => ({
   api: {
@@ -25,7 +27,14 @@ vi.mock("@trpc/client", async (importOriginal) => ({
     mutation: vi.fn<() => Promise<unknown>>(),
   }),
 }));
-vi.mock("@zoen/companion-ui", () => ({
+vi.mock("@zoen/companion-ui", async () => ({
+  parseRoomMessageLocation: (
+    await import("../packages/companion-ui/src/rooms/links")
+  ).parseRoomMessageLocation,
+  RoomConversation: (props: ComponentProps<typeof RoomConversation>) => {
+    mocks.room = props;
+    return <div>Room</div>;
+  },
   CompanionShell: ({ children }: { children: ReactNode }) => children,
   ComposerReferenceProvider: ({ children }: { children: ReactNode }) =>
     children,
@@ -42,6 +51,21 @@ vi.mock("@zoen/companion-ui", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.save.mockResolvedValue(undefined);
+  mocks.search = "space=team-test";
+  mocks.room = undefined;
+});
+it("opens the exact linked message and keeps malformed references out of the context reader", () => {
+  mocks.search =
+    "space=team-test&room=19cdb11a-2a1e-4f87-9508-cb379b63460c&message=%24original";
+  expect(
+    renderToStaticMarkup(<ConnectedCompanion draftScope="test/team" />)
+  ).toContain("Room");
+  expect(mocks.room?.selectedMessage).toBe("$original");
+  mocks.search += "&message=%24another";
+  expect(
+    renderToStaticMarkup(<ConnectedCompanion draftScope="test/team" />)
+  ).toContain("Este link de mensagem é inválido.");
+  expect(mocks.room?.selectedMessage).toBeUndefined();
 });
 it("opens saved conversations without losing the selected workspace", async () => {
   expect(

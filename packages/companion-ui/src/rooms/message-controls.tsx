@@ -22,6 +22,7 @@ export function RoomMessageControls({
   onReact,
   onReply,
   onCopy,
+  messageLink,
   onThread,
   onUnread,
   onProfile,
@@ -33,6 +34,7 @@ export function RoomMessageControls({
   | "onReact"
   | "onReply"
   | "onCopy"
+  | "messageLink"
   | "onThread"
   | "onUnread"
   | "onProfile"
@@ -54,6 +56,7 @@ export function RoomMessageControls({
       <View style={[styles.actions, item.mine && styles.outgoing]}>
         {!item.redacted && (
           <MessageActions
+            messageLink={messageLink?.(item.id)}
             onUnread={onUnread}
             onPin={() => {
               setAction("pin");

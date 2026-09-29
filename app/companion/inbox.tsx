@@ -60,6 +60,9 @@ export function ConnectedRoom(
       {...props}
       data={data}
       onCopyText={(text) => navigator.clipboard.writeText(text)}
+      linkOrigin={
+        typeof window === "undefined" ? undefined : window.location.origin
+      }
       avatarUri="/marketing/zoen-avatar.webp"
     />
   );

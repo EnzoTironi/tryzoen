@@ -19,6 +19,7 @@ vi.mock("@db/queries", () => ({
       roomId: "!room:matrix.test",
       label: "Team room",
       kind: "group",
+      workspaceId: "workspace",
       epoch: "epoch",
       matrixId: "@member:matrix.test",
       name: "Member",

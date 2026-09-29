@@ -38,7 +38,7 @@ export async function listConversationInbox(
       });
     const rooms = configured
       ? await authorizedInboxRooms(actor)
-      : sql`SELECT NULL::text AS id, NULL::text AS "roomId", NULL::text AS epoch, NULL::text AS label, NULL::text AS kind, NULL::text AS username, NULL::text AS "avatarUri", 0::bigint AS "activityAt", false AS ready WHERE false`;
+      : sql`SELECT NULL::text AS id, NULL::text AS "workspaceId", NULL::text AS "roomId", NULL::text AS epoch, NULL::text AS label, NULL::text AS kind, NULL::text AS username, NULL::text AS "avatarUri", 0::bigint AS "activityAt", false AS ready WHERE false`;
     const entries = inboxEntries(actor, input, rooms);
     const rows = z.array(rowSchema).parse(
       await query(sql`${entries}
@@ -119,7 +119,7 @@ function inboxEntries(
         UNION ALL
         SELECT r.id, 'room', CASE WHEN r.kind = 'direct' THEN 'people' ELSE 'groups' END,
           r."activityAt", r.label || ' ' || coalesce(r.username, ''),
-          jsonb_build_object('id',r.id,'roomId',r."roomId",'epoch',r.epoch,'label',r.label,'kind',r.kind,'username',r.username,'avatarUri',r."avatarUri")
+          jsonb_build_object('id',r.id,'workspaceId',r."workspaceId",'roomId',r."roomId",'epoch',r.epoch,'label',r.label,'kind',r.kind,'username',r.username,'avatarUri',r."avatarUri")
         FROM rooms r WHERE NOT ${input.archived}
       )`;
 }

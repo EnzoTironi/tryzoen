@@ -16,6 +16,11 @@ import {
 import { readMatrixRoomSync } from "../../server/matrix/sync/room";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { z } from "zod";
+import { readMatrixContext } from "../../server/matrix/context";
+import {
+  roomMessageUrl,
+  parseRoomMessageLocation,
+} from "../../packages/companion-ui/src/rooms/links";
 
 test(
   "native pins and reactor identities preserve room authorization and reviewed state",
@@ -42,6 +47,21 @@ test(
         ).event_id;
     const first = await send("First pinned reference");
     const second = await send("Second pinned reference");
+    const link = roomMessageUrl("https://app.tryzoen.com", {
+      id: room.id,
+      workspaceId: room.workspaceId,
+      messageId: first,
+    });
+    const location = parseRoomMessageLocation(new URL(link).searchParams);
+    expect(location?.workspaceId).toBe(fixture.actor.workspaceId);
+    if (!location) throw new Error("Expected a valid message link");
+    expect(await readMatrixContext(fixture.guest, location)).toMatchObject({
+      room: { id: room.id, workspaceId: fixture.actor.workspaceId },
+      target: { id: first, text: "First pinned reference" },
+    });
+    await expect(readMatrixContext(outsider.actor, location)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
     await markMatrixRoomRead(fixture.actor, { id: room.id, messageId: first });
     const accountData = (kind: string) =>
       matrixRequest(

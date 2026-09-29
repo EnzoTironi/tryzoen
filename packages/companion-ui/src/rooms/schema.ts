@@ -5,6 +5,7 @@ import { messageReactionSchema } from "../reactions/schema";
 
 export const roomSchema = z.object({
   id: z.string(),
+  workspaceId: z.string().min(1).max(200),
   roomId: z.string(),
   label: z.string(),
   epoch: z.string(),

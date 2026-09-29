@@ -34,6 +34,7 @@ const actor = {
 const rooms = Array.from({ length: 30 }, (_, index) => ({
   id: randomUUID(),
   roomId: `!room${index}:test`,
+  workspaceId: "workspace",
   epoch: randomUUID(),
   label: `Room ${index}`,
   kind: "group",

@@ -1,4 +1,6 @@
 import { useMarkRoomUnread } from "./unread";
+import { roomMessageUrl } from "./links";
+import { RoomMessageContext } from "./context";
 import { RoomPins } from "./pins";
 import { RoomSearch } from "./search";
 import { ConnectionStatus } from "../conversation/connection";
@@ -44,7 +46,13 @@ export function RoomConversation({
   avatarUri,
   onCopyText,
   onOpenRoom,
+  linkOrigin,
+  selectedMessage,
+  onCloseMessage,
 }: {
+  readonly linkOrigin?: string;
+  readonly selectedMessage?: string;
+  readonly onCloseMessage?: () => void;
   readonly data: RoomData;
   readonly cacheScope: string;
   readonly roomId: string;
@@ -61,7 +69,8 @@ export function RoomConversation({
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const exposed = useContext(CompanionVisibility);
-  const visible = exposed && !details && !profile && !searching && !pins;
+  const visible =
+    exposed && !details && !profile && !searching && !pins && !selectedMessage;
   const active = useRoomLifecycle(cacheScope, roomId, exposed);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
@@ -89,6 +98,15 @@ export function RoomConversation({
   });
   const current = messages.isError ? undefined : messages.data;
   const room = current?.pages[0]?.room;
+  const messageLink =
+    room && linkOrigin
+      ? (messageId: string) =>
+          roomMessageUrl(linkOrigin, {
+            id: room.id,
+            workspaceId: room.workspaceId,
+            messageId,
+          })
+      : undefined;
   const typing = useRoomSync(
     data,
     cacheScope,
@@ -169,6 +187,7 @@ export function RoomConversation({
             cacheScope={cacheScope}
             avatarUri={avatarUri}
             onCopy={onCopyText}
+            messageLink={messageLink}
             outgoing={draft.outgoing}
             onRetrySend={draft.retry}
             onSettleSend={draft.settle}
@@ -259,6 +278,7 @@ export function RoomConversation({
             }
             avatarUri={avatarUri}
             onCopyText={onCopyText}
+            messageLink={messageLink}
             onProfile={setProfile}
             visible={visible}
             active={active}
@@ -285,6 +305,19 @@ export function RoomConversation({
           onConversation={() => {
             setDetails(false);
             setRoot(undefined);
+          }}
+        />
+      )}
+      {selectedMessage && onCloseMessage && (
+        <RoomMessageContext
+          key={selectedMessage}
+          data={data}
+          cacheScope={cacheScope}
+          reference={{ id: roomId, messageId: selectedMessage }}
+          onClose={onCloseMessage}
+          onOpenRoom={(id) => {
+            onCloseMessage();
+            onOpenRoom?.(id);
           }}
         />
       )}
@@ -428,6 +461,7 @@ function RoomThread({
   root,
   avatarUri,
   onCopyText,
+  messageLink,
   onProfile,
   visible,
   active,
@@ -438,6 +472,7 @@ function RoomThread({
   "data" | "cacheScope" | "roomId" | "avatarUri" | "onCopyText"
 > & {
   readonly onUnread?: () => void;
+  readonly messageLink?: (id: string) => string;
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
@@ -493,6 +528,7 @@ function RoomThread({
         cacheScope={cacheScope}
         avatarUri={avatarUri}
         onCopy={onCopyText}
+        messageLink={messageLink}
         outgoing={draft.outgoing}
         onRetrySend={draft.retry}
         onSettleSend={draft.settle}

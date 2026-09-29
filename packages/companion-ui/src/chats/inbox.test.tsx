@@ -67,6 +67,7 @@ vi.mock("@tanstack/react-query", async (original) => ({
                   kind: "direct",
                   username: "ana",
                   roomId: "!a:test",
+                  workspaceId: "workspace",
                   epoch: "one",
                 },
                 preview: "Private preview",
