@@ -1,7 +1,7 @@
-import { OntologyInvalid } from "./ontology-validation";
 import { jsonString } from "@shared/validation";
 import type { z } from "zod";
 import {
+  OntologyInvalid,
   ontologyCitations,
   ontologyValidOn,
   validateOntology,
@@ -100,23 +100,6 @@ export const publishOntology = async function (
   await requireWorkspaceAccess(actor, true);
   const graph = await validateOntology(input.graph);
   const repository = WorkspaceRepository;
-  const citations = ontologyCitations(graph);
-  for (const revision of new Set(citations.map((source) => source.revision))) {
-    const sources = citations.filter((source) => source.revision === revision);
-    const selected = await repository.selection(
-      actor,
-      [...new Set(sources.map((source) => source.path))],
-      revision
-    );
-    for (const source of sources) {
-      if (
-        !selected.documents
-          .find((document) => document.path === source.path)
-          ?.content.includes(source.excerpt)
-      )
-        throw new OntologyInvalid({ reason: "source" });
-    }
-  }
   return await repository.write(
     actor,
     {

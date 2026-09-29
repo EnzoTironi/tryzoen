@@ -12,6 +12,7 @@ import {
 } from "../../workspaces/access";
 import { readWorkspaceCapabilities } from "../../workspaces/capabilities";
 import { WorkspaceRepository } from "../../workspaces/repository";
+import { ontologyPath } from "@zoen/companion-ui/ontology";
 
 import {
   ProposeKnowledgeSchema,
@@ -40,17 +41,18 @@ export default defineDynamic({
       return {
         "workspace-knowledge-propose": defineTool({
           description:
-            "Propose a coherent change to workspace knowledge or analysis models for human review in Library. Available only in a private signed-in app conversation. Read the workspace head first. Supply exact file contents, affected paths, dependencies and evidence from authorized files at their revisions or cited web sources. For domain discovery propose knowledge/purpose.md, canonical definitions and knowledge/routing/index.json together. The routing JSON is {version:1,records:[{id:<UUID>,title,summary,terms:[<topic>],paths:[<published knowledge paths>]}]}, up to 60 records and 3 paths each. Preserve each record's UUID across label changes or file moves; update its paths in the same proposal when moving a definition. A routing reference must exist in the resulting revision. This only saves a proposal. It does not approve definitions or execute models. An administrator reviews all files as one change; never claim a proposal was published.",
+            "Propose a coherent change to workspace knowledge, analysis models or ontology records for human review in Library. Available only in a private signed-in app conversation. Read the workspace head first. Supply exact file contents, affected paths, dependencies and evidence from authorized files at their revisions or cited web sources. For ontology changes first read workspace_ontology_read, preserve existing record IDs and include the complete graph as JSON in ontology/workspace.json. Each property has {value,sources:[{path,revision,excerpt}],validTime:null|{from,until}}; links also have sources and validTime. Cite exact passages from existing authorized knowledge files. Leave unknown dates null; until is exclusive. All graph citations are validated and tracked as dependencies, even when not repeated in proposal evidence. Ontology changes require the ontology capability and an administrator's review. For domain discovery propose knowledge/purpose.md, canonical definitions and knowledge/routing/index.json together. The routing JSON is {version:1,records:[{id:<UUID>,title,summary,terms:[<topic>],paths:[<published knowledge paths>]}]}, up to 60 records and 3 paths each. Preserve each record's UUID across label changes or file moves; update its paths in the same proposal when moving a definition. A routing reference must exist in the resulting revision. This only saves a proposal. It does not approve definitions or execute models. An administrator reviews all files as one change; never claim a proposal was published.",
           inputSchema: ProposeKnowledgeSchema.omit({ operationId: true }),
           execute: (input, execution) =>
             withSignal(execution.abortSignal, async () => {
               const actor = await workspaceActorFromPrincipal(
                 execution.session.auth.current ?? undefined
               );
+              const enabled = (await readWorkspaceCapabilities(actor)).enabled;
               if (
-                !(await readWorkspaceCapabilities(actor)).enabled.includes(
-                  "files"
-                )
+                !enabled.includes("files") ||
+                (input.changes.some((change) => change.path === ontologyPath) &&
+                  !enabled.includes("ontology"))
               )
                 throw new WorkspaceAccessDenied();
               return proposeKnowledge(actor, {

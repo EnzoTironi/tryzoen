@@ -8,7 +8,7 @@ import {
 import {
   knowledgeProposalPathSchema,
   knowledgeProposalSchema,
-  knowledgePathSchema,
+  knowledgeChangePathSchema,
   knowledgeRoutingPath,
   knowledgeRoutingSchema,
 } from "@zoen/companion-ui/knowledge";
@@ -26,8 +26,16 @@ import {
 import { readAgentGrantCapabilities } from "./bots";
 import {
   ontologyPath,
+  OntologySchema,
+  type OntologySourceSchema,
   type OntologyActionSchema,
 } from "@zoen/companion-ui/ontology";
+import {
+  ontologyCitations,
+  validateOntology,
+  OntologyInvalid,
+} from "./ontology-validation";
+import { validateKnowledgeProposal } from "./knowledge/validation";
 import { createHash } from "node:crypto";
 import {
   requireWorkspaceAccess,
@@ -155,10 +163,36 @@ const replay = async function (
     });
   return previous?.revision ?? null;
 };
+
+/** Historical quotes are checked only in revisions owned by this workspace. */
+export async function workspaceCitationConflicts(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  citations: readonly z.output<typeof OntologySourceSchema>[]
+) {
+  const conflicts = new Set<string>();
+  for (const revision of new Set(citations.map((source) => source.revision))) {
+    const sources = citations.filter((source) => source.revision === revision);
+    const selected = await WorkspaceRepository.selection(
+      actor,
+      [...new Set(sources.map((source) => source.path))],
+      revision
+    );
+    for (const source of sources) {
+      if (
+        !selected.documents
+          .find((document) => document.path === source.path)
+          ?.content.includes(source.excerpt)
+      )
+        conflicts.add(source.path);
+    }
+  }
+  return [...conflicts];
+}
 async function validateKnowledgeChange(
   input: z.output<typeof WorkspaceChangeSchema>,
   source: WorkspacePublicationSource
 ) {
+  let citations: z.output<typeof OntologySourceSchema>[] = [];
   if (
     source.kind === "agent" &&
     (input.path === "knowledge/purpose.md" ||
@@ -175,12 +209,16 @@ async function validateKnowledgeChange(
     if (source.kind === "agent" && input.content === null)
       throw new WorkspaceAccessDenied();
     if (input.content !== null)
-      await jsonString(knowledgeProposalSchema).parseAsync(input.content);
+      citations = (
+        await validateKnowledgeProposal(
+          jsonString(knowledgeProposalSchema).parse(input.content)
+        )
+      ).citations;
   }
   if (
     source.kind === "knowledge-publication" &&
     (!isValid(knowledgeProposalPathSchema, source.proposal) ||
-      !isValid(knowledgePathSchema, input.path))
+      !isValid(knowledgeChangePathSchema, input.path))
   )
     throw new WorkspaceRepositoryError({ reason: "invalid_input" });
   if (
@@ -189,15 +227,22 @@ async function validateKnowledgeChange(
       input.content !== null)
   )
     throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+  return citations;
 }
 
 async function validateWorkspaceChange(
   input: z.output<typeof WorkspaceChangeSchema>,
   source: WorkspacePublicationSource
 ) {
-  await validateKnowledgeChange(input, source);
-  if (input.path === ontologyPath && source.kind !== "ontology")
-    throw new WorkspaceAccessDenied();
+  const citations = await validateKnowledgeChange(input, source);
+  if (input.path === ontologyPath) {
+    if (!["ontology", "knowledge-publication"].includes(source.kind))
+      throw new WorkspaceAccessDenied();
+    const graph = await validateOntology(
+      jsonString(OntologySchema).parse(input.content)
+    );
+    citations.push(...ontologyCitations(graph));
+  }
   if (
     isValid(PublishedToolPath, input.path) &&
     !["tool-publication", "tool-rollback", "tool-disable"].includes(source.kind)
@@ -268,6 +313,7 @@ async function validateWorkspaceChange(
     throw new WorkspaceRepositoryError({
       reason: "invalid_input",
     });
+  return citations;
 }
 
 export const WorkspaceRepository = {
@@ -517,11 +563,18 @@ export const WorkspaceRepository = {
       // publication cannot be used to bypass their policy or validation.
       if (
         input.changes.length > 1 &&
-        !input.changes.every(({ path }) => path.startsWith("knowledge/"))
+        !input.changes.every(
+          ({ path }) =>
+            path.startsWith("knowledge/") ||
+            (source.kind === "knowledge-publication" && path === ontologyPath)
+        )
       )
         throw new WorkspaceAccessDenied();
-      for (const change of input.changes)
-        await validateWorkspaceChange(change, source);
+      const citations = (
+        await Promise.all(
+          input.changes.map((change) => validateWorkspaceChange(change, source))
+        )
+      ).flat();
       const admin =
         source.kind === "knowledge-publication" ||
         source.kind === "knowledge-rejection" ||
@@ -583,6 +636,8 @@ export const WorkspaceRepository = {
         throw new WorkspaceRepositoryError({
           reason: "conflict",
         });
+      if ((await workspaceCitationConflicts(actor, citations)).length)
+        throw new OntologyInvalid({ reason: "source" });
       const metadata =
         source.kind === "ontology"
           ? {

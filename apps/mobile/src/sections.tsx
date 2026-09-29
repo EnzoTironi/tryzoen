@@ -129,8 +129,9 @@ function LibrarySection({
     () =>
       companionKnowledgeData(rpc, scope, randomUUID, () => {
         void cache.invalidateQueries({ queryKey: ["files"] });
+        void cache.invalidateQueries({ queryKey: ontology.cacheKey });
       }),
-    [cache, scope]
+    [cache, scope, ontology]
   );
   const files = useQuery({
     queryKey: ["files"],

@@ -1,10 +1,16 @@
 import { z } from "zod";
 
-import { WorkspacePathSchema, GitRevisionSchema } from "./files-schema";
+import {
+  WorkspacePathSchema,
+  GitRevisionSchema,
+  knowledgePathSchema,
+} from "./files-schema";
+import { ontologyPath } from "./ontology/schema";
 
-export const knowledgePathSchema = WorkspacePathSchema.refine((path) =>
-  path.startsWith("knowledge/")
-);
+export const knowledgeChangePathSchema = z.union([
+  knowledgePathSchema,
+  z.literal(ontologyPath),
+]);
 export const knowledgeRoutingPath = "knowledge/routing/index.json";
 export const knowledgeRoutingSchema = z.strictObject({
   version: z.literal(1),
@@ -43,10 +49,14 @@ export const knowledgeProposalSchema = z
       .array(
         z
           .object({
-            path: knowledgePathSchema,
+            path: knowledgeChangePathSchema,
             content: z.string().max(262_144).nullable(),
           })
           .strict()
+          .refine(
+            (change) => change.path !== ontologyPath || change.content !== null,
+            "Propose an ontology document, rather than deleting its file"
+          )
       )
       .min(1)
       .max(20)
@@ -56,7 +66,7 @@ export const knowledgeProposalSchema = z
         "Each file must appear once"
       ),
     dependencies: z
-      .array(knowledgePathSchema)
+      .array(knowledgeChangePathSchema)
       .max(20)
       .refine(
         (paths) => new Set(paths).size === paths.length,
@@ -129,11 +139,11 @@ export const knowledgeProposalReviewSchema = z.object({
   changes: z
     .array(
       z.object({
-        path: knowledgePathSchema,
+        path: knowledgeChangePathSchema,
         before: z.string().nullable(),
         after: z.string().nullable(),
       })
     )
     .max(20),
-  conflicts: z.array(knowledgePathSchema).max(60),
+  conflicts: z.array(knowledgeChangePathSchema).max(24),
 });

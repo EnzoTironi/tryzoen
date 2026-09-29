@@ -7,6 +7,9 @@ export const WorkspacePathSchema = z
   )
   .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
 export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);
+export const knowledgePathSchema = WorkspacePathSchema.refine((path) =>
+  path.startsWith("knowledge/")
+);
 
 export const workspaceRevisionSchema = z.object({
   revision: GitRevisionSchema,

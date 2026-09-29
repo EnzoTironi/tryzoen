@@ -2186,3 +2186,26 @@ observations / one repeated-edit gate; no new complexity or duplication finding.
 A local build-cache write encountered a full disk after the build completed.
 Only the verified, regenerable Turbopack cache in this worktree was removed;
 private records, sessions and user files were preserved.
+
+### K1 / wave 44 — reviewed conversational ontology publication
+
+The existing native knowledge proposal accepts the complete canonical ontology
+with related knowledge files. Graph semantics and scoped historical quotes are
+checked before staging, and all graph citations participate in source conflicts
+without relying on the separate evidence list. The private-app/admin boundary,
+ontology capability, immutable drafts, bounded references and atomic CAS/replay
+contract remain explicit. Generic editor/agent publication is still denied.
+
+The shared review shows readable records, claims, validity and connections in
+cards. Publishing refreshes the scoped Library ontology cache; failed review
+authorization clears its stale preview. Eleven isolated integration cases pass,
+including the actual native schema/executor, member denial, forged/foreign
+sources, invalid links and edited-source conflicts. Full check: nine tasks,
+282 files / 1,750 tests, 1m29.433s; build: 54.22s. Chrome verifies desktop review,
+390×844 mobile sheet, normal publication and opening the changed dossier without
+a reload. Evidence is attached to PR 155 with `gh --attach`.
+
+The structural delta reports five repeated-edit gates plus minor complexity/size
+observations and JSX/renamed-symbol indexing limitations. No finding was hidden
+or acknowledged away. K2 semantic execution, K3 private memory replacement and
+K4 dream review remain open; this wave does not claim complete Muse parity.

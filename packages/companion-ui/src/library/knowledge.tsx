@@ -18,6 +18,8 @@ import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { pageStyles } from "../page";
 import { colors } from "../theme";
+import { ontologyPath } from "./ontology/schema";
+import { OntologyReview } from "./ontology/review";
 
 export interface KnowledgeProposalData {
   readonly cacheKey: readonly unknown[];
@@ -47,10 +49,11 @@ export function KnowledgeProposals({
     queryFn: data.list,
     staleTime: 15_000,
   });
-  const items = proposals.data?.items.filter((item) =>
-    `${item.title} ${item.summary}`
-      .toLowerCase()
-      .includes(query.toLowerCase().trim())
+  const items = (proposals.isError ? undefined : proposals.data)?.items.filter(
+    (item) =>
+      `${item.title} ${item.summary}`
+        .toLowerCase()
+        .includes(query.toLowerCase().trim())
   );
   return (
     <View style={styles.collection}>
@@ -106,7 +109,7 @@ export function KnowledgeProposals({
         <Text style={pageStyles.copy}>
           {query
             ? "No matching proposals."
-            : "No changes awaiting review. Ask Zoen to propose a definition, a model or a set of related documents."}
+            : "No changes awaiting review. Ask Zoen to propose records, connections, a definition or an analysis model."}
         </Text>
       )}
       {path && (
@@ -182,7 +185,7 @@ function KnowledgeReview({
       onClose();
     },
   });
-  const snapshot = review.data;
+  const snapshot = review.isError ? undefined : review.data;
   const change = snapshot?.changes[selected];
   return (
     <CompanionSheet title="Review changes" onClose={onClose} maxWidth={960}>
@@ -244,11 +247,13 @@ function KnowledgeReview({
                 label="Current"
                 content={change.before}
                 columns={!compact}
+                ontology={change.path === ontologyPath}
               />
               <KnowledgeSource
                 label="Proposed"
                 content={change.after}
                 columns={!compact}
+                ontology={change.path === ontologyPath}
               />
             </View>
           )}
@@ -335,17 +340,24 @@ function KnowledgeSource({
   label,
   content,
   columns,
+  ontology,
 }: {
   readonly label: string;
   readonly content: string | null;
   readonly columns: boolean;
+  readonly ontology: boolean;
 }) {
   return (
     <View style={[styles.source, columns && styles.sourceColumn]}>
       <Text style={styles.sourceLabel}>{label}</Text>
-      <Text selectable style={styles.sourceText}>
-        {content ?? (label === "Current" ? "New file" : "File will be removed")}
-      </Text>
+      {ontology && content !== null ? (
+        <OntologyReview content={content} />
+      ) : (
+        <Text selectable style={styles.sourceText}>
+          {content ??
+            (label === "Current" ? "New file" : "File will be removed")}
+        </Text>
+      )}
     </View>
   );
 }

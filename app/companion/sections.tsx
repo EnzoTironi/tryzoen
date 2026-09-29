@@ -2,6 +2,7 @@
 import { ConnectedCreatorStudio } from "./settings/creators";
 import { ConnectedSearch } from "./search";
 import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
 import {
@@ -96,6 +97,7 @@ function ConnectedLibrary({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const cache = useQueryClient();
   const utils = api.useUtils();
   const params = useSearchParams();
   const scope = params.get("space") ?? "personal";
@@ -113,9 +115,10 @@ function ConnectedLibrary({
         () => crypto.randomUUID(),
         () => {
           void utils.workspaces.files.invalidate();
+          void cache.invalidateQueries({ queryKey: ontology.cacheKey });
         }
       ),
-    [utils, knowledgeScope]
+    [utils, knowledgeScope, cache, ontology]
   );
   const files = api.workspaces.files.useQuery({});
   const [path, setPath] = useState<string>();

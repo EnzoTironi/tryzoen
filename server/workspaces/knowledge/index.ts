@@ -12,12 +12,14 @@ import {
   WorkspaceWriteSchema,
   WorkspaceRepository,
   WorkspaceRepositoryError,
-} from "./repository";
+  workspaceCitationConflicts,
+} from "../repository";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
-} from "./access";
+} from "../access";
+import { validateKnowledgeProposal } from "./validation";
 
 export const ProposeKnowledgeSchema = z
   .object(knowledgeProposalSchema.shape)
@@ -188,16 +190,9 @@ export async function readKnowledgeProposal(
     actor,
     knowledgeProposalPathSchema.parse(path)
   );
-  const proposal = jsonString(knowledgeProposalSchema).parse(stored.content);
-  const paths = [
-    ...new Set([
-      ...proposal.changes.map((change) => change.path),
-      ...proposal.dependencies,
-      ...proposal.evidence
-        .filter((item) => item.kind === "file")
-        .map((item) => item.path),
-    ]),
-  ];
+  const { proposal, paths, citations } = await validateKnowledgeProposal(
+    jsonString(knowledgeProposalSchema).parse(stored.content)
+  );
   // Reads use the captured head. A concurrent save cannot produce a mixed preview;
   // the publication's CAS still checks this exact head after the human decides.
   const current = await WorkspaceRepository.selection(
@@ -223,31 +218,8 @@ export async function readKnowledgeProposal(
     (filename) =>
       (before.get(filename) ?? null) !== (original.get(filename) ?? null)
   );
-  const citations = new Map<string, string[]>();
-  for (const evidence of proposal.evidence) {
-    if (evidence.kind !== "file") continue;
-    citations.set(evidence.revision, [
-      ...(citations.get(evidence.revision) ?? []),
-      evidence.path,
-    ]);
-  }
-  for (const [revision, filenames] of citations) {
-    const cited = await WorkspaceRepository.selection(
-      actor,
-      filenames,
-      revision
-    );
-    for (const evidence of proposal.evidence) {
-      if (evidence.kind !== "file" || evidence.revision !== revision) continue;
-      if (
-        !cited.documents
-          .find((document) => document.path === evidence.path)
-          ?.content.includes(evidence.excerpt) &&
-        !conflicts.includes(evidence.path)
-      )
-        conflicts.push(evidence.path);
-    }
-  }
+  for (const filename of await workspaceCitationConflicts(actor, citations))
+    if (!conflicts.includes(filename)) conflicts.push(filename);
   return knowledgeProposalReviewSchema.parse({
     path,
     revision: stored.revision,

@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { GitRevisionSchema } from "../files-schema";
-import { knowledgePathSchema } from "../knowledge-schema";
+import { GitRevisionSchema, knowledgePathSchema } from "../files-schema";
 
 const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const label = z.string().trim().min(1).max(120);

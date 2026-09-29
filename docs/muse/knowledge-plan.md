@@ -287,3 +287,37 @@ web administrator evidence editor remains available; conversational corrections,
 full historical/date selection in the Library and unified private learned memory
 still need their complete owner. No private session files, Akita dual writer,
 semantic executor or provider-freshness guarantee was added.
+
+## K1 progress — conversational ontology proposals
+
+Private signed-in conversations can now stage the complete canonical ontology
+alongside its definitions and models through the existing native proposal tool.
+The shared path contract includes only `ontology/workspace.json` in addition to
+knowledge files; drafts cannot delete the graph. Generic editor/agent writes
+still cannot publish ontology, and only administrators can review it. The tool
+also checks that the ontology capability is enabled.
+
+Graph validation and every historical citation run before the draft is stored.
+The proposal's graph citations are automatically included in its bounded source
+set and base-versus-review comparison, even when the author omits them from the
+proposal's separate evidence list. At most 24 distinct files and 24 file/revision
+pairs can be referenced. A stale cited source blocks approval. Publication checks
+the canonical graph and owned quotes at the repository boundary, then writes the
+ontology, companion files and draft removal in one existing CAS publication.
+Successful decision retries still return the original receipt.
+
+The shared review renders records, claims, explicit validity, quoted evidence,
+directional relationships and definitions from the canonical document. Records
+and connections render in batches of 25 with a local expansion control. No
+parallel ontology shape is stored. Review and list surfaces clear stale content
+on failed authorization revalidation; publishing invalidates the scoped ontology
+cache along with workspace files. Chrome verifies a two-file review/publication,
+its new dossier without a reload, and the 390×844 mobile sheet.
+
+Eleven isolated knowledge/ontology integration cases pass. The full required
+check passes all nine tasks (282 files / 1,750 tests, 1m29.433s); the web/agent
+build passes in 54.22s. The structural report retains five repeated-edit gates
+and minor size/complexity observations; it is not a clean quality report.
+No production deployment, database reset or new dependency was needed. This
+provides the reviewed conversational authoring boundary, not a live-model
+evaluation or replacement of private learned memory.
