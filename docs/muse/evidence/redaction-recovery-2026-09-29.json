@@ -60,11 +60,7 @@
     "checkTests": 1701,
     "check": "passed",
     "build": "passed",
-    "expo": [
-      "web",
-      "ios",
-      "android"
-    ],
+    "expo": ["web", "ios", "android"],
     "focusedRealSynapseTests": 3,
     "focusedRealSynapse": "passed",
     "structuralReview": {
