@@ -104,8 +104,8 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 ## Dependências e ordem de entrega
 
 1. **Fundação de comunicação:** contrato de projeção/sync da caixa de entrada → ordenação e não lidas → leitura/digitação → push e recuperação offline. Não ordenar apenas a página carregada e chamar isso de ordenação global. Não adicionar um segundo serviço de chat/presença.
-2. **Ações e experiência cotidiana, em paralelo:** operações de mensagem, voz/mídia, configurações nativas e qualidade do editor. Cada uma tem testes e dono distintos.
-3. **Criadores e memória, em paralelo com comunicação:** entrevista/testes/revisão pelo chat; ingestão autorizada e publicação de corpus; corrigir gates do motor e sua operação. Sonhos não bloqueiam mensagens nem a autoria deliberada de arquivos.
+2. **Ações e experiência cotidiana:** operações de mensagem, voz/mídia, configurações nativas e qualidade do editor. Cada uma tem testes e dono distintos.
+3. **Criadores e memória:** entrevista/testes/revisão pelo chat; ingestão autorizada e publicação de corpus; corrigir gates do motor e sua operação. Sonhos não bloqueiam mensagens nem a autoria deliberada de arquivos.
 4. **Colaboração:** hangouts dependem de identidade/membership e transporte de mídia qualificado; agentes em grupo dependem de concessões e entrega durável; edição colaborativa de documento exige contrato próprio antes de considerar Yjs.
 5. **Marketplace:** interface de descoberta pode avançar com contratos definidos; publicação depende de versão/fonte/autoridade e acesso pago depende de entitlements. Nunca lançar acesso só porque o cartão ficou pronto.
 6. **Muse proativo e distribuição:** Feed/Ideias dependem de fontes autorizadas, orçamento e rotinas, não de sonhos automáticos. Aparelhos reais, proteção contra abuso e capacidade são gates de lançamento e acompanham as entregas.
@@ -285,6 +285,43 @@ falha em um usuário não pode bloquear outros, e filas precisam de limites,
 retentativas e medidas de vazão. Offline, E2EE, chamadas, ingestão externa/YouTube,
 marketplace público, sonhos seguros, aparelhos reais e capacidade de um milhão
 de usuários continuam com critérios abertos. Esta rodada não os certifica.
+
+### Nona rodada — isolamento da entrega de memória — 28/09/2026
+
+A entrega agora confirma cada conta separadamente: um lote corrompido não desfaz
+as contas saudáveis. Cada invocação visita até cinco namespaces, com até 25 fontes
+por conta. A fila restante volta atrás de quem já aguardava. Novas capturas
+herdam a elegibilidade do primeiro evento pendente e não furam a retentativa.
+Falhas persistem contagem/data e espera exponencial de 60 segundos até uma hora;
+o erro do agendamento continua visível depois de atender as demais contas.
+
+Os testes com o Akita real cobrem arquivo já gravado antes da falha, replay,
+retentativa, conta ruidosa, workers concorrentes, namespace bloqueado e revogação
+da organização com vínculo residual no workspace. O comando de medição
+`scripts/session-archive-capacity.ts` cria somente contas/corpora sintéticos no
+banco isolado, verifica os recibos e produz JSON; não usa modelos nem embeddings.
+
+A migração 0091 acrescenta metadados de entrega e índices. Não há reset de banco,
+segunda infraestrutura de filas nem troca de motor. A cadência atual de um minuto
+continua limitada a um dispatcher: fan-out, topologia de volumes, corpora grandes,
+planos de consulta sob backlog inativo e SLOs de produção permanecem pendentes.
+O contrato completo está em [entrega de memória](file-memory.md#fair-session-delivery-and-durable-retry--2026-09-28).
+
+Validação: 405 testes isolados em 104 arquivos passaram; `pnpm check` passou
+com 1.591 testes em 259 arquivos e `pnpm db:check` passou. A comparação local
+com 500 fontes/20 contas registrou 10,87 s com um worker e 6,43 s com quatro,
+com recibos conferidos em todas as contas. O p95 de cada dispatch subiu de
+2,77 s para 6,43 s sob concorrência. É uma amostra por configuração em disco
+local, sem embeddings/modelos/cadência de cron; não representa capacidade de
+um milhão de usuários. [Relatório reproduzível](evidence/session-delivery-2026-09-28.json).
+
+O build passou. Na interface em execução, um turno sintético respondeu e persistiu
+após recarregar no mobile; o cron normal confirmou suas quatro fontes, sem
+pendências ou falhas. [Capturas desktop/mobile e sequência de oito segundos](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5882578474)
+foram anexadas ao PR por `gh --attach`. A revisão estrutural do incremento contra
+`f34a3eed` reteve cinco observações, uma gating por churn do capturador, sem
+supressões; as demais são tamanho do JSON de evidência e listas de scripts/migrações.
+O CI do commit anterior está integralmente aprovado; esta rodada será revalidada.
 
 ### Critérios para cada rodada
 

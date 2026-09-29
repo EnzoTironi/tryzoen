@@ -155,6 +155,7 @@
     "infra:fly-pg:plan:prod": "bash ./scripts/fly-alchemy-pg.sh plan --stage prod",
     "infra:fly-pg:deploy:prod": "bash ./scripts/fly-alchemy-pg.sh deploy --stage prod",
     "ingress:set-webhooks": "bash ./scripts/set-channel-webhooks.sh",
+    "test:memory:capacity": "node --env-file=tests/runtime/.env.example --import tsx scripts/session-archive-capacity.ts",
     "test:runtime:setup": "node --import tsx scripts/runtime-tests.ts up",
     "test:runtime:reset": "node --import tsx scripts/runtime-tests.ts reset",
     "test:runtime:down": "node --import tsx scripts/runtime-tests.ts down",

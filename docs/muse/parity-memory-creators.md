@@ -75,7 +75,7 @@ Qualify retained-volume placement, per-tenant quotas, queue fairness, host/super
 
 Acceptance: lost/corrupt index and whole-volume recovery are tested separately; missing authoritative files fail closed. Restoring stale snapshots cannot resurrect erased namespaces. Bounded reads/backlogs remain fair under one noisy tenant. Measure latency, throughput and recovery objectives before claiming capacity.
 
-Owners: `server/memory/*`, `db/services/memory-corpora.ts`, `scripts/ai-memory-lifecycle-acceptance.ts`, runtime memory suites and deployment configuration. Can run in parallel with C1/C2 if file ownership is respected.
+Owners: `server/memory/*`, `db/services/memory-corpora.ts`, `scripts/ai-memory-lifecycle-acceptance.ts`, runtime memory suites and deployment configuration. Coordinate changes with C1/C2 through these existing owners.
 
 ### M2 — Safe opt-in dreaming
 
@@ -97,7 +97,7 @@ Dependencies: communications realtime/durable delivery and C3 for published spec
 
 1. Work proceeds with one agent at the user's latest request. Creator work follows C1 then C2/C3; operational memory follows M1 then M2. Shared schemas, UI and callers change together.
 2. Publication follows corpus authorization; paid access follows entitlement enforcement. G1 follows Matrix delivery semantics. Preview creation and result retrieval through chat are now implemented; the checkpoints below record their boundaries.
-3. Next operational increment: isolate ingestion failure and bound work per namespace so one damaged or noisy tenant cannot block the others. Qualify this before opt-in dreaming, public publication or a capacity claim.
+3. Operational delivery isolation is implemented in the M1 checkpoint below. Continue with measured throughput, scheduler fan-out and recovery before opt-in dreaming, public publication or a capacity claim.
 4. Every slice records implemented/partial/unverified status, authorization tests, narrow runtime evidence, `pnpm check`, `pnpm build` and relevant cross-platform/browser evidence. Attach verified images/video to its PR with `gh --attach`. Do not rerun unrelated heavy suites concurrently against the same database.
 
 ## Research and version evidence
@@ -208,3 +208,19 @@ catalog. The narrow dependency correction and its removal gate are documented in
 YouTube/external extraction, public marketplace, paid access, dreaming and scale
 qualification remain open. The next M1 slice isolates tenant ingestion failures
 and bounds work fairly before any capacity claim.
+
+### M1 delivery checkpoint — 2026-09-28
+
+The [fair delivery contract](file-memory.md#fair-session-delivery-and-durable-retry--2026-09-28)
+replaces the all-account transaction with separately committed, bounded batches.
+Failure persists per-account retry timing without blocking healthy accounts;
+capture cannot bypass the failed head. Concurrent workers skip owned namespaces,
+and organization revocation is checked even when workspace membership remains.
+Migration 0091 is additive. Native engine ingestion and immutable-file replay
+remain the same implementation.
+
+A reproducible `scripts/session-archive-capacity.ts` harness measures real native
+ingestion with synthetic accounts and JSON output, fenced to the isolated runtime
+database and temporary files. It excludes the minute cadence; results must not be
+extrapolated to a million accounts. Next M1 gates are measured dispatcher capacity,
+scheduler fan-out, large/inactive-backlog query plans and retained-volume recovery.

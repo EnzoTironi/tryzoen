@@ -79,9 +79,14 @@ test.each(["corpus", "namespace", "volume"] as const)(
     const preserved = `${target}.preserved-${randomUUID()}`;
     await rename(target, preserved);
     try {
-      await expect(drainSessionSources()).rejects.toThrow(
-        "Memory requires both its source files and original index."
-      );
+      await expect(drainSessionSources()).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({
+            message:
+              "Memory requires both its source files and original index.",
+          }),
+        ],
+      });
       const [queued] = await query<{
         payload: unknown;
         stored: string | null;
@@ -94,6 +99,12 @@ test.each(["corpus", "namespace", "volume"] as const)(
       await rm(target, { recursive: true, force: true });
       await rename(preserved, target);
     }
+    expect(await drainSessionSources()).toEqual({
+      stored: 0,
+      configured: true,
+    });
+    await query(sql`UPDATE memory_session_sources SET available_at = now()
+      WHERE namespace_id = ${owner.id} AND stored_at IS NULL`);
     expect(await drainSessionSources()).toEqual({
       stored: 1,
       configured: true,

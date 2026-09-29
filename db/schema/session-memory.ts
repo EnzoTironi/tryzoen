@@ -3,6 +3,7 @@ import {
   bigserial,
   check,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -31,6 +32,11 @@ export const memorySessionSources = pgTable(
       .defaultNow()
       .notNull(),
     storedAt: timestamp("stored_at", { withTimezone: true }),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    deliveryFailures: integer("delivery_failures").default(0).notNull(),
+    lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
   },
   (table) => [
     primaryKey({ columns: [table.namespaceId, table.eventId] }),
@@ -42,11 +48,15 @@ export const memorySessionSources = pgTable(
       "memory_session_source_delivery",
       sql`(${table.payload} IS NULL) = (${table.storedAt} IS NOT NULL)`
     ),
+    check(
+      "memory_session_source_failures",
+      sql`${table.deliveryFailures} >= 0 AND (${table.deliveryFailures} = 0) = (${table.lastFailedAt} IS NULL)`
+    ),
     index("memory_session_sources_pending_idx")
-      .on(table.captureSequence)
+      .on(table.availableAt, table.captureSequence)
       .where(sql`${table.storedAt} IS NULL`),
     index("memory_session_sources_owner_pending_idx")
-      .on(table.namespaceId)
+      .on(table.namespaceId, table.captureSequence)
       .where(sql`${table.storedAt} IS NULL`),
   ]
 );

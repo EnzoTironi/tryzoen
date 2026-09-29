@@ -1240,3 +1240,17 @@ Next operational work is fair, bounded namespace ingestion with isolated failure
 durable retry and measured throughput. Continue with one agent as requested. The
 public-marketplace, external-source, device, offline, encryption, calling and
 capacity gates in the roadmap remain open.
+
+### Session delivery isolation — wave 9
+
+Memory archive delivery commits one authorized namespace at a time. Failed
+accounts retain exact pending sources and durable backoff; healthy accounts keep
+their acknowledgements. Bounded batches rotate waiting accounts, new capture
+cannot bypass a failed head, and concurrent workers skip locked namespaces.
+Organization membership is fenced alongside workspace access. The unchanged
+native Akita engine still verifies ingestion and immutable file replay.
+
+See the [delivery and measurement contract](file-memory.md#fair-session-delivery-and-durable-retry--2026-09-28).
+The local capacity harness uses only disposable synthetic data in the isolated
+runtime database. Minute-cadence fan-out and production-volume capacity remain
+unqualified; this delivery fix is not a million-account result.

@@ -290,12 +290,18 @@ test("disk errors retain queued content for retry; account deletion fences sourc
   const raw = join(directory, owner.id, "raw");
   await mkdir(raw, { recursive: true, mode: 0o700 });
   await writeFile(join(raw, "eve"), "Synthetic failed volume layout");
-  await expect(drainSessionSources()).rejects.toThrow(/EEXIST|ENOTDIR/);
+  await expect(drainSessionSources()).rejects.toHaveProperty(
+    "errors.0.message",
+    expect.stringMatching(/EEXIST|ENOTDIR/)
+  );
   const [pending] = await query<{ payload: unknown }>(
     sql`SELECT payload FROM memory_session_sources WHERE event_id = ${event.meta.id}`
   );
   expect(pending?.payload).toMatchObject({ eventId: event.meta.id });
   await rm(join(raw, "eve"));
+  expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
+  await query(sql`UPDATE memory_session_sources SET available_at = now()
+    WHERE namespace_id = ${owner.id} AND stored_at IS NULL`);
   expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
   await query(sql`DELETE FROM workspaces WHERE id = ${actor.workspaceId}`);
   expect(
@@ -313,7 +319,7 @@ test("disk errors retain queued content for retry; account deletion fences sourc
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });
 
-test("drains at most 25 events and serializes capture identity inside its owner boundary", async () => {
+test("drains at most 25 events per account and serializes capture identity inside its owner boundary", async () => {
   await using workspace = await workspaceFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
@@ -424,7 +430,13 @@ test("refuses to acknowledge a modified outbox payload", async () => {
   await query(
     sql`UPDATE memory_session_sources SET payload = jsonb_set(payload, '{text}', '"Modified without receipt"') WHERE event_id = ${event.meta.id}`
   );
-  await expect(drainSessionSources()).rejects.toThrow("integrity verification");
+  await expect(drainSessionSources()).rejects.toMatchObject({
+    errors: [
+      expect.objectContaining({
+        message: "Session source failed integrity verification.",
+      }),
+    ],
+  });
   const [pending] = await query<{ storedAt: string | null }>(
     sql`SELECT stored_at AS "storedAt" FROM memory_session_sources WHERE event_id = ${event.meta.id}`
   );
