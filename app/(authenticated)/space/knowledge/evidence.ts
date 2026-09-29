@@ -49,7 +49,11 @@ export function linkOntologyEvidence(
   citation: z.output<typeof OntologySourceSchema>,
   validTime: z.output<typeof OntologyClaimSchema>["validTime"]
 ) {
-  const sources = [...target.sources, citation];
+  const sources = target.sources.some(
+    (item) => JSON.stringify(item) === JSON.stringify(citation)
+  )
+    ? target.sources
+    : [...target.sources, citation];
   if (target.kind === "link")
     return {
       ...graph,

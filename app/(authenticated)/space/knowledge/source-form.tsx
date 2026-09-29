@@ -29,6 +29,7 @@ export function OntologySourceForm({
   const [path, setPath] = useState("");
   const [targetId, setTargetId] = useState("record");
   const [invalid, setInvalid] = useState(false);
+  const [draftExcerpt, setExcerpt] = useState("");
   const candidate = api.workspaces.files.useQuery(
     { path },
     { enabled: !!path }
@@ -56,12 +57,6 @@ export function OntologySourceForm({
           return;
         }
         const citation = { path, revision, excerpt };
-        if (
-          target.sources.some(
-            (item) => JSON.stringify(item) === JSON.stringify(citation)
-          )
-        )
-          return;
         const from = z.string().parse(values.get("from") ?? "") || null;
         const until = z.string().parse(values.get("until") ?? "") || null;
         const validTime = from || until ? { from, until } : null;
@@ -111,6 +106,10 @@ export function OntologySourceForm({
         placeholder={t("Trecho usado como evidência")}
         maxLength={2000}
         required
+        value={draftExcerpt}
+        onChange={(event) => {
+          setExcerpt(event.target.value);
+        }}
       />
       {target?.kind !== "record" && (
         <>
@@ -146,7 +145,13 @@ export function OntologySourceForm({
           pending ||
           !candidate.data?.revision ||
           !target ||
-          target.sources.length >= 10
+          (target.sources.length >= 10 &&
+            !target.sources.some(
+              (citation) =>
+                citation.path === path &&
+                citation.revision === candidate.data.revision &&
+                citation.excerpt === draftExcerpt
+            ))
         }
       >
         {t("Vincular fonte")}

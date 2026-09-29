@@ -2175,3 +2175,14 @@ but are imported, rendered, type checked and covered by the browser journey.
 Library complexity no longer regresses, and historical reads reuse the owning
 adapter. The report is not clean; no finding was hidden or acknowledged away.
 This read journey does not implement a second memory authority or complete K3/K4.
+
+A final evidence-editor correction permits changing an already linked citation's
+validity without duplicating that citation, including when the ten-source limit
+is reached. Two focused property/link cases confirm citation preservation and
+immutable input; Chrome confirms unknown-to-explicit validity through the actual
+form with the same path/revision/excerpt. `pnpm check` now passes 282 files /
+1,750 tests and all nine tasks (1m8.093s). The final structural delta has two
+observations / one repeated-edit gate; no new complexity or duplication finding.
+A local build-cache write encountered a full disk after the build completed.
+Only the verified, regenerable Turbopack cache in this worktree was removed;
+private records, sessions and user files were preserved.
