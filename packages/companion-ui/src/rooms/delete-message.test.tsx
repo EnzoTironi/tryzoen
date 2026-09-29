@@ -29,6 +29,7 @@ const data: RoomData = {
   setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
+  setAvatar: vi.fn<RoomData["setAvatar"]>(),
   changeMembership: vi.fn<RoomData["changeMembership"]>(),
   setNotifications: vi.fn<RoomData["setNotifications"]>(),
   setTyping: vi.fn<RoomData["setTyping"]>(),

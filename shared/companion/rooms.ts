@@ -98,6 +98,11 @@ export function companionRoomData(
         await rpc.mutation("workspaces.rooms.changeMembership", input)
       );
     },
+    async setAvatar(input) {
+      return roomRenameResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.setAvatar", input)
+      );
+    },
     async rename(input) {
       return roomRenameResultSchema.parse(
         await rpc.mutation("workspaces.rooms.rename", input)

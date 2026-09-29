@@ -4,6 +4,7 @@ import { RoomNotificationSettings } from "./notifications";
 import { PresenceIndicator } from "./presence";
 import type { roomPresenceSchema } from "./schema";
 import { RenameRoom } from "./rename";
+import { EditRoomAvatar } from "./avatar";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -47,7 +48,9 @@ export function RoomDetails({
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [panel, setPanel] = useState<"rename" | "manage" | "leave">();
+  const [panel, setPanel] = useState<
+    "rename" | "avatar" | "manage" | "leave"
+  >();
   const closePanel = () => {
     setPanel(undefined);
   };
@@ -80,6 +83,15 @@ export function RoomDetails({
         onClose={closePanel}
       />
     );
+  if (panel === "avatar")
+    return (
+      <EditRoomAvatar
+        data={data}
+        cacheScope={cacheScope}
+        room={page.room}
+        onClose={closePanel}
+      />
+    );
   return (
     <SheetSurface
       title="Informações do grupo"
@@ -94,7 +106,12 @@ export function RoomDetails({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={styles.portrait}>
-            <ConversationAvatar name={page.room.label} group size={100} />
+            <ConversationAvatar
+              name={page.room.label}
+              uri={page.room.avatarUri ?? undefined}
+              group
+              size={100}
+            />
             {bots > 0 && (
               <View style={styles.agentPortrait}>
                 <ConversationAvatar name="Zoen" uri={avatarUri} size={36} />
@@ -105,20 +122,36 @@ export function RoomDetails({
             {page.room.label}
           </Text>
           {permissions.data?.mayManage && !permissions.isError && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Editar nome do grupo"
-              onPress={() => {
-                setPanel("rename");
-              }}
-              style={{
-                minHeight: 44,
-                justifyContent: "center",
-                paddingHorizontal: 16,
-              }}
-            >
-              <Text style={styles.actionText}>Editar nome</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row" }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Editar nome do grupo"
+                onPress={() => {
+                  setPanel("rename");
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text style={styles.actionText}>Editar nome</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Editar foto do grupo"
+                onPress={() => {
+                  setPanel("avatar");
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text style={styles.actionText}>Editar foto</Text>
+              </Pressable>
+            </View>
           )}
           <Text style={styles.subtitle}>
             {people}

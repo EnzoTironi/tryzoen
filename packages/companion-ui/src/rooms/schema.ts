@@ -1,4 +1,4 @@
-import type { inlineAttachmentSchema } from "../attachments/schema";
+import { inlineAttachmentSchema } from "../attachments/schema";
 import { conversationDraftSchema } from "../session/input";
 import { z } from "zod";
 import { messageReactionSchema } from "../reactions/schema";
@@ -12,6 +12,7 @@ export const roomSchema = z.object({
   kind: z.enum(["group", "direct"]),
   username: z.string().nullable().optional(),
   avatarUri: z.string().nullable().optional(),
+  avatarRevision: z.uuid().nullable().optional(),
 });
 export const directPersonSchema = z.object({
   name: z.string(),
@@ -81,6 +82,17 @@ export const roomRenameSchema = roomCreateSchema.pick({ name: true }).extend({
 export const roomRenameResultSchema = z.object({
   status: z.enum(["saved", "conflict"]),
   room: roomSchema,
+});
+export const roomAvatarFileSchema = inlineAttachmentSchema.refine((file) =>
+  ["image/jpeg", "image/png", "image/webp", "image/avif"].includes(
+    file.mediaType
+  )
+);
+export const roomAvatarWriteSchema = z.object({
+  id: roomReadSchema.shape.id,
+  operationId: z.uuid(),
+  expectedRevision: z.uuid().nullable(),
+  file: roomAvatarFileSchema.nullable(),
 });
 export const roomMembershipChangeSchema = z.discriminatedUnion("action", [
   z.object({ id: z.uuid(), action: z.literal("leave") }),
@@ -350,6 +362,9 @@ export interface RoomData {
   ) => Promise<z.infer<typeof roomMembershipResultSchema>>;
   rename: (
     input: z.infer<typeof roomRenameSchema>
+  ) => Promise<z.infer<typeof roomRenameResultSchema>>;
+  setAvatar: (
+    input: z.infer<typeof roomAvatarWriteSchema>
   ) => Promise<z.infer<typeof roomRenameResultSchema>>;
   notifications: (
     input: z.infer<typeof roomNotificationsReadSchema>,

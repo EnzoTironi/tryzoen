@@ -124,6 +124,8 @@ export const workspaceGroupBindings = pgTable(
     installationId: text("installation_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     label: text("label").notNull(),
+    avatarUri: text("avatar_uri"),
+    avatarRevision: uuid("avatar_revision"),
     createdBy: text("created_by").notNull(),
     epoch: uuid("epoch").defaultRandom().notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -140,6 +142,10 @@ export const workspaceGroupBindings = pgTable(
     check(
       "workspace_group_bindings_channel_check",
       sql`${table.channel} IN ('telegram', 'matrix')`
+    ),
+    check(
+      "workspace_group_bindings_avatar_check",
+      sql`${table.avatarUri} IS NULL OR (${table.avatarRevision} IS NOT NULL AND octet_length(${table.avatarUri}) <= 32791 AND ${table.avatarUri} ~ ('^data:image/webp' || chr(59) || 'base64,[A-Za-z0-9+/]+={0,2}$'))`
     ),
   ]
 );

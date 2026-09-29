@@ -1958,3 +1958,18 @@ report draft loss across the responsive breakpoint with a thread open.
 Serial check (280 files / 1,740 tests), build and desktop/mobile round trip
 passed. No synthetic report submitted, no production deployment.
 Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895589746.
+
+### Group photos — wave 38
+
+Shared details now expose admin-only photo review/replacement/removal. The
+server normalizes accepted rasters to metadata-free 192×192 WebP (24 KiB cap),
+writes native Matrix avatar state and its bounded authorized display projection.
+Revision checks share the membership lock; the native operation marker repairs
+lost acknowledgements without duplicate publication/upload. Migration 0096 was
+applied only to isolated/review DBs. Sharp is pinned to stable 0.35.5.
+
+Real PostgreSQL/Synapse avatar integration passed, plus the full check (280 files /
+1,740 tests), build and desktop/mobile UI upload/save/reload/removal.
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895904261.
+Photo source files are never persisted; native historical state/media retention
+is separate from clearing the currently displayed photo. See universal-client.md.

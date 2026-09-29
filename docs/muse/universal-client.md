@@ -226,3 +226,32 @@ identity; it no longer sits underneath the large avatar and duplicate full-width
 back controls. Desktop and 390 × 844 mobile Chrome checks verified navigation
 and the increased reading space. This browser evidence does not qualify native
 keyboard or physical-device behavior.
+
+## Group photo transport — 2026-09-29
+
+The shared group information sheet/modal supports an administrator choosing,
+previewing, replacing or removing its photo. The existing web/Expo attachment
+adapter supplies one JPEG, PNG, WebP or AVIF within the 3 MiB request envelope.
+The server verifies a decodable raster, caps input at 24 million pixels, applies
+EXIF orientation, center-crops to 192×192, strips metadata and encodes WebP.
+The encoded thumbnail is capped at 24 KiB; decoding has a five-second processing
+limit. HEIC and interactive crop controls are not part of this slice.
+
+Sharp 0.35.5 is the current stable direct server dependency. It replaces the
+previous transitive 0.35.4 within Next's compatible range; it does not ship in
+the React Native client. The native Matrix `m.room.avatar` state points to this
+normalized media. The group binding keeps the bounded display projection so
+authorized inbox reads do not fan out into one media request per row. Originals
+and original filenames are not uploaded to Matrix or stored in the projection.
+
+Photo writes share the membership/name lock, recheck administrative authority
+and compare the displayed revision. A native operation marker and digest allow
+an accepted write to be reconciled after a lost response without another upload.
+An upload whose response is lost before publishing room state can still leave
+an unreferenced homeserver blob; homeserver media retention remains operational
+work. Removing the photo clears the current state and projection, not historical
+Matrix state or copies already received by participants. Native external state
+writers have no compare-and-set guarantee.
+
+Reference: [Matrix room avatar](https://spec.matrix.org/latest/client-server-api/#mroomavatar),
+[Sharp input bounds](https://sharp.pixelplumbing.com/api-constructor/).

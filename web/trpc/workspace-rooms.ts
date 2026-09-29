@@ -1,3 +1,5 @@
+import { setMatrixRoomAvatar } from "../../server/matrix/avatar";
+import { roomAvatarWriteSchema } from "@zoen/companion-ui/rooms";
 import {
   readThreadSubscription,
   setThreadSubscription,
@@ -194,6 +196,12 @@ export const workspaceRoomsRouter = {
     .output(roomMembershipResultSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, () => changeMatrixGroupMembership(ctx.actor, input))
+    ),
+  setAvatar: workspaceProcedure
+    .input(roomAvatarWriteSchema)
+    .output(roomRenameResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setMatrixRoomAvatar(ctx.actor, input))
     ),
   rename: workspaceProcedure
     .input(roomRenameSchema)

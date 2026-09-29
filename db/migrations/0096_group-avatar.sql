@@ -1,0 +1,3 @@
+ALTER TABLE "workspace_group_bindings" ADD COLUMN "avatar_uri" text;--> statement-breakpoint
+ALTER TABLE "workspace_group_bindings" ADD COLUMN "avatar_revision" uuid;--> statement-breakpoint
+ALTER TABLE "workspace_group_bindings" ADD CONSTRAINT "workspace_group_bindings_avatar_check" CHECK ("workspace_group_bindings"."avatar_uri" IS NULL OR ("workspace_group_bindings"."avatar_revision" IS NOT NULL AND octet_length("workspace_group_bindings"."avatar_uri") <= 32791 AND "workspace_group_bindings"."avatar_uri" ~ ('^data:image/webp' || chr(59) || 'base64,[A-Za-z0-9+/]+={0,2}$')));

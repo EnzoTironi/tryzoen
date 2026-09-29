@@ -155,6 +155,7 @@ export async function pollNativeSync(
           "m.reaction",
           "m.room.member",
           "m.room.name",
+          "m.room.avatar",
           "m.room.pinned_events",
         ],
       },

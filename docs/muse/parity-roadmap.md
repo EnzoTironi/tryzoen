@@ -37,13 +37,13 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 | ------- | ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | COMM-01 | Caixa de entrada unificada    | Parcial         | Ordenação global por atividade, prévia e horário reais, não lidas/menções, paginação estável, filtros e fixadas sem esconder conversas         |
 | COMM-02 | Sincronização e recuperação   | Parcial         | Matrix incremental, preenchimento de lacunas, retomada após queda/reinício e conta trocada, envio idempotente, cache autorizado e limitado     |
-| COMM-03 | Leitura, digitação e presença | Pendente        | Marcadores por pessoa/thread, privacidade e visibilidade corretas, expiração de digitação, ausência de estados simulados                       |
+| COMM-03 | Leitura, digitação e presença | Parcial         | Marcadores por pessoa/thread, privacidade e visibilidade corretas, expiração de digitação, ausência de estados simulados                       |
 | COMM-04 | DMs, contatos e solicitações  | Parcial         | DMs existentes no mesmo espaço preservados; descoberta por username, convites externos, aceitar/recusar e impedir abuso com política explícita |
 | COMM-05 | Grupos e comunidades          | Parcial         | Criar, convidar, entrar/sair, papéis, remoção, dados do grupo, permissões do bot e política de histórico testados                              |
 | COMM-06 | Threads e ações de mensagem   | Parcial         | Reação/resposta existentes; editar, excluir, salvar, encaminhar, seguir thread e voltar à origem com autoridade e estados consistentes         |
 | COMM-07 | Busca e organização           | Parcial         | Busca autorizada em mensagens/anexos com filtros e salto ao resultado; arquivar, fixar e exportar DMs/grupos além do chat pessoal              |
 | COMM-08 | Notificações e offline        | Pendente        | Push real, preferências/mute, menções/threads, deep links, recuperação offline e nenhuma notificação duplicada por retry                       |
-| COMM-09 | Segurança social              | Pendente        | Bloquear, denunciar com escolha de evidências, controle de desconhecidos, moderação, limites e exclusão/exportação com alcance explicado       |
+| COMM-09 | Segurança social              | Parcial         | Bloquear, denunciar com escolha de evidências, controle de desconhecidos, moderação, limites e exclusão/exportação com alcance explicado       |
 | COMM-10 | Criptografia e aparelhos      | Não qualificado | E2EE, verificação, chaves/recuperação, mídia cifrada e participação autorizada de bots provadas entre dispositivos                             |
 | COMM-11 | Coordenação leve              | Pendente        | Mensagens agendadas, lembretes pessoais, enquetes e eventos/RSVP com ciclo completo e fusos corretos; entrega faseada após o mensageiro básico |
 
@@ -53,7 +53,7 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 | -------- | ----------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | MEDIA-01 | Editor e referências                | Base implementada | Formatação e referências existentes; preservar rótulos após remontagem, IME/undo/seleção e teclado físico/virtual nos clientes                |
 | MEDIA-02 | Arquivos e cartões                  | Parcial           | Envio/recepção/playback existentes; uploads grandes retomáveis, progresso/cancelamento/retry, thumbnails privados e fallback de formato       |
-| MEDIA-03 | Voz no compositor                   | Pendente          | Gravar, cancelar, revisar, enviar, retomar após interrupção; permissões, rota de áudio, duração e transcrição quando suportada                |
+| MEDIA-03 | Voz no compositor                   | Parcial           | Gravar, cancelar, revisar, enviar, retomar após interrupção; permissões, rota de áudio, duração e transcrição quando suportada                |
 | MEDIA-04 | Entendimento de anexos              | Parcial           | Agente recebe conteúdo autorizado efetivamente extraído; informar formato não processado, limites e falhas; upload não equivale a compreensão |
 | MEDIA-05 | Chamadas e hangouts                 | Pendente          | Entrar/sair, participantes, áudio/vídeo, reconexão, troca de dispositivo, compartilhamento de tela e consentimento de gravação/bot            |
 | MEDIA-06 | Aplicativos e artefatos interativos | Pendente          | Host de MCP Apps e visores com comunicação restrita, autenticação, falhas e navegação; cartão de ferramenta sozinho não satisfaz              |
@@ -1307,3 +1307,32 @@ ou camada artificial foi adicionada para alterar a medição.
 
 [Imagens e sequência visual](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895589746)
 anexadas com `gh --attach`. Sem deploy de produção.
+
+### Rodada 38 — fotos dos grupos — 29/09/2026
+
+Administradores podem escolher, revisar, substituir e remover a foto do grupo
+no modal desktop compacto ou sheet mobile. A prévia é imediata; o resultado
+confirmado atualiza o cache TanStack da conversa/thread e invalida a inbox e
+o diretório. Cabeçalho, detalhes e lista usam a mesma foto. Mudança concorrente
+mostra conflito, preservando a escolha até o usuário consultar a versão atual.
+
+Sharp 0.35.5 normaliza o arquivo autorizado para WebP 192×192, remove metadados
+e limita a miniatura a 24 KiB. O transporte reutiliza o limite de 3 MiB dos
+anexos e aceita JPEG/PNG/WebP/AVIF até 24 milhões de pixels. O Matrix recebe
+`m.room.avatar`; a projeção limitada acompanha os metadados autorizados, evitando
+uma consulta de mídia por linha da inbox. O marcador nativo de operação permite
+recuperar resposta perdida sem repetir o upload já publicado. Detalhes e limites
+de retenção estão em [cliente universal](universal-client.md#group-photo-transport--2026-09-29).
+
+Migração aditiva 0096 aplicada somente aos bancos isolado e de revisão. O teste
+com PostgreSQL/Synapse reais cobre estado nativo, leitura de participantes e
+sync, revisão obsoleta, concorrência, resposta perdida, autoridade administrativa
+e rejeição de SVG disfarçado. Check final: 280 arquivos / 1.740 testes, nove
+tarefas; build passou. A revisão estrutural apontou 24 observações / 12 gates,
+incluindo churn dos donos, wrappers RPC e formulários JSX; sem supressões.
+
+No browser, seleção/prévia/envio/reload exibiram a mesma foto no cabeçalho, inbox
+e detalhes. Remoção pelo celular e restauração também passaram.
+[Imagens e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895904261)
+anexadas por `gh --attach`. HEIC, ajuste manual do recorte e qualificação em
+aparelhos físicos continuam abertos. Sem deploy de produção.

@@ -48,7 +48,7 @@ export const requireMatrixRoom = async function (
   const config = await matrixConfiguration();
 
   const rows =
-    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
+    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, avatar_uri AS "avatarUri", avatar_revision AS "avatarRevision", 'group' AS kind FROM workspace_group_bindings
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND channel = 'matrix'
       AND installation_id = ${config.serverName} AND revoked_at IS NULL
       ${manage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined')`} FOR SHARE`);
@@ -69,7 +69,7 @@ export const listMatrixRooms = async function (
   });
 
   const rows =
-    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
+    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, avatar_uri AS "avatarUri", avatar_revision AS "avatarRevision", 'group' AS kind FROM workspace_group_bindings
     WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined') ORDER BY created_at LIMIT 20`);
   return {
     configured,

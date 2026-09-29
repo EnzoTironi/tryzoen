@@ -29,7 +29,7 @@ export async function authorizedInboxRooms(
     SELECT r.*, COALESCE(a.latest_at, 0)::double precision AS "activityAt", a.latest_event_id AS "latestEventId", COALESCE(a.latest_edited, false) AS "latestEdited", a.reconciled_at IS NOT NULL AS ready
     FROM (
       SELECT b.workspace_id AS "workspaceId", b.id::text, b.conversation_id AS "roomId", b.epoch::text, b.label, 'group'::text AS kind,
-        NULL::text AS username, NULL::text AS "avatarUri"
+        NULL::text AS username, b.avatar_uri AS "avatarUri", b.avatar_revision AS "avatarRevision"
       FROM workspace_group_bindings b
       JOIN workspace_memberships wm ON wm.workspace_id = b.workspace_id AND wm.user_id = ${actor.userId}
       JOIN workspaces w ON w.id = b.workspace_id
@@ -38,7 +38,7 @@ export async function authorizedInboxRooms(
         AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = b.id AND m.user_id = ${actor.userId} AND m.state <> 'joined')
       UNION ALL
       SELECT d.workspace_id AS "workspaceId", d.id::text, d.room_id AS "roomId", d.id::text AS epoch, u.name AS label, 'direct'::text AS kind,
-        n.username, u.image AS "avatarUri"
+        n.username, u.image AS "avatarUri", NULL::uuid AS "avatarRevision"
       FROM matrix_direct_rooms d JOIN workspaces w ON w.id = d.workspace_id
       JOIN workspace_memberships first_member ON first_member.workspace_id = d.workspace_id AND first_member.user_id = d.first_user_id
       JOIN workspace_memberships second_member ON second_member.workspace_id = d.workspace_id AND second_member.user_id = d.second_user_id

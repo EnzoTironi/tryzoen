@@ -94,6 +94,7 @@ vi.mock("@tanstack/react-query", async (original) => ({
 const rooms: RoomData = {
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
+  setAvatar: vi.fn<RoomData["setAvatar"]>(),
   changeMembership: vi.fn<RoomData["changeMembership"]>(),
   setNotifications: vi.fn<RoomData["setNotifications"]>(),
   setTyping: vi.fn<RoomData["setTyping"]>(),

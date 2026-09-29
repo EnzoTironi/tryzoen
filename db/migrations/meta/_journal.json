@@ -673,6 +673,13 @@
       "when": 1790701376832,
       "tag": "0095_matrix-message-reports",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1790704523040,
+      "tag": "0096_group-avatar",
+      "breakpoints": true
     }
   ]
 }
