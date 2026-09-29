@@ -26,7 +26,10 @@ export function OntologyReview({ content }: { readonly content: string }) {
   return (
     <View style={styles.content}>
       <Text style={pageStyles.copy}>
-        {graph.entities.length} records · {graph.links.length} connections
+        {graph.entities.length}{" "}
+        {graph.entities.length === 1 ? "record" : "records"} ·{" "}
+        {graph.links.length}{" "}
+        {graph.links.length === 1 ? "connection" : "connections"}
       </Text>
       {graph.entities.slice(0, limit).map((entity) => (
         <View key={entity.id} style={styles.card}>

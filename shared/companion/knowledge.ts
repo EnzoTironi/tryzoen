@@ -1,5 +1,8 @@
 import type { KnowledgeProposalData, OntologyData } from "@zoen/companion-ui";
-import { OntologyReadResultSchema } from "@zoen/companion-ui/ontology";
+import {
+  OntologyReadResultSchema,
+  ontologyPath,
+} from "@zoen/companion-ui/ontology";
 import { companionDocumentHistory } from "./files";
 import {
   knowledgeProposalListSchema,
@@ -14,6 +17,7 @@ export function companionOntologyData(
 ): OntologyData {
   return {
     cacheKey: ["ontology", scope],
+    history: companionDocumentHistory(rpc, ontologyPath, scope).list,
     async read(input) {
       return OntologyReadResultSchema.parse(
         await rpc.query("workspaces.ontology.read", input)

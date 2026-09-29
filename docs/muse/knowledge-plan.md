@@ -321,3 +321,31 @@ and minor size/complexity observations; it is not a clean quality report.
 No production deployment, database reset or new dependency was needed. This
 provides the reviewed conversational authoring boundary, not a live-model
 evaluation or replacement of private learned memory.
+
+## K1 progress — recorded versions and validity in the shared Library
+
+The shared Knowledge collection now opens the existing document history in a
+mobile sheet or desktop modal. A reader may select a recorded Git version and,
+independently, a world-valid date. No second history decoder or storage owner was
+introduced. Historical views remain read-only; unknown validity stays visible,
+invalid calendar dates cannot be applied and interval ends remain exclusive.
+
+TanStack query keys include principal/workspace scope, recorded version and
+validity date. The next view resolves before the sheet closes, so switching does
+not relabel the old records or replace the collection with a loading screen.
+Cached views are reused within the existing 15-second freshness window. Access
+revalidation errors remove stale graph/history content. History remains bounded
+to 50 versions and record search to 100 visible results.
+
+Validation: full `pnpm check` passed nine tasks, 284 files / 1,752 tests in
+50.757s; `pnpm build` passed in 40.643s. Two focused cache/transport tests cover
+principal/date/revision separation and reuse of the document owner. Chrome
+confirms invalid-date denial, an older label at the same record ID, desktop and
+390×844 mobile controls, exclusive-end filtering and explicitly unknown dates.
+Evidence is attached to PR 155. Disk exhaustion interrupted earlier attempts;
+only regenerable caches under this worktree were removed before the successful
+run. No user files or production records were removed.
+
+This is revision-based history for authored ontology, not historical replacement
+of the learned-memory engine. Timestamp `as_of` selection, private claims/sessions,
+complete memory replacement and safe dream candidates remain open.

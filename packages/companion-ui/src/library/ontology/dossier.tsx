@@ -34,6 +34,11 @@ export function OntologyDossier({
           {type?.name ?? entity.type} · Recorded version{" "}
           {record.revision?.slice(0, 8) ?? "—"}
         </Text>
+        {record.validOn && (
+          <Text style={pageStyles.copy}>
+            Facts valid on {record.validOn}. Unknown validity remains visible.
+          </Text>
+        )}
         {entity.sources.length > 0 && (
           <View style={styles.card}>
             <Text style={pageStyles.rowTitle}>About this record</Text>

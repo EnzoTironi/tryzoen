@@ -1,17 +1,19 @@
 import { useState } from "react";
 import type { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Network } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type {
   OntologyReadResultSchema,
   OntologyReadSchema,
   OntologySourceSchema,
 } from "./schema";
 import { OntologyDossier } from "./dossier";
+import { OntologyHistory } from "./history";
+import { ontologyReadOptions } from "./query";
+import type { DocumentHistoryData } from "../../document-history";
 import { ActionButton } from "../../button";
 import { pageStyles } from "../../page";
-import { colors } from "../../theme";
+import { OntologyRecords } from "./records";
 
 export interface OntologyData {
   readonly cacheKey: readonly unknown[];
@@ -21,6 +23,7 @@ export interface OntologyData {
   readonly source: (
     citation: z.output<typeof OntologySourceSchema>
   ) => Promise<string | null>;
+  readonly history: DocumentHistoryData["list"];
 }
 
 export function OntologyCollection({
@@ -31,23 +34,10 @@ export function OntologyCollection({
   readonly query: string;
 }) {
   const [selected, setSelected] = useState<string>();
-  const knowledge = useQuery({
-    queryKey: [...data.cacheKey, "current"],
-    queryFn: () => data.read({}),
-    staleTime: 15_000,
-  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [view, setView] = useState<z.output<typeof OntologyReadSchema>>({});
+  const knowledge = useQuery(ontologyReadOptions(data, view));
   const graph = knowledge.isError ? undefined : knowledge.data?.graph;
-  const term = query.toLocaleLowerCase().trim();
-  const matching =
-    graph?.entities.filter((entity) =>
-      `${entity.name} ${graph.types.find((type) => type.id === entity.type)?.name ?? ""} ${Object.values(
-        entity.properties
-      )
-        .map((claim) => claim.value)
-        .join(" ")}`
-        .toLocaleLowerCase()
-        .includes(term)
-    ) ?? [];
   const entity = graph?.entities.find((item) => item.id === selected);
   return (
     <View style={styles.collection}>
@@ -55,6 +45,28 @@ export function OntologyCollection({
         Useful facts, the people and projects they connect, and the evidence
         behind them.
       </Text>
+      <ActionButton
+        quiet
+        onPress={() => {
+          setHistoryOpen(true);
+        }}
+      >
+        {`${view.revision ? `Recorded version ${view.revision.slice(0, 8)}` : "Current knowledge"}${view.validOn ? ` · Valid on ${view.validOn}` : " · All dates"}`}
+      </ActionButton>
+      {historyOpen && (
+        <OntologyHistory
+          data={data}
+          view={view}
+          onApply={(next) => {
+            setSelected(undefined);
+            setView(next);
+            setHistoryOpen(false);
+          }}
+          onClose={() => {
+            setHistoryOpen(false);
+          }}
+        />
+      )}
       {knowledge.isPending && (
         <Text style={pageStyles.copy}>Loading knowledge…</Text>
       )}
@@ -73,41 +85,8 @@ export function OntologyCollection({
           Try again
         </ActionButton>
       )}
-      {matching.slice(0, 100).map((item) => (
-        <Pressable
-          key={item.id}
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${item.name}`}
-          onPress={() => {
-            setSelected(item.id);
-          }}
-          style={styles.row}
-        >
-          <View style={styles.icon}>
-            <Network size={22} color={colors.muted} />
-          </View>
-          <View style={pageStyles.rowCopy}>
-            <Text style={pageStyles.rowTitle}>{item.name}</Text>
-            <Text style={pageStyles.copy}>
-              {graph?.types.find((type) => type.id === item.type)?.name ??
-                item.type}
-            </Text>
-          </View>
-          <ChevronRight size={18} color={colors.muted} />
-        </Pressable>
-      ))}
-      {matching.length > 100 && (
-        <Text style={pageStyles.copy}>
-          Showing 100 records. Search to find a more specific person, project or
-          fact.
-        </Text>
-      )}
-      {knowledge.isSuccess && !matching.length && (
-        <Text style={pageStyles.copy}>
-          {term
-            ? "No matching knowledge."
-            : "Your published knowledge will appear here with its relationships and sources."}
-        </Text>
+      {graph && (
+        <OntologyRecords graph={graph} query={query} onOpen={setSelected} />
       )}
       {entity && knowledge.data && (
         <OntologyDossier
@@ -127,20 +106,4 @@ export function OntologyCollection({
 
 const styles = StyleSheet.create({
   collection: { gap: 16 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  icon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.wash,
-  },
 });
