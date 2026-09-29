@@ -223,7 +223,8 @@ export interface RoomData {
     input: z.infer<typeof roomMediaReadSchema>
   ) => Promise<z.infer<typeof inlineAttachmentSchema>>;
   reactions: (
-    input: z.infer<typeof roomReactionsReadSchema>
+    input: z.infer<typeof roomReactionsReadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomReactionsPageSchema>>;
   react: (
     input: z.infer<typeof roomReactionWriteSchema>

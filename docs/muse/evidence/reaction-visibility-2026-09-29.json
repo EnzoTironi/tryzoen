@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build, synthetic review account and Matrix room",
+  "transport": "Chrome CDP Network.requestWillBeSent; reaction procedure only; no request bodies or credentials retained",
+  "baseline": {
+    "revision": "1ffb6224",
+    "state": "Group details cover the conversation",
+    "durationMs": 86216,
+    "reactionRequests": 3,
+    "truncated": false
+  },
+  "treatment": {
+    "revision": "909a8720 with wave 14 reaction lifecycle changes",
+    "state": "Group details cover the conversation",
+    "durationMs": 51380,
+    "reactionRequests": 0,
+    "truncated": false,
+    "reactionRequestsObservedOnClosingDetails": 1
+  },
+  "functionalChecks": [
+    "Added a thumbs-up to a synthetic group message through the production UI",
+    "Reloaded and confirmed the saved reaction remained visible",
+    "Opened the same message in a thread at a 390 by 844 viewport",
+    "Confirmed the shared reaction and preserved bottom navigation",
+    "Removed only the reaction created for this test from the thread",
+    "Returned to the room and confirmed the reaction was removed"
+  ],
+  "limitations": [
+    "Single local browser and synthetic room; not a load or capacity qualification",
+    "Background, offline, unmount and delayed responses are covered by automated hook and real HTTP transport tests, not this visual measurement",
+    "Visibility gating covers group details, participant profiles, room search and the room timeline hidden by a narrow thread; global settings overlays are not included",
+    "Message history still requires incremental sync qualification"
+  ]
+}

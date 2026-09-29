@@ -515,3 +515,34 @@ qualificação em aparelhos e capacidade para um milhão de usuários permanecem
 como gates abertos.
 
 Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883699640
+
+### Décima quarta rodada — ciclo de vida das reações — 29/09/2026
+
+Reações agora acompanham a visibilidade da conversa e da thread. Detalhes do
+grupo, perfis e busca suspendem a consulta; no mobile, abrir a thread também
+suspende as reações da conversa encoberta. Background, offline e desmontagem
+cancelam o transporte e invalidam o cache. Uma leitura atrasada não pode iniciar
+uma reação depois da saída; uma escrita já aceita pelo servidor não pode
+sobrescrever o cache de uma conversa reaberta. O identificador de operação
+continua estável em uma nova tentativa, sem desfazer escritas já aceitas.
+
+Os novos testes reproduziram cinco falhas antes da correção. Os 18 testes focados
+cobrem limites de mensagens visíveis, cancelamento HTTP, perda de atividade,
+replay de effects e respostas atrasadas. `pnpm check` passou com 268 arquivos e
+1.632 testes; `pnpm build` e exports Expo web/iOS/Android passaram. Não houve
+alteração de banco nem de procedures do servidor; a última suíte completa do
+runtime permanece com 420 testes isolados na rodada 12.
+
+[A medição no navegador](evidence/reaction-visibility-2026-09-29.json) observou
+três consultas em 86,2 segundos com os detalhes abertos no build anterior e zero
+em 51,4 segundos no novo. Fechar o modal retomou a consulta. No build atual,
+adicionar, recarregar, abrir a thread mobile e remover uma reação sintética
+confirmou a persistência e o compartilhamento do estado. A barra inferior foi
+preservada. Quatro capturas e um vídeo de aproximadamente 20 segundos composto
+das capturas foram [anexados via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883888398).
+
+A revisão estrutural apontou 16 observações, dez gating, sem supressões: churn,
+adapters estruturalmente semelhantes e tamanho do hook; há dois falsos positivos
+de uso em testes. O ciclo de vida permanece no hook existente. A pausa de overlays
+globais de configurações, o sync incremental do histórico e os gates de produção
+continuam abertos. Esta medição local não qualifica capacidade de produção.

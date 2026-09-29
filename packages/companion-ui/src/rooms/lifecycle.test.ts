@@ -75,6 +75,7 @@ test("background cancels room and thread reads, preserves other rooms and requir
   const pending = [
     key,
     ["matrix-thread", "account:workspace", "room", "$root"],
+    ["matrix-reactions", "account:workspace", "room", ["$message"]],
   ].map((queryKey) =>
     client
       .query({
@@ -101,7 +102,7 @@ test("background cancels room and thread reads, preserves other rooms and requir
   await Promise.all(pending);
 
   expect(state.enabled).toBe(false);
-  expect(signals).toHaveLength(2);
+  expect(signals).toHaveLength(3);
   expect(signals.every((signal) => signal.aborted)).toBe(true);
   expect(client.getQueryState(key)?.isInvalidated).toBe(true);
   expect(client.getQueryData(key)).toBe("previous authorized page");

@@ -52,10 +52,17 @@ export function RoomConversation({
   const [searching, setSearching] = useState(false);
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
-  const reactions = useRoomReactions(data, cacheScope, roomId);
   const active = useRoomLifecycle(cacheScope, roomId);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
+  const visible = !details && !profile && !searching;
+  const timelineVisible = visible && (!root || wide);
+  const reactions = useRoomReactions(
+    data,
+    cacheScope,
+    roomId,
+    active && timelineVisible
+  );
   const messages = useInfiniteQuery({
     queryKey: ["matrix-messages", cacheScope, roomId],
     initialPageParam: undefined as string | undefined,
@@ -76,7 +83,7 @@ export function RoomConversation({
     data,
     cacheScope,
     roomId,
-    !!room && !messages.isError && !details && !profile && !searching
+    !!room && !messages.isError && visible
   );
   const showProfile = () => {
     if (room?.kind === "direct")
@@ -98,7 +105,7 @@ export function RoomConversation({
     cacheScope,
     roomId,
     timeline,
-    !messages.isError && !details && !profile && !searching && (!root || wide)
+    !messages.isError && timelineVisible
   );
   return (
     <View style={styles.layout}>
@@ -199,7 +206,7 @@ export function RoomConversation({
             avatarUri={avatarUri}
             onCopyText={onCopyText}
             onProfile={setProfile}
-            visible={!details && !profile && !searching}
+            visible={visible}
             active={active}
             typing={typing}
           />
@@ -348,7 +355,12 @@ function RoomThread({
   readonly typing: ReturnType<typeof useRoomTyping>;
 }) {
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
-  const reactions = useRoomReactions(data, cacheScope, roomId);
+  const reactions = useRoomReactions(
+    data,
+    cacheScope,
+    roomId,
+    active && visible
+  );
   const result = useInfiniteQuery({
     queryKey: ["matrix-thread", cacheScope, roomId, root.id],
     initialPageParam: undefined as string | undefined,

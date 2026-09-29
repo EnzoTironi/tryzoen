@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { companionRoomData } from "../../shared/companion/rooms";
 
-it.each(["messages", "thread"] as const)(
+it.each(["messages", "thread", "reactions"] as const)(
   "cancels the actual room %s transport when its foreground owner stops",
   async (operation) => {
     const transport = vi.fn<typeof fetch>(
@@ -26,7 +26,7 @@ it.each(["messages", "thread"] as const)(
     const rooms = companionRoomData(rpc, randomUUID);
     const controller = new AbortController();
     const result = rooms[operation](
-      { id: randomUUID(), rootId: "$root" },
+      { id: randomUUID(), rootId: "$root", messageIds: ["$message"] },
       controller.signal
     );
     await vi.waitFor(() => {

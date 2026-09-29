@@ -11,7 +11,11 @@ export function useRoomLifecycle(cacheScope: string, roomId: string) {
   useEffect(() => {
     let foreground = AppState.currentState === "active";
     const pause = () => {
-      for (const prefix of ["matrix-messages", "matrix-thread"]) {
+      for (const prefix of [
+        "matrix-messages",
+        "matrix-thread",
+        "matrix-reactions",
+      ]) {
         const queryKey = [prefix, cacheScope, roomId];
         void client.cancelQueries({ queryKey });
         void client.invalidateQueries({ queryKey, refetchType: "none" });

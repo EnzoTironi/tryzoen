@@ -1360,3 +1360,25 @@ Screenshots and a labelled screenshot-sequence video were attached with `gh --at
 Native-device and production-capacity qualification remain open.
 
 Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883699640
+
+### Reaction lifetime and visibility — wave 14
+
+Room and thread reactions now observe active/online state and local overlays.
+The hidden room timeline pauses when a narrow thread opens. Cancelled reaction
+queries propagate their AbortSignal through the shared transport. Delayed reads
+cannot start a write after the view loses ownership; already accepted writes do
+not overwrite a reopened view's cache. Retries retain the same operation ID.
+
+Five regressions were reproduced against the previous implementation. Eighteen
+focused tests and the full application check (268 files / 1,632 tests) passed,
+as did the production build and Expo exports. No server procedure or database
+changed; wave 12 remains the latest full isolated runtime qualification (420 tests).
+
+The production UI persisted a synthetic reaction across reload and shared it
+with the mobile thread, then removed it through that thread. The bottom bar
+remains visible. [Network evidence](evidence/reaction-visibility-2026-09-29.json)
+records three background-modal reaction reads in 86.2 seconds before the fix,
+zero in 51.4 seconds after it, and resumed fetching on close. Global settings
+overlays and incremental message-history sync remain separate open work.
+[Four screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883888398)
+were attached with `gh --attach`. This is not a production load qualification.

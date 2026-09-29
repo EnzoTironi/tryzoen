@@ -106,9 +106,9 @@ export function companionRoomData(
         await rpc.query("workspaces.rooms.media", input)
       );
     },
-    async reactions(input) {
+    async reactions(input, signal) {
       return roomReactionsPageSchema.parse(
-        await rpc.query("workspaces.rooms.reactions", input)
+        await rpc.query("workspaces.rooms.reactions", input, { signal })
       );
     },
     async react(input) {
