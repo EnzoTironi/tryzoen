@@ -105,6 +105,11 @@ export function Composer({
   const inFlight = useRef(false);
   const input = useRef<ComposerEditorHandle>(null);
   const editorAdapter = useContext(ComposerEditorProvider);
+  const previousReply = useRef(reply?.id);
+  useEffect(() => {
+    if (reply?.id && reply.id !== previousReply.current) input.current?.focus();
+    previousReply.current = reply?.id;
+  }, [reply?.id]);
   const [reference, setReference] =
     useState<ReturnType<typeof referenceAt>>(null);
   const change = (text: string) => {

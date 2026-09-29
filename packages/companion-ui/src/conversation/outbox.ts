@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import type { z } from "zod";
-import { useLocalMessages, type outgoingSchema } from "./persistence";
+import { useLocalMessages, outgoingSchema } from "./persistence";
 import {
   skipToken,
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ export type OutgoingMessage<Input, Receipt> = Omit<
 > & {
   input: Input;
   receipt?: Receipt;
+  queued?: boolean;
 };
 
 /** Account-scoped, navigation-safe local echoes. Delivery is owned by the transport. */
@@ -31,6 +33,13 @@ export function useMessageOutbox<Input, Receipt>(
     initialData: [],
     staleTime: Infinity,
     gcTime: Infinity,
+  });
+  const paused = useMutationState({
+    filters: { mutationKey: key, exact: true, status: "pending" },
+    select: (pending) =>
+      pending.state.isPaused
+        ? outgoingSchema.safeParse(pending.state.variables).data?.id
+        : undefined,
   });
   const update = (id: string, change: Partial<Entry>) => {
     // Never recreate a cleared account cache from a late response.
@@ -81,7 +90,11 @@ export function useMessageOutbox<Input, Receipt>(
     }
   });
   return {
-    entries: query.data ?? [],
+    entries: (query.data ?? []).map((entry): Entry =>
+      paused.includes(entry.id)
+        ? Object.assign({}, entry, { queued: true })
+        : entry
+    ),
     enqueue: (id: string, input: Input) => {
       const current = client.getQueryData<Entry[]>(key) ?? [];
       if (current.length >= 20)

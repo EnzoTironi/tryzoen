@@ -10,6 +10,50 @@ vi.mock("../client", async (original) => ({
 beforeEach(() => {
   mocks.request.mockReset().mockResolvedValue({ next_batch: "native-token" });
 });
+it("filters presence to authorized participants and strips last-seen and private status text", async () => {
+  mocks.request.mockResolvedValue({
+    next_batch: "next",
+    presence: {
+      events: [
+        {
+          type: "m.presence",
+          sender: "@ana:test",
+          content: {
+            presence: "online",
+            last_active_ago: 33,
+            status_msg: "private detail",
+          },
+        },
+      ],
+    },
+  });
+  const result = await pollNativeSync(
+    "@viewer:test",
+    ["!room:test"],
+    "previous",
+    "room",
+    ["@ana:test"]
+  );
+  expect(result.presence?.events).toEqual([
+    {
+      type: "m.presence",
+      sender: "@ana:test",
+      content: { presence: "online" },
+    },
+  ]);
+  const url = new URL(
+    mocks.request.mock.calls.at(-1)?.[1] ?? "",
+    "https://matrix.invalid"
+  );
+  expect(JSON.parse(url.searchParams.get("filter") ?? "{}")).toMatchObject({
+    presence: { senders: ["@ana:test"], limit: 100 },
+  });
+  await expect(
+    pollNativeSync("@viewer:test", ["!room:test"], "previous", "room", [
+      "@other:test",
+    ])
+  ).rejects.toThrow(MatrixError);
+});
 it("bootstraps one stable bridge device and bounds metadata responses", async () => {
   await pollNativeSync("@viewer:test", ["!room:test"], null, "inbox");
   expect(mocks.request).toHaveBeenCalledWith(

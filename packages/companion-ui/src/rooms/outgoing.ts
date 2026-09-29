@@ -5,7 +5,7 @@ import type { roomMessageSchema } from "./schema";
 export type RoomMessageView = z.infer<typeof roomMessageSchema> & {
   outgoing?: Pick<
     ReturnType<typeof useRoomDraft>["outgoing"][number],
-    "id" | "status"
+    "id" | "status" | "queued"
   > & {
     file?: NonNullable<ReturnType<typeof useRoomDraft>["files"]>[number];
   };
@@ -55,7 +55,12 @@ export function projectOutgoingRoomMessages(
               sender: input.quote.sender,
             }
           : null,
-        outgoing: { id: entry.id, status: entry.status, file: part.file },
+        outgoing: {
+          id: entry.id,
+          status: entry.status,
+          queued: entry.queued,
+          file: part.file,
+        },
       });
     }
   }

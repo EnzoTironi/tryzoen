@@ -283,6 +283,12 @@ export function useSessionAgent(
       }
     },
     data,
+    delivery: new Map(
+      submissions.entries.map(({ id, status: deliveryStatus, queued }) => [
+        id,
+        { status: deliveryStatus, queued },
+      ])
+    ),
     error,
     events,
     hasOlder: (history?.startIndex ?? 0) > 0,

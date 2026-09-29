@@ -144,6 +144,14 @@ export const roomMessageSchema = z.object({
     .object({ id: z.string(), text: z.string(), sender: z.string() })
     .nullable(),
 });
+export const roomPresencePreferenceSchema = z.object({ sharing: z.boolean() });
+export const roomPresenceWriteSchema = roomReadSchema
+  .pick({ id: true })
+  .extend(roomPresencePreferenceSchema.shape);
+export const roomPresenceSchema = z.object({
+  id: z.string().max(255),
+  state: z.enum(["online", "unavailable", "offline"]),
+});
 export const roomSyncPageSchema = z.object({
   status: z.enum(["ready", "unavailable", "denied"]),
   cursor: z.string().max(16384).nullable(),
@@ -157,6 +165,7 @@ export const roomSyncPageSchema = z.object({
     })
     .nullable(),
   userIds: z.array(z.string().max(255)).max(100),
+  presence: z.array(roomPresenceSchema).max(100),
   expiresAt: z.number().int().nonnegative(),
 });
 export const roomEditResultSchema = z.object({
@@ -231,6 +240,13 @@ export const roomSearchPageSchema = z.object({
 });
 
 export interface RoomData {
+  presencePreference: (
+    input: { id: string },
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomPresencePreferenceSchema>>;
+  setPresencePreference: (
+    input: z.infer<typeof roomPresenceWriteSchema>
+  ) => Promise<z.infer<typeof roomPresencePreferenceSchema>>;
   changeMembership: (
     input: z.infer<typeof roomMembershipChangeSchema>
   ) => Promise<z.infer<typeof roomMembershipResultSchema>>;

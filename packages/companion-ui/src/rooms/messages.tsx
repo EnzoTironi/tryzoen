@@ -1,3 +1,4 @@
+import { MessageInteraction } from "../conversation/interaction";
 import { MessageDelivery } from "../conversation/delivery";
 import { AttachmentCard } from "../attachments/card";
 import { projectOutgoingRoomMessages, type RoomMessageView } from "./outgoing";
@@ -376,66 +377,77 @@ function RoomMessage({
               : ""}
           </Text>
         </View>
-        <View
-          style={
-            item.media || item.outgoing?.file
-              ? { maxWidth: "100%" }
-              : [styles.bubble, item.mine && styles.blue]
+        <MessageInteraction
+          outgoing={item.mine}
+          disabled={!!outgoing || !!item.redacted}
+          onReply={() => {
+            onReply(item);
+          }}
+          footer={
+            outgoing ? (
+              <MessageDelivery
+                onRemove={
+                  onRemoveSend
+                    ? () => {
+                        onRemoveSend(outgoing.id);
+                      }
+                    : undefined
+                }
+                status={outgoing.status}
+                queued={outgoing.queued}
+                onRetry={
+                  onRetrySend
+                    ? () => {
+                        onRetrySend(outgoing.id);
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <RoomMessageControls
+                data={data}
+                roomId={roomId}
+                cacheScope={cacheScope}
+                item={item}
+                reaction={reaction}
+                onReact={onReact}
+                onReply={onReply}
+                onCopy={onCopy}
+                onThread={onThread}
+              />
+            )
           }
         >
-          {item.reply && (
-            <View style={styles.quote}>
-              <Text style={styles.sender}>{item.reply.sender}</Text>
-              <Text numberOfLines={3} style={styles.caption}>
-                {item.reply.text}
-              </Text>
-            </View>
-          )}
-          {item.outgoing?.file ? (
-            <AttachmentCard file={item.outgoing.file} />
-          ) : item.media ? (
-            <RoomAttachment
-              item={item}
-              data={data}
-              roomId={roomId}
-              cacheScope={cacheScope}
-            />
-          ) : (
-            <AssistantMarkdown text={item.text} compact />
-          )}
-        </View>
-        {!item.redacted && !item.media && <MessageLinks text={item.text} />}
-        {outgoing ? (
-          <MessageDelivery
-            onRemove={
-              onRemoveSend
-                ? () => {
-                    onRemoveSend(outgoing.id);
-                  }
-                : undefined
+          <View
+            style={
+              item.media || item.outgoing?.file
+                ? { maxWidth: "100%" }
+                : [styles.bubble, item.mine && styles.blue]
             }
-            status={outgoing.status}
-            onRetry={
-              onRetrySend
-                ? () => {
-                    onRetrySend(outgoing.id);
-                  }
-                : undefined
-            }
-          />
-        ) : (
-          <RoomMessageControls
-            data={data}
-            roomId={roomId}
-            cacheScope={cacheScope}
-            item={item}
-            reaction={reaction}
-            onReact={onReact}
-            onReply={onReply}
-            onCopy={onCopy}
-            onThread={onThread}
-          />
-        )}
+          >
+            {item.reply && (
+              <View style={styles.quote}>
+                <Text style={styles.sender}>{item.reply.sender}</Text>
+                <Text numberOfLines={3} style={styles.caption}>
+                  {item.reply.text}
+                </Text>
+              </View>
+            )}
+            {item.outgoing?.file ? (
+              <AttachmentCard file={item.outgoing.file} />
+            ) : item.media ? (
+              <RoomAttachment
+                item={item}
+                data={data}
+                roomId={roomId}
+                cacheScope={cacheScope}
+              />
+            ) : (
+              <AssistantMarkdown text={item.text} compact />
+            )}
+          </View>
+          {!item.redacted && !item.media && <MessageLinks text={item.text} />}
+        </MessageInteraction>
       </View>
     </>
   );

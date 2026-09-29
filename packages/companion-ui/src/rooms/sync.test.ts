@@ -145,6 +145,7 @@ test("replayed response cannot extend its expiry and disposal clears state", asy
     status: "ready" as const,
     cursor: "opaque",
     userIds: ["ana"],
+    presence: [],
     expiresAt: 105000,
     timelineChanged: false,
     reactionsChanged: false,
@@ -174,12 +175,46 @@ const healthy = {
   status: "ready" as const,
   cursor: "next",
   userIds: [],
+  presence: [],
   expiresAt: 0,
   timelineChanged: false,
   reactionsChanged: false,
   changes: null,
   reset: false,
 };
+
+test("native presence deltas survive idle sync, disappear on offline and expire on lost sync", async () => {
+  data.readSync
+    .mockResolvedValueOnce({
+      ...healthy,
+      presence: [{ id: "ana", state: "online" }],
+      expiresAt: 130000,
+    })
+    .mockResolvedValueOnce({ ...healthy, expiresAt: 132000 })
+    .mockResolvedValueOnce({
+      ...healthy,
+      presence: [{ id: "ana", state: "offline" }],
+      expiresAt: 134000,
+    })
+    .mockResolvedValueOnce({
+      ...healthy,
+      presence: [{ id: "ana", state: "online" }],
+      expiresAt: 110000,
+    });
+  mount();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(state.snapshots.at(-1)).toMatchObject({
+    presence: [{ id: "ana", state: "online" }],
+  });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(state.snapshots.at(-1)).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(state.snapshots.at(-1)).toMatchObject({
+    presence: [{ id: "ana", state: "online" }],
+  });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(state.snapshots.at(-1)).toBeUndefined();
+});
 
 function observeHistory(kind: string) {
   const read = vi.fn<
@@ -216,6 +251,7 @@ test("idle and typing-only sync never refetch loaded history", async () => {
   data.readSync.mockResolvedValue({
     ...healthy,
     userIds: ["ana"],
+    presence: [],
     expiresAt: 130000,
   });
   mount();
@@ -638,6 +674,7 @@ test("revoked access stops polling and refreshes the authorized inbox", async ()
     status: "denied",
     cursor: null,
     userIds: [],
+    presence: [],
     expiresAt: 0,
     timelineChanged: false,
     reactionsChanged: false,

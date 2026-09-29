@@ -4,6 +4,11 @@ packages:
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  # Expo's current SDK 57 compatibility cohort, verified against its npm releases.
+  - expo@57.0.26
+  - expo-constants@57.0.20
+  - expo-modules-core@57.0.20
+  - expo-document-picker@57.0.3
   # Match the AI SDK and workflow cohort supported by the installed Eve release.
   - "@ai-sdk/*"
   - ai

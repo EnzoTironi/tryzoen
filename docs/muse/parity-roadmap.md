@@ -965,3 +965,51 @@ Visual evidence attached with `gh --attach`: [screenshots and screenshot sequenc
 Validation: `pnpm check` (274 files / 1,710 tests), `pnpm build`, and the three
 isolated Matrix runtime tests passed. Structural review recorded 41 observations /
 10 gates without suppressions; existing owner complexity/size/churn remains visible.
+
+### Vigésima sétima rodada — menus compactos, gestos e presença — 29/09/2026
+
+A referência de Discord passa a orientar as ações das mensagens: menu de 304 px
+ancorado no desktop, folha compacta com grupos de ações no mobile e reações rápidas
+no topo. O mesmo dono atende conversas privadas com o agente, grupos e threads.
+A barra permanente de botões foi removida. Responder, thread, encaminhar, copiar,
+salvar, editar e excluir aparecem apenas quando a conversa oferece a capacidade.
+Threads com respostas mantêm seu acesso visível; iniciar uma fica no menu.
+
+Toque prolongado abre ações; arrastar horizontalmente para a direita prepara a
+resposta e foca o compositor sem descartar o rascunho. Movimento vertical cancela
+o toque prolongado; seleção com mouse e controles interativos mantêm seus eventos.
+O clique de compatibilidade depois de soltar o dedo não aciona um item da folha.
+O componente usa PanResponder/Animated existentes, respeita movimento reduzido e
+expõe ações de acessibilidade. Menu de contexto e Shift+F10 dão acesso no desktop.
+
+Presença humana usa Matrix nativo, por adesão explícita, desligada por padrão.
+A preferência pertence à conta Matrix; desativar impede heartbeats antigos de
+republicar online. O filtro de participantes é autorizado, limitado a 100 e
+revalidado após o long poll. Bots, status livre e last-seen não entram na projeção.
+Sinais expiram em 30 segundos e são limpos ao sair, cobrir ou perder conexão.
+O heartbeat acontece no sync ativo, no máximo a cada dez segundos. Indicadores
+online/ausente não são inferidos de digitação. Estado de conexão ocupa overlay
+sem deslocar o conteúdo; envio pausado se distingue de envio em andamento.
+
+Conferência do build local: clique direito em grupo/agente/thread, resposta com
+foco, toque prolongado com soltura, arrastar para responder preservando texto,
+seletor de emoji e reação nativa confirmada. Desktop 1440×900 e mobile 390×844;
+sem erros de console. [Imagens e sequência de capturas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5891392313)
+anexadas com `gh --attach`; o vídeo não é gravação contínua. [Registro](evidence/message-interactions-2026-09-29.json).
+
+`pnpm check`: 274 arquivos / 1.712 testes; build passou. Três suítes com
+PostgreSQL/Synapse reais passaram (quatro testes): presença, sync e digitação.
+Expo exportou web/iOS/Android. A última correção de supressão do clique após
+long-press teve check e build completos; os exports precedem esse ajuste web.
+Expo 57.0.26, constants 57.0.20 e document-picker 57.0.3 corrigem a verificação
+de compatibilidade do CI anterior. Exceções de idade de release são restritas aos
+quatro patches dessa coorte, incluindo modules-core 57.0.20. Nenhuma migração.
+
+Revisão estrutural: 34 observações / 15 gates, sem reconhecimentos para esconder
+achados; tamanho e complexidade de JSX, sync e donos existentes permanecem dívida.
+Uma anotação de lint local documenta o registro de callbacks do PanResponder que
+só leem refs durante eventos. Qualificação de gestos/leitor de tela em aparelhos
+físicos, haptics, duplo toque configurável e arrastar a própria folha para fechar
+não foram concluídos. Controles de mídia/links preservam seu comportamento próprio;
+neles o menu continua acessível pelo botão. Isto não declara paridade completa,
+push/E2EE/chamadas concluídos nem capacidade para um milhão de pessoas.

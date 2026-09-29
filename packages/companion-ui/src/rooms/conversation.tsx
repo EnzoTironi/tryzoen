@@ -1,4 +1,6 @@
 import { RoomSearch } from "./search";
+import { ConnectionStatus } from "../conversation/connection";
+import { PresenceIndicator } from "./presence";
 import { useRoomLifecycle } from "./lifecycle";
 import { useRoomSync } from "./sync";
 import { RoomTypingIndicator } from "./typing-indicator";
@@ -127,10 +129,14 @@ export function RoomConversation({
     );
   return (
     <View style={styles.layout}>
+      <ConnectionStatus top={66} reconnecting={typing.reconnecting} />
       {(!root || wide || messages.isError) && (
         <View style={styles.main}>
           <RoomHeader
             room={room}
+            presence={
+              room?.kind === "direct" ? typing.presence[0]?.state : undefined
+            }
             compact={compact}
             onBack={onBack}
             onProfile={showProfile}
@@ -138,11 +144,6 @@ export function RoomConversation({
               setSearching(true);
             }}
           />
-          {typing.reconnecting && (
-            <Text accessibilityRole="alert" style={styles.syncStatus}>
-              Reconectando… As mensagens podem estar desatualizadas.
-            </Text>
-          )}
           <RoomMessages
             data={data}
             roomId={roomId}
@@ -241,6 +242,7 @@ export function RoomConversation({
       )}
       {details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
+          presence={typing.presence}
           onLeft={onBack}
           onChanged={() => messages.refetch()}
           data={data}
@@ -281,6 +283,9 @@ export function RoomConversation({
       {profile && room && (
         <ParticipantProfile
           person={profile}
+          presence={
+            typing.presence.find((person) => person.id === profile.id)?.state
+          }
           data={data}
           cacheScope={cacheScope}
           onOpenRoom={onOpenRoom}
@@ -304,12 +309,14 @@ export function RoomConversation({
 
 function RoomHeader({
   room,
+  presence,
   compact,
   onBack,
   onProfile,
   onSearch,
 }: {
   readonly room?: z.infer<typeof roomSchema>;
+  readonly presence?: Parameters<typeof PresenceIndicator>[0]["state"];
   readonly compact: boolean;
   readonly onBack: () => void;
   readonly onProfile: () => void;
@@ -345,13 +352,17 @@ function RoomHeader({
         <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>
           {room?.label ?? "Conversa"}
         </Text>
-        <Text style={styles.caption}>
-          {room?.kind === "direct"
-            ? room.username
-              ? `@${room.username} · conversa direta`
-              : "Conversa direta"
-            : "Pessoas e Zoen · espaço compartilhado"}
-        </Text>
+        {presence && presence !== "offline" ? (
+          <PresenceIndicator state={presence} />
+        ) : (
+          <Text style={styles.caption}>
+            {room?.kind === "direct"
+              ? room.username
+                ? `@${room.username} · conversa direta`
+                : "Conversa direta"
+              : "Pessoas e Zoen · espaço compartilhado"}
+          </Text>
+        )}
       </Pressable>
       <IconButton icon={Search} label="Buscar na conversa" onPress={onSearch} />
       <IconButton
@@ -428,11 +439,6 @@ function RoomThread({
   );
   return (
     <>
-      {typing.reconnecting && (
-        <Text accessibilityRole="alert" style={styles.syncStatus}>
-          Reconectando… As mensagens podem estar desatualizadas.
-        </Text>
-      )}
       <RoomMessages
         data={data}
         roomId={roomId}
@@ -514,13 +520,6 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, minWidth: 0, gap: 4 },
   title: { fontSize: 17, fontWeight: "600", color: colors.ink },
   caption: { fontSize: 12, color: colors.muted, lineHeight: 18 },
-  syncStatus: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.muted,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
   thread: { width: 320, borderLeftWidth: 1, borderLeftColor: "#ededf0" },
   fullThread: { width: "100%", borderLeftWidth: 0 },
 });

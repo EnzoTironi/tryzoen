@@ -7,10 +7,15 @@ import type {
 } from "eve/client";
 import type { EveMessageData, UseEveAgentStatus } from "eve/react";
 import type { UserContent } from "ai";
+import type { OutgoingMessage } from "../conversation/outbox";
 
 export interface ChatAgent {
   readonly cancel: () => Promise<CancelSessionResult>;
   readonly data: EveMessageData;
+  readonly delivery?: ReadonlyMap<
+    string,
+    Pick<OutgoingMessage<unknown, unknown>, "status" | "queued">
+  >;
   readonly error?: Error;
   readonly events: readonly MessageStreamEvent[];
   readonly hasOlder: boolean;

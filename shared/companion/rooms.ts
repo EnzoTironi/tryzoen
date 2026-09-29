@@ -1,4 +1,5 @@
 import { roomMembershipResultSchema } from "@zoen/companion-ui/rooms";
+import { roomPresencePreferenceSchema } from "@zoen/companion-ui/rooms";
 import {
   roomRenameResultSchema,
   roomNotificationsSchema,
@@ -33,6 +34,18 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async presencePreference(input, signal) {
+      return roomPresencePreferenceSchema.parse(
+        await rpc.query("workspaces.rooms.presencePreference", input, {
+          signal,
+        })
+      );
+    },
+    async setPresencePreference(input) {
+      return roomPresencePreferenceSchema.parse(
+        await rpc.mutation("workspaces.rooms.setPresencePreference", input)
+      );
+    },
     async changeMembership(input) {
       return roomMembershipResultSchema.parse(
         await rpc.mutation("workspaces.rooms.changeMembership", input)

@@ -14,7 +14,7 @@ const actor = {
 };
 test("typing cursor is opaque, purpose-bound, rejects tampering and expires", async () => {
   const envelope = {
-    purpose: "matrix-room-sync-v1" as const,
+    purpose: "matrix-room-sync-v2" as const,
     userId: actor.userId,
     sessionId: actor.authSessionId,
     workspaceId: actor.workspaceId,
@@ -22,6 +22,7 @@ test("typing cursor is opaque, purpose-bound, rejects tampering and expires", as
     epoch: "one",
     nextBatch: "private-native-token",
     issuedAt: Date.now(),
+    presencePublishedAt: Date.now(),
     userIds: ["@private:test"],
     expiresAt: Date.now() + 30000,
   };

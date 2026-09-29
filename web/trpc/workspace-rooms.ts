@@ -1,5 +1,13 @@
 import { changeMatrixGroupMembership } from "../../server/matrix/membership";
 import {
+  readPresencePreference,
+  updateMatrixPresence,
+} from "../../server/matrix/presence";
+import {
+  roomPresencePreferenceSchema,
+  roomPresenceWriteSchema,
+} from "@zoen/companion-ui/rooms";
+import {
   roomMembershipChangeSchema,
   roomMembershipResultSchema,
 } from "@zoen/companion-ui/rooms";
@@ -101,6 +109,20 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  presencePreference: workspaceProcedure
+    .input(roomReadSchema.pick({ id: true }))
+    .output(roomPresencePreferenceSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readPresencePreference(ctx.actor, input.id))
+    ),
+  setPresencePreference: workspaceProcedure
+    .input(roomPresenceWriteSchema)
+    .output(roomPresencePreferenceSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () =>
+        updateMatrixPresence(ctx.actor, input.id, input.sharing)
+      )
+    ),
   changeMembership: workspaceProcedure
     .input(roomMembershipChangeSchema)
     .output(roomMembershipResultSchema)

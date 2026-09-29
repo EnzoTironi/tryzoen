@@ -18,6 +18,7 @@ vi.mock("../markdown", () => ({
 vi.mock("./sync", () => ({
   useRoomSync: vi.fn<typeof useRoomSync>(() => ({
     userIds: [],
+    presence: [],
     reconnecting: false,
     accessDenied: false,
     change: vi.fn<(value: boolean) => void>(),
@@ -80,6 +81,8 @@ vi.mock("@tanstack/react-query", async (original) => ({
   }),
 }));
 const data: RoomData = {
+  presencePreference: vi.fn<RoomData["presencePreference"]>(),
+  setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
   changeMembership: vi.fn<RoomData["changeMembership"]>(),
@@ -134,8 +137,7 @@ it("renders native reaction counts, profile links and the same message actions i
   const html = render();
   expect(html).toContain("Synthetic private text");
   expect(html).toContain("❤️: 2 reações");
-  expect(html).toContain("Copy message");
-  expect(html).toContain("Reply to message");
+  expect(html).toContain("Message actions");
   expect(html).toContain("Perfil de Member");
 });
 it("hides cached messages and reactions once room authorization fails", () => {
@@ -242,6 +244,7 @@ it("keeps reconnection enabled after a read failure while hiding cached private 
 it("explains revoked access without showing history or a reconnect loop", () => {
   vi.mocked(useRoomSync).mockReturnValueOnce({
     userIds: [],
+    presence: [],
     reconnecting: false,
     accessDenied: true,
     change: vi.fn<(value: boolean) => void>(),

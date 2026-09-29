@@ -8,7 +8,7 @@ import {
 } from "../../workspaces/access";
 
 const cursorSchema = z.object({
-  purpose: z.literal("matrix-room-sync-v1"),
+  purpose: z.literal("matrix-room-sync-v2"),
   userId: z.string(),
   sessionId: z.string(),
   workspaceId: z.string(),
@@ -18,6 +18,7 @@ const cursorSchema = z.object({
   issuedAt: z.number().int(),
   userIds: z.array(z.string().max(255)).max(100),
   expiresAt: z.number().int().nonnegative(),
+  presencePublishedAt: z.number().int().nonnegative(),
 });
 export async function sealRoomSyncCursor(value: z.infer<typeof cursorSchema>) {
   const cursor = await symmetricEncrypt({

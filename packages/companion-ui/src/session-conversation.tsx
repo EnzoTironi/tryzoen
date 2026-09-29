@@ -39,6 +39,7 @@ export function SessionConversation({
     <Conversation
       key={sessionId}
       messages={messages}
+      delivery={agent.delivery}
       initialDraft={draft}
       onDraftChange={saveDraft}
       onCopyText={onCopyText}

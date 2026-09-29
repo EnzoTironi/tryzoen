@@ -1752,3 +1752,47 @@ Visual evidence attached with `gh --attach`: [screenshots and screenshot sequenc
 Validation: `pnpm check` (274 files / 1,710 tests), `pnpm build`, and the three
 isolated Matrix runtime tests passed. Structural review recorded 41 observations /
 10 gates without suppressions; existing owner complexity/size/churn remains visible.
+
+### Compact actions, touch gestures and native presence — wave 27
+
+`conversation/interaction.tsx` owns bubble anchoring, desktop context/keyboard
+access, touch hold and right-swipe reply through existing RN PanResponder/Animated.
+`message-actions.tsx` supplies real capabilities and grouped items; the existing
+reaction picker renders a 304 px desktop popover or compact mobile sheet. Its
+lazy fallback no longer inserts a loading row into a message. Private agent chat,
+Matrix rooms and threads share the interaction surface. Long-press release
+suppresses the compatibility click before it can land on a new sheet item.
+Reply changes focus the current composer while preserving its draft.
+
+`server/matrix/presence.ts` owns native account-data opt-in and presence writes.
+Default is off. An advisory lock serializes privacy changes/heartbeats; explicit
+opt-out is written before offline so another active client cannot republish.
+Room sync filters at most 100 authorized human participants, revalidates membership
+after the native long poll, emits only sender/state, and reuses the ephemeral
+client sync map with 30-second expiry. Background/offline/unmount clears state.
+`set_presence=offline` remains on native sync; only the consent-aware heartbeat
+publishes online. Do not replace this with typing heuristics or a SQL presence loop.
+
+`conversation/connection.tsx` adds a non-layout-shifting offline/reconnect overlay.
+Paused TanStack mutations derive queued delivery state without persisting promises
+or changing transport records. No new database table or migration is needed.
+
+Validation: check 274 files / 1,712 tests; production build; three isolated real
+PostgreSQL/Synapse suites (4 tests); Expo web/iOS/Android exports. Exports preceded
+the final web long-press click suppression; final check/build include it. Compatible
+Expo patch cohort upgraded to expo 57.0.26, constants/modules-core 57.0.20,
+document-picker 57.0.3. pnpm release-age exceptions name only these exact versions.
+
+Browser verification covered the private agent, groups, thread menus, native
+reaction selection, touch hold/release, swipe reply, focus and draft preservation.
+[Five screenshots and labelled mobile screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5891392313)
+were attached using `gh --attach`. [Record](evidence/message-interactions-2026-09-29.json).
+Structural quality reports 34 observations / 15 gates (no quality acknowledgements):
+JSX size/complexity, sync growth and repeated settings layout remain visible.
+
+Remaining: real-device gesture/accessibility qualification, media-control gesture
+policy, draggable-sheet dismissal, haptics, configurable double tap, per-message
+unread/pinning/report actions and full reactor details. Controls inside media/link
+cards keep their native interactions and expose actions through the ellipsis.
+Native push, E2EE, calls, cold offline boot, background draining and production
+capacity are still release gates. Creator expansion remains deferred.

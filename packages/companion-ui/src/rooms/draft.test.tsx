@@ -14,6 +14,8 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  presencePreference: vi.fn<RoomData["presencePreference"]>(),
+  setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
   changeMembership: vi.fn<RoomData["changeMembership"]>(),
@@ -128,6 +130,7 @@ it("keeps multiple sends through navigation in transport order with distinct ide
   await vi.waitFor(() => {
     expect(data.send).toHaveBeenCalledTimes(1);
   });
+  expect(open().outgoing.map((entry) => !!entry.queued)).toEqual([false, true]);
   pending.resolve();
   await vi.waitFor(() => {
     expect(data.send).toHaveBeenCalledTimes(2);

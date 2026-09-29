@@ -55,6 +55,8 @@ vi.mock("../button", () => ({
   },
 }));
 const data: RoomData = {
+  presencePreference: vi.fn<RoomData["presencePreference"]>(),
+  setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
   changeMembership: vi.fn<RoomData["changeMembership"]>(),

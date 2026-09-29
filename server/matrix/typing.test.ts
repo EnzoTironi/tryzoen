@@ -15,6 +15,16 @@ vi.mock("./rooms", () => ({
   joinMatrixRoom: mocks.join,
   requireMatrixRoom: mocks.access,
 }));
+vi.mock("./presence", () => ({
+  updateMatrixPresence: vi.fn<typeof import("./presence").updateMatrixPresence>(
+    async () => ({ sharing: false })
+  ),
+}));
+vi.mock("./members", () => ({
+  readRoomMembers: vi.fn<typeof import("./members").readRoomMembers>(
+    async () => []
+  ),
+}));
 vi.mock("./sync/native", () => ({ pollNativeSync: mocks.native }));
 vi.mock("./sync/changes", () => ({ readRoomChanges: mocks.changes }));
 vi.mock("./sync/room-cursor", () => ({
@@ -67,7 +77,8 @@ afterEach(() => vi.useRealTimers());
 test("initial cached snapshot seeds only and same request replay has fixed expiry", async () => {
   expect(await readMatrixRoomSync(actor, { id: room.id })).toMatchObject({
     userIds: [],
-    expiresAt: 0,
+    presence: [],
+    expiresAt: 130000,
   });
   mocks.open.mockResolvedValue({
     roomId: room.roomId,

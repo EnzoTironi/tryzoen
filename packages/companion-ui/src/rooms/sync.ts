@@ -8,7 +8,8 @@ import {
 } from "@tanstack/react-query";
 import { useTypingPublisher } from "./typing-publisher";
 import { reconcileRoomHistory } from "./history";
-import type { RoomData } from "./schema";
+import type { RoomData, roomPresenceSchema } from "./schema";
+import type { z } from "zod";
 
 /** One native sync for room/thread changes, reactions and typing. Never sends draft text. */
 export function useRoomSync(
@@ -24,6 +25,7 @@ export function useRoomSync(
   const [snapshot, setSnapshot] = useState<{
     scope: string;
     userIds: string[];
+    presence: z.infer<typeof roomPresenceSchema>[];
   }>();
   const change = useTypingPublisher(data, cacheScope, roomId, enabled);
   useEffect(() => {
@@ -35,6 +37,7 @@ export function useRoomSync(
     let expiry: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
     let accessDenied = false;
+    const presence = new Map<string, z.infer<typeof roomPresenceSchema>>();
     const allowed = () =>
       enabled &&
       active &&
@@ -47,6 +50,7 @@ export function useRoomSync(
     const reactions = { queryKey: ["matrix-reactions", cacheScope, roomId] };
     const clear = () => {
       clearTimeout(expiry);
+      presence.clear();
       setSnapshot(undefined);
     };
     const stop = () => {
@@ -103,12 +107,21 @@ export function useRoomSync(
         if (!applied) return;
         cursor = result.cursor ?? undefined;
         setFailure(undefined);
-        clear();
-        const remaining = Math.min(30000, result.expiresAt - Date.now());
-        if (remaining > 0 && result.userIds.length) {
-          setSnapshot({ scope, userIds: result.userIds });
-          expiry = setTimeout(clear, remaining);
+        clearTimeout(expiry);
+        if (result.reset) presence.clear();
+        for (const person of result.presence) {
+          if (person.state === "offline") presence.delete(person.id);
+          else presence.set(person.id, person);
         }
+        const remaining = Math.min(30000, result.expiresAt - Date.now());
+        if (remaining > 0 && (result.userIds.length || presence.size)) {
+          setSnapshot({
+            scope,
+            userIds: result.userIds,
+            presence: [...presence.values()],
+          });
+          expiry = setTimeout(clear, remaining);
+        } else clear();
         failures = 0;
       } catch {
         if (controller.signal.aborted || disposed) return;
@@ -152,6 +165,7 @@ export function useRoomSync(
   }, [data, cacheScope, roomId, enabled, scope, change, client]);
   return {
     userIds: snapshot?.scope === scope ? snapshot.userIds : [],
+    presence: snapshot?.scope === scope ? snapshot.presence : [],
     reconnecting: failure === scope,
     accessDenied: denied === scope,
     change,

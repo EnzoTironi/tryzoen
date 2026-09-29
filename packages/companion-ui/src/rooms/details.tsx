@@ -1,5 +1,7 @@
 import { GroupMembership } from "./membership";
 import { RoomNotificationSettings } from "./notifications";
+import { PresenceIndicator, PresenceSettings } from "./presence";
+import type { roomPresenceSchema } from "./schema";
 import { RenameRoom } from "./rename";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -22,6 +24,7 @@ export function RoomDetails({
   data,
   cacheScope,
   page,
+  presence,
   avatarUri,
   onClose,
   onLeft,
@@ -32,6 +35,7 @@ export function RoomDetails({
   readonly data: RoomData;
   readonly cacheScope: string;
   readonly page: z.infer<typeof roomPageSchema>;
+  readonly presence?: z.infer<typeof roomPresenceSchema>[];
   readonly avatarUri?: string;
   readonly onClose: () => void;
   readonly onLeft: () => void;
@@ -179,6 +183,14 @@ export function RoomDetails({
                       {member.name}
                     </Text>
                     {member.bot && <Text style={styles.badge}>IA</Text>}
+                    {!member.bot && !member.mine && (
+                      <PresenceIndicator
+                        state={
+                          presence?.find((person) => person.id === member.id)
+                            ?.state
+                        }
+                      />
+                    )}
                   </View>
                   <Text style={styles.memberCaption}>
                     {member.bot
@@ -212,6 +224,11 @@ export function RoomDetails({
           )}
         </View>
         <RoomNotificationSettings
+          data={data}
+          cacheScope={cacheScope}
+          roomId={page.room.id}
+        />
+        <PresenceSettings
           data={data}
           cacheScope={cacheScope}
           roomId={page.room.id}

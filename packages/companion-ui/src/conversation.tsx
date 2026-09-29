@@ -1,4 +1,6 @@
+import { MessageInteraction } from "./conversation/interaction";
 import { MessageDelivery } from "./conversation/delivery";
+import { ConnectionStatus } from "./conversation/connection";
 import { useConversationScroll } from "./conversation/scroll";
 import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
@@ -32,6 +34,7 @@ import {
 
 export function Conversation({
   messages,
+  delivery,
   status,
   error,
   onSend,
@@ -50,6 +53,7 @@ export function Conversation({
   onVisibleMessagesChange,
 }: {
   readonly messages: readonly EveMessage[];
+  readonly delivery?: ChatAgent["delivery"];
   readonly status: UseEveAgentStatus;
   readonly error?: string;
   readonly onSend: ChatAgent["send"];
@@ -105,6 +109,7 @@ export function Conversation({
   );
   return (
     <View style={styles.root}>
+      <ConnectionStatus />
       <FlatList
         ref={listRef}
         data={messages}
@@ -141,65 +146,83 @@ export function Conversation({
               message.role === "user" ? styles.userGroup : styles.assistantGroup
             }
           >
-            <View style={{ gap: 6, maxWidth: "100%" }}>
-              {message.parts.map((part, index) => (
-                <MessagePart
-                  // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
-                  key={`${message.id}:${index}`}
-                  part={part}
-                  isUser={message.role === "user"}
-                  canRespond={canRespond}
-                  onRespond={onRespond}
-                />
-              ))}
-              {message.metadata?.status === "failed" &&
-                !message.metadata.optimistic && (
-                  <Text style={styles.error}>
-                    A resposta não pôde ser concluída.
-                  </Text>
-                )}
-            </View>
-            <View style={{ minHeight: 44, justifyContent: "center" }}>
-              {message.metadata?.optimistic ? (
-                <MessageDelivery
-                  onRemove={
-                    onRemoveSend
-                      ? () => {
-                          onRemoveSend(message.id);
-                        }
-                      : undefined
-                  }
-                  status={
-                    message.metadata.status === "failed" ? "failed" : "sending"
-                  }
-                  failureText="Envio não confirmado. Verifique a conversa antes de reenviar."
-                  onRetry={
-                    onRetrySend
-                      ? () => {
-                          onRetrySend(message.id);
-                        }
-                      : undefined
-                  }
-                />
-              ) : (
-                <MessageActions
-                  text={messageText(message)}
-                  outgoing={message.role === "user"}
-                  onCopy={onCopyText}
-                  onReply={() => {
-                    setReply({
-                      id: message.id,
-                      role: message.role,
-                      text: messageText(message),
-                    });
-                  }}
-                  reaction={reactions?.get(message.id)}
-                  onReact={
-                    onReact ? (emoji) => onReact(message.id, emoji) : undefined
-                  }
-                />
-              )}
-            </View>
+            <MessageInteraction
+              outgoing={message.role === "user"}
+              disabled={!!message.metadata?.optimistic}
+              onReply={() => {
+                setReply({
+                  id: message.id,
+                  role: message.role,
+                  text: messageText(message),
+                });
+              }}
+              footer={
+                message.metadata?.optimistic ? (
+                  <MessageDelivery
+                    onRemove={
+                      onRemoveSend
+                        ? () => {
+                            onRemoveSend(message.id);
+                          }
+                        : undefined
+                    }
+                    status={
+                      delivery?.get(message.id)?.status ??
+                      (message.metadata.status === "failed"
+                        ? "failed"
+                        : "sending")
+                    }
+                    queued={delivery?.get(message.id)?.queued}
+                    failureText="Envio não confirmado. Verifique a conversa antes de reenviar."
+                    onRetry={
+                      onRetrySend
+                        ? () => {
+                            onRetrySend(message.id);
+                          }
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <MessageActions
+                    text={messageText(message)}
+                    outgoing={message.role === "user"}
+                    onCopy={onCopyText}
+                    onReply={() => {
+                      setReply({
+                        id: message.id,
+                        role: message.role,
+                        text: messageText(message),
+                      });
+                    }}
+                    reaction={reactions?.get(message.id)}
+                    onReact={
+                      onReact
+                        ? (emoji) => onReact(message.id, emoji)
+                        : undefined
+                    }
+                  />
+                )
+              }
+            >
+              <View style={{ gap: 6, maxWidth: "100%" }}>
+                {message.parts.map((part, index) => (
+                  <MessagePart
+                    // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
+                    key={`${message.id}:${index}`}
+                    part={part}
+                    isUser={message.role === "user"}
+                    canRespond={canRespond}
+                    onRespond={onRespond}
+                  />
+                ))}
+                {message.metadata?.status === "failed" &&
+                  !message.metadata.optimistic && (
+                    <Text style={styles.error}>
+                      A resposta não pôde ser concluída.
+                    </Text>
+                  )}
+              </View>
+            </MessageInteraction>
           </View>
         )}
         ListFooterComponent={

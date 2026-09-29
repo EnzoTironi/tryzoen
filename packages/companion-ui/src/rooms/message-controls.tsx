@@ -43,6 +43,13 @@ export function RoomMessageControls({
       <View style={[styles.actions, item.mine && styles.outgoing]}>
         {!item.redacted && (
           <MessageActions
+            onThread={
+              onThread
+                ? () => {
+                    onThread(item);
+                  }
+                : undefined
+            }
             onForward={() => {
               setAction("forward");
             }}
@@ -101,7 +108,7 @@ function RoomThreadAction({
 }: Pick<ComponentProps<typeof RoomMessageControls>, "item" | "onThread">) {
   return (
     <>
-      {onThread && (
+      {onThread && item.replies > 0 && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
@@ -148,6 +155,7 @@ function RoomReactionSummary({
 
 const styles = StyleSheet.create({
   actions: {
+    position: "static",
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",

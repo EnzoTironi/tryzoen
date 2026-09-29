@@ -3,6 +3,21 @@ import { MatrixError, matrixRequest } from "../client";
 
 const nativeSyncSchema = z.object({
   next_batch: z.string().max(4096),
+  presence: z
+    .object({
+      events: z
+        .array(
+          z.object({
+            type: z.literal("m.presence"),
+            sender: z.string().max(255),
+            content: z.object({
+              presence: z.enum(["online", "unavailable", "offline"]),
+            }),
+          })
+        )
+        .max(100),
+    })
+    .optional(),
   rooms: z
     .object({
       join: z
@@ -58,11 +73,14 @@ export async function pollNativeSync(
   viewer: string,
   roomIds: string[],
   since: string | null,
-  mode: "inbox" | "room"
+  mode: "inbox" | "room",
+  presenceSenders: string[] = []
 ) {
   const focused = mode === "room";
   const limit = focused ? 1 : 31;
   if (roomIds.length > limit) throw new MatrixError({ reason: "unavailable" });
+  if (presenceSenders.length > 100 || (!focused && presenceSenders.length))
+    throw new MatrixError({ reason: "unavailable" });
   const device = focused ? "ZOEN_ROOM_BRIDGE_V1" : "ZOEN_INBOX_BRIDGE_V1";
   if (!since)
     await matrixRequest(
@@ -87,7 +105,9 @@ export async function pollNativeSync(
           "redacts",
         ]
       : ["event_id", "type"],
-    presence: { types: [] },
+    presence: presenceSenders.length
+      ? { types: ["m.presence"], senders: presenceSenders, limit: 100 }
+      : { types: [] },
     account_data: { types: [] },
     room: {
       rooms: roomIds,
@@ -114,17 +134,24 @@ export async function pollNativeSync(
     viewer,
     { maxResponseBytes: focused ? 2_097_152 : 1_048_576 }
   );
-  return parseNativeSync(response, roomIds, mode);
+  return parseNativeSync(response, roomIds, mode, presenceSenders);
 }
 
 /** Keep native output validation together, including ephemeral data minimization. */
 function parseNativeSync(
   response: unknown,
   roomIds: string[],
-  mode: "inbox" | "room"
+  mode: "inbox" | "room",
+  presenceSenders: string[]
 ) {
   const result = nativeSyncSchema.safeParse(response);
   if (!result.success) throw new MatrixError({ reason: "unavailable" });
+  if (
+    result.data.presence?.events.some(
+      (event) => !presenceSenders.includes(event.sender)
+    )
+  )
+    throw new MatrixError({ reason: "unavailable" });
   const ids = [
     ...Object.keys(result.data.rooms?.join ?? {}),
     ...Object.keys(result.data.rooms?.leave ?? {}),
