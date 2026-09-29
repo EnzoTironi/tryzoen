@@ -158,6 +158,7 @@ const matrixRelation = z.object({
   "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
 });
 const matrixContent = z.object({
+  redacts: z.string().optional(),
   body: z.string().optional(),
   url: z.string().optional(),
   filename: z.string().optional(),
@@ -169,6 +170,7 @@ const matrixContent = z.object({
   "m.relates_to": matrixRelation.optional(),
 });
 const matrixEvent = z.object({
+  redacts: z.string().optional(),
   event_id: z.string(),
   room_id: z.string().optional(),
   type: z.string(),

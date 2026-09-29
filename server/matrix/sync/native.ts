@@ -83,6 +83,8 @@ export async function pollNativeSync(
           "content",
           "unsigned",
           "room_id",
+          "state_key",
+          "redacts",
         ]
       : ["event_id", "type"],
     presence: { types: [] },

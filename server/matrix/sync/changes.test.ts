@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     (...args: unknown[]) => Promise<z.infer<typeof MatrixEventSchema>>
   >(),
   members: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  native: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
 }));
 vi.mock("../messages", async (original) => ({
   ...(await original<typeof import("../messages")>()),
@@ -17,6 +18,7 @@ vi.mock("../members", () => ({ readRoomMembers: mocks.members }));
 vi.mock("../client", async (original) => ({
   ...(await original<typeof import("../client")>()),
   matrixConfiguration: async () => ({ botId: "@bot:test" }),
+  matrixRequest: mocks.native,
 }));
 const actor = {
   userId: "user",
@@ -41,6 +43,7 @@ function event(id: string): z.infer<typeof MatrixEventSchema> {
   };
 }
 beforeEach(() => {
+  mocks.native.mockReset();
   mocks.members
     .mockReset()
     .mockResolvedValue([
@@ -135,3 +138,76 @@ test("rejects a cross-room event or an oversized batch before looking up members
   ).rejects.toBeInstanceOf(MatrixError);
   expect(mocks.members).not.toHaveBeenCalled();
 });
+
+function redaction(id: string) {
+  return {
+    ...event("$redaction"),
+    type: "m.room.redaction",
+    content: { redacts: id },
+  };
+}
+function removed(id: string, type = "m.room.message") {
+  return {
+    ...event(id),
+    type,
+    room_id: room.roomId,
+    content: {},
+    unsigned: { redacted_because: { event_id: "$redaction" } },
+  };
+}
+test("removing a reaction produces an empty history delta without reading members", async () => {
+  mocks.native.mockResolvedValue(removed("$reaction", "m.reaction"));
+  expect(await readRoomChanges(actor, room, [redaction("$reaction")])).toEqual({
+    added: [],
+    updated: [],
+  });
+  expect(mocks.members).not.toHaveBeenCalled();
+  expect(mocks.native).toHaveBeenCalledWith(
+    "GET",
+    "rooms/!room%3Atest/event/%24reaction",
+    undefined,
+    room.matrixId
+  );
+});
+test("projects a verified message tombstone and deduplicates repeated redactions", async () => {
+  mocks.native.mockResolvedValue(removed("$original"));
+  const changes = await readRoomChanges(actor, room, [
+    redaction("$original"),
+    redaction("$original"),
+  ]);
+  expect(changes?.added).toEqual([]);
+  expect(changes?.updated).toEqual([
+    expect.objectContaining({
+      id: "$original",
+      redacted: true,
+      text: "Mensagem removida",
+    }),
+  ]);
+  expect(mocks.native).toHaveBeenCalledTimes(1);
+});
+test("accepts the top-level redaction target used by older native room versions", async () => {
+  mocks.native.mockResolvedValue(removed("$original"));
+  const changes = await readRoomChanges(actor, room, [
+    {
+      ...redaction("$unused"),
+      content: {},
+      redacts: "$original",
+    },
+  ]);
+  expect(changes?.updated[0]?.id).toBe("$original");
+});
+test.each([
+  { ...removed("$original"), room_id: "!other:test" },
+  { ...removed("$original"), event_id: "$wrong" },
+  { ...removed("$original"), unsigned: undefined },
+  { ...removed("$original"), state_key: "" },
+  removed("$original", "m.room.member"),
+])(
+  "recovers rather than trusting an ambiguous or unverified target",
+  async (target) => {
+    mocks.native.mockResolvedValue(target);
+    expect(
+      await readRoomChanges(actor, room, [redaction("$original")])
+    ).toBeNull();
+  }
+);

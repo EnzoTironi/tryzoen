@@ -58,9 +58,15 @@ export function applyRoomChanges(
 ) {
   const head = current.pages[0];
   if (!head) return undefined;
-  const known = new Set(
-    current.pages.flatMap((page) => page.messages.map((message) => message.id))
+  const loaded = new Map(
+    current.pages.flatMap((page) =>
+      [...page.messages, ...(page.parent ? [page.parent] : [])].map(
+        (message) => [message.id, message] as const
+      )
+    )
   );
+  if (needsRedactionRecovery(loaded, changes.updated)) return undefined;
+  const known = new Set(loaded.keys());
   const updated = new Map(
     changes.updated.map((message) => [message.id, message])
   );
@@ -92,4 +98,19 @@ export function applyRoomChanges(
       ...(page.parent ? { parent: replace(page.parent) } : {}),
     })),
   };
+}
+
+/** Stripped edit ancestry and removed reply counts require authoritative recovery. */
+function needsRedactionRecovery(
+  loaded: ReadonlyMap<
+    string,
+    z.infer<typeof roomPageSchema>["messages"][number]
+  >,
+  updated: NonNullable<z.infer<typeof roomSyncPageSchema>["changes"]>["updated"]
+) {
+  return updated.some((message) => {
+    if (!message.redacted) return false;
+    const previous = loaded.get(message.id);
+    return !previous || (!!previous.rootId && !previous.redacted);
+  });
 }

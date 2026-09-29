@@ -10,6 +10,8 @@ import {
   readMatrixMessages,
   sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { matrixRequest } from "../../server/matrix/client";
+import { applyRoomChanges } from "../../packages/companion-ui/src/rooms/history";
 import { readMatrixRoomSync } from "../../server/matrix/sync/room";
 import {
   readMatrixReactions,
@@ -36,7 +38,7 @@ test(
       operationId: randomUUID(),
       name: "Synthetic room change feed",
     });
-    await joinMatrixRoom(fixture.actor, room.id);
+    const writer = await joinMatrixRoom(fixture.actor, room.id);
     await joinMatrixRoom(fixture.guest, room.id);
     const baseline = await sendMatrixMessage(fixture.actor, {
       id: room.id,
@@ -108,7 +110,10 @@ test(
       previousEventId: reaction.mineEventId ?? undefined,
       emoji: null,
     });
-    expect(await sync()).toMatchObject({ reactionsChanged: true });
+    expect(await sync()).toMatchObject({
+      reactionsChanged: true,
+      changes: { added: [], updated: [] },
+    });
     expect(
       await readMatrixReactions(fixture.guest, {
         id: room.id,
@@ -134,6 +139,45 @@ test(
         (m) => m.id === sent.event_id
       )?.text
     ).toBe("Synthetic edited message");
+    const beforeSecondEdit = await readMatrixMessages(fixture.guest, room.id);
+    const revision = beforeSecondEdit.messages.find(
+      (message) => message.id === sent.event_id
+    )?.editId;
+    if (!revision) throw new Error("Expected original edit revision");
+    const secondEdit = await editMatrixMessage(fixture.actor, {
+      id: room.id,
+      messageId: sent.event_id,
+      expectedRevision: revision,
+      operationId: randomUUID(),
+      text: "Synthetic temporary edit",
+    });
+    expect(secondEdit.status).toBe("saved");
+    await sync();
+    const editId = secondEdit.message.editId;
+    if (!editId) throw new Error("Expected replacement event");
+    const beforeEditRemoval = await readMatrixMessages(fixture.guest, room.id);
+    await matrixRequest(
+      "PUT",
+      `rooms/${encodeURIComponent(room.roomId)}/redact/${encodeURIComponent(editId)}/${randomUUID()}`,
+      {},
+      writer.matrixId
+    );
+    const removedEdit = await sync();
+    if (!removedEdit.changes) throw new Error("Expected a redaction delta");
+    expect(removedEdit.changes.updated).toEqual([
+      expect.objectContaining({ id: editId, redacted: true }),
+    ]);
+    expect(
+      applyRoomChanges(
+        { pages: [beforeEditRemoval], pageParams: [undefined] },
+        removedEdit.changes
+      )
+    ).toBeUndefined();
+    expect(
+      (await readMatrixMessages(fixture.guest, room.id)).messages.find(
+        (message) => message.id === sent.event_id
+      )?.text
+    ).toBe("Synthetic edited message");
     const reply = await sendMatrixMessage(fixture.actor, {
       id: room.id,
       rootId: sent.event_id,
@@ -150,15 +194,53 @@ test(
       replies: 1,
       text: "Synthetic edited message",
     });
+    const beforeReplyRemoval = await readMatrixMessages(fixture.guest, room.id);
+    await deleteMatrixMessage(fixture.actor, {
+      id: room.id,
+      messageId: reply.event_id,
+      operationId: randomUUID(),
+    });
+    const removedReply = await sync();
+    if (!removedReply.changes) throw new Error("Expected a redaction delta");
+    expect(removedReply.changes.updated).toEqual([
+      expect.objectContaining({ id: reply.event_id, redacted: true }),
+    ]);
+    expect(
+      applyRoomChanges(
+        { pages: [beforeReplyRemoval], pageParams: [undefined] },
+        removedReply.changes
+      )
+    ).toBeUndefined();
+    const refreshed = await readMatrixMessages(fixture.guest, room.id);
+    expect(
+      refreshed.messages.find((message) => message.id === sent.event_id)
+        ?.replies
+    ).toBe(0);
     await deleteMatrixMessage(fixture.actor, {
       id: room.id,
       messageId: sent.event_id,
       operationId: randomUUID(),
     });
-    expect(await sync()).toMatchObject({
+    const removedOriginal = await sync();
+    if (!removedOriginal.changes) throw new Error("Expected a redaction delta");
+    expect(removedOriginal).toMatchObject({
       timelineChanged: true,
-      changes: null,
+      changes: {
+        added: [],
+        updated: [
+          expect.objectContaining({ id: sent.event_id, redacted: true }),
+        ],
+      },
     });
+    const patched = applyRoomChanges(
+      { pages: [refreshed], pageParams: [undefined] },
+      removedOriginal.changes
+    );
+    expect(
+      patched?.pages[0]?.messages.find(
+        (message) => message.id === sent.event_id
+      )?.redacted
+    ).toBe(true);
     expect(
       (await readMatrixMessages(fixture.guest, room.id)).messages.find(
         (m) => m.id === sent.event_id

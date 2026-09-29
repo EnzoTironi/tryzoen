@@ -728,3 +728,32 @@ Não há encaminhamento em massa ou entre workspaces. Se a confirmação se perd
 e o original mudar antes do retry, o usuário deve conferir o destino e revisar
 a nova versão; não há garantia global de exatamente uma entrega. Retenção total
 do histórico, operação nativa e capacidade de produção continuam abertas.
+
+### Vigésima primeira rodada — exclusões e reconexão — 29/09/2026
+
+O sync verifica o alvo exato de uma exclusão nativa, incluindo sala, tipo e
+confirmação do homeserver. Remover uma reação atualiza apenas as contagens;
+remover uma mensagem principal já carregada aplica o estado removido às páginas
+existentes sem alterar seus cursores. Alvos desconhecidos, edições com relação
+apagada e respostas removidas recuperam o histórico para preservar conteúdo e
+contagem da thread. As leituras continuam limitadas a quatro em paralelo.
+
+A verificação visual também encontrou e corrigiu uma falha de reconexão: o erro
+de leitura desativava o próprio observador necessário para recuperar a conversa.
+Agora ele mantém o backoff autorizado; conteúdo privado fica oculto durante a
+falha e reaparece somente após revalidação. Parar e reiniciar o servidor local
+recuperou a conversa e o rascunho sem reload ou retry manual.
+
+No build real, exclusão de mensagem e remoção de reação em outra aba produziram
+zero leituras de histórico; a remoção consultou as contagens uma vez. As janelas
+de observação incluem automação e não medem latência. A comparação anterior de
+exclusão de mensagem foi descartada porque a aba já estava em erro. [Registro](evidence/redaction-recovery-2026-09-29.json).
+Seis capturas e uma sequência de 24 segundos foram [anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5886337421).
+
+`pnpm check`: 272 arquivos / 1.701 testes; build e exports Expo web/iOS/Android
+passaram. Três testes reais de Synapse cobrem exclusão de reação, edição, resposta
+e mensagem principal, além de lacunas e revogação. Os seis checks do checkpoint
+`b6b31ea1` passaram. Sem migração ou dependência nova. A revisão estrutural mantém
+sete observações / um gate de churn, sem supressões; o classificador local tem
+complexidade 24. Retenção total, grandes rajadas, aparelhos físicos, paridade e
+capacidade de produção permanecem abertos.

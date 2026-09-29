@@ -1529,3 +1529,29 @@ This is one reviewed copy at a time within a workspace. Lost acknowledgement plu
 subsequent source editing requires inspecting the destination and reviewing a new
 version; no global exactly-once claim. Physical devices, bounded total history
 retention and production-capacity qualification remain open.
+
+### Verified native removals and automatic recovery — wave 21
+
+Native redactions now read and verify the exact target, including room, event
+kind and homeserver confirmation. Reaction removals invalidate counts without
+history recovery. Loaded main-message removals patch a tombstone while retaining
+page cursors. Unknown targets, stripped edit ancestry and removed replies still
+recover history to retain valid content and thread counts. Exact reads retain
+the existing concurrency bound of four.
+
+Browser verification exposed a reconnect loop being disabled by its own history
+error. The authorized observer now keeps its backoff while private content stays
+hidden. Stopping and restarting the production server recovered the conversation
+and its draft without reload or manual retry. A second-tab message removal and
+reaction removal each caused zero history reads. Observation windows include
+automation and are not latency measurements; an invalid deletion baseline was
+discarded. [Measurements](evidence/redaction-recovery-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests, production build and all Expo exports passed.
+Three isolated real Synapse tests exercise reaction/edit/reply/root removal,
+gap recovery and revocation. All six CI checks on `b6b31ea1` passed. No dependency
+or migration was added. Structural review: seven observations / one churn gate,
+without suppressions; the local classifier has complexity 24. Six actual captures
+and a labelled 24-second screenshot sequence were [attached via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5886337421).
+Bounded total history, large bursts, physical devices, full parity and production
+capacity remain open.

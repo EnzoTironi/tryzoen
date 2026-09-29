@@ -579,3 +579,49 @@ test("a bounded live head falls back to sequential history recovery before ackno
   await vi.advanceTimersByTimeAsync(2000);
   expect(data.readSync.mock.calls[1]?.[0].cursor).toBe("next");
 });
+
+test("a native tombstone patches loaded history and refreshes reactions without page reads", async () => {
+  const room = observeMessages("matrix-messages");
+  const reactions = observeReactions();
+  data.readSync
+    .mockResolvedValueOnce({
+      ...healthy,
+      timelineChanged: true,
+      reactionsChanged: true,
+      changes: {
+        added: [],
+        updated: [{ ...message("$old", "Mensagem removida"), redacted: true }],
+      },
+    })
+    .mockResolvedValue(healthy);
+  mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(room.read).not.toHaveBeenCalled();
+  expect(reactions.read).toHaveBeenCalledTimes(1);
+  expect(
+    room.observer.getCurrentResult().data?.pages[1]?.messages[0]
+  ).toMatchObject({ id: "$old", redacted: true, text: "Mensagem removida" });
+  expect(room.observer.getCurrentResult().data?.pageParams).toEqual([
+    undefined,
+    "older",
+  ]);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(data.readSync.mock.calls[1]?.[0].cursor).toBe("next");
+});
+
+test("recovers automatically after both sync and history fail without a remount", async () => {
+  const room = observeMessages("matrix-messages");
+  room.read.mockRejectedValueOnce(new Error("Synthetic unavailable history"));
+  data.readSync
+    .mockRejectedValueOnce(new Error("Synthetic unavailable sync"))
+    .mockResolvedValue({ ...healthy, reset: true });
+  mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(room.observer.getCurrentResult().isError).toBe(true);
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(data.readSync.mock.calls[1]?.[0].cursor).toBeUndefined();
+  expect(room.observer.getCurrentResult().isError).toBe(false);
+  expect(
+    room.observer.getCurrentResult().data?.pages[0]?.messages[0]?.text
+  ).toBe("$recent");
+});

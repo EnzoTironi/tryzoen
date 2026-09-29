@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5886337421",
+  "messageRemoval": {
+    "paths": {
+      "/api/trpc/workspaces.rooms.reactions": 1,
+      "/api/trpc/workspaces.rooms.readSync": 2,
+      "/api/trpc/companion.inboxSync": 2,
+      "/api/trpc/companion.inbox": 1
+    },
+    "durationMs": 16684,
+    "truncated": false,
+    "hasMore": false,
+    "received": true
+  },
+  "beforeComparison": {
+    "conclusive": false,
+    "reason": "Receiver had an earlier failed read after the isolated Synapse restart; baseline discarded."
+  },
+  "reactionRemoval": {
+    "durationMs": 13429,
+    "paths": {
+      "/api/trpc/workspaces.rooms.reactions": 1,
+      "/api/trpc/workspaces.rooms.readSync": 1
+    },
+    "truncated": false,
+    "hasMore": false,
+    "received": true,
+    "previousVerifiedObservation": {
+      "source": "reaction-sync-2026-09-29.json",
+      "historyReads": 1,
+      "reactionReads": 1
+    }
+  },
+  "restart": {
+    "errorVisible": true,
+    "networkRefusedObserved": true,
+    "automaticRecovery": true,
+    "manualRetry": false,
+    "pageReload": false,
+    "draftPreserved": true,
+    "successfulReads": [
+      "/api/trpc/companion.inboxSync",
+      "/api/trpc/companion.inboxSync",
+      "/api/trpc/workspaces.rooms.readSync",
+      "/api/trpc/workspaces.rooms.messages",
+      "/api/trpc/workspaces.rooms.reactions",
+      "/api/trpc/workspaces.rooms.reactions",
+      "/api/trpc/workspaces.rooms.markRead",
+      "/api/trpc/companion.inboxSync",
+      "/api/trpc/workspaces.rooms.readSync",
+      "/api/trpc/companion.inboxSync",
+      "/api/trpc/workspaces.rooms.readSync"
+    ],
+    "privateContentHiddenDuringFailedRead": true
+  },
+  "environment": "Local production build, isolated synthetic workspace; two Chromium tabs, desktop and 390x844 viewport",
+  "validation": {
+    "checkFiles": 272,
+    "checkTests": 1701,
+    "check": "passed",
+    "build": "passed",
+    "expo": [
+      "web",
+      "ios",
+      "android"
+    ],
+    "focusedRealSynapseTests": 3,
+    "focusedRealSynapse": "passed",
+    "structuralReview": {
+      "observations": 7,
+      "gating": 1,
+      "suppressed": false
+    }
+  },
+  "limits": [
+    "Network observation durations include automation and are not latency SLOs",
+    "Unknown targets, stripped edit ancestry and removed replies use conservative history recovery",
+    "Original deletion comparison was discarded because the receiver had a failed read; only the new functional observation is claimed",
+    "Two browser tabs use the same synthetic account; another account is covered by real Synapse tests",
+    "No physical-device or million-user capacity qualification"
+  ]
+}

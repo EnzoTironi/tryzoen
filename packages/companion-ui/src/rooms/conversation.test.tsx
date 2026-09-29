@@ -7,12 +7,20 @@ import {
 } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RoomConversation } from "./conversation";
+import { useRoomSync } from "./sync";
 import type { RoomData } from "./schema";
 
 vi.mock("react-native", () => import("react-native-web"));
 vi.mock("lucide-react-native", () => import("lucide-react"));
 vi.mock("../markdown", () => ({
   AssistantMarkdown: ({ text }: { text: string }) => <p>{text}</p>,
+}));
+vi.mock("./sync", () => ({
+  useRoomSync: vi.fn<typeof useRoomSync>(() => ({
+    userIds: [],
+    reconnecting: false,
+    change: vi.fn<(value: boolean) => void>(),
+  })),
 }));
 const mocks = vi.hoisted(() => ({
   revoked: false,
@@ -99,6 +107,7 @@ const data: RoomData = {
 beforeEach(() => {
   mocks.revoked = false;
   mocks.direct = false;
+  vi.mocked(useRoomSync).mockClear();
 });
 function render() {
   return renderToStaticMarkup(
@@ -212,4 +221,12 @@ it("coalesces simultaneous history requests and stops a repeated cursor", async 
   ]);
   expect(data.messages).toHaveBeenCalledTimes(2);
   expect(observer.getCurrentResult().hasNextPage).toBe(false);
+});
+
+it("keeps reconnection enabled after a read failure while hiding cached private content", () => {
+  mocks.revoked = true;
+  const html = render();
+  expect(html).not.toContain("Synthetic private text");
+  expect(html).toContain("Tentar novamente");
+  expect(useRoomSync).toHaveBeenLastCalledWith(data, "viewer", "binding", true);
 });

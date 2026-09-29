@@ -138,3 +138,57 @@ test("a full live head requests recovery without trimming messages across its cu
     })?.pages[0]?.messages[1]?.text
   ).toBe("Changed");
 });
+
+test("a loaded main message becomes a tombstone without losing pagination boundaries", () => {
+  const next = applyRoomChanges(history, {
+    added: [],
+    updated: [
+      { ...message("$old"), redacted: true, text: "Mensagem removida" },
+    ],
+  });
+  expect(next?.pages[1]?.messages[0]).toMatchObject({
+    id: "$old",
+    redacted: true,
+    text: "Mensagem removida",
+  });
+  expect(next?.pageParams).toBe(history.pageParams);
+  expect(next?.pages[0]).toEqual(history.pages[0]);
+});
+test("an unknown removed event can be an edit and must recover authoritative history", () => {
+  const current = {
+    ...history,
+    pages: [
+      { ...page, messages: [{ ...message("$recent"), editId: "$edit" }] },
+    ],
+  };
+  expect(
+    applyRoomChanges(current, {
+      added: [],
+      updated: [{ ...message("$edit"), redacted: true }],
+    })
+  ).toBeUndefined();
+  expect(
+    applyRoomChanges(history, {
+      added: [],
+      updated: [{ ...message("$outside-cache"), redacted: true }],
+    })
+  ).toBeUndefined();
+});
+test("a removed reply recovers its authoritative thread count; replay remains idempotent", () => {
+  const current = {
+    ...history,
+    pages: [
+      {
+        ...page,
+        parent: message("$root"),
+        messages: [message("$reply", "$root")],
+      },
+    ],
+  };
+  expect(
+    applyRoomChanges(current, {
+      added: [],
+      updated: [{ ...message("$reply"), redacted: true }],
+    })
+  ).toBeUndefined();
+});

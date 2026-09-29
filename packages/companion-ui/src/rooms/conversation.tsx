@@ -86,7 +86,8 @@ export function RoomConversation({
     data,
     cacheScope,
     roomId,
-    !!room && !messages.isError && visible
+    // Keep the authorized, backed-off sync alive so a failed history read can recover.
+    visible && (!!room || messages.isError)
   );
   const showProfile = () => {
     if (room?.kind === "direct")

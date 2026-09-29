@@ -20,6 +20,8 @@ export async function readRoomMessage(
   );
   if (
     message.event_id !== id ||
+    (message.room_id !== undefined && message.room_id !== room.roomId) ||
+    message.state_key !== undefined ||
     message.type !== "m.room.message" ||
     (!allowRedacted && !!message.unsigned?.redacted_because) ||
     (!message.content.body &&

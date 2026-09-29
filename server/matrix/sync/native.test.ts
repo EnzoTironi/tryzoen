@@ -127,6 +127,8 @@ it("focused room shares change signals and typing in a finite native long-poll",
       "content",
       "unsigned",
       "room_id",
+      "state_key",
+      "redacts",
     ],
     room: {
       rooms: ["!room:test"],
