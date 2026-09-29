@@ -58,3 +58,9 @@ export {
 export { VaultCollection } from "./vault/collection";
 export { VaultItemForm } from "./vault/form";
 export type { VaultData } from "./vault/data";
+
+export {
+  GesturePreferenceProvider,
+  MessageGestureSettings,
+  type GesturePreferenceStorage,
+} from "./conversation/gesture-preferences";

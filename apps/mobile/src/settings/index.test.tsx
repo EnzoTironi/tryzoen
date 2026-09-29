@@ -47,6 +47,7 @@ vi.mock("../auth", () => ({
   },
 }));
 vi.mock("@zoen/companion-ui", () => ({
+  MessageGestureSettings: () => <div>Message gestures</div>,
   SettingsPanel: (
     props: ComponentProps<typeof import("@zoen/companion-ui").SettingsPanel>
   ) => {

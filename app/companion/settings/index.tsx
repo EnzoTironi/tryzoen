@@ -1,7 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { SettingsPanel, type SettingsPage } from "@zoen/companion-ui";
+import {
+  MessageGestureSettings,
+  SettingsPanel,
+  type SettingsPage,
+} from "@zoen/companion-ui";
 import { authClient } from "@web/auth/client";
 import { useI18n } from "@web/i18n/context";
 import { LanguagePicker } from "@web/i18n/language-picker";
@@ -73,6 +77,7 @@ function SettingsContent({
         <>
           <WorkspaceSwitcher />
           <LanguagePicker />
+          <MessageGestureSettings />
           <ModelConnections />
           <ConnectedCreatorStudio />
         </>

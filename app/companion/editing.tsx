@@ -3,11 +3,13 @@ import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import {
   CompanionOverlayProvider,
+  GesturePreferenceProvider,
   MarkdownEditorProvider,
   ComposerEditorProvider,
   type ComposerEditorProps,
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
+import { browserGestureStorage } from "@web/components/companion-gesture-storage";
 import { renderWebCompanionOverlay } from "./overlay";
 
 const RichTextEditor = dynamic(
@@ -33,12 +35,14 @@ export function CompanionEditingProvider({
   readonly children: ReactNode;
 }) {
   return (
-    <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
-      <MarkdownEditorProvider value={renderEditor}>
-        <ComposerEditorProvider value={composerAdapter}>
-          {children}
-        </ComposerEditorProvider>
-      </MarkdownEditorProvider>
-    </CompanionOverlayProvider>
+    <GesturePreferenceProvider storage={browserGestureStorage}>
+      <CompanionOverlayProvider renderOverlay={renderWebCompanionOverlay}>
+        <MarkdownEditorProvider value={renderEditor}>
+          <ComposerEditorProvider value={composerAdapter}>
+            {children}
+          </ComposerEditorProvider>
+        </MarkdownEditorProvider>
+      </CompanionOverlayProvider>
+    </GesturePreferenceProvider>
   );
 }

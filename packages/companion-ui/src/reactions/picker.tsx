@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  Animated,
   ActivityIndicator,
   FlatList,
   Pressable,
@@ -11,6 +12,7 @@ import {
   type LayoutRectangle,
 } from "react-native";
 import { ArrowLeft, Plus, X } from "lucide-react-native";
+import { useSheetDrag, SheetGrabber } from "../sheet-drag";
 import { CompanionOverlay } from "../overlay";
 import { IconButton } from "../icon-button";
 import { colors } from "../theme";
@@ -33,6 +35,7 @@ export default function ReactionPicker({
 }) {
   const { width, height } = useWindowDimensions();
   const compact = width < 720;
+  const drag = useSheetDrag(compact, onClose);
   const [panelHeight, setPanelHeight] = useState(0);
   const menuWidth = Math.min(304, width - 24);
   const left = Math.max(
@@ -62,7 +65,12 @@ export default function ReactionPicker({
       setPending(false);
     }
   };
-  const renderEmoji = (entry: (typeof quickReactions)[number]) => (
+  const renderEmoji = (
+    entry: Pick<
+      (typeof reactionCategories)[number]["items"][number],
+      "emoji" | "name"
+    >
+  ) => (
     <Pressable
       key={entry.emoji}
       accessibilityRole="button"
@@ -101,9 +109,10 @@ export default function ReactionPicker({
           onPress={onClose}
           style={StyleSheet.absoluteFill}
         />
-        <View
+        <Animated.View
           style={[
             styles.panel,
+            { transform: [{ translateY: drag.offset }] },
             compact
               ? [styles.mobilePanel, { maxHeight: height * 0.82 }]
               : {
@@ -121,7 +130,7 @@ export default function ReactionPicker({
             );
           }}
         >
-          {compact && <View style={styles.handle} />}
+          {compact && <SheetGrabber handlers={drag.handlers} />}
           {expanded && (
             <View style={styles.header}>
               <IconButton
@@ -209,7 +218,7 @@ export default function ReactionPicker({
               Não foi possível salvar a reação. Tente novamente.
             </Text>
           )}
-        </View>
+        </Animated.View>
       </View>
     </CompanionOverlay>
   );
@@ -238,15 +247,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.line,
-    alignSelf: "center",
-    marginTop: 2,
-    marginBottom: 14,
   },
   header: {
     flexDirection: "row",

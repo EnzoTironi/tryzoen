@@ -1851,3 +1851,26 @@ thread root navigation, clean sidebar and retained draft; zero console errors.
 [Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892527473) includes screenshots and a labelled screenshot sequence.
 Structural delta: 23 observations / 11 gates, zero acknowledgements.
 OS-level universal/app links and private Eve message links remain open.
+
+### Message gestures — wave 30
+
+`conversation/double-tap.ts` recognizes intentional touch pairs and uses the
+existing reaction transport. `gesture-preferences.tsx` owns a device-only TanStack
+preference; platform storage adapters contain no account content. Mouse selection,
+interactive children, scrolling and long presses keep their existing semantics.
+Read coordinates from `nativeEvent.touches`, including on React Native Web.
+`sheet-drag.tsx` is shared by SheetSurface and the compact ReactionPicker. Its
+44px grabber owns the drag, leaving scrolling and document selection untouched.
+Short or cancelled drags reset; desktop dialogs are unchanged.
+
+Check passed: 277 files / 1,726 tests, nine tasks; build passed. Expo all-platform
+exports preceded the final web touch fix; browser plus final check/build cover
+that fix. Browser proved actual Matrix reactions, saved preferences, offline error
+and retry, short/complete drags, and retained drafts. Physical devices and haptics
+are not qualified. [Visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892916585).
+Structural delta: 26 observations / 10 gates, zero acknowledgements.
+
+The remote full runtime suite caught an unread-count regression: this Synapse's
+Sliding Sync returns dummy zero counters. The follow-up must source counters from
+bounded v3 sync while keeping native account-data markers. Do not suppress the
+notification integration test or treat a zero from Sliding Sync as authoritative.

@@ -6,6 +6,7 @@ import {
   ActionButton,
   CreatorStudio,
   SettingsPanel,
+  MessageGestureSettings,
   type SettingsPage,
 } from "@zoen/companion-ui";
 import { auth } from "../auth";
@@ -150,6 +151,7 @@ function GeneralSettings({
         {account.data?.user.name ?? "Your account"}
       </Text>
       <Text style={styles.description}>{account.data?.user.email}</Text>
+      <MessageGestureSettings />
       <ActionButton
         quiet
         onPress={() => {

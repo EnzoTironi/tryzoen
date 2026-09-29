@@ -1,4 +1,5 @@
 import { LocalMessagesProvider } from "@zoen/companion-ui/local-messages";
+import { gestureStorage } from "./gesture-storage";
 import { mobileMessageStorage } from "./message-storage";
 import { MobileOverlayProvider } from "./overlay";
 import { useAudioRecording } from "./audio-recording";
@@ -17,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ActionButton,
   CompanionShell,
+  GesturePreferenceProvider,
   MarkdownEditorProvider,
   ComposerEditorProvider,
   AttachmentProvider,
@@ -132,31 +134,33 @@ function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
   );
   return (
     <QueryClientProvider client={client}>
-      <LocalMessagesProvider storage={storage}>
-        <MobileOverlayProvider>
-          <MarkdownEditorProvider value={renderMarkdownEditor}>
-            <ComposerEditorProvider value={composerAdapter}>
-              <AttachmentProvider
-                pick={pickAttachments}
-                save={saveAttachment}
-                renderMedia={renderMedia}
-                startAudioRecording={startAudioRecording}
-              >
-                <MobileCompanion
-                  onSignOut={async () => {
-                    const result = await auth.signOut();
-                    if (result.error)
-                      throw new Error(
-                        result.error.message ?? "Could not sign out."
-                      );
-                    client.clear();
-                  }}
-                />
-              </AttachmentProvider>
-            </ComposerEditorProvider>
-          </MarkdownEditorProvider>
-        </MobileOverlayProvider>
-      </LocalMessagesProvider>
+      <GesturePreferenceProvider storage={gestureStorage}>
+        <LocalMessagesProvider storage={storage}>
+          <MobileOverlayProvider>
+            <MarkdownEditorProvider value={renderMarkdownEditor}>
+              <ComposerEditorProvider value={composerAdapter}>
+                <AttachmentProvider
+                  pick={pickAttachments}
+                  save={saveAttachment}
+                  renderMedia={renderMedia}
+                  startAudioRecording={startAudioRecording}
+                >
+                  <MobileCompanion
+                    onSignOut={async () => {
+                      const result = await auth.signOut();
+                      if (result.error)
+                        throw new Error(
+                          result.error.message ?? "Could not sign out."
+                        );
+                      client.clear();
+                    }}
+                  />
+                </AttachmentProvider>
+              </ComposerEditorProvider>
+            </MarkdownEditorProvider>
+          </MobileOverlayProvider>
+        </LocalMessagesProvider>
+      </GesturePreferenceProvider>
     </QueryClientProvider>
   );
 }

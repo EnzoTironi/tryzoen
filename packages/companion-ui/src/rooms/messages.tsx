@@ -389,6 +389,8 @@ function RoomMessage({
         </View>
         <MessageInteraction
           outgoing={item.mine}
+          reaction={reaction?.mine}
+          onQuickReact={(emoji) => onReact(item.id, emoji)}
           disabled={!!outgoing || !!item.redacted}
           onReply={() => {
             onReply(item);

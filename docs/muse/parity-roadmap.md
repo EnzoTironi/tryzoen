@@ -1077,3 +1077,30 @@ donos JSX e churn continuam dívida explícita. Links do chat privado Eve e
 Universal Links/App Links para abrir o app nativo permanecem pendentes. O cliente
 Expo copia o endereço web canônico. Esta rodada não altera produção nem conclui
 push, E2EE, chamadas ou qualificação para um milhão de pessoas.
+
+### Trigésima rodada — duplo toque e sheets por gesto — 29/09/2026
+
+O componente comum das mensagens reconhece duplo toque para reagir, com seis
+opções e desativação em Geral. A escolha usa TanStack e persistência por aparelho
+(localStorage cosmético no web/Electron; SecureStore existente no Expo). O gesto
+rejeita rolagem, multitouch e pressão longa. Duplo clique de mouse preserva seleção
+de texto. Links e controles de mídia conservam suas ações. O navegador expõe as
+coordenadas em `touches`, correção também aplicada ao cancelamento da pressão longa.
+
+A alça compartilhada fecha sheets mobile de conteúdo/configurações e o menu de
+mensagem; arraste curto retorna à posição e reduzir movimento é respeitado. Os
+modais desktop não mudam de comportamento. Falhas de reação permanecem visíveis e
+podem ser repetidas, sem perder o rascunho nem fingir sucesso sem conexão.
+
+`pnpm check`: 277 arquivos / 1.726 testes, nove tarefas. `pnpm build` passou.
+Exports Expo web/iOS/Android passaram antes da correção final das coordenadas do
+toque; a correção passou em check/build e navegador. Chrome 390×844 confirmou
+reação Matrix, preferência persistida, erro offline/recuperação e arrastes curto/
+completo em menu e configurações. Desktop 1440×900 confirmou modal e seleção de
+texto. Aparelhos físicos e haptics continuam abertos.
+
+[Imagens e sequência de screenshots, anexadas com gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892916585).
+Revisão estrutural: 26 observações, 10 gates, nove menores e sete símbolos novos,
+sem acknowledgements. Crescimento de MessageInteraction permanece dívida.
+O CI remoto expôs uma regressão nos contadores após a adoção do Sliding Sync;
+correção em andamento na próxima rodada. Não há implantação em produção.

@@ -148,6 +148,10 @@ export function Conversation({
           >
             <MessageInteraction
               outgoing={message.role === "user"}
+              reaction={reactions?.get(message.id)}
+              onQuickReact={
+                onReact ? (emoji) => onReact(message.id, emoji) : undefined
+              }
               disabled={!!message.metadata?.optimistic}
               onReply={() => {
                 setReply({

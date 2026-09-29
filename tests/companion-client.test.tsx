@@ -35,6 +35,8 @@ vi.mock("@zoen/companion-ui", async () => ({
     mocks.room = props;
     return <div>Room</div>;
   },
+  GesturePreferenceProvider: ({ children }: { children: ReactNode }) =>
+    children,
   CompanionShell: ({ children }: { children: ReactNode }) => children,
   ComposerReferenceProvider: ({ children }: { children: ReactNode }) =>
     children,

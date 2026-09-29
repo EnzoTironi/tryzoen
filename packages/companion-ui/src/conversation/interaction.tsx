@@ -17,9 +17,12 @@ import {
   Platform,
   StyleSheet,
   View,
+  Text,
+  ActivityIndicator,
   type LayoutRectangle,
 } from "react-native";
 import { Reply } from "lucide-react-native";
+import { useDoubleTapReaction } from "./double-tap";
 import { colors } from "../theme";
 
 const MessageInteractionContext = createContext<
@@ -41,16 +44,21 @@ export function MessageInteraction({
   children,
   footer,
   onReply,
+  onQuickReact,
+  reaction,
   outgoing,
   disabled = false,
 }: {
   readonly children: ReactNode;
   readonly footer: ReactNode;
   readonly onReply: () => void;
+  readonly reaction?: string | null;
+  readonly onQuickReact?: (emoji: string) => Promise<void>;
   readonly outgoing: boolean;
   readonly disabled?: boolean;
 }) {
   const bubble = useRef<View>(null);
+  const tap = useDoubleTapReaction(onQuickReact, reaction, disabled);
   const [offset] = useState(() => new Animated.Value(0));
   const reply = useRef(onReply);
   const inactive = useRef(disabled);
@@ -215,17 +223,22 @@ export function MessageInteraction({
                 else open();
               }}
               onTouchStart={(event) => {
+                const touch = event.nativeEvent.touches[0];
                 clearTimeout(held.current);
                 suppressClick.current = false;
                 if (
                   disabled ||
+                  !touch ||
                   event.nativeEvent.touches.length !== 1 ||
                   interactiveTarget(event.target)
-                )
+                ) {
+                  tap.cancel();
                   return;
+                }
+                tap.start(event);
                 origin.current = {
-                  x: event.nativeEvent.pageX,
-                  y: event.nativeEvent.pageY,
+                  x: touch.pageX,
+                  y: touch.pageY,
                 };
                 held.current = setTimeout(() => {
                   suppressClick.current = true;
@@ -233,18 +246,22 @@ export function MessageInteraction({
                 }, 480);
               }}
               onTouchMove={(event) => {
-                if (!origin.current) return;
+                tap.move(event);
+                const touch = event.nativeEvent.touches[0];
+                if (!origin.current || !touch) return;
                 if (
-                  Math.abs(event.nativeEvent.pageX - origin.current.x) > 8 ||
-                  Math.abs(event.nativeEvent.pageY - origin.current.y) > 8
+                  Math.abs(touch.pageX - origin.current.x) > 8 ||
+                  Math.abs(touch.pageY - origin.current.y) > 8
                 )
                   clearTimeout(held.current);
               }}
-              onTouchEnd={() => {
+              onTouchEnd={(event) => {
+                if (tap.end() && Platform.OS === "web") event.preventDefault();
                 clearTimeout(held.current);
                 origin.current = undefined;
               }}
               onTouchCancel={() => {
+                tap.cancel();
                 clearTimeout(held.current);
                 origin.current = undefined;
                 reset();
@@ -255,6 +272,18 @@ export function MessageInteraction({
             </View>
           </Animated.View>
         </View>
+        {tap.status === "pending" && (
+          <ActivityIndicator
+            accessibilityLabel="Salvando reação"
+            size="small"
+            style={styles.quickStatus}
+          />
+        )}
+        {tap.status === "failed" && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            Não foi possível reagir. Toque duas vezes para tentar novamente.
+          </Text>
+        )}
         {footer}
       </View>
     </MessageInteractionContext>
@@ -272,6 +301,8 @@ function interactiveTarget(target: unknown) {
 }
 
 const styles = StyleSheet.create({
+  quickStatus: { position: "absolute", right: 8, bottom: -4 },
+  error: { fontSize: 12, color: colors.danger, maxWidth: 260 },
   root: { maxWidth: "100%", alignItems: "flex-start", position: "relative" },
   outgoing: { alignItems: "flex-end" },
   bubble: { maxWidth: "100%" },
