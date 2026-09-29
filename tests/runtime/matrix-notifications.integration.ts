@@ -18,6 +18,7 @@ import { markMatrixRoomRead } from "../../server/matrix/read-position";
 import { saveDirectoryProfile } from "../../server/accounts/directory";
 import { openDirectRoom } from "../../server/matrix/direct";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
+import { setThreadSubscription } from "../../server/matrix/thread-subscriptions";
 
 let receiver: Awaited<ReturnType<typeof matrixReceiver>>;
 beforeAll(async () => {
@@ -104,6 +105,11 @@ test(
       messageId: mention.event_id,
     });
     await count(0);
+    await setThreadSubscription(guest, {
+      id: room.id,
+      rootId: message.event_id,
+      following: true,
+    });
     const reply = await sendMatrixMessage(actor, {
       id: room.id,
       operationId: randomUUID(),

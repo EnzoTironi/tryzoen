@@ -1,4 +1,5 @@
 import { useMarkRoomUnread } from "./unread";
+import { ThreadSubscription } from "./thread-subscription";
 import { roomMessageUrl } from "./links";
 import { RoomMessageContext } from "./context";
 import { RoomPins } from "./pins";
@@ -521,6 +522,13 @@ function RoomThread({
   );
   return (
     <>
+      <ThreadSubscription
+        data={data}
+        cacheScope={cacheScope}
+        roomId={roomId}
+        rootId={root.id}
+        active={active && visible && !result.isError}
+      />
       <RoomMessages
         onUnread={onUnread}
         data={data}

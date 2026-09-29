@@ -1,4 +1,13 @@
 import {
+  readThreadSubscription,
+  setThreadSubscription,
+} from "../../server/matrix/thread-subscriptions";
+import {
+  threadSubscriptionReadSchema,
+  threadSubscriptionWriteSchema,
+  threadSubscriptionSchema,
+} from "@zoen/companion-ui/rooms";
+import {
   roomUnreadSchema,
   roomPinsReadSchema,
   roomPinsSchema,
@@ -168,6 +177,18 @@ export const workspaceRoomsRouter = {
     .output(roomRenameResultSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, () => renameMatrixRoom(ctx.actor, input))
+    ),
+  threadSubscription: workspaceProcedure
+    .input(threadSubscriptionReadSchema)
+    .output(threadSubscriptionSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readThreadSubscription(ctx.actor, input))
+    ),
+  setThreadSubscription: workspaceProcedure
+    .input(threadSubscriptionWriteSchema)
+    .output(threadSubscriptionSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setThreadSubscription(ctx.actor, input))
     ),
   notifications: workspaceProcedure
     .input(roomNotificationsReadSchema)

@@ -51,6 +51,7 @@ if whatsapp_as and whatsapp_hs and whatsapp_url:
 config = {
     "server_name": name, "pid_file": str(config_dir / "homeserver.pid"),
     "signing_key_path": str(key), "report_stats": False,
+    "experimental_features": {"msc4306_enabled": True},
     "listeners": [{"port": 8008, "tls": False, "type": "http", "bind_addresses": ["::"],
                    "resources": [{"names": ["client", "health"], "compress": False}]}],
     "database": {"name": "psycopg2", "args": {

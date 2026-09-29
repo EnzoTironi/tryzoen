@@ -1,6 +1,8 @@
 server_name: zoen-eve.test
 signing_key_path: /data/signing.key
 report_stats: false
+experimental_features:
+  msc4306_enabled: true
 listeners:
   - port: 8008
     type: http

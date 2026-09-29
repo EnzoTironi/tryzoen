@@ -56,6 +56,20 @@ export const roomSyncReadSchema = z.object({
 export const roomThreadSchema = roomReadSchema.extend({
   rootId: z.string().startsWith("$").max(255),
 });
+export const threadSubscriptionReadSchema = roomThreadSchema.pick({
+  id: true,
+  rootId: true,
+});
+export const threadSubscriptionWriteSchema =
+  threadSubscriptionReadSchema.extend({ following: z.boolean() });
+export const threadSubscriptionSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("unsupported") }),
+  z.object({
+    status: z.literal("ready"),
+    following: z.boolean(),
+    automatic: z.boolean(),
+  }),
+]);
 export const roomCreateSchema = z.object({
   operationId: z.uuid(),
   name: z.string().trim().min(1).max(80),
@@ -278,6 +292,13 @@ export const roomSearchPageSchema = z.object({
 export const roomUnreadSchema = z.object({ id: z.uuid(), unread: z.boolean() });
 
 export interface RoomData {
+  threadSubscription: (
+    input: z.infer<typeof threadSubscriptionReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof threadSubscriptionSchema>>;
+  setThreadSubscription: (
+    input: z.infer<typeof threadSubscriptionWriteSchema>
+  ) => Promise<z.infer<typeof threadSubscriptionSchema>>;
   setUnread: (input: z.infer<typeof roomUnreadSchema>) => Promise<void>;
   pins: (
     input: z.infer<typeof roomPinsReadSchema>,

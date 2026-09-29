@@ -53,6 +53,28 @@ they are not total unread messages. Existing messages skipped under the prior
 exclusive namespace do not acquire retroactive notification history. This change
 does not enable device push, public receipts, personal-device login or E2EE.
 
+## Native thread subscriptions
+
+The pinned Synapse supports MSC4306 behind `experimental_features.msc4306_enabled`.
+Both generated deployment configuration and the isolated runtime fixture enable
+it. The application checks the advertised `org.matrix.msc4306` capability and
+uses `unstable/io.element.msc4306` endpoints; unsupported servers hide the control.
+This is an explicit compatibility constraint while the proposal remains unstable.
+No alternate subscription table or replacement push rule is maintained by Zoen.
+
+Subscriptions are manual and per person. Ordinary replies in unfollowed threads
+do not produce native unread notifications; mentions still follow native push rules.
+Zoen's explicit room-mute override continues to silence the whole conversation.
+Posting does not automatically follow a thread. Native app push and a unified
+followed-thread inbox remain separate release work. Activating this configuration
+on an existing server changes attention semantics; validate the native notification
+rollout above before deploying it. No production deployment accompanies this change.
+
+Runtime proof: `tests/runtime/matrix-thread-subscriptions.integration.ts` exercises
+follow/unfollow, repeats, two-person isolation, unauthorized roots, membership
+revocation and notification counts against real PostgreSQL/Synapse.
+Protocol: [MSC4306](https://github.com/matrix-org/matrix-spec-proposals/blob/rei/msc_thread_subscriptions/proposals/4306-thread-subscriptions.md).
+
 Reproducible protocol/registration proof, inside the pinned runtime image after
 the compose configuration is created:
 

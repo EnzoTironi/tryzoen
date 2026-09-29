@@ -38,18 +38,24 @@ export const matrixConfiguration = async () => {
 
 /** Only a configured homeserver is reachable. Tokens never enter URLs or logs. */
 export const matrixRequest = async function (
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   body?: z.core.util.JSONType,
   userId?: string,
   requestOptions: {
-    version?: "v1" | "v3" | "unstable/org.matrix.simplified_msc3575";
+    version?:
+      | ""
+      | "v1"
+      | "v3"
+      | "unstable/org.matrix.simplified_msc3575"
+      | "unstable/io.element.msc4306";
     maxResponseBytes?: number;
   } = {}
 ) {
   const config = await matrixConfiguration();
+  const version = requestOptions.version ?? "v3";
   const url = new URL(
-    `/_matrix/client/${requestOptions.version ?? "v3"}/${path}`,
+    `/_matrix/client/${version ? `${version}/` : ""}${path}`,
     config.url
   );
   if (userId) url.searchParams.set("user_id", userId);

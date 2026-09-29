@@ -1149,3 +1149,30 @@ Revisão estrutural: dez observações / seis gates, sem acknowledgements; compl
 e churn nos donos existentes seguem dívida. Reações não entram na fila offline
 de mensagens: falham explicitamente e permitem nova tentativa. Nenhuma migração
 ou implantação de produção. Paridade integral e capacidade não estão declaradas.
+
+### Trigésima terceira rodada — acompanhar threads no Matrix — 29/09/2026
+
+Acompanhar/deixar de acompanhar usa a assinatura nativa por pessoa do MSC4306,
+sem outra tabela de favoritos ou regra de push por thread. A interface compartilhada
+responde imediatamente, confirma a gravação e oferece reconciliação após falha.
+O backend verifica capacidade, mensagem raiz e membership antes/depois do provedor;
+as alterações são serializadas por pessoa/sala/thread. Servidores sem a capacidade
+não exibem o controle. A configuração gerada e o servidor isolado habilitam o
+recurso experimental; produção não foi alterada. O rollout muda a atenção de
+respostas comuns: somente threads acompanhadas notificam, salvo regras de menção.
+Silenciar a sala continua prevalecendo.
+
+Os dois testes reais PostgreSQL/Synapse de notificações e assinaturas passaram:
+isolamento por pessoa, repetição, contadores, mute, raiz inválida e revogação.
+Check serial passou com 279 arquivos / 1.736 testes e nove tarefas; build passou.
+A execução paralela inicial encontrou pressão de recursos e timeouts nos testes;
+nenhum timeout foi aumentado, teste omitido ou resultado mascarado. Navegador
+1440×900 confirmou prévia imediata com latência de dois segundos e persistência
+após recarga; 390×844 confirmou o mesmo estado e cancelamento da assinatura.
+[Capturas e sequência anexadas com gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893689261).
+
+Fonte: [MSC4306](https://github.com/matrix-org/matrix-spec-proposals/blob/rei/msc_thread_subscriptions/proposals/4306-thread-subscriptions.md),
+qualificado com Synapse 1.160.0. Caixa global de threads acompanhadas, assinatura
+automática ao responder e push em segundo plano continuam pendentes. Revisão
+estrutural: 17 observações / oito gates, sem acknowledgements. O CI do commit
+anterior 757a6057 concluiu os seis jobs com sucesso.

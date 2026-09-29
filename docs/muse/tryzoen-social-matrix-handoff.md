@@ -1911,3 +1911,22 @@ offline, retry, retained drafts, private-agent persistence and touch reactions.
 [Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893325236).
 Structural delta: ten observations / six gates, zero acknowledgements. Reactions
 are explicitly retryable, not persisted in the message outbox. No production changes.
+
+### Native thread subscriptions — wave 33
+
+`server/matrix/thread-subscriptions.ts` owns MSC4306 GET/PUT/DELETE with provider
+capability detection, root validation, actor/room/root serialization and membership
+revalidation. The shared thread button uses TanStack pending state and confirmed
+cache; failure offers readback before another toggle. No duplicate persistence.
+The isolated server and generated configuration enable the experimental feature;
+production is unchanged. See infrastructure/matrix/README.md for compatibility
+and changed notification semantics. Room mute still overrides followed threads.
+
+Two isolated runtime tests passed (notifications and subscriptions). Full serial
+check: 279 files / 1,736 tests, nine tasks; build passed. Initial parallel checking
+hit host resource pressure; serial checking passed without altered test deadlines.
+Browser confirmed instant pending state, reload persistence and mobile unfollow.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893689261).
+Structural review: 17 observations / eight gates, no acknowledgements. Followed
+thread inbox, automatic subscription on reply and background push remain open.
+CI for preceding commit 757a6057 passed all six jobs before this push.
