@@ -111,7 +111,7 @@ it("focused room shares change signals and typing in a finite native long-poll",
     expect.stringContaining("device_id=ZOEN_ROOM_BRIDGE_V1&timeout=10000"),
     undefined,
     "@viewer:test",
-    { maxResponseBytes: 65536 }
+    { maxResponseBytes: 2097152 }
   );
   const request = mocks.request.mock.calls[0]?.[1] ?? "";
   const filter: unknown = JSON.parse(
@@ -119,10 +119,19 @@ it("focused room shares change signals and typing in a finite native long-poll",
       "{}"
   );
   expect(filter).toMatchObject({
-    event_fields: ["event_id", "type", "content.user_ids"],
+    event_fields: [
+      "event_id",
+      "type",
+      "sender",
+      "origin_server_ts",
+      "content",
+      "unsigned",
+      "room_id",
+    ],
     room: {
       rooms: ["!room:test"],
       timeline: {
+        limit: 20,
         types: ["m.room.message", "m.room.redaction", "m.room.member"],
       },
       ephemeral: { types: ["m.typing"] },

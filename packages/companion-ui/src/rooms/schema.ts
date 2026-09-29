@@ -47,14 +47,6 @@ export const roomSyncReadSchema = z.object({
   id: z.uuid(),
   cursor: z.string().min(1).max(16384).optional(),
 });
-export const roomSyncPageSchema = z.object({
-  status: z.enum(["ready", "unavailable"]),
-  cursor: z.string().max(16384).nullable(),
-  timelineChanged: z.boolean(),
-  reset: z.boolean(),
-  userIds: z.array(z.string().max(255)).max(100),
-  expiresAt: z.number().int().nonnegative(),
-});
 export const roomThreadSchema = roomReadSchema.extend({
   rootId: z.string().startsWith("$").max(255),
 });
@@ -116,6 +108,20 @@ export const roomMessageSchema = z.object({
   reply: z
     .object({ id: z.string(), text: z.string(), sender: z.string() })
     .nullable(),
+});
+export const roomSyncPageSchema = z.object({
+  status: z.enum(["ready", "unavailable"]),
+  cursor: z.string().max(16384).nullable(),
+  timelineChanged: z.boolean(),
+  reset: z.boolean(),
+  changes: z
+    .object({
+      added: z.array(roomMessageSchema).max(20),
+      updated: z.array(roomMessageSchema).max(20),
+    })
+    .nullable(),
+  userIds: z.array(z.string().max(255)).max(100),
+  expiresAt: z.number().int().nonnegative(),
 });
 export const roomEditResultSchema = z.object({
   status: z.enum(["saved", "conflict"]),

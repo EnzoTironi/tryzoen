@@ -1439,3 +1439,28 @@ Four actual screenshots and a labelled 20-second screenshot sequence were
 Structural review reports 31 observations, 16 gating, without suppressions.
 Incremental content patching, native-device and production-capacity qualification
 remain open. Do not infer throughput or million-account readiness from idle UI.
+
+### Incremental content application — wave 17
+
+Focused native sync batches now project new events, validated edits and thread
+roots into the existing infinite caches. Batches hold at most 20 events and exact
+relationship reads run at concurrency four. Authorization is checked again after
+projection. Concurrent local writes or pagination replay the unacknowledged cursor;
+inactive queries remain stale. The 200-message live-head cap, redactions, membership
+changes and gaps use sequential history recovery without fabricating native cursors.
+
+[Browser measurements](evidence/incremental-history-2026-09-29.json) found zero
+history reads for a new arrival, an edit and a mobile thread reply. Three arrivals
+kept an older reading anchor within 0.1875 px and the new-message button reached
+the final arrival. These are synthetic functional comparisons, not load tests.
+
+Application check passed 270 files / 1,664 tests, production build and all Expo
+exports passed, and three focused isolated Synapse tests passed. The previous full
+runtime suite passed 421 tests at `86ed2531`; the next CI run repeats it. An unchanged
+QuickJS cancellation test timed out once, then its 18 focused tests and the whole
+check passed without weakening assertions. Structural review remains open with
+11 observations / six gating. Large-burst recovery, bounded total cache retention,
+physical-device qualification and production capacity remain release gates.
+
+Six screenshots and a labelled 24-second screenshot sequence were
+[attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784).

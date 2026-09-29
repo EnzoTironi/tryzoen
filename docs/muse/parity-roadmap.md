@@ -618,3 +618,39 @@ A revisão estrutural conjunta apontou 31 observações, 16 gating, sem supress�
 churn, tamanho e repetição de adapters/decodificação de cursor. Esta medição
 local não qualifica aparelhos físicos, conteúdo incremental ou capacidade de
 produção; esses gates permanecem abertos.
+
+### Décima sétima rodada — aplicação incremental do histórico — 29/09/2026
+
+Os lotes nativos agora aplicam mensagens novas, edições e respostas diretamente
+às páginas TanStack já carregadas. A mensagem é inserida uma única vez; a edição
+preserva sua posição e usa o conteúdo validado pelo homeserver. Respostas atualizam
+a thread e a contagem do pai. Uma escrita local ou paginação concorrente impede
+a confirmação do cursor e provoca replay, sem sobrescrever estado mais recente.
+Threads inativas permanecem stale até a próxima abertura autorizada.
+
+O lote possui no máximo 20 eventos e quatro leituras de relacionamentos em
+paralelo. O cabeçalho ao vivo tem limite de 200 mensagens. Exclusões, mudanças de
+membership, lacunas e excesso desse limite continuam recuperando as páginas em
+sequência; nenhum cursor de paginação é inventado nem ultrapassado por descarte.
+A autorização é revalidada depois de todas as leituras de projeção.
+
+[A conferência local](evidence/incremental-history-2026-09-29.json) registrou zero
+leituras de histórico para chegada, edição e resposta na thread mobile. O build
+anterior fez uma leitura para sua chegada sintética. Depois de navegar além da
+primeira página, três novas mensagens preservaram a Nota 039 em 332 → 332,1875 px.
+O botão de novas mensagens levou à última chegada. São janelas e cargas distintas,
+sem inferência de vazão ou capacidade de produção.
+
+`pnpm check` passou com 270 arquivos e 1.664 testes; build e exports Expo nas três
+plataformas passaram. Três testes focados com Synapse isolado passaram, cobrindo
+chegada, edição, thread, exclusão, lacuna, revogação e digitação. A última execução
+completa do runtime permanece em 421 testes no commit `86ed2531`; CI repetirá a
+suíte completa deste checkpoint. Um timeout no teste QuickJS existente foi
+investigado: seus 18 testes focados e a repetição completa do check passaram sem
+reduzir asserções. A revisão estrutural mantém 11 observações, seis gating, sem
+supressões. Retenção global de páginas, grandes rajadas durante recuperação,
+aparelhos físicos e capacidade de produção continuam abertos.
+
+Seis capturas do build real e uma sequência de aproximadamente 24 segundos foram
+[anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784).
+O vídeo é composto de capturas, não uma gravação contínua.

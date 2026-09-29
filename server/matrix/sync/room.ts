@@ -11,6 +11,7 @@ import { joinMatrixRoom, requireMatrixRoom } from "../rooms";
 import { MatrixError } from "../client";
 import { openRoomSyncCursor, sealRoomSyncCursor } from "./room-cursor";
 import { pollNativeSync } from "./native";
+import { readRoomChanges } from "./changes";
 
 export async function readMatrixRoomSync(
   actor: z.infer<typeof WorkspaceActorSchema>,
@@ -33,11 +34,19 @@ export async function readMatrixRoomSync(
       previous?.nextBatch ?? null,
       "room"
     );
+    const event = native.rooms?.join?.[room.roomId]?.ephemeral?.events.at(-1);
+    const timeline = native.rooms?.join?.[room.roomId]?.timeline;
+    const reset =
+      !previous ||
+      !!timeline?.limited ||
+      room.roomId in (native.rooms?.leave ?? {});
+    const changes =
+      !reset && timeline?.events.length
+        ? await readRoomChanges(actor, room, timeline.events)
+        : null;
     const current = await requireMatrixRoom(actor, input.id);
     if (current.roomId !== room.roomId || current.epoch !== room.epoch)
       throw new WorkspaceAccessDenied();
-    const event = native.rooms?.join?.[room.roomId]?.ephemeral?.events.at(-1);
-    const timeline = native.rooms?.join?.[room.roomId]?.timeline;
     // A healthy incremental sync retains the native set until a replacement (including []).
     // Bind the deadline to the request cursor, so identical request replay cannot renew it.
     const expiresAt = previous ? previous.issuedAt + 30000 : Date.now() + 30000;
@@ -62,10 +71,8 @@ export async function readMatrixRoomSync(
       status: "ready",
       cursor,
       timelineChanged: (timeline?.events.length ?? 0) > 0,
-      reset:
-        !previous ||
-        !!timeline?.limited ||
-        room.roomId in (native.rooms?.leave ?? {}),
+      reset,
+      changes,
       userIds: previous && expiresAt > Date.now() ? userIds : [],
       expiresAt: previous ? expiresAt : 0,
     });
@@ -77,6 +84,7 @@ export async function readMatrixRoomSync(
       cursor: null,
       timelineChanged: false,
       reset: false,
+      changes: null,
       userIds: [],
       expiresAt: 0,
     });

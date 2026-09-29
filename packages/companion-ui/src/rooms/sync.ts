@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { useTypingPublisher } from "./typing-publisher";
+import { reconcileRoomHistory } from "./history";
 import type { RoomData } from "./schema";
 
 /** One native sync for room/thread changes and typing. Never sends draft text. */
@@ -66,6 +67,14 @@ export function useRoomSync(
       const controller = new AbortController();
       read = controller;
       const stopped = () => controller.signal.aborted || !allowed();
+      const before = new Map(
+        history.flatMap((filter) =>
+          client
+            .getQueryCache()
+            .findAll(filter)
+            .map((query) => [query.queryHash, query.state.data] as const)
+        )
+      );
       try {
         const result = await data.readSync(
           { id: roomId, cursor },
@@ -74,10 +83,14 @@ export function useRoomSync(
         if (stopped()) return;
         if (result.status !== "ready") throw new Error("Room sync unavailable");
         if (result.reset || result.timelineChanged) {
-          // Do not cancel a prepend or acknowledge its signal before history catches up.
-          // Replay the same cursor once pagination has finished.
-          if (history.some((filter) => client.isFetching(filter) > 0)) return;
-          await refresh();
+          const reconciled = reconcileRoomHistory(
+            client,
+            history.flatMap((filter) => client.getQueryCache().findAll(filter)),
+            before,
+            result.reset ? null : result.changes
+          );
+          if (reconciled === "retry") return;
+          if (reconciled === "recover") await refresh();
           if (stopped()) return;
         }
         cursor = result.cursor ?? undefined;

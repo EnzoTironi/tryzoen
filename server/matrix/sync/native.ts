@@ -35,8 +35,10 @@ const nativeSyncSchema = z.object({
             timeline: z
               .object({
                 events: z
-                  .array(z.object({ event_id: z.string(), type: z.string() }))
-                  .max(1),
+                  .array(
+                    z.looseObject({ event_id: z.string(), type: z.string() })
+                  )
+                  .max(20),
                 limited: z.boolean().optional(),
               })
               .optional(),
@@ -68,7 +70,17 @@ export async function pollNativeSync(
       viewer
     );
   const filter = {
-    event_fields: ["event_id", "type", "content.user_ids"],
+    event_fields: focused
+      ? [
+          "event_id",
+          "type",
+          "sender",
+          "origin_server_ts",
+          "content",
+          "unsigned",
+          "room_id",
+        ]
+      : ["event_id", "type"],
     presence: { types: [] },
     account_data: { types: [] },
     room: {
@@ -78,7 +90,7 @@ export async function pollNativeSync(
       account_data: { types: [] },
       ephemeral: { types: focused ? ["m.typing"] : ["m.receipt"] },
       timeline: {
-        limit: 1,
+        limit: focused ? 20 : 1,
         types: focused
           ? ["m.room.message", "m.room.redaction", "m.room.member"]
           : [
@@ -95,7 +107,7 @@ export async function pollNativeSync(
     `sync?device_id=${device}&timeout=${focused && since ? 10000 : 0}&set_presence=offline&filter=${encodeURIComponent(JSON.stringify(filter))}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
     undefined,
     viewer,
-    { maxResponseBytes: focused ? 65536 : 1_048_576 }
+    { maxResponseBytes: focused ? 2_097_152 : 1_048_576 }
   );
   return parseNativeSync(response, roomIds, mode);
 }
@@ -115,10 +127,12 @@ function parseNativeSync(
   if (ids.length > roomIds.length || ids.some((id) => !roomIds.includes(id)))
     throw new MatrixError({ reason: "unavailable" });
   if (
-    Object.values(result.data.rooms?.join ?? {}).some((room) =>
-      room.ephemeral?.events.some(
-        (event) => event.type !== (mode === "room" ? "m.typing" : "m.receipt")
-      )
+    Object.values(result.data.rooms?.join ?? {}).some(
+      (room) =>
+        (room.timeline?.events.length ?? 0) > (mode === "room" ? 20 : 1) ||
+        room.ephemeral?.events.some(
+          (event) => event.type !== (mode === "room" ? "m.typing" : "m.receipt")
+        )
     )
   )
     throw new MatrixError({ reason: "unavailable" });

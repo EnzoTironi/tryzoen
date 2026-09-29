@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { useRoomSync } from "./sync";
 import type { RoomData } from "./schema";
+import type { applyRoomChanges } from "./history";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 const state = vi.hoisted(() => ({
   effects: [] as (() => void | (() => void))[],
@@ -142,6 +143,7 @@ test("replayed response cannot extend its expiry and disposal clears state", asy
     userIds: ["ana"],
     expiresAt: 105000,
     timelineChanged: false,
+    changes: null,
     reset: false,
   };
   data.readSync.mockResolvedValue(response);
@@ -169,6 +171,7 @@ const healthy = {
   userIds: [],
   expiresAt: 0,
   timelineChanged: false,
+  changes: null,
   reset: false,
 };
 
@@ -299,4 +302,200 @@ test("sync authorization failure revalidates history and does not leave stale co
   await vi.advanceTimersByTimeAsync(0);
   expect(room.observer.getCurrentResult().isError).toBe(true);
   expect(thread.observer.getCurrentResult().isError).toBe(true);
+});
+
+function message(id: string, text = id, rootId: string | null = null) {
+  return {
+    id,
+    text,
+    rootId,
+    sender: "Ana",
+    senderId: "@ana:test",
+    mine: false,
+    bot: false,
+    timestamp: 1,
+    replies: 0,
+    reply: null,
+  };
+}
+function observeMessages(kind: string, rootId?: string) {
+  const page: Parameters<typeof applyRoomChanges>[0]["pages"][number] = {
+    room: {
+      id: "room",
+      roomId: "!room:test",
+      label: "Room",
+      epoch: "epoch",
+      kind: "group",
+    },
+    members: [],
+    membersTruncated: false,
+    nextCursor: "older",
+    messages: [message("$recent", "$recent", rootId ?? null)],
+    ...(rootId ? { parent: message(rootId) } : {}),
+  };
+  const read = vi.fn<() => Promise<typeof page>>(async () => page);
+  const observer = new InfiniteQueryObserver(client, {
+    queryKey: [kind, "account:workspace", "room", ...(rootId ? [rootId] : [])],
+    initialPageParam: undefined as string | undefined,
+    queryFn: read,
+    getNextPageParam: (result) => result.nextCursor,
+    staleTime: Infinity,
+    initialData: {
+      pages: [
+        page,
+        {
+          ...page,
+          nextCursor: null,
+          messages: [message("$old", "$old", rootId ?? null)],
+        },
+      ],
+      pageParams: [undefined, "older"],
+    },
+  });
+  unsubscribe.push(
+    observer.subscribe(() => {
+      // Keep an actual active observer for cache updates and recovery.
+    })
+  );
+  return { observer, read };
+}
+
+test("native additions and old edits update real infinite caches without reading historical pages", async () => {
+  const room = observeMessages("matrix-messages");
+  const thread = observeMessages("matrix-thread", "$root");
+  data.readSync.mockResolvedValue({
+    ...healthy,
+    timelineChanged: true,
+    changes: {
+      added: [message("$new"), message("$reply", "New reply", "$root")],
+      updated: [
+        message("$old", "Edited old message"),
+        { ...message("$root"), replies: 1 },
+      ],
+    },
+  });
+  mount();
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(room.read).not.toHaveBeenCalled();
+  expect(thread.read).not.toHaveBeenCalled();
+  expect(
+    room.observer
+      .getCurrentResult()
+      .data?.pages.map((page) => page.messages.map((item) => item.id))
+  ).toEqual([["$recent", "$new", "$reply"], ["$old"]]);
+  expect(
+    room.observer.getCurrentResult().data?.pages[1]?.messages[0]?.text
+  ).toBe("Edited old message");
+  expect(
+    thread.observer
+      .getCurrentResult()
+      .data?.pages[0]?.messages.map((item) => item.id)
+  ).toEqual(["$recent", "$reply"]);
+  expect(
+    thread.observer.getCurrentResult().data?.pages[0]?.parent?.replies
+  ).toBe(1);
+  expect(data.readSync.mock.calls[1]?.[0].cursor).toBe("next");
+});
+
+test("a late batch cannot overwrite a local edit and is replayed against its new baseline", async () => {
+  const room = observeMessages("matrix-messages");
+  let complete:
+    | ((result: Awaited<ReturnType<RoomData["readSync"]>>) => void)
+    | undefined;
+  data.readSync.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      })
+  );
+  mount();
+  const key = ["matrix-messages", "account:workspace", "room"];
+  client.setQueryData<Parameters<typeof applyRoomChanges>[0]>(
+    key,
+    (current) =>
+      current && {
+        ...current,
+        pages: current.pages.map((page) => ({
+          ...page,
+          messages: page.messages.map((item) =>
+            item.id === "$recent"
+              ? { ...item, text: "Local edit", editId: "$edit" }
+              : item
+          ),
+        })),
+      }
+  );
+  complete?.({
+    ...healthy,
+    timelineChanged: true,
+    changes: { added: [], updated: [message("$recent", "Stale text")] },
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(
+    room.observer.getCurrentResult().data?.pages[0]?.messages[0]?.text
+  ).toBe("Local edit");
+  data.readSync.mockResolvedValue(healthy);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(data.readSync.mock.calls[1]?.[0].cursor).toBeUndefined();
+  expect(room.read).not.toHaveBeenCalled();
+});
+
+test("inactive threads stay stale instead of becoming fresh from an incomplete baseline", async () => {
+  const room = observeMessages("matrix-messages");
+  const key = ["matrix-thread", "account:workspace", "room", "$hidden"];
+  const first = room.observer.getCurrentResult().data?.pages[0];
+  expect(first).toBeDefined();
+  const previous = {
+    pages: [
+      {
+        ...first,
+        parent: message("$hidden"),
+      },
+    ],
+    pageParams: [undefined],
+  };
+  client.setQueryData(key, previous);
+  data.readSync.mockResolvedValue({
+    ...healthy,
+    timelineChanged: true,
+    changes: { added: [message("$new")], updated: [] },
+  });
+  mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(client.getQueryData(key)).toEqual(previous);
+  expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+  expect(room.read).not.toHaveBeenCalled();
+});
+
+test("a bounded live head falls back to sequential history recovery before acknowledging", async () => {
+  const room = observeMessages("matrix-messages");
+  client.setQueryData<Parameters<typeof applyRoomChanges>[0]>(
+    ["matrix-messages", "account:workspace", "room"],
+    (current) =>
+      current && {
+        ...current,
+        pages: current.pages.map((page, index) =>
+          index === 0
+            ? {
+                ...page,
+                messages: Array.from({ length: 200 }, (_, n) =>
+                  message(`$${n}`)
+                ),
+              }
+            : page
+        ),
+      }
+  );
+  data.readSync
+    .mockResolvedValueOnce({
+      ...healthy,
+      timelineChanged: true,
+      changes: { added: [message("$overflow")], updated: [] },
+    })
+    .mockResolvedValue(healthy);
+  mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(room.read).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(data.readSync.mock.calls[1]?.[0].cursor).toBe("next");
 });

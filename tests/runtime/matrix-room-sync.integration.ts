@@ -73,7 +73,12 @@ test(
     });
     const changed = await sync();
     expect(changed.timelineChanged).toBe(true);
-    expect(JSON.stringify(changed)).not.toContain("Synthetic original message");
+    expect(changed.changes?.added).toEqual([
+      expect.objectContaining({
+        id: sent.event_id,
+        text: "Synthetic original message",
+      }),
+    ]);
     await editMatrixMessage(fixture.actor, {
       id: room.id,
       messageId: sent.event_id,
@@ -81,25 +86,50 @@ test(
       operationId: randomUUID(),
       text: "Synthetic edited message",
     });
-    expect((await sync()).timelineChanged).toBe(true);
+    const edited = await sync();
+    expect(edited.changes?.updated).toEqual([
+      expect.objectContaining({
+        id: sent.event_id,
+        text: "Synthetic edited message",
+      }),
+    ]);
     expect(
       (await readMatrixMessages(fixture.guest, room.id)).messages.find(
         (m) => m.id === sent.event_id
       )?.text
     ).toBe("Synthetic edited message");
+    const reply = await sendMatrixMessage(fixture.actor, {
+      id: room.id,
+      rootId: sent.event_id,
+      operationId: randomUUID(),
+      text: "Synthetic thread arrival",
+    });
+    const thread = await sync();
+    expect(thread.changes?.added[0]).toMatchObject({
+      id: reply.event_id,
+      rootId: sent.event_id,
+    });
+    expect(thread.changes?.updated[0]).toMatchObject({
+      id: sent.event_id,
+      replies: 1,
+      text: "Synthetic edited message",
+    });
     await deleteMatrixMessage(fixture.actor, {
       id: room.id,
       messageId: sent.event_id,
       operationId: randomUUID(),
     });
-    expect((await sync()).timelineChanged).toBe(true);
+    expect(await sync()).toMatchObject({
+      timelineChanged: true,
+      changes: null,
+    });
     expect(
       (await readMatrixMessages(fixture.guest, room.id)).messages.find(
         (m) => m.id === sent.event_id
       )?.redacted
     ).toBe(true);
 
-    for (let n = 0; n < 3; n += 1) {
+    for (let n = 0; n < 21; n += 1) {
       await sendMatrixMessage(fixture.actor, {
         id: room.id,
         operationId: randomUUID(),
@@ -111,7 +141,7 @@ test(
       (await readMatrixMessages(fixture.guest, room.id)).messages.filter((m) =>
         m.text.startsWith("Synthetic burst")
       )
-    ).toHaveLength(3);
+    ).toHaveLength(21);
     await query(
       sql`DELETE FROM workspace_memberships WHERE workspace_id=${fixture.guest.workspaceId} AND user_id=${fixture.guest.userId}`
     );

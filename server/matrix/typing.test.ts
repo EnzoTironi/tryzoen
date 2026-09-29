@@ -9,12 +9,14 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
   seal: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
   request: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  changes: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
 }));
 vi.mock("./rooms", () => ({
   joinMatrixRoom: mocks.join,
   requireMatrixRoom: mocks.access,
 }));
 vi.mock("./sync/native", () => ({ pollNativeSync: mocks.native }));
+vi.mock("./sync/changes", () => ({ readRoomChanges: mocks.changes }));
 vi.mock("./sync/room-cursor", () => ({
   openRoomSyncCursor: mocks.open,
   sealRoomSyncCursor: mocks.seal,
@@ -59,6 +61,7 @@ beforeEach(() => {
     },
   });
   mocks.request.mockReset().mockResolvedValue({});
+  mocks.changes.mockReset().mockResolvedValue(null);
 });
 afterEach(() => vi.useRealTimers());
 test("initial cached snapshot seeds only and same request replay has fixed expiry", async () => {
@@ -117,7 +120,7 @@ test("bootstrap requires reconciliation, but an idle incremental read does not r
 });
 
 test.each(["m.room.message", "m.room.redaction", "m.room.member"])(
-  "%s signals authorized history without copying its body into sync",
+  "%s falls back to authorized history when a batch cannot be applied",
   async (type) => {
     mocks.open.mockResolvedValue({
       roomId: room.roomId,
@@ -170,6 +173,37 @@ test("a limited native timeline requests recovery even if its event list is empt
   expect(
     await readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
   ).toMatchObject({ reset: true, timelineChanged: false });
+});
+test("access is rechecked after authoritative change projection, before exposing content", async () => {
+  mocks.open.mockResolvedValue({
+    roomId: room.roomId,
+    epoch: room.epoch,
+    nextBatch: "s1",
+    issuedAt: 100000,
+    userIds: [],
+  });
+  mocks.native.mockResolvedValue({
+    next_batch: "s2",
+    rooms: {
+      join: {
+        [room.roomId]: {
+          timeline: { events: [{ event_id: "$new", type: "m.room.message" }] },
+        },
+      },
+    },
+  });
+  mocks.changes.mockImplementation(async () => {
+    mocks.access.mockResolvedValue({
+      ...room,
+      epoch: "revoked-during-projection",
+    });
+    return { added: [], updated: [] };
+  });
+  await expect(
+    readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(mocks.changes).toHaveBeenCalledTimes(1);
+  expect(mocks.seal).not.toHaveBeenCalled();
 });
 test("publisher derives sender, applies finite lease and rejects delegated actors", async () => {
   await setMatrixTyping(actor, { id: room.id, typing: true });
