@@ -40,7 +40,7 @@ vi.mock("@tanstack/react-query", () => ({
   useMutation: () => ({ isError: false, mutate: state.remove }),
 }));
 vi.mock("../page", () => ({ pageStyles: {} }));
-vi.mock("./form", () => ({ VaultCreationForm: () => null }));
+vi.mock("./form", () => ({ VaultItemForm: () => null }));
 vi.mock("../button", () => ({
   ActionButton: ({
     children,
@@ -57,6 +57,8 @@ const data = {
   list: vi.fn<VaultData["list"]>(),
   create: vi.fn<VaultData["create"]>(),
   remove: state.remove,
+  read: vi.fn<VaultData["read"]>(),
+  update: vi.fn<VaultData["update"]>(),
 };
 function render() {
   return renderToStaticMarkup(

@@ -2,7 +2,7 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
-import { VaultCreationForm } from "@zoen/companion-ui";
+import { VaultItemForm } from "@zoen/companion-ui";
 import { companionVaultData } from "@shared/companion/vault";
 import { api } from "@web/trpc/client";
 import { authClient } from "@web/auth/client";
@@ -21,9 +21,9 @@ export function CardForm({
     [client]
   );
   return (
-    <VaultCreationForm
+    <VaultItemForm
       key={session.data?.session.id ?? "signed-out"}
-      data={data}
+      onSave={data.create}
       kind="payment"
       initialLabel={initialLabel}
       onDone={() => {

@@ -5,8 +5,9 @@ import type { z } from "zod";
 import { ActionButton } from "../button";
 import { pageStyles } from "../page";
 import type { VaultData } from "./data";
-import type { VaultItem, vaultPageInputSchema } from "./schema";
-import { VaultCreationForm } from "./form";
+import type { vaultPageInputSchema } from "./schema";
+import { VaultItemForm } from "./form";
+import { VaultItemDetails } from "./details";
 
 export function VaultCollection({
   kind,
@@ -74,9 +75,9 @@ export function VaultCollection({
   const mayManage = list.data.pages[0]?.mayManage === true;
   if (adding && mayManage)
     return (
-      <VaultCreationForm
+      <VaultItemForm
         kind={kind}
-        data={data}
+        onSave={data.create}
         onDone={() => {
           setAdding(false);
           void refetch();
@@ -90,6 +91,10 @@ export function VaultCollection({
       <VaultItemDetails
         key={item.id}
         item={item}
+        data={data}
+        onChanged={() => {
+          void refetch();
+        }}
         mayManage={mayManage}
         pending={remove.isPending}
         onRemove={() => {
@@ -157,81 +162,6 @@ export function VaultCollection({
           {list.isFetchingNextPage ? "Loading…" : "Show more saved items"}
         </ActionButton>
       )}
-    </View>
-  );
-}
-
-function VaultItemDetails({
-  item,
-  mayManage,
-  pending,
-  onRemove,
-  onBack,
-  renderPermission,
-}: {
-  readonly item: VaultItem;
-  readonly mayManage: boolean;
-  readonly pending: boolean;
-  readonly onRemove: () => void;
-  readonly onBack: () => void;
-  readonly renderPermission?: (id: string) => ReactNode;
-}) {
-  const [confirming, setConfirming] = useState(false);
-  return (
-    <View style={{ gap: 16 }}>
-      <Text accessibilityRole="header" style={pageStyles.heading}>
-        {item.label}
-      </Text>
-      <Text style={pageStyles.copy}>{item.account}</Text>
-      <Text style={pageStyles.copy}>
-        Saved {new Date(item.createdAt).toLocaleDateString()}. Secrets are not
-        displayed here.
-      </Text>
-      {item.hasSecret && renderPermission?.(item.id)}
-      {mayManage &&
-        (confirming ? (
-          <>
-            <Text>
-              Remove this saved item and revoke its existing grants? This cannot
-              be undone.
-            </Text>
-            <ActionButton
-              disabled={pending}
-              onPress={() => {
-                onRemove();
-              }}
-            >
-              {pending ? "Removing…" : "Confirm removal"}
-            </ActionButton>
-            <ActionButton
-              quiet
-              disabled={pending}
-              onPress={() => {
-                setConfirming(false);
-              }}
-            >
-              Keep item
-            </ActionButton>
-          </>
-        ) : (
-          <ActionButton
-            quiet
-            onPress={() => {
-              setConfirming(true);
-            }}
-          >
-            Remove saved item
-          </ActionButton>
-        ))}
-      <ActionButton
-        quiet
-        disabled={pending}
-        onPress={() => {
-          onBack();
-        }}
-      >
-        Back to saved items
-      </ActionButton>
     </View>
   );
 }

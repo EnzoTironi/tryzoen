@@ -1,43 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { ZodError } from "zod";
-import { AppState, Text, TextInput, View } from "react-native";
+import { AppState, Text, View } from "react-native";
 import { ActionButton } from "../button";
 import { pageStyles } from "../page";
 import {
   createVaultFormItem,
   loginFormSchema,
   paymentCardFormSchema,
+  vaultFormValues,
+  type VaultFormDraft,
 } from "./forms";
-import type { VaultData } from "./data";
+import type { VaultCreateItem } from "./schema";
+import { VaultFields } from "./fields";
 
 /** Secret draft never enters query/mutation caches or persistent storage. */
-export function VaultCreationForm({
+export function VaultItemForm({
   kind,
-  data,
+  onSave,
   onDone,
+  initialValue,
   initialLabel = "",
   initialOrigin = "",
   initialIdentifierType = "email",
 }: {
   readonly kind: "login" | "payment";
-  readonly data: Pick<VaultData, "create">;
+  readonly onSave: (value: VaultCreateItem) => Promise<void | boolean>;
   readonly onDone: () => void;
+  readonly initialValue?: VaultCreateItem;
   readonly initialLabel?: string;
   readonly initialOrigin?: string;
   readonly initialIdentifierType?: "email" | "phone" | "username";
 }) {
-  const [values, setValues] = useState({
+  const [values, setValues] = useState<VaultFormDraft>({
     nickname: initialLabel,
     origin: initialOrigin,
     identifierType: initialIdentifierType,
     identifier: "",
     password: "",
+    totp: "",
     cardholderName: "",
     cardNumber: "",
     expiration: "",
     cvc: "",
     billingPostalCode: "",
+    ...(initialValue ? vaultFormValues(initialValue) : {}),
   });
+  const [revealed, setRevealed] = useState(false);
   const [pending, setPending] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -58,6 +66,15 @@ export function VaultCreationForm({
       listener.remove();
     };
   }, []);
+  useEffect(() => {
+    if (!revealed) return undefined;
+    const timer = setTimeout(() => {
+      setRevealed(false);
+    }, 30_000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [revealed]);
   const result = (
     kind === "login" ? loginFormSchema : paymentCardFormSchema
   ).safeParse(values);
@@ -78,17 +95,26 @@ export function VaultCreationForm({
     setLocalError(undefined);
     submitting.current = true;
     setPending(true);
+    let conflict = false;
     try {
-      await data.create(input);
+      conflict = (await onSave(input)) === false;
+      if (conflict) throw new Error("The saved item changed");
       if (alive.current) done.current();
     } catch {
       if (alive.current) {
         setValues((current) => ({
           ...current,
           password: "",
+          totp: "",
           cardNumber: "",
           cvc: "",
         }));
+        setRevealed(false);
+        setLocalError(
+          conflict
+            ? "This saved item changed or was removed. Reopen it before editing again."
+            : undefined
+        );
         setFailed(true);
       }
     } finally {
@@ -100,76 +126,44 @@ export function VaultCreationForm({
     return (
       <View style={{ gap: 16 }}>
         <Text accessibilityRole="alert">
-          Could not confirm the save. Sensitive fields were cleared. Check saved
-          items before creating it again.
+          {localError ??
+            "Could not confirm the save. Sensitive fields were cleared. Check saved items before trying again."}
         </Text>
-        <ActionButton onPress={onDone}>Check saved items</ActionButton>
+        <ActionButton onPress={onDone}>
+          {initialValue ? "Review saved item" : "Check saved items"}
+        </ActionButton>
       </View>
     );
-  const fields: readonly (readonly [keyof typeof values, string, boolean?])[] =
-    kind === "login"
-      ? [
-          ["nickname", "Name"],
-          ["origin", "Website"],
-          ["identifier", "Sign-in identifier"],
-          ["password", "Password", true],
-        ]
-      : [
-          ["nickname", "Nickname (optional)"],
-          ["cardholderName", "Name on card"],
-          ["cardNumber", "Card number", true],
-          ["expiration", "Expiration (MM / YY)"],
-          ["cvc", "CVC", true],
-          ["billingPostalCode", "Billing ZIP / postal"],
-        ];
   return (
     <View style={{ gap: 16 }}>
       <Text style={pageStyles.copy}>
-        {kind === "login"
-          ? "Saved credentials stay in your vault. Saving does not grant Zoen permission to use them."
-          : "Save card details in your vault. This does not connect a payment provider or authorize purchases."}
+        {initialValue
+          ? "Changes revoke existing access for Zoen. Grant permission again after saving if needed."
+          : kind === "login"
+            ? "Saved credentials stay in your vault. Saving does not grant Zoen permission to use them."
+            : "Save card details in your vault. This does not connect a payment provider or authorize purchases."}
       </Text>
-      {kind === "login" && (
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["email", "phone", "username"] as const).map((value) => (
-            <ActionButton
-              key={value}
-              quiet
-              disabled={pending || values.identifierType === value}
-              onPress={() => {
-                setValues((current) => ({ ...current, identifierType: value }));
-              }}
-            >
-              {value}
-            </ActionButton>
-          ))}
-        </View>
-      )}
-      {fields.map(([field, label, secret]) => (
-        <View key={field} style={{ gap: 6 }}>
-          <Text>{label}</Text>
-          <TextInput
-            accessibilityLabel={label}
-            value={values[field]}
-            editable={!pending}
-            secureTextEntry={secret}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="off"
-            maxLength={field === "password" ? 20_000 : 2048}
-            onChangeText={(value) => {
-              setValues((current) => ({ ...current, [field]: value }));
-            }}
-            style={{
-              borderRadius: 12,
-              backgroundColor: "#f1f1f2",
-              padding: 12,
-              color: "#171717",
-              fontSize: 16,
-            }}
-          />
-        </View>
-      ))}
+      <VaultFields
+        kind={kind}
+        values={values}
+        pending={pending}
+        revealed={revealed}
+        onChange={(field, value) => {
+          setValues((current) => ({ ...current, [field]: value }));
+        }}
+      />
+      <ActionButton
+        quiet
+        disabled={pending}
+        onPress={() => {
+          setRevealed((value) => !value);
+        }}
+      >
+        {revealed ? "Hide sensitive fields" : "Show sensitive fields"}
+      </ActionButton>
+      <Text style={pageStyles.copy}>
+        Sensitive fields hide again after 30 seconds.
+      </Text>
       {localError && <Text accessibilityRole="alert">{localError}</Text>}
       {attempted && !result.success && (
         <Text accessibilityRole="alert">
@@ -182,7 +176,13 @@ export function VaultCreationForm({
           void submit();
         }}
       >
-        {pending ? "Saving…" : kind === "login" ? "Save login" : "Save card"}
+        {pending
+          ? "Saving…"
+          : initialValue
+            ? "Save changes"
+            : kind === "login"
+              ? "Save login"
+              : "Save card"}
       </ActionButton>
       <ActionButton quiet disabled={pending} onPress={onDone}>
         Cancel

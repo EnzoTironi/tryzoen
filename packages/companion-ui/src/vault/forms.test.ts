@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
 import { expect, it } from "vitest";
-import { createVaultFormItem } from "./forms";
+import { createVaultFormItem, vaultFormValues } from "./forms";
 import { parseLoginVaultPayload, parsePaymentCardSecret } from "./schema";
 const login = {
   nickname: "Mail",
@@ -75,3 +75,21 @@ it.each(["12/99", "1299", "12 /99", "12 / 99"])(
     ).toMatchObject({ expirationMonth: 12, expirationYear: 2099 });
   }
 );
+
+it("editing preserves authenticator keys, passwordless methods and complete card values", () => {
+  for (const password of ["", "synthetic-secret"]) {
+    const saved = createVaultFormItem("login", {
+      ...login,
+      password,
+      totp: password ? "SYNTHETICKEY" : "",
+    });
+    expect(createVaultFormItem("login", vaultFormValues(saved))).toEqual(saved);
+  }
+  const savedCard = createVaultFormItem("payment", card);
+  expect(createVaultFormItem("payment", vaultFormValues(savedCard))).toEqual(
+    savedCard
+  );
+  expect(() =>
+    createVaultFormItem("login", { ...login, password: "", totp: "KEY" })
+  ).toThrow(ZodError);
+});

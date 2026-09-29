@@ -8,6 +8,8 @@ import { replacePersonalProfile } from "../../server/personal-memory/profile";
 import { selectGatewayModel } from "@db/services/settings";
 import {
   listAccountVaultItems,
+  readAccountVaultItem,
+  updateAccountVaultItem,
   createAccountVaultItem,
   importAccountVaultItems,
   removeAccountVaultItem,
@@ -32,6 +34,8 @@ import {
 } from "@zoen/companion-ui/vault";
 import {
   vaultCreateItemSchema,
+  vaultItemRevisionSchema,
+  vaultUpdateItemSchema,
   vaultImportItemsSchema,
 } from "@zoen/companion-ui/vault";
 import { createTRPCRouter, protectedProcedure } from "./init";
@@ -163,6 +167,22 @@ export const appRouter = createTRPCRouter({
       .output(vaultPageSchema)
       .query(({ ctx, input }) =>
         listAccountVaultItems(ctx.requestHeaders, input)
+      ),
+    read: protectedProcedure
+      .input(vaultItemRevisionSchema)
+      .output(vaultCreateItemSchema.nullable())
+      .mutation(({ ctx, input, signal }) =>
+        withSignal(signal, () =>
+          readAccountVaultItem(ctx.requestHeaders, input)
+        )
+      ),
+    update: protectedProcedure
+      .input(vaultUpdateItemSchema)
+      .output(z.boolean())
+      .mutation(({ ctx, input, signal }) =>
+        withSignal(signal, () =>
+          updateAccountVaultItem(ctx.requestHeaders, input)
+        )
       ),
     create: protectedProcedure
       .input(vaultCreateItemSchema)

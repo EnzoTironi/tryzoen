@@ -2,12 +2,16 @@ import { z } from "zod";
 import { transaction } from "@db/queries";
 import {
   readVaultPage,
+  readVaultItemContent,
+  updateVaultItem,
   saveVaultItem,
   deleteVaultItem,
 } from "@db/services/vault";
 import { vaultPageInputSchema } from "@zoen/companion-ui/vault";
 import {
   vaultCreateItemSchema,
+  vaultItemRevisionSchema,
+  vaultUpdateItemSchema,
   vaultImportItemsSchema,
 } from "@zoen/companion-ui/vault";
 import { resolveWorkspaceActor } from "../session";
@@ -61,5 +65,34 @@ export async function removeAccountVaultItem(headers: Headers, raw: string) {
       true
     );
     return deleteVaultItem(actor, id);
+  });
+}
+
+/** Explicit authenticated reads only; never expose this through list or agent tools. */
+export async function readAccountVaultItem(
+  headers: Headers,
+  raw: z.infer<typeof vaultItemRevisionSchema>
+) {
+  const input = vaultItemRevisionSchema.parse(raw);
+  return transaction(async () => {
+    const actor = await requireWorkspaceAccess(
+      await resolveWorkspaceActor(headers),
+      true
+    );
+    return readVaultItemContent(actor, input);
+  });
+}
+
+export async function updateAccountVaultItem(
+  headers: Headers,
+  raw: z.infer<typeof vaultUpdateItemSchema>
+) {
+  const input = vaultUpdateItemSchema.parse(raw);
+  return transaction(async () => {
+    const actor = await requireWorkspaceAccess(
+      await resolveWorkspaceActor(headers),
+      true
+    );
+    return updateVaultItem(actor, input);
   });
 }

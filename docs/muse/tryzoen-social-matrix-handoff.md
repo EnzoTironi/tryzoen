@@ -1278,3 +1278,34 @@ and [TanStack sequential infinite refetch](https://tanstack.com/query/latest/doc
 no duplicate message store was added. Validation: 1,603 application tests, build,
 three Expo exports and 14 focused isolated runtime tests passed. Full parity and
 million-account production capacity are still unqualified. Continue with one agent.
+
+### Credential editing and revocation — wave 11
+
+The shared vault form now handles creation and editing, with no creation-only
+alias. An explicit cancellable POST reads a selected revision into local editor
+state; decrypted payloads do not enter TanStack caches. Sensitive fields hide
+after 30 seconds; backgrounding or five minutes closes the editor. The server
+rejects stale edits, preserves item IDs and atomically replaces encrypted content
+while revoking prior grants. Grant creation and replacement share a workspace
+lock. Native payment and new-password hints avoid misclassifying card fields as
+login credentials. Authenticated tRPC responses are private and not cacheable.
+
+Delegated-secret reads now reuse the central workspace/organization/personal-owner
+membership predicate, retaining locks through decryption. Regression tests proved
+the previous stale-membership access before the fix. Full principal authentication
+still belongs to the caller; the extracted membership check is not a substitute
+for authenticating a session, channel, schedule or grant.
+
+Desktop/mobile browser checks used only synthetic credentials/cards. A preexisting
+local test item could not decrypt and was left intact; a newly created item was
+updated and read back successfully. Physical-device and payment qualification,
+step-up authentication and production capacity remain open. Continue without
+subagents as requested.
+
+Validation: 1,611 application tests, the build, three Expo exports and the complete
+isolated runtime suite (414 tests / 105 files) passed. The test database alone was
+recreated before that run. [Wave 11 visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883295480)
+contains four screenshots and a labelled screenshot-sequence video, attached
+with `gh --attach` after verifying the running build. The latest blank card form
+did not autofill site credentials; reopening the synthetic item after restart
+preserved its saved content.

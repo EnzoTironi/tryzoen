@@ -6,9 +6,16 @@ import {
 } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import type { vaultPageInputSchema } from "@zoen/companion-ui/vault";
+import type {
+  vaultPageInputSchema,
+  vaultItemRevisionSchema,
+  vaultUpdateItemSchema,
+} from "@zoen/companion-ui/vault";
 
-import { vaultItemKindSchema } from "@zoen/companion-ui/vault";
+import {
+  vaultItemKindSchema,
+  vaultCreateItemSchema,
+} from "@zoen/companion-ui/vault";
 import {
   loginAccountHint,
   parsePaymentCardSecret,
@@ -125,6 +132,46 @@ export async function saveVaultItem(
       label: input.label,
       updatedAt: now,
     });
+  });
+}
+
+/** Hold the item lock through decryption so an edit cannot change the snapshot mid-read. */
+export async function readVaultItemContent(
+  scope: AccessScope,
+  revision: z.infer<typeof vaultItemRevisionSchema>
+) {
+  return transaction(async () => {
+    const [record] = vaultRows.parse(
+      await query(sql`SELECT ${selection} FROM vault_items
+      WHERE workspace_id=${scope.workspaceId} AND id=${revision.id}
+        AND date_trunc('milliseconds', updated_at)=${revision.updatedAt}::timestamptz FOR SHARE`)
+    );
+    if (!record) return null;
+    const secret = await readVaultSecret(scope, record.id);
+    return secret ? vaultCreateItemSchema.parse({ ...record, secret }) : null;
+  });
+}
+
+export async function updateVaultItem(
+  scope: AccessScope,
+  input: z.infer<typeof vaultUpdateItemSchema>
+) {
+  return transaction(async () => {
+    // Serialize with delegation so an old secret cannot be granted after replacement.
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`vault-delegation:${scope.workspaceId}`}, 0))`
+    );
+    const rows =
+      await query(sql`UPDATE vault_items SET label=${input.value.label},
+      account=${vaultAccountHint(input.value)},
+      updated_at=date_trunc('milliseconds', GREATEST(clock_timestamp(), updated_at + interval '1 millisecond'))
+      WHERE id=${input.item.id} AND workspace_id=${scope.workspaceId} AND kind=${input.value.kind}
+        AND date_trunc('milliseconds', updated_at)=${input.item.updatedAt}::timestamptz RETURNING id`);
+    if (!rows.length) return false;
+    await writeVaultSecret(scope, input.item.id, input.value.secret);
+    await query(sql`UPDATE vault_item_delegations SET revoked_at=clock_timestamp(), wrapped_secret='revoked'
+      WHERE item_id=${input.item.id} AND workspace_id=${scope.workspaceId} AND revoked_at IS NULL`);
+    return true;
   });
 }
 

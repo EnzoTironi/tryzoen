@@ -1,6 +1,6 @@
 # Plano de paridade do Zoen
 
-Atualizado em 28/09/2026. Base integrada: PR [148](https://github.com/EnzoTironi/tryzoen/pull/148), merge `a1b96ea`. Este é o plano de produto e execução; os documentos de cada frente registram contratos, evidências e limitações. Uma referência visual, uma tela e uma funcionalidade validada são evidências diferentes.
+Atualizado em 29/09/2026. Base integrada: PR [148](https://github.com/EnzoTironi/tryzoen/pull/148), merge `a1b96ea`. Este é o plano de produto e execução; os documentos de cada frente registram contratos, evidências e limitações. Uma referência visual, uma tela e uma funcionalidade validada são evidências diferentes.
 
 ## O produto que estamos construindo
 
@@ -382,3 +382,52 @@ na classificação da ferramenta), principalmente churn de contratos/componentes
 adapters de transporte com validação repetida e harness de testes. Os caminhos
 foram revisados com testes e `--pr-context`; os componentes grandes preexistentes
 continuam sendo dívida, sem alegação de qualidade estrutural concluída.
+
+### Décima primeira rodada — cofre editável e revogação — 29/09/2026
+
+Credenciais e cartões usam um único formulário compartilhado para criar e editar.
+Abrir a edição faz uma leitura autenticada explícita por POST; os valores
+originalmente cifrados ficam somente no editor montado, fora dos caches de
+queries/mutations e da persistência do cliente. As respostas tRPC usam
+`private, no-store`. Campos sensíveis começam ocultos, voltam a se ocultar em
+30 segundos e o editor fecha ao sair do aplicativo ou após cinco minutos.
+Os indícios de autofill distinguem cartões de senhas do site. Isso não equivale
+a autenticação biométrica nem impede ferramentas privilegiadas no dispositivo.
+
+Salvar mantém o ID do item e compara a revisão lida. Duas edições simultâneas
+não sobrescrevem uma à outra. O timestamp avança mesmo com relógio atrasado ou
+uma revisão antiga com frações de milissegundo. Metadados, segredo
+cifrado e revogação das delegações antigas compartilham a transação; falhas fazem
+rollback do conjunto. A mesma trava de delegação impede conceder uma cópia
+antiga do segredo depois da atualização. O botão de permissão revalida o estado
+quando remonta, sem habilitar ações a partir de uma resposta antiga ou falha.
+
+A revisão encontrou e reproduziu uma falha interna: o leitor de credenciais
+delegadas aceitava um vínculo de workspace restante após revogação da organização,
+ou um vínculo indevido no espaço pessoal de outra pessoa. Ele agora reutiliza a
+mesma regra de membership do controle central e mantém as travas durante a leitura
+e decifração. Os testes novos falharam antes da correção e passaram depois.
+
+Chrome confirmou criar, cancelar, editar e reabrir uma credencial fictícia;
+a resposta autorizada continha a nova canary e não permitia cache. A ocultação
+automática foi observada. Um cartão fictício também foi criado e atualizado na
+sheet mobile. Um item antigo do ambiente local falhou na decifração e permaneceu
+intacto, com a edição bloqueada; não foi presumida a recuperação desse dado.
+
+Validação: `pnpm check` passou com 264 arquivos e 1.611 testes; `pnpm build`
+passou. A suíte completa de runtime passou com 105 arquivos e 414 testes em banco
+isolado, incluindo Matrix, memória e cofre. O banco de testes foi recriado antes
+da suíte; o banco local de revisão e produção foram preservados.
+
+Os exports Expo web/iOS/Android passaram. A conferência final verificou a sheet e
+o modal no build novo, persistência após reiniciar e formulário de cartão vazio
+com os indícios corretos de autofill. [Quatro capturas e uma sequência de vídeo](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883295480)
+foram anexadas via `gh --attach`; o vídeo não é gravação contínua.
+
+Revisão estrutural: 23 observações, 11 gating, sem supressões. Permanecem tamanho
+e ramificações dos componentes, adaptação e autorização repetidas e churn; o
+scanner também não identifica alguns usos por JSX. Os campos do formulário e a
+leitura protegida possuem donos separados, sem wrappers criados para testes.
+
+Restam qualificação em aparelhos reais, autenticação adicional para segredos,
+provedor de pagamentos e capacidade de produção. O checkpoint não encerra a paridade.

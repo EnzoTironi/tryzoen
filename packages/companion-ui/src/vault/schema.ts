@@ -232,6 +232,17 @@ export const vaultCreateItemSchema = z
     }
   });
 
+export const vaultItemRevisionSchema = vaultItemSchema
+  .pick({ id: true, updatedAt: true })
+  .extend({
+    id: z.string().min(1).max(160),
+    updatedAt: z.iso.datetime(),
+  });
+export const vaultUpdateItemSchema = z.object({
+  item: vaultItemRevisionSchema,
+  value: vaultCreateItemSchema,
+});
+
 export const vaultImportItemsSchema = z
   .array(
     vaultCreateItemSchema.refine((item) => item.kind === "login", {

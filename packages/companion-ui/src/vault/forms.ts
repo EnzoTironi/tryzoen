@@ -7,6 +7,9 @@ import {
   serializePaymentCard,
   paymentCardBrand,
   vaultCreateItemSchema,
+  parseLoginVaultPayload,
+  parsePaymentCardSecret,
+  type VaultCreateItem,
 } from "./schema";
 export const loginFormSchema = z
   .object({
@@ -19,6 +22,7 @@ export const loginFormSchema = z
       .transform(normalizeLoginOrigin)
       .pipe(loginOriginSchema),
     password: z.string().max(20_000),
+    totp: z.string().trim().max(2048).default(""),
   })
   .superRefine((form, context) => {
     const identifier = loginIdentifierSchema.safeParse({
@@ -34,6 +38,13 @@ export const loginFormSchema = z
         });
       }
     }
+    if (form.totp && !form.password) {
+      context.addIssue({
+        code: "custom",
+        message: "An authenticator key requires a password.",
+        path: ["totp"],
+      });
+    }
     if (form.identifierType === "username" && !form.password) {
       context.addIssue({
         code: "custom",
@@ -45,7 +56,11 @@ export const loginFormSchema = z
 
 function loginAuthentication(form: z.output<typeof loginFormSchema>) {
   if (form.password) {
-    return { password: form.password, type: "password" as const };
+    return {
+      password: form.password,
+      type: "password" as const,
+      ...(form.totp ? { totp: form.totp } : {}),
+    };
   }
   if (form.identifierType === "email") return { type: "email_otp" as const };
   if (form.identifierType === "phone") return { type: "sms_otp" as const };
@@ -82,6 +97,9 @@ export const paymentCardFormSchema = z.object({
     .refine(isCurrentExpiration, "Use a current expiration date."),
   nickname: z.string().trim().max(120),
 });
+
+export type VaultFormDraft = z.input<typeof loginFormSchema> &
+  z.input<typeof paymentCardFormSchema>;
 
 function passesLuhnCheck(number: string) {
   let sum = 0;
@@ -146,4 +164,36 @@ export function createVaultFormItem(kind: "login" | "payment", raw: unknown) {
       securityCode: form.cvc,
     }),
   });
+}
+
+/** Reuse the canonical payload parsers; never reconstruct a secret from its masked hint. */
+export function vaultFormValues(item: VaultCreateItem) {
+  if (item.kind === "login") {
+    const payload = parseLoginVaultPayload(item.secret);
+    if (!payload) throw new Error("Invalid saved login");
+    return {
+      nickname: item.label,
+      origin: payload.origin,
+      identifierType: payload.identifier.type,
+      identifier: payload.identifier.value,
+      password:
+        payload.authentication.type === "password"
+          ? payload.authentication.password
+          : "",
+      totp:
+        payload.authentication.type === "password"
+          ? (payload.authentication.totp ?? "")
+          : "",
+    };
+  }
+  if (item.kind !== "payment") throw new Error("Unsupported form kind");
+  const card = parsePaymentCardSecret(item.secret);
+  return {
+    nickname: item.label,
+    cardholderName: card.cardholderName,
+    cardNumber: card.number,
+    expiration: `${String(card.expirationMonth).padStart(2, "0")} / ${String(card.expirationYear).slice(-2)}`,
+    cvc: card.securityCode,
+    billingPostalCode: card.billingPostalCode,
+  };
 }
