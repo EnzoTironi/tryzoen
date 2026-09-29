@@ -8,8 +8,8 @@ import {
   createMatrixRoom,
   joinMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { matrixRequest } from "../../server/matrix/client";
 import { applyRoomChanges } from "../../packages/companion-ui/src/rooms/history";
 import { readMatrixRoomSync } from "../../server/matrix/sync/room";

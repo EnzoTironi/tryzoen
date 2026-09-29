@@ -1172,8 +1172,8 @@ após recarga; 390×844 confirmou o mesmo estado e cancelamento da assinatura.
 [Capturas e sequência anexadas com gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893689261).
 
 Fonte: [MSC4306](https://github.com/matrix-org/matrix-spec-proposals/blob/rei/msc_thread_subscriptions/proposals/4306-thread-subscriptions.md),
-qualificado com Synapse 1.160.0. Caixa global de threads acompanhadas, assinatura
-automática ao responder e push em segundo plano continuam pendentes. Revisão
+qualificado com Synapse 1.160.0. Caixa global de threads acompanhadas e push em
+segundo plano continuam pendentes. A rodada 39 acrescenta assinatura ao responder. Revisão
 estrutural: 17 observações / oito gates, sem acknowledgements. O CI do commit
 anterior 757a6057 concluiu os seis jobs com sucesso.
 
@@ -1336,3 +1336,25 @@ e detalhes. Remoção pelo celular e restauração também passaram.
 [Imagens e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895904261)
 anexadas por `gh --attach`. HEIC, ajuste manual do recorte e qualificação em
 aparelhos físicos continuam abertos. Sem deploy de produção.
+
+### Rodada 39 — acompanhar threads ao responder — 29/09/2026
+
+Uma resposta de texto ou arquivo acompanha a thread pelo MSC4306 nativo. O evento
+real da resposta é a causa da assinatura; replay posterior não desfaz um unfollow
+mais recente. Responder novamente volta a acompanhar, preservando assinaturas
+manuais existentes. Autor, raiz e acesso são verificados. Envios foram colocados
+no dono `server/matrix/send.ts`, com os consumidores atualizados diretamente.
+
+A confirmação dos alertas tem limite de três segundos. Se ficar incerta, a
+mensagem permanece enviada e a interface oferece conferir os alertas. Não há
+reenvio automático da mensagem nem promessa de retry em segundo plano para a
+assinatura. O cache TanStack consulta o estado atual e protege decisões manuais
+mais recentes contra respostas atrasadas. Servidores sem suporte ocultam o controle.
+
+O teste PostgreSQL/Synapse cobre texto, anexos, identidade única de envio,
+isolamento, preferência manual, unfollow seguido de replay, capacidade ausente e
+perda de confirmação antes/depois da escrita. Check passou: 280 arquivos / 1.742
+testes e nove tarefas. A caixa global de threads acompanhadas e push em segundo
+plano continuam pendentes; nenhuma migração ou implantação de produção nesta rodada.
+
+Build e conferência desktop/mobile passaram; [capturas e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896204935) foram anexadas com `gh --attach`. A revisão estrutural registrou 19 observações / dez gates, sem supressões; inclui complexidade do dono de assinatura, tamanho do hook e churn dos adaptadores.

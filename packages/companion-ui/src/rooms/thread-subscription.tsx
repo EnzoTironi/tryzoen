@@ -28,6 +28,7 @@ export function ThreadSubscription({
     retry: false,
   });
   const change = useMutation({
+    mutationKey: queryKey,
     scope: { id: JSON.stringify(queryKey) },
     networkMode: "always",
     retry: false,
@@ -44,7 +45,8 @@ export function ThreadSubscription({
     ? change.variables
     : current.data?.status === "ready" && current.data.following;
   const Icon = following ? BellRing : Bell;
-  const failed = current.isError || change.isError;
+  const failed =
+    current.isError || change.isError || current.data?.status === "unconfirmed";
   return (
     <View style={styles.section}>
       <Pressable
@@ -56,10 +58,8 @@ export function ThreadSubscription({
               ? "Deixar de acompanhar thread"
               : "Acompanhar thread"
         }
-        accessibilityState={{
-          selected: following,
-          disabled: !active || current.isPending,
-        }}
+        aria-pressed={following}
+        aria-disabled={!active || current.isPending}
         disabled={!active || current.isPending}
         onPress={() => {
           if (failed) {
@@ -83,7 +83,9 @@ export function ThreadSubscription({
       </Pressable>
       {failed && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Não foi possível confirmar os alertas desta thread.
+          {current.data?.status === "unconfirmed"
+            ? "Resposta enviada. Confira os alertas desta thread."
+            : "Não foi possível confirmar os alertas desta thread."}
         </Text>
       )}
     </View>

@@ -9,6 +9,7 @@ export class MatrixError extends Error {
     | "unavailable"
     | "forbidden"
     | "conflict"
+    | "obsolete-subscription"
     | "expired-position"
     | "not-found";
   constructor(input: { readonly reason: MatrixError["reason"] }) {
@@ -108,6 +109,8 @@ function matrixFailureReason(
   status: number
 ): MatrixError["reason"] {
   if (code === "M_UNKNOWN_POS") return "expired-position";
+  if (code === "IO.ELEMENT.MSC4306.M_CONFLICTING_UNSUBSCRIPTION")
+    return "obsolete-subscription";
   if (code === "M_USER_IN_USE" || code === "M_ROOM_IN_USE") return "conflict";
   if (status === 403) return "forbidden";
   if (status === 404) return "not-found";

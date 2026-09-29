@@ -14,8 +14,8 @@ import { editMatrixMessage } from "../../server/matrix/edits";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 
 test(

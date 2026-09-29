@@ -7,8 +7,8 @@ import { matrixReceiver } from "./matrix-fixture";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { syncConversationInbox } from "../../server/matrix/sync";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 

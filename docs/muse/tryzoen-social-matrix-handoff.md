@@ -1928,7 +1928,7 @@ hit host resource pressure; serial checking passed without altered test deadline
 Browser confirmed instant pending state, reload persistence and mobile unfollow.
 [Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893689261).
 Structural review: 17 observations / eight gates, no acknowledgements. Followed
-thread inbox, automatic subscription on reply and background push remain open.
+thread inbox and background push remain open; wave 39 below adds automatic following on reply.
 CI for preceding commit 757a6057 passed all six jobs before this push.
 
 ### Message reports (wave 36, 2026-09-29)
@@ -1973,3 +1973,26 @@ Real PostgreSQL/Synapse avatar integration passed, plus the full check (280 file
 Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895904261.
 Photo source files are never persisted; native historical state/media retention
 is separate from clearing the currently displayed photo. See universal-client.md.
+
+### Follow threads when replying — wave 39
+
+`server/matrix/send.ts` now owns message publication and activity projection;
+callers were moved directly without a re-export compatibility layer. A successful
+thread reply requests native MSC4306 following with its actual cause event ID.
+The subscription owner validates author/root and uses the same per-person lock
+as manual writes. Native ordering rejects a late automatic replay after an unfollow;
+a newer reply follows again, and a manual subscription remains manual.
+
+A three-second bound applies to this secondary operation. Provider unavailability
+returns a confirmed message receipt plus an unconfirmed alert setting, without
+requesting a duplicate send. The shared thread control offers explicit checking.
+TanStack refreshes native state on success and preserves newer manual cache writes
+and account teardown against late receipts. No background subscription retry is
+claimed. Unsupported homeservers keep their existing hidden control.
+
+Real PostgreSQL/Synapse acceptance covers text/file replies, isolation, duplicate
+send identity, manual precedence, unsubscribe/replay ordering, unsupported servers,
+and missing/lost acknowledgements. Full check: 280 files / 1,742 tests and nine tasks.
+Global followed-thread inbox, background push and device qualification remain open.
+
+Build and desktop/mobile browser checks passed. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896204935.

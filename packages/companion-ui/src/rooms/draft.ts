@@ -49,17 +49,45 @@ export function useRoomDraft(
   >(
     ["matrix-outbox", cacheScope, roomId],
     async ({ quote: _quote, ...input }) => {
-      await data.send(input);
+      const subscriptionKey = [
+        "matrix-thread-subscription",
+        cacheScope,
+        roomId,
+        input.rootId,
+      ];
+      const subscriptionRevision =
+        client.getQueryState(subscriptionKey)?.dataUpdateCount;
+      const receipt = await data.send(input);
       void client.invalidateQueries({
         queryKey: ["conversation-inbox", cacheScope],
       });
       void client.invalidateQueries({
         queryKey: ["matrix-messages", cacheScope, roomId],
       });
-      if (input.rootId)
+      if (input.rootId) {
         void client.invalidateQueries({
           queryKey: ["matrix-thread", cacheScope, roomId, input.rootId],
         });
+        if (
+          receipt.subscription?.status === "unconfirmed" &&
+          !client.isMutating({ mutationKey: subscriptionKey })
+        ) {
+          await client.cancelQueries({ queryKey: subscriptionKey });
+          client.setQueryData(
+            subscriptionKey,
+            (previous: typeof receipt.subscription) =>
+              previous &&
+              !client.isMutating({ mutationKey: subscriptionKey }) &&
+              client.getQueryState(subscriptionKey)?.dataUpdateCount ===
+                subscriptionRevision
+                ? receipt.subscription
+                : previous
+          );
+        } else {
+          // Read current native state: a manual unfollow may be newer than this receipt.
+          void client.invalidateQueries({ queryKey: subscriptionKey });
+        }
+      }
     }
   );
   return {

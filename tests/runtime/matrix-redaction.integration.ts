@@ -7,8 +7,8 @@ import { workspaceFixture } from "./workspace-fixture";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 import { readMatrixMedia } from "../../server/matrix/media/read";
 import { openDirectRoom } from "../../server/matrix/direct";

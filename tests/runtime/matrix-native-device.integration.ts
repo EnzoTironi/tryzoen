@@ -8,8 +8,8 @@ import { ensureMatrixIdentity } from "../../server/matrix/identities";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 const response = z.object({
   next_batch: z.string(),

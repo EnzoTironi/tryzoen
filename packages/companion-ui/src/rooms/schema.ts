@@ -65,12 +65,17 @@ export const threadSubscriptionWriteSchema =
   threadSubscriptionReadSchema.extend({ following: z.boolean() });
 export const threadSubscriptionSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unsupported") }),
+  z.object({ status: z.literal("unconfirmed") }),
   z.object({
     status: z.literal("ready"),
     following: z.boolean(),
     automatic: z.boolean(),
   }),
 ]);
+export const roomSendResultSchema = z.object({
+  event_id: roomThreadSchema.shape.rootId,
+  subscription: threadSubscriptionSchema.optional(),
+});
 export const roomCreateSchema = z.object({
   operationId: z.uuid(),
   name: z.string().trim().min(1).max(80),
@@ -446,7 +451,9 @@ export interface RoomData {
     input: z.infer<typeof roomThreadSchema>,
     signal?: AbortSignal
   ) => Promise<z.infer<typeof roomThreadPageSchema>>;
-  send: (input: z.infer<typeof roomSendSchema>) => Promise<void>;
+  send: (
+    input: z.infer<typeof roomSendSchema>
+  ) => Promise<z.infer<typeof roomSendResultSchema>>;
 }
 
 export const savedMessageCursorSchema = z.object({

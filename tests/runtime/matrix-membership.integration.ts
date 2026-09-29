@@ -9,8 +9,8 @@ import {
   joinMatrixRoom,
   listMatrixRooms,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import {
   changeMatrixGroupMembership,
   readNativeGroupMembership,

@@ -7,9 +7,9 @@ import { matrixReceiver } from "./matrix-fixture";
 import { workspaceFixture } from "./workspace-fixture";
 import {
   createMatrixRoom,
-  sendMatrixMessage,
   readMatrixMessages,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { ensureMatrixIdentity } from "../../server/matrix/identities";
 import { matrixRequest, matrixConfiguration } from "../../server/matrix/client";
 import {

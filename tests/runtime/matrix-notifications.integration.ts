@@ -3,11 +3,8 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { workspaceFixture } from "./workspace-fixture";
 import { matrixReceiver } from "./matrix-fixture";
-import {
-  createMatrixRoom,
-  joinMatrixRoom,
-  sendMatrixMessage,
-} from "../../server/matrix/rooms";
+import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import {
   readRoomNotifications,
   setRoomNotifications,

@@ -62,10 +62,16 @@ uses `unstable/io.element.msc4306` endpoints; unsupported servers hide the contr
 This is an explicit compatibility constraint while the proposal remains unstable.
 No alternate subscription table or replacement push rule is maintained by Zoen.
 
-Subscriptions are manual and per person. Ordinary replies in unfollowed threads
+Subscriptions are per person, with manual and reply-triggered following. Ordinary replies in unfollowed threads
 do not produce native unread notifications; mentions still follow native push rules.
 Zoen's explicit room-mute override continues to silence the whole conversation.
-Posting does not automatically follow a thread. Native app push and a unified
+Posting a reply follows its thread using the native `automatic` cause event ID.
+Manual subscriptions retain their manual status; a delayed replay cannot undo an
+unsubscription made after that reply. A new reply after unfollowing follows again.
+The server verifies the cause belongs to the same person and thread. When the
+secondary subscription call is unavailable or exceeds three seconds, the send receipt remains accepted
+with an explicit unconfirmed alert setting. The UI asks the person to check the
+setting; it does not resend the message or claim background retry. Native app push and a unified
 followed-thread inbox remain separate release work. Activating this configuration
 on an existing server changes attention semantics; validate the native notification
 rollout above before deploying it. No production deployment accompanies this change.
@@ -73,6 +79,8 @@ rollout above before deploying it. No production deployment accompanies this cha
 Runtime proof: `tests/runtime/matrix-thread-subscriptions.integration.ts` exercises
 follow/unfollow, repeats, two-person isolation, unauthorized roots, membership
 revocation and notification counts against real PostgreSQL/Synapse.
+`tests/runtime/matrix-thread-replies.integration.ts` also verifies causal replay,
+manual precedence, text/file replies, unsupported servers and lost confirmations.
 Protocol: [MSC4306](https://github.com/matrix-org/matrix-spec-proposals/blob/rei/msc_thread_subscriptions/proposals/4306-thread-subscriptions.md).
 
 Reproducible protocol/registration proof, inside the pinned runtime image after

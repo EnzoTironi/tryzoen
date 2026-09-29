@@ -8,8 +8,8 @@ import { openDirectRoom } from "../../server/matrix/direct";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { reconcileMatrixActivity } from "../../server/matrix/activity-reconcile";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { matrixReceiver } from "./matrix-fixture";

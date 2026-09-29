@@ -9,10 +9,10 @@ import { workspaceFixture } from "./workspace-fixture";
 import { matrixReceiver } from "./matrix-fixture";
 import {
   createMatrixRoom,
-  sendMatrixMessage,
   readMatrixMessages,
   closeMatrixRoom,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import {
   readSavedCleanupState,
   clearUnavailableSavedMessages,

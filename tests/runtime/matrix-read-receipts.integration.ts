@@ -3,11 +3,8 @@ import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
 import { query } from "@db/queries";
 import { workspaceFixture } from "./workspace-fixture";
-import {
-  createMatrixRoom,
-  joinMatrixRoom,
-  sendMatrixMessage,
-} from "../../server/matrix/rooms";
+import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import {
   markMatrixRoomRead,
   readReadReceiptPreference,

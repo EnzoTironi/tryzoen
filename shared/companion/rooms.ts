@@ -3,6 +3,7 @@ import {
   roomPinsSchema,
   roomPinResultSchema,
   threadSubscriptionSchema,
+  roomSendResultSchema,
   readReceiptPreferenceSchema,
 } from "@zoen/companion-ui/rooms";
 import { roomReactorsPageSchema } from "@zoen/companion-ui/rooms";
@@ -244,7 +245,9 @@ export function companionRoomData(
       );
     },
     async send(input) {
-      await rpc.mutation("workspaces.rooms.send", input);
+      return roomSendResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.send", input)
+      );
     },
   };
 }

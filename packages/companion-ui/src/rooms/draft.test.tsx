@@ -48,7 +48,7 @@ const data: RoomData = {
   directs: vi.fn<RoomData["directs"]>(),
   media: vi.fn<RoomData["media"]>(),
   operationId: () => crypto.randomUUID(),
-  send: vi.fn<RoomData["send"]>().mockResolvedValue(undefined),
+  send: vi.fn<RoomData["send"]>().mockResolvedValue({ event_id: "$sent" }),
   list: vi.fn<RoomData["list"]>(),
   create: vi.fn<RoomData["create"]>(),
   messages: vi.fn<RoomData["messages"]>(),
@@ -92,7 +92,7 @@ function open(scope = "viewer:workspace", room = "room", root?: string) {
 
 afterEach(() => {
   client.clear();
-  vi.mocked(data.send).mockReset().mockResolvedValue(undefined);
+  vi.mocked(data.send).mockReset().mockResolvedValue({ event_id: "$sent" });
 });
 
 it("restores text and quote after navigation, with separate account, room and thread drafts", () => {
@@ -203,12 +203,81 @@ it("sends thread replies and attachments without touching the main or next draft
   expect(open("other:workspace").outgoing).toHaveLength(0);
 });
 
-function pendingSend() {
-  let resolve!: () => void;
-  let reject!: (cause: Error) => void;
-  const promise = new Promise<void>((accept, fail) => {
-    resolve = accept;
-    reject = fail;
+it("keeps a delivered reply accepted when automatic alerts are uncertain", async () => {
+  const key = [
+    "matrix-thread-subscription",
+    "viewer:workspace",
+    "room",
+    "$root",
+  ];
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
   });
+  vi.mocked(data.send).mockResolvedValueOnce({
+    event_id: "$reply",
+    subscription: { status: "unconfirmed" },
+  });
+  const thread = () => open("viewer:workspace", "room", "$root");
+  await thread().send({ text: "Delivered once" });
+  thread().change("Next reply");
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("accepted");
+  });
+  expect(client.getQueryData(key)).toEqual({ status: "unconfirmed" });
+  expect(thread().text).toBe("Next reply");
+  expect(data.send).toHaveBeenCalledTimes(1);
+});
+
+it("does not replace a newer manual alert decision with a late send warning", async () => {
+  const key = [
+    "matrix-thread-subscription",
+    "viewer:workspace",
+    "room",
+    "$root",
+  ];
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
+  });
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  const thread = () => open("viewer:workspace", "room", "$root");
+  await thread().send({ text: "Reply" });
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(1);
+  });
+  // Even an unchanged value is a newer explicit decision.
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
+  });
+  pending.resolve({
+    event_id: "$sent",
+    subscription: { status: "unconfirmed" },
+  });
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("accepted");
+  });
+  expect(client.getQueryData(key)).toMatchObject({
+    status: "ready",
+    following: false,
+  });
+});
+
+function pendingSend() {
+  let resolve!: (receipt?: Awaited<ReturnType<RoomData["send"]>>) => void;
+  let reject!: (cause: Error) => void;
+  const promise = new Promise<Awaited<ReturnType<RoomData["send"]>>>(
+    (accept, fail) => {
+      resolve = (receipt = { event_id: "$sent" }) => {
+        accept(receipt);
+      };
+      reject = fail;
+    }
+  );
   return { promise, resolve, reject };
 }

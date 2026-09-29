@@ -7,11 +7,8 @@ import { z } from "zod";
 import { workspaceFixture } from "./workspace-fixture";
 import { matrixReceiver } from "./matrix-fixture";
 import { matrixRequest, MatrixEventSchema } from "../../server/matrix/client";
-import {
-  createMatrixRoom,
-  joinMatrixRoom,
-  sendMatrixMessage,
-} from "../../server/matrix/rooms";
+import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { editMatrixMessage } from "../../server/matrix/edits";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 

@@ -122,6 +122,7 @@ import {
   roomReactionWriteSchema,
   roomReactionSummarySchema,
   roomSendSchema,
+  roomSendResultSchema,
   roomReadSchema,
   roomThreadSchema,
   roomPageSchema,
@@ -135,8 +136,8 @@ import {
   createMatrixRoom,
   listMatrixRooms,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 
 import {
   readMatrixReactions,
@@ -388,6 +389,7 @@ export const workspaceRoomsRouter = {
     ),
   send: workspaceProcedure
     .input(roomSendSchema)
+    .output(roomSendResultSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, async () => sendMatrixMessage(ctx.actor, input))
     ),

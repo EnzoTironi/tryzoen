@@ -10,8 +10,8 @@ import {
   createMatrixRoom,
   joinMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import {
   forwardMatrixMessage,
   listForwardDestinations,

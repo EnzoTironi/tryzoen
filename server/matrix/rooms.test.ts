@@ -2,13 +2,16 @@ import { z } from "zod";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MatrixEventSchema } from "./client";
 import type { matrixRequest } from "./client";
+import type { setThreadSubscription } from "./thread-subscriptions";
 import type { requireWorkspaceAccess } from "../workspaces/access";
-import { readMatrixMessages, sendMatrixMessage } from "./rooms";
+import { readMatrixMessages } from "./rooms";
+import { sendMatrixMessage } from "./send";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
 const mocks = vi.hoisted(() => ({
   request: vi.fn<typeof matrixRequest>(),
   access: vi.fn<typeof requireWorkspaceAccess>(),
+  subscription: vi.fn<typeof setThreadSubscription>(),
 }));
 
 vi.mock("@db/queries", () => ({
@@ -33,6 +36,9 @@ vi.mock("../workspaces/access", async (importOriginal) => ({
   requireWorkspaceAccess: mocks.access,
 }));
 vi.mock("./direct", () => ({ findDirectRoom: async () => null }));
+vi.mock("./thread-subscriptions", () => ({
+  setThreadSubscription: mocks.subscription,
+}));
 vi.mock("./identities", () => ({
   ensureMatrixIdentity: async () => "@member:matrix.test",
 }));
@@ -54,6 +60,9 @@ const actor = {
 
 beforeEach(() => {
   mocks.request.mockReset();
+  mocks.subscription
+    .mockReset()
+    .mockResolvedValue({ status: "ready", following: true, automatic: true });
   mocks.access.mockReset().mockResolvedValue({
     ...actor,
     role: "member",
@@ -218,6 +227,15 @@ it("uses native Matrix thread relations and a stable transaction ID for sends", 
     text: "Ready",
     rootId: "$root",
   });
+  expect(mocks.subscription).toHaveBeenCalledWith(
+    actor,
+    {
+      id: "binding",
+      rootId: "$root",
+      following: true,
+    },
+    "$sent"
+  );
   expect(mocks.request).toHaveBeenCalledWith(
     "PUT",
     expect.stringContaining("/send/m.room.message/deduplicated-operation"),

@@ -8,8 +8,8 @@ import {
   joinMatrixRoom,
   listMatrixRooms,
   readMatrixMessages,
-  sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { readMatrixRoomSync } from "../../server/matrix/sync/room";
 import * as matrix from "../../server/matrix/client";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
