@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Markdown, { Renderer } from "react-native-marked";
 import { colors } from "./theme";
 
@@ -33,10 +33,13 @@ class AssistantRenderer extends Renderer {
 export function AssistantMarkdown({
   text,
   allowImages = true,
+  compact = false,
 }: {
   readonly text: string;
   /** Private documents can render their text without contacting image hosts. */
   readonly allowImages?: boolean;
+  /** Message bubbles own their outer padding; documents keep block spacing. */
+  readonly compact?: boolean;
 }) {
   const renderer = useMemo(
     () => new AssistantRenderer(allowImages),
@@ -46,9 +49,11 @@ export function AssistantMarkdown({
     <Markdown
       value={text}
       renderer={renderer}
+      styles={compact ? messageStyles : undefined}
       flatListProps={{
         scrollEnabled: false,
         style: { backgroundColor: "transparent" },
+        ItemSeparatorComponent: compact ? MessageBlockSeparator : undefined,
       }}
       theme={{
         colors: {
@@ -60,4 +65,12 @@ export function AssistantMarkdown({
       }}
     />
   );
+}
+
+const messageStyles = StyleSheet.create({
+  paragraph: { paddingVertical: 0 },
+});
+
+function MessageBlockSeparator() {
+  return <View style={{ height: 10 }} />;
 }

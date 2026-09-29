@@ -654,3 +654,25 @@ aparelhos físicos e capacidade de produção continuam abertos.
 Seis capturas do build real e uma sequência de aproximadamente 24 segundos foram
 [anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784).
 O vídeo é composto de capturas, não uma gravação contínua.
+
+### Décima oitava rodada — densidade das mensagens — 29/09/2026
+
+Reação, citação, cópia e thread compartilham uma faixa que quebra linha quando
+necessário. Ícones mais discretos preservam alvos de 44 px; o acesso à thread
+passa de 28 para 44 px. A mesma mensagem curta no desktop caiu de 166 para 110 px
+(33,7%). O renderer de conversa remove padding externo duplicado e mantém
+separação entre blocos; documentos e cartões de memória conservam seu layout.
+
+No build real foram verificados cópia, citação/remoção, reação persistida, abertura
+e retorno de thread mobile e edição/salvamento de negrito, parágrafos e lista pelo
+editor visual. A barra inferior continua visível. [Medição local](evidence/message-density-2026-09-29.json).
+`pnpm check` passou com 270 arquivos e 1.664 testes; build e exports Expo web/iOS/
+Android passaram. Um mock incompleto foi substituído pelo adapter React Native
+Web nos testes de imagens privadas, preservando todas as asserções. Não houve
+mudança de servidor ou banco. A revisão estrutural trouxe quatro observações,
+zero gating e nenhuma supressão.
+
+[Cinco capturas e uma sequência de aproximadamente 20 segundos](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885161314)
+foram anexadas via `gh --attach`. O vídeo é composto de capturas. Texto ampliado,
+aparelhos físicos e os alvos menores dos links de nome/perfil ainda precisam de
+qualificação; esta rodada não conclui acessibilidade, paridade ou capacidade.

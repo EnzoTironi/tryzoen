@@ -358,7 +358,7 @@ function RoomMessage({
               cacheScope={cacheScope}
             />
           ) : (
-            <AssistantMarkdown text={item.text} />
+            <AssistantMarkdown text={item.text} compact />
           )}
         </View>
         {!item.redacted && !item.media && <MessageLinks text={item.text} />}
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   },
   latestText: { fontSize: 13, fontWeight: "600", color: colors.accent },
   content: { paddingHorizontal: 24, paddingVertical: 24 },
-  separator: { height: 20 },
+  separator: { height: 12 },
   messageLine: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   outgoingLine: { justifyContent: "flex-end" },
   day: {
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 24,
   },
-  row: { alignItems: "flex-start", gap: 6, flexShrink: 1, maxWidth: "92%" },
+  row: { alignItems: "flex-start", gap: 4, flexShrink: 1, maxWidth: "92%" },
   outgoing: { alignItems: "flex-end" },
   attribution: { flexDirection: "row", alignItems: "center", gap: 7 },
   sender: { fontSize: 12, color: colors.muted, fontWeight: "500" },
@@ -426,13 +426,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  time: { fontSize: 10, color: colors.muted },
+  time: { fontSize: 11, color: colors.muted },
   bubble: {
     maxWidth: "100%",
     backgroundColor: "#f0f0f2",
-    borderRadius: 19,
+    borderRadius: 21,
     paddingHorizontal: 16,
-    paddingVertical: 11,
+    paddingVertical: 10,
   },
   blue: { backgroundColor: "#cfe7ff" },
   text: { color: colors.ink, fontSize: 15, lineHeight: 23 },

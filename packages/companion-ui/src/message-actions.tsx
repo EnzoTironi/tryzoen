@@ -59,6 +59,7 @@ export function MessageActions({
           </Pressable>
         ) : (
           <IconButton
+            quiet
             icon={outgoing ? Ellipsis : SmilePlus}
             label={onDelete ? "Message actions" : "React to message"}
             onPress={() => {
@@ -136,7 +137,12 @@ function TextMessageActions({
           Reply
         </ActionButton>
       ) : (
-        <IconButton icon={Reply} label="Reply to message" onPress={reply} />
+        <IconButton
+          quiet
+          icon={Reply}
+          label="Reply to message"
+          onPress={reply}
+        />
       )}
       {onCopy &&
         (expanded ? (
@@ -150,6 +156,7 @@ function TextMessageActions({
           </ActionButton>
         ) : (
           <IconButton
+            quiet
             icon={copied ? Check : Copy}
             label={copied ? "Message copied" : "Copy message"}
             onPress={() => {
@@ -179,7 +186,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
     minWidth: 44,
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: 10,
     borderRadius: 22,
     backgroundColor: colors.wash,

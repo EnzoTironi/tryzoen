@@ -1464,3 +1464,20 @@ physical-device qualification and production capacity remain release gates.
 
 Six screenshots and a labelled 24-second screenshot sequence were
 [attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784).
+
+### Compact message presentation — wave 18
+
+Shared room actions now wrap in one row, with quieter icons and 44 px action
+and thread targets. Conversation Markdown owns no duplicate outer paragraph
+padding but separates blocks; document previews keep their layout. A short
+message measures 166 → 110 px on desktop. Copy feedback, quoted reply/removal,
+persistent reaction, mobile thread navigation and visual rich-text editing were
+verified against the production build. Mobile bottom navigation remains visible.
+
+Check passed 270 files / 1,664 tests, as did build and all Expo exports. A narrow
+React Native test mock was updated to the web adapter without removing private
+image/link assertions. No server or database behavior changed. Quality delta:
+four observations, zero gating; the reported unused separator is a library callback.
+[Five screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885161314)
+were attached with `gh --attach`. [Local measurements](evidence/message-density-2026-09-29.json)
+do not qualify physical devices, enlarged text or the smaller profile-name links.

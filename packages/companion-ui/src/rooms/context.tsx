@@ -166,7 +166,7 @@ function ContextMessage({
             paddingVertical: 6,
           }}
         >
-          <AssistantMarkdown text={item.text} />
+          <AssistantMarkdown text={item.text} compact />
         </View>
       )}
     </View>

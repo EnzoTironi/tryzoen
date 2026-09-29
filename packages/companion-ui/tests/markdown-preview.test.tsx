@@ -3,9 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { AssistantMarkdown } from "../src/markdown";
 
-vi.mock("react-native", () => ({
-  Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-}));
+vi.mock("react-native", () => import("react-native-web"));
 vi.mock("react-native-marked", () => {
   class Renderer {
     getKey() {

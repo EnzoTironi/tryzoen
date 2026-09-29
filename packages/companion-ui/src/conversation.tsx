@@ -223,7 +223,7 @@ export function Conversation({
 
 function UserMessage({ text }: { readonly text: string }) {
   const quoted = readReplyMessage(text);
-  if (!quoted) return <AssistantMarkdown text={text} />;
+  if (!quoted) return <AssistantMarkdown text={text} compact />;
   return (
     <View style={styles.quotedMessage}>
       <View style={styles.quote}>
@@ -238,7 +238,7 @@ function UserMessage({ text }: { readonly text: string }) {
           {quoted.quote}
         </Text>
       </View>
-      <AssistantMarkdown text={quoted.text} />
+      <AssistantMarkdown text={quoted.text} compact />
     </View>
   );
 }
@@ -261,7 +261,7 @@ export function MessagePart({
           {isUser ? (
             <UserMessage text={part.text} />
           ) : (
-            <AssistantMarkdown text={part.text} />
+            <AssistantMarkdown text={part.text} compact />
           )}
         </View>
         <MessageLinks text={readReplyMessage(part.text)?.text ?? part.text} />

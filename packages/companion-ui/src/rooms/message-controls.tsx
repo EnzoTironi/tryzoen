@@ -37,39 +37,42 @@ export function RoomMessageControls({
   return (
     <>
       <RoomReactionSummary reaction={item.redacted ? undefined : reaction} />
-      {!item.redacted && (
-        <MessageActions
-          onSave={() => {
-            setAction("save");
-          }}
-          onEdit={
-            item.mine && !item.media
-              ? () => {
-                  setAction("edit");
-                }
-              : undefined
-          }
-          onDelete={
-            item.mine
-              ? () => {
-                  setAction("delete");
-                }
-              : undefined
-          }
-          text={item.text}
-          outgoing={item.mine}
-          onCopy={onCopy}
-          onReply={() => {
-            onReply(item);
-          }}
-          reaction={reaction?.mine}
-          reactionCount={
-            reaction?.reactions.find((entry) => entry.emoji === reaction.mine)
-              ?.count
-          }
-          onReact={(emoji) => onReact(item.id, emoji)}
-        />
-      )}
+      <View style={[styles.actions, item.mine && styles.outgoing]}>
+        {!item.redacted && (
+          <MessageActions
+            onSave={() => {
+              setAction("save");
+            }}
+            onEdit={
+              item.mine && !item.media
+                ? () => {
+                    setAction("edit");
+                  }
+                : undefined
+            }
+            onDelete={
+              item.mine
+                ? () => {
+                    setAction("delete");
+                  }
+                : undefined
+            }
+            text={item.text}
+            outgoing={item.mine}
+            onCopy={onCopy}
+            onReply={() => {
+              onReply(item);
+            }}
+            reaction={reaction?.mine}
+            reactionCount={
+              reaction?.reactions.find((entry) => entry.emoji === reaction.mine)
+                ?.count
+            }
+            onReact={(emoji) => onReact(item.id, emoji)}
+          />
+        )}
+        <RoomThreadAction item={item} onThread={onThread} />
+      </View>
       {action && (
         <RoomMessageDialog
           action={action}
@@ -82,7 +85,6 @@ export function RoomMessageControls({
           }}
         />
       )}
-      <RoomThreadAction item={item} onThread={onThread} />
     </>
   );
 }
@@ -100,13 +102,13 @@ function RoomThreadAction({
           onPress={() => {
             onThread(item);
           }}
-          style={styles.reply}
+          style={({ pressed }) => [styles.reply, pressed && styles.pressed]}
         >
           <MessageCircle size={14} color={colors.accent} />
           <Text style={styles.replyText}>
             {item.replies
               ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
-              : "Responder em thread"}
+              : "Thread"}
           </Text>
         </Pressable>
       )}
@@ -117,27 +119,36 @@ function RoomThreadAction({
 function RoomReactionSummary({
   reaction,
 }: Pick<ComponentProps<typeof RoomMessageControls>, "reaction">) {
-  if (!reaction?.reactions.length) return null;
+  const otherReactions = reaction?.reactions.filter(
+    (entry) => entry.emoji !== reaction.mine
+  );
+  if (!reaction || !otherReactions?.length) return null;
   return (
     <View style={styles.reactions}>
-      {reaction.reactions
-        .filter((entry) => entry.emoji !== reaction.mine)
-        .map((entry) => (
-          <View key={entry.emoji} style={styles.reaction}>
-            <Text
-              accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
-              style={styles.reactionText}
-            >
-              {entry.emoji} {entry.count}
-              {reaction.complete ? "" : "+"}
-            </Text>
-          </View>
-        ))}
+      {otherReactions.map((entry) => (
+        <View key={entry.emoji} style={styles.reaction}>
+          <Text
+            accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
+            style={styles.reactionText}
+          >
+            {entry.emoji} {entry.count}
+            {reaction.complete ? "" : "+"}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 2,
+    maxWidth: "100%",
+  },
+  outgoing: { justifyContent: "flex-end" },
   reactions: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
   reaction: {
     borderRadius: 16,
@@ -150,9 +161,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 7,
+    minHeight: 44,
+    paddingHorizontal: 10,
+    borderRadius: 22,
   },
   replyText: { color: colors.accent, fontSize: 12 },
+  pressed: { backgroundColor: colors.wash },
 });
 
 function RoomMessageDialog({
