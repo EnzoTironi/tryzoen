@@ -24,6 +24,8 @@ import {
   creatorSourceExample,
   creatorSourceSchema,
   creatorSourceSnapshotSchema,
+  creatorSourceMetadataSchema,
+  creatorUploadSnapshotSchema,
 } from "./sources/schema";
 
 const projection = sql`id, draft_id AS "draftId", revision, status, rights,
@@ -55,7 +57,7 @@ export function listCreatorSources(
     return z
       .array(
         creatorSourceSchema.extend({
-          snapshot: creatorSourceSnapshotSchema.omit({ content: true }),
+          snapshot: creatorSourceMetadataSchema,
         })
       )
       .max(20)
@@ -76,6 +78,7 @@ export function acquireCreatorSource(
     if (existing[0]) {
       const saved = creatorSourceSchema.parse(existing[0]);
       if (
+        saved.snapshot.extraction !== "workspace-markdown" ||
         saved.draftId !== input.draftId ||
         saved.snapshot.path !== input.path ||
         saved.snapshot.fileRevision !== input.fileRevision ||
@@ -204,5 +207,48 @@ export function withdrawCreatorSource(
       },
     });
     return { source: await readCreatorSource(actor, input.id), draft: saved };
+  });
+}
+
+/** Called only by the authenticated one-shot upload capture, never with model-provided bytes. */
+export function acquireCreatorUploadSource(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  input: Pick<
+    z.infer<typeof creatorSourceAcquireSchema>,
+    "id" | "draftId" | "expectedDraftRevision"
+  >,
+  rawSnapshot: z.infer<typeof creatorUploadSnapshotSchema>
+) {
+  const snapshot = creatorUploadSnapshotSchema.parse(rawSnapshot);
+  return transaction(async () => {
+    await lockCreatorDrafts(actor);
+    const draft = await readCreatorDraft(actor, input.draftId);
+    const [existing] = await query(
+      sql`SELECT ${projection},snapshot FROM creator_sources WHERE id=${input.id} AND workspace_id=${actor.workspaceId} AND user_id=${actor.userId}`
+    );
+    if (existing) {
+      const saved = creatorSourceSchema.parse(existing);
+      if (
+        saved.draftId !== input.draftId ||
+        JSON.stringify(saved.snapshot) !== JSON.stringify(snapshot)
+      )
+        throw new CreatorDraftConflict();
+      return saved;
+    }
+    if (
+      draft.archivedAt ||
+      draft.revision !== input.expectedDraftRevision ||
+      draft.content.examples.some((example) => example.id === input.id)
+    )
+      throw new CreatorDraftConflict();
+    if ((await listCreatorSources(actor, input.draftId)).length >= 20)
+      throw new Error(
+        "A draft can retain up to 20 source snapshots, including withdrawn sources."
+      );
+    const rows = await query(
+      sql`INSERT INTO creator_sources(id,workspace_id,user_id,draft_id,snapshot) VALUES(${input.id},${actor.workspaceId},${actor.userId},${input.draftId},${JSON.stringify(snapshot)}::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id`
+    );
+    if (!rows.length) throw new WorkspaceAccessDenied();
+    return readCreatorSource(actor, input.id);
   });
 }

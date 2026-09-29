@@ -4,6 +4,7 @@ import {
   savedMessagesPageSchema,
   saveMessageResultSchema,
   roomContextSchema,
+  roomSearchPageSchema,
 } from "@zoen/companion-ui/rooms";
 import { roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
@@ -64,9 +65,14 @@ export function companionRoomData(
         await rpc.mutation("workspaces.rooms.saveMessage", input)
       );
     },
-    async context(input) {
+    async search(input, signal) {
+      return roomSearchPageSchema.parse(
+        await rpc.query("workspaces.rooms.search", input, { signal })
+      );
+    },
+    async context(input, signal) {
       return roomContextSchema.parse(
-        await rpc.query("workspaces.rooms.context", input)
+        await rpc.query("workspaces.rooms.context", input, { signal })
       );
     },
     async markRead(input) {

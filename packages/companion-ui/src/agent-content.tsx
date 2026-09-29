@@ -140,6 +140,8 @@ function ActivitySection({
         Voltar à atividade
       </ActionButton>
       <ConversationReview
+        key={`${cacheScope}:${selected}`}
+        cacheScope={cacheScope}
         client={client}
         sessionId={selected}
         approvals={approvals}

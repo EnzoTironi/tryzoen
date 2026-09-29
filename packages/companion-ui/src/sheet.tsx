@@ -60,10 +60,12 @@ export function CompanionSheet({
   title,
   onClose,
   children,
+  scrollable = true,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
+  readonly scrollable?: boolean;
 }) {
   return (
     <SheetSurface title={title} onClose={onClose}>
@@ -77,12 +79,16 @@ export function CompanionSheet({
           onPress={onClose}
         />
       </View>
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-      >
-        {children}
-      </ScrollView>
+      {scrollable ? (
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[styles.content, styles.listContent]}>{children}</View>
+      )}
     </SheetSurface>
   );
 }
@@ -128,4 +134,5 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, fontSize: 23, fontWeight: "600", color: colors.ink },
   content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },
+  listContent: { minHeight: 0, flexShrink: 1 },
 });

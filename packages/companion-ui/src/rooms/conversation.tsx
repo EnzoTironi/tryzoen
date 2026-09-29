@@ -1,3 +1,4 @@
+import { RoomSearch } from "./search";
 import { useRoomTyping } from "./typing";
 import { RoomTypingIndicator } from "./typing-indicator";
 import { useState } from "react";
@@ -9,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { ArrowLeft, Info, X } from "lucide-react-native";
+import { ArrowLeft, Info, Search, X } from "lucide-react-native";
 import type { z } from "zod";
 import { RoomComposer } from "./composer";
 import { useRoomDraft } from "./draft";
@@ -47,6 +48,7 @@ export function RoomConversation({
 }) {
   const [root, setRoot] = useState<z.infer<typeof roomMessageSchema>>();
   const [details, setDetails] = useState(false);
+  const [searching, setSearching] = useState(false);
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const reactions = useRoomReactions(data, cacheScope, roomId);
@@ -70,7 +72,7 @@ export function RoomConversation({
     data,
     cacheScope,
     roomId,
-    !!room && !messages.isError && !details && !profile
+    !!room && !messages.isError && !details && !profile && !searching
   );
   const showProfile = () => {
     if (room?.kind === "direct")
@@ -92,7 +94,7 @@ export function RoomConversation({
     cacheScope,
     roomId,
     timeline,
-    !messages.isError && !details && !profile && (!root || wide)
+    !messages.isError && !details && !profile && !searching && (!root || wide)
   );
   return (
     <View style={styles.layout}>
@@ -103,6 +105,9 @@ export function RoomConversation({
             compact={compact}
             onBack={onBack}
             onProfile={showProfile}
+            onSearch={() => {
+              setSearching(true);
+            }}
           />
           <RoomMessages
             data={data}
@@ -189,7 +194,7 @@ export function RoomConversation({
             avatarUri={avatarUri}
             onCopyText={onCopyText}
             onProfile={setProfile}
-            visible={!details && !profile}
+            visible={!details && !profile && !searching}
             typing={typing}
           />
         </View>
@@ -209,6 +214,24 @@ export function RoomConversation({
             setDetails(false);
             setRoot(undefined);
           }}
+        />
+      )}
+      {searching && room && (
+        <RoomSearch
+          key={`${cacheScope}:${roomId}`}
+          data={data}
+          cacheScope={cacheScope}
+          roomId={roomId}
+          members={current.pages[0]?.members ?? []}
+          onClose={() => {
+            setSearching(false);
+          }}
+          onOpenRoom={
+            onOpenRoom ??
+            (() => {
+              setSearching(false);
+            })
+          }
         />
       )}
       {profile && room && (
@@ -239,11 +262,13 @@ function RoomHeader({
   compact,
   onBack,
   onProfile,
+  onSearch,
 }: {
   readonly room?: z.infer<typeof roomSchema>;
   readonly compact: boolean;
   readonly onBack: () => void;
   readonly onProfile: () => void;
+  readonly onSearch: () => void;
 }) {
   return (
     <View style={styles.header}>
@@ -283,6 +308,7 @@ function RoomHeader({
             : "Pessoas e Zoen · espaço compartilhado"}
         </Text>
       </Pressable>
+      <IconButton icon={Search} label="Buscar na conversa" onPress={onSearch} />
       <IconButton
         icon={Info}
         label={

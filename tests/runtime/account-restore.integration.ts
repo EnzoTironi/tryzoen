@@ -1,6 +1,9 @@
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
+import { mkdtempDisposable, open } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
   requestAccountDeletion,
@@ -16,7 +19,12 @@ test("a full pre-deletion Postgres backup cannot rewind the independent erasure 
   if (!container) throw new Error("The isolated restore container is required");
   await using fixture = await workspaceFixture();
   const { guest, guestPersonal } = fixture;
-  const backup = execFileSync(
+  await using directory = await mkdtempDisposable(
+    join(tmpdir(), "zoen-restore-")
+  );
+  const path = join(directory.path, "database.dump");
+  await using backup = await open(path, "wx", 0o600);
+  execFileSync(
     "docker",
     [
       "exec",
@@ -29,7 +37,7 @@ test("a full pre-deletion Postgres backup cannot rewind the independent erasure 
       "-Fc",
     ],
     {
-      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", backup.fd, "pipe"],
     }
   );
   await requestAccountDeletion(guest);
@@ -39,6 +47,7 @@ test("a full pre-deletion Postgres backup cannot rewind the independent erasure 
     )
   ).toHaveLength(0);
   await ErasureJournal.append(guest.userId);
+  await using restoreInput = await open(path, "r");
   execFileSync(
     "docker",
     [
@@ -55,8 +64,7 @@ test("a full pre-deletion Postgres backup cannot rewind the independent erasure 
       "companion_runtime_test",
     ],
     {
-      input: backup,
-      maxBuffer: 64 * 1024 * 1024,
+      stdio: [restoreInput.fd, "ignore", "pipe"],
     }
   );
   expect(

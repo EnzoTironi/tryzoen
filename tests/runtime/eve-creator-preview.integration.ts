@@ -50,6 +50,7 @@ beforeAll(async () => {
     "creator-library",
     "creator-review",
     "creator-release",
+    "creator-evaluation-remove",
   ]) {
     const tool = await readFile(
       new URL(`../../agent/tools/${name}.ts`, import.meta.url),
@@ -519,8 +520,20 @@ test("the native conversational authoring tool persists private drafts and denie
       message: `creator-authoring ${JSON.stringify({ action: "evaluation", evaluation: { draftId: draft.id, expectedRevision: null, cases: [evaluationCase] } })}`,
     });
     await server.settled(sessionId, 2);
+    const firstEvaluation = await readCreatorDraft(workspace.actor, draft.id);
+    expect(firstEvaluation.evaluation?.cases).toEqual([evaluationCase]);
+    const anotherCase = {
+      ...evaluationCase,
+      id: randomUUID(),
+      title: "Another case",
+    };
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-authoring ${JSON.stringify({ action: "evaluation", evaluation: { draftId: draft.id, expectedRevision: firstEvaluation.evaluation?.revision, cases: [anotherCase] } })}`,
+    });
+    await server.settled(sessionId, 3);
     const evaluated = await readCreatorDraft(workspace.actor, draft.id);
-    expect(evaluated.evaluation?.cases).toEqual([evaluationCase]);
+    expect(evaluated.evaluation?.cases).toEqual([evaluationCase, anotherCase]);
     const previewInput = {
       draftId: draft.id,
       revision: saved.revision,
@@ -535,7 +548,7 @@ test("the native conversational authoring tool persists private drafts and denie
       auth,
       message: `creator-authoring ${JSON.stringify({ action: "preview", preview: previewInput })}`,
     });
-    await server.settled(sessionId, 3);
+    await server.settled(sessionId, 4);
     expect(
       (await listCreatorPreviews(workspace.actor, draft.id))[0]?.evaluation
         ?.case
@@ -544,7 +557,7 @@ test("the native conversational authoring tool persists private drafts and denie
       auth,
       message: `creator-authoring ${JSON.stringify({ action: "candidate", draftId: draft.id })}`,
     });
-    const candidateEvents = await server.settled(sessionId, 4);
+    const candidateEvents = await server.settled(sessionId, 5);
     expect(JSON.stringify(candidateEvents)).toContain(
       "latest run needs a completed answer"
     );
@@ -717,3 +730,80 @@ function releaseQuestion(
   if (!item) throw new Error("Expected human release review");
   return item;
 }
+
+test.each(["cancel", "remove", "changed"] as const)(
+  "case removal asks the human, survives restart and respects %s",
+  async (choice) => {
+    await using workspace = await workspaceFixture();
+    const draft = await saveCreatorDraft(workspace.personal, {
+      id: randomUUID(),
+      expectedRevision: null,
+      content: {
+        title: "Synthetic removal test",
+        description: "",
+        playbook: "",
+        examples: [],
+      },
+    });
+    const item = {
+      id: randomUUID(),
+      title: "Keep my evaluation",
+      question: "An unanswered question?",
+      criteria: "Admit insufficient evidence.",
+    };
+    const saved = await saveCreatorEvaluation(workspace.personal, {
+      draftId: draft.id,
+      expectedRevision: null,
+      cases: [item],
+    });
+    const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
+    let server = await runtime(await freePort(), "127.0.0.1", directory);
+    try {
+      const { sessionId } = z.object({ sessionId: z.string() }).parse(
+        await server.request("/probe/send", {
+          address: randomUUID(),
+          id: randomUUID(),
+          auth,
+          message: `creator-evaluation-remove ${JSON.stringify({ draftId: draft.id, caseId: item.id, expectedRevision: saved.evaluation?.revision })}`,
+        })
+      );
+      const prompt = releaseQuestion(await server.settled(sessionId));
+      expect(prompt.prompt).toContain(item.question);
+      expect(prompt.prompt).toContain(item.criteria);
+      expect(
+        (await readCreatorDraft(workspace.personal, draft.id)).evaluation?.cases
+      ).toEqual([item]);
+      await server.stop();
+      server = await runtime(await freePort(), "127.0.0.1", directory);
+      const current =
+        choice === "changed"
+          ? { ...item, criteria: "New human criteria" }
+          : item;
+      if (choice === "changed")
+        await saveCreatorEvaluation(workspace.personal, {
+          draftId: draft.id,
+          expectedRevision: saved.evaluation?.revision ?? null,
+          cases: [current],
+        });
+      await server.request(`/probe/input/${sessionId}`, {
+        auth,
+        responses: [
+          {
+            requestId: prompt.requestId,
+            optionId: choice === "cancel" ? "cancel" : "remove",
+          },
+        ],
+      });
+      const events = await server.settled(sessionId, 2);
+      expect(
+        (await readCreatorDraft(workspace.personal, draft.id)).evaluation?.cases
+      ).toEqual(choice === "remove" ? [] : [current]);
+      expect(
+        JSON.stringify(events).includes("This draft changed elsewhere")
+      ).toBe(choice === "changed");
+    } finally {
+      await server.stop();
+    }
+  },
+  90000
+);

@@ -38,6 +38,7 @@ vi.mock("@tanstack/react-query", () => ({
 const data = {
   setTyping: vi.fn<RoomData["setTyping"]>(),
   readTyping: vi.fn<RoomData["readTyping"]>(),
+  search: vi.fn<RoomData["search"]>(),
 };
 let dispose: (() => void) | undefined;
 function TypingHarness({ enabled }: { enabled: boolean }) {

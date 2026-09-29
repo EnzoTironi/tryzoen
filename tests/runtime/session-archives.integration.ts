@@ -60,6 +60,42 @@ const source = (
   data: { message: text, sequence: 0, turnId: "turn_0" },
 });
 
+test("resumed Eve turns with empty turn IDs have separate native receipts and do not block later sources", async () => {
+  if (!process.env.ZOEN_AI_MEMORY_BINARY)
+    throw new Error(
+      "This case requires the qualified native memory executable."
+    );
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const sessionId = `session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  for (const sequence of [3, 5]) {
+    await captureSessionSource(
+      actor,
+      sessionSource(
+        {
+          type: "turn.completed",
+          meta: { id: randomUUID(), at: "2026-09-28T12:00:00.000Z" },
+          data: { turnId: "", sequence },
+        },
+        sessionId
+      )
+    );
+    expect(await drainSessionSources()).toEqual({
+      stored: 1,
+      configured: true,
+    });
+  }
+  await captureSessionSource(actor, sessionSource(source(), sessionId));
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
+  const exported = await exportSessionSources(
+    actor,
+    sessionId,
+    new AbortController().signal
+  );
+  expect((await exported.text()).trim().split("\n")).toHaveLength(3);
+});
+
 test("exports delivered sources only to their owner, including segmented text while memory is paused", async () => {
   await using workspace = await workspaceFixture();
   const actor = workspace.personal;

@@ -2,6 +2,8 @@
 import { browserSessionClient } from "@web/eve/client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { authClient } from "@web/auth/client";
 import type { ChatUsage } from "@shared/chat/schema";
 import type { TraceView } from "../_lib/trace-view";
 import { SubagentPanel } from "./activity";
@@ -16,8 +18,29 @@ export function ChatSession({
   readonly initialUsage?: ChatUsage;
   readonly sessionId: string;
 }) {
+  const account = authClient.useSession();
+  const params = useSearchParams();
+  const cacheScope = `${account.data?.user.id ?? "anonymous"}:${account.data?.session.id ?? "signed-out"}:${params.get("space") ?? "personal"}`;
+  return (
+    <OwnedChatSession
+      key={`${cacheScope}:${sessionId}`}
+      cacheScope={cacheScope}
+      initialUsage={initialUsage}
+      sessionId={sessionId}
+    />
+  );
+}
+function OwnedChatSession({
+  initialUsage,
+  sessionId,
+  cacheScope,
+}: {
+  readonly initialUsage?: ChatUsage;
+  readonly sessionId: string;
+  readonly cacheScope: string;
+}) {
   const [traceView, setTraceView] = useState<TraceView>("imessage");
-  const agent = useSessionAgent(sessionId, browserSessionClient);
+  const agent = useSessionAgent(sessionId, browserSessionClient, cacheScope);
 
   return (
     <div className="relative flex h-full min-h-0 overflow-hidden bg-background text-foreground">
@@ -29,6 +52,7 @@ export function ChatSession({
             hasOlder: agent.hasOlder,
             isLoadingOlder: agent.isLoadingOlder,
             loadOlder: agent.loadOlder,
+            olderError: agent.olderError,
           }}
           sessionId={sessionId}
           traceView={traceView}

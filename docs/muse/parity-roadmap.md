@@ -110,7 +110,11 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 5. **Marketplace:** interface de descoberta pode avançar com contratos definidos; publicação depende de versão/fonte/autoridade e acesso pago depende de entitlements. Nunca lançar acesso só porque o cartão ficou pronto.
 6. **Muse proativo e distribuição:** Feed/Ideias dependem de fontes autorizadas, orçamento e rotinas, não de sonhos automáticos. Aparelhos reais, proteção contra abuso e capacidade são gates de lançamento e acompanham as entregas.
 
-## Organização da execução paralela
+## Organização da execução
+
+Desde a orientação mais recente do usuário, a implementação e integração seguem
+com um único agente. A tabela abaixo preserva os donos de código definidos na
+primeira rodada; não representa subagentes ativos.
 
 O PR 148 foi integrado depois dos seis checks aprovados. Com autorização do usuário, a exigência obsoleta `Private Mem0 service` foi removida da proteção da `main`; `Checks` e `Runtime storage and build` continuam obrigatórios, com atualização estrita da base. O segundo já executa qualificação de ingestão, restore e sonhos Akita.
 
@@ -121,7 +125,7 @@ O PR 148 foi integrado depois dos seis checks aprovados. Com autorização do us
 | Muse/plataformas | Sessões autenticadas nas configurações Expo, revogar outra sessão               | `apps/mobile/src/settings`, chamada em `sections.tsx`, export do primitive compartilhado | Sessão autenticada não é dispositivo pareado/controlável; confirmar revogação e preservar sessão atual                                                       |
 | Integração       | Este plano, revisão dos contratos, validação, evidência e PR                    | Documentação central, integração de testes, build/CI                                     | Apenas um escritor por arquivo compartilhado; suites de runtime no banco isolado rodam coordenadas                                                           |
 
-Cada frente publica primeiro o contrato e os arquivos que possui. Alterações em schema/export/adapter compartilhado exigem comunicação entre os donos. Não executar duas migrações, builds de artefatos gerados ou suites que resetem o mesmo banco simultaneamente. A integração mantém os testes de autorização e não esconde falhas para obter CI verde.
+Cada incremento atualiza seu contrato e todos os callers. Não executar duas migrações, builds de artefatos gerados ou suites que resetem o mesmo banco simultaneamente. A integração mantém os testes de autorização e não esconde falhas para obter CI verde.
 
 ## Gates de entrega
 
@@ -221,6 +225,66 @@ Chrome no build corrente confirmou envio real ao agente com compositor limpo, so
 Evidência desta rodada: nove screenshots do aplicativo em execução e um vídeo composto dessas capturas, anexados ao PR 152 por `gh --attach`. Não é gravação contínua. A inspeção também encontrou paginação manual ainda presente no chat do agente; a próxima fatia deve removê-la como já foi feito nas conversas Matrix.
 
 Revisão estrutural contra `4f31966c`: 93 observações, 45 gating, sem supressões. Incluem crescimento dos fluxos de autorização/qualificação, tamanho dos formulários e cartões, churn, padrões de adaptação/testes e callbacks registrados que o scanner não reconhece. Não foi criada uma abstração genérica para reduzir métricas. A dívida continua registrada; esses resultados não concluem paridade, lançamento em aparelhos, sonhos, YouTube, marketplace público, offline, E2EE, chamadas ou capacidade para um milhão de usuários.
+
+### Oitava rodada — busca, histórico e arquivos do criador — 28/09/2026
+
+A busca usa o índice nativo do Matrix em uma conversa autorizada, com filtro por
+autor, páginas de 20 resultados, cursor vinculado ao usuário/sessão/sala/consulta
+e verificação do evento atual para descartar resultados editados ou excluídos.
+Abrir o resultado mostra seu contexto autorizado sem perder o termo pesquisado
+nem o rascunho. O mesmo contexto atende às mensagens salvas. A busca não inclui
+um segundo índice social nem consulta conversas de outras contas.
+
+O histórico do agente agora carrega páginas automaticamente com TanStack nas
+interfaces compartilhadas e na rota `/chat`. Cada leitura tem orçamento explícito;
+somente a intenção de rolar para cima solicita outra página. A posição de leitura
+é preservada ao inserir o histórico e o stream atual continua sob responsabilidade
+do Eve. Os botões de mensagens anteriores foram removidos. A inbox usa datas
+compactas do calendário local, mantendo a data completa para acessibilidade.
+
+Criadores podem solicitar um novo arquivo Markdown/texto pelo chat. O recebimento
+é vinculado à sessão, ao dono e à revisão do rascunho; só a revisão humana de
+conteúdo/direitos adiciona o texto ao ensino. Acrescentar um caso de avaliação
+preserva os casos anteriores; removê-lo exige uma ação explícita e confirmada.
+As revisões de fonte e rascunho são distintas e conflitos ficam visíveis antes da
+pergunta de aprovação. A migração 0090 foi aplicada apenas nos bancos locais.
+
+A conferência real encontrou duas falhas de memória: continuações sem ID de turno
+colidiam na ingestão Akita e anexos retiravam ferramentas de memória do catálogo
+do Eve. Ambas têm regressões executáveis. A correção do Eve serializa somente os
+campos de mídia previstos pelo SDK, preservando validação JSON, autorização e
+aprovações. Os testes verificam anexos íntegros após reinício. A suíte de restauração
+agora usa arquivo temporário para o dump; um evento Matrix atrasado de entrada não
+rotaciona novamente uma audiência já registrada.
+
+Chrome com contas sintéticas confirmou busca e contexto em desktop/mobile,
+preservação de termo/rascunho, importação com revisão humana e ferramentas de
+memória disponíveis depois de um anexo. A paginação mobile passou de 8 para 12
+mensagens mantendo a leitura; `/chat` passou de 14 para 25 parágrafos sem botão
+legado. As contagens são observações do cenário, não metas de capacidade.
+
+Validação integrada: `pnpm check` passou com 259 arquivos e 1.591 testes;
+`pnpm build`, `pnpm db:check` e exportações Expo web/iOS/Android passaram.
+A rodada completa de runtime isolado passou 399 de 400 testes; a expectativa
+restante, sobre um evento Matrix de entrada já conhecido, foi corrigida para
+preservar o epoch. Os quatro testes de ingress/typing passaram novamente. O CI
+repetirá a suíte completa no commit publicado; esta evidência local não é descrita
+como uma nova execução completa sem falhas.
+
+[Nove screenshots e sequência de 36 segundos](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5882275776)
+do aplicativo em execução foram anexados por `gh --attach`. Revisão estrutural
+do incremento contra `fdd168f4`: 67 observações, 31 gating, 13 menores e 23 em
+símbolos novos, sem supressão. Foi removida a duplicação da âncora de rolagem;
+permanecem crescimento de componentes, churn, padrões de testes/adaptadores e
+callbacks não reconhecidos pelo scanner. A revisão de contratos confirma os
+consumidores compartilhados e os testes de runtime cobrem os caminhos dinâmicos
+que o grafo estático não resolve. Isso não encerra o gate de qualidade estrutural.
+
+O próximo incremento operacional é a entrega justa da memória por namespace:
+falha em um usuário não pode bloquear outros, e filas precisam de limites,
+retentativas e medidas de vazão. Offline, E2EE, chamadas, ingestão externa/YouTube,
+marketplace público, sonhos seguros, aparelhos reais e capacidade de um milhão
+de usuários continuam com critérios abertos. Esta rodada não os certifica.
 
 ### Critérios para cada rodada
 

@@ -57,6 +57,7 @@ export function AgentMessage({
 
   return (
     <Message
+      data-testid="agent-message"
       data-optimistic={message.metadata?.optimistic ? "true" : undefined}
       from={message.role}
     >

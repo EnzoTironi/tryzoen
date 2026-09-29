@@ -1217,8 +1217,26 @@ Migration 0089 is local/test only. Nine verified screenshots and their clearly
 labelled screenshot-sequence video accompany PR 152; physical devices remain
 unqualified. Structural findings are recorded without suppression in the roadmap.
 
-Next complete slices are native Matrix search inside one authorized conversation,
-authorized uploaded text/Markdown as reviewed creator sources, and automatic
-pagination of agent chat history. The Matrix timelines already paginate
-automatically. These continue the same ownership boundaries rather than adding a
-second messaging index, memory engine or generic collaboration framework.
+### Integrated parity checkpoint — wave 8
+
+Wave 8 implements native search within one
+authorized Matrix conversation, human-reviewed creator Markdown/text uploads and
+automatic TanStack agent-history pagination. Search revalidates every hit and
+opens exact authorized context. The source hook accepts only a newly submitted
+human file for an armed, bounded intake; content/rights approval remains separate.
+Adding an evaluation case preserves omitted cases; explicit removal asks the
+human. History preserves the visible reading position while prepending and keeps
+the active Eve stream separate from immutable older pages.
+
+Browser QA verified search/context/draft preservation at desktop and mobile
+sizes, source review through the real conversation, continued memory-tool use
+after an attachment, and automatic history in both chat surfaces. Compiled
+regressions cover the two memory failures uncovered by that walkthrough: missing
+continuation IDs in native Akita ingestion and non-JSON SDK media in Eve's durable
+memory callbacks. A local runtime patch handles media in history and turn input
+without changing the strict validation of other context fields.
+
+Next operational work is fair, bounded namespace ingestion with isolated failure,
+durable retry and measured throughput. Continue with one agent as requested. The
+public-marketplace, external-source, device, offline, encryption, calling and
+capacity gates in the roadmap remain open.

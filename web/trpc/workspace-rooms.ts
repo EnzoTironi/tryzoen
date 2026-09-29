@@ -1,3 +1,8 @@
+import { searchMatrixMessages } from "../../server/matrix/search";
+import {
+  roomSearchQuerySchema,
+  roomSearchPageSchema,
+} from "@zoen/companion-ui/rooms";
 import { setMatrixTyping, readMatrixTyping } from "../../server/matrix/typing";
 import {
   roomTypingWriteSchema,
@@ -110,6 +115,12 @@ export const workspaceRoomsRouter = {
     .output(saveMessageResultSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, () => setSavedMatrixMessage(ctx.actor, input))
+    ),
+  search: workspaceProcedure
+    .input(roomSearchQuerySchema)
+    .output(roomSearchPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => searchMatrixMessages(ctx.actor, input))
     ),
   context: workspaceProcedure
     .input(roomMediaReadSchema)

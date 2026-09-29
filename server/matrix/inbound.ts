@@ -114,16 +114,7 @@ export const acceptMatrixTransaction = async function (
         continue;
       }
       if (event.type === "m.room.member") {
-        // Invite notifications can arrive after the synchronous join has already
-        // persisted membership. Only joins and actual departures change audience.
-        if (!["join", "leave", "ban"].includes(event.content.membership ?? ""))
-          continue;
-        await query(
-          sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${binding.id}`
-        );
-        if (event.content.membership !== "join")
-          await query(sql`DELETE FROM matrix_room_members WHERE binding_id = ${binding.id}
-          AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key ?? ""})`);
+        await projectGroupMembership(binding.id, event);
         continue;
       }
       if (
@@ -156,6 +147,30 @@ export const acceptMatrixTransaction = async function (
     return accepted;
   });
 };
+
+async function projectGroupMembership(
+  bindingId: string,
+  event: z.infer<typeof MatrixEventSchema>
+) {
+  // Invite callbacks can follow a synchronous join; they don't change audience.
+  const membership = event.content.membership;
+  if (membership !== "join" && membership !== "leave" && membership !== "ban")
+    return;
+  if (membership === "join") {
+    // joinMatrixRoom fenced this audience before committing the membership.
+    // Its asynchronous callback must not invalidate newly issued cursors.
+    const known = await query(sql`SELECT 1 FROM matrix_room_members m
+      JOIN matrix_identities i ON i.user_id=m.user_id
+      WHERE m.binding_id=${bindingId} AND i.matrix_id=${event.state_key ?? ""}`);
+    if (known.length) return;
+  }
+  await query(
+    sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+  );
+  if (membership !== "join")
+    await query(sql`DELETE FROM matrix_room_members WHERE binding_id = ${bindingId}
+      AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key ?? ""})`);
+}
 
 /** Keep accepted transaction fingerprints stable as display-only aggregation schemas evolve. */
 function transactionFingerprint(event: z.infer<typeof MatrixEventSchema>) {

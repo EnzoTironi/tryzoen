@@ -4,7 +4,7 @@ import { sentMessages } from "@zoen/companion-ui/messages";
 import { isTerminalSession } from "@zoen/companion-ui/session";
 
 import { useI18n } from "@web/i18n/context";
-import { AlertCircleIcon, BrainIcon, LoaderCircleIcon } from "lucide-react";
+import { AlertCircleIcon, BrainIcon } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import type { EveMessage } from "eve/react";
 import {
@@ -22,6 +22,7 @@ import { Message, MessageContent } from "@web/components/ai-elements/message";
 import { Shimmer } from "@web/components/ai-elements/shimmer";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";
+import { HistoryEdge } from "./history-edge";
 import { AgentMessage } from "./message";
 import type { ChatAgent } from "@zoen/companion-ui/session";
 
@@ -40,6 +41,7 @@ export function ChatConversation({
     readonly hasOlder: boolean;
     readonly isLoadingOlder: boolean;
     readonly loadOlder: () => Promise<void>;
+    readonly olderError?: Error;
   };
   readonly initial?: false;
   readonly sessionId?: string;
@@ -95,21 +97,9 @@ export function ChatConversation({
       }
     >
       <ConversationContent className="mx-auto w-full max-w-3xl gap-6 px-4 pt-6 pb-36 sm:px-6">
-        {history?.hasOlder ? (
-          <Button
-            className="self-center"
-            disabled={history.isLoadingOlder}
-            onClick={() => void history.loadOlder()}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {history.isLoadingOlder ? (
-              <LoaderCircleIcon className="animate-spin" />
-            ) : null}
-            {history.isLoadingOlder ? t("Loading…") : t("Load older messages")}
-          </Button>
-        ) : null}
+        {history && (
+          <HistoryEdge history={history} firstMessageId={messages[0]?.id} />
+        )}
         {isRestoring && messages.length === 0 ? (
           <Shimmer className="type-supporting-body self-center" duration={1}>
             {t("Loading recent messages")}

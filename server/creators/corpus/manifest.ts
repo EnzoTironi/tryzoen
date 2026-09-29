@@ -5,7 +5,10 @@ import type { z } from "zod";
 import type { creatorDraftSchema } from "@zoen/companion-ui/creators";
 import type { WorkspaceActorSchema } from "../../workspaces/access";
 import { readCreatorSource } from "../sources";
-import { creatorSourceExample } from "../sources/schema";
+import {
+  creatorSourceExample,
+  creatorSourceMetadataSchema,
+} from "../sources/schema";
 import { corpusDigest, corpusManifestSchema, corpusPages } from "./schema";
 
 /** Called within release approval's owner/draft locks, after its evidence passes. */
@@ -39,16 +42,11 @@ export async function freezeCreatorCorpus(
           JSON.stringify(example))
     )
       throw new Error("Source changed before release approval.");
+    const { content: _content, ...metadata } = source?.snapshot ?? {};
     const reference = source
       ? {
           ...source,
-          snapshot: {
-            title: source.snapshot.title,
-            path: source.snapshot.path,
-            fileRevision: source.snapshot.fileRevision,
-            digest: source.snapshot.digest,
-            extraction: source.snapshot.extraction,
-          },
+          snapshot: creatorSourceMetadataSchema.parse(metadata),
         }
       : null;
     pages.push(
@@ -59,7 +57,11 @@ export async function freezeCreatorCorpus(
           attribution: example.source,
           rights: example.rights,
           title: example.title,
-          kind: source ? "workspace-source" : "authored",
+          kind: source
+            ? source.snapshot.extraction === "chat-upload"
+              ? "uploaded-source"
+              : "workspace-source"
+            : "authored",
           source: reference,
         },
         example.content

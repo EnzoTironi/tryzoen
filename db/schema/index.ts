@@ -42,3 +42,4 @@ export * from "./creator-sources";
 export * from "./creator-corpora";
 
 export * from "./creator-qualifications";
+export * from "./creator-source-intakes";

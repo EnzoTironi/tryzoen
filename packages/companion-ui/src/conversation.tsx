@@ -1,3 +1,4 @@
+import { useConversationScroll } from "./conversation/scroll";
 import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
 import { InputRequestCard } from "./conversation/input-request";
@@ -37,6 +38,7 @@ export function Conversation({
   onCancel,
   onLoadOlder,
   loadingOlder = false,
+  olderError,
   onCopyText,
   initialDraft,
   reactions,
@@ -49,8 +51,9 @@ export function Conversation({
   readonly onSend: ChatAgent["send"];
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
   readonly onCancel: () => void;
-  readonly onLoadOlder?: () => void;
+  readonly onLoadOlder?: () => Promise<void>;
   readonly loadingOlder?: boolean;
+  readonly olderError?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: ConversationDraft;
   readonly reactions?: ReadonlyMap<string, string | null>;
@@ -63,9 +66,19 @@ export function Conversation({
       ? { id: staged.id, role: staged.role, text: staged.quote }
       : undefined
   );
-  const scroll = useRef<FlatList<EveMessage>>(null);
-  const nearBottom = useRef(true);
-  const positioned = useRef(false);
+  const {
+    ref: listRef,
+    retry: retryHistory,
+    onLayout: layoutHistory,
+    onScrollBeginDrag: dragHistory,
+    onScroll: scrollHistory,
+    onContentSizeChange: resizeHistory,
+  } = useConversationScroll({
+    messages,
+    loadingOlder,
+    olderError,
+    onLoadOlder,
+  });
   const busy = status === "streaming" || status === "submitted";
   const canRespond = status === "ready" || status === "error";
   const reportVisible = useRef(onVisibleMessagesChange);
@@ -79,21 +92,10 @@ export function Conversation({
         reportVisible.current?.(viewableItems.map(({ item }) => item.id));
       }
   );
-  useEffect(() => {
-    if (messages.length === 0 || positioned.current) return undefined;
-    const frame = requestAnimationFrame(() => {
-      scroll.current?.scrollToEnd({ animated: false });
-      positioned.current = true;
-      nearBottom.current = true;
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [messages.length]);
   return (
     <View style={styles.root}>
       <FlatList
-        ref={scroll}
+        ref={listRef}
         data={messages}
         keyExtractor={(message) => message.id}
         contentContainerStyle={[styles.messages, styles.column]}
@@ -103,44 +105,27 @@ export function Conversation({
         onViewableItemsChanged={onViewableItemsChanged}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         scrollEventThrottle={100}
-        onLayout={() => {
-          if (nearBottom.current && messages.length > 0)
-            scroll.current?.scrollToEnd({ animated: false });
-        }}
-        onScrollBeginDrag={() => {
-          positioned.current = true;
-        }}
-        onScroll={({ nativeEvent }) => {
-          const atBottom =
-            nativeEvent.contentSize.height -
-              nativeEvent.contentOffset.y -
-              nativeEvent.layoutMeasurement.height <
-            100;
-          // Initial list measurements can report the top before history is positioned.
-          if (atBottom && nativeEvent.contentOffset.y > 0)
-            positioned.current = true;
-          if (positioned.current) nearBottom.current = atBottom;
-        }}
-        onContentSizeChange={() => {
-          if (nearBottom.current)
-            scroll.current?.scrollToEnd({ animated: false });
-        }}
+        onLayout={layoutHistory}
+        onScrollBeginDrag={dragHistory}
+        onScroll={scrollHistory}
+        onContentSizeChange={resizeHistory}
         ListHeaderComponent={
-          onLoadOlder ? (
-            <ActionButton
-              quiet
-              disabled={loadingOlder}
-              onPress={() => {
-                nearBottom.current = false;
-                onLoadOlder();
-              }}
-            >
-              {loadingOlder ? "Loading…" : "Earlier messages"}
-            </ActionButton>
+          loadingOlder ? (
+            <ActivityIndicator accessibilityLabel="Loading earlier messages" />
+          ) : olderError ? (
+            <View>
+              <Text accessibilityRole="alert">
+                Earlier messages couldn’t be loaded.
+              </Text>
+              <ActionButton quiet onPress={retryHistory}>
+                Try again
+              </ActionButton>
+            </View>
           ) : null
         }
         renderItem={({ item: message }) => (
           <View
+            testID="agent-message"
             style={
               message.role === "user" ? styles.userGroup : styles.assistantGroup
             }

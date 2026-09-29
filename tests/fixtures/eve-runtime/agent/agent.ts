@@ -20,6 +20,7 @@ export default defineAgent({
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           for (const name of [
+            "creator-evaluation-remove",
             "creator-qualification",
             "creator-pilot",
             "creator-release",
@@ -39,7 +40,11 @@ export default defineAgent({
           }
           if (
             lastUserMessage?.startsWith("creator-sources ") &&
-            !toolResults.some((result) => result.name === "creator-sources")
+            !messages
+              .slice(
+                messages.findLastIndex((message) => message.role === "user") + 1
+              )
+              .some((message) => message.role === "tool")
           )
             return {
               toolCalls: [

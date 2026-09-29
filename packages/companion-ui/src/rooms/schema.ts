@@ -167,7 +167,22 @@ export const roomMediaReadSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
 });
 
+export const roomSearchQuerySchema = z.object({
+  id: z.uuid(),
+  query: z.string().trim().min(1).max(200),
+  senderId: z.string().min(1).max(255).optional(),
+  cursor: z.string().min(1).max(16384).optional(),
+});
+export const roomSearchPageSchema = z.object({
+  items: z.array(roomMessageSchema).max(20),
+  nextCursor: z.string().max(16384).nullable(),
+});
+
 export interface RoomData {
+  search: (
+    input: z.infer<typeof roomSearchQuerySchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof roomSearchPageSchema>>;
   setTyping: (input: z.infer<typeof roomTypingWriteSchema>) => Promise<void>;
   readTyping: (
     input: z.infer<typeof roomTypingReadSchema>,
@@ -187,7 +202,8 @@ export interface RoomData {
     input: z.infer<typeof saveMessageSchema>
   ) => Promise<z.infer<typeof saveMessageResultSchema>>;
   context: (
-    input: z.infer<typeof roomMediaReadSchema>
+    input: z.infer<typeof roomMediaReadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomContextSchema>>;
   editMessage: (
     input: z.infer<typeof roomEditSchema>

@@ -5,7 +5,8 @@ import { beforeAll, afterAll, expect, test, vi } from "vitest";
 import { matrixReceiver } from "./matrix-fixture";
 import { workspaceFixture } from "./workspace-fixture";
 import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
-import { matrixRequest } from "../../server/matrix/client";
+import { matrixRequest, matrixConfiguration } from "../../server/matrix/client";
+import { acceptMatrixTransaction } from "../../server/matrix/inbound";
 import { z } from "zod";
 let receiver: Awaited<ReturnType<typeof matrixReceiver>> | undefined;
 beforeAll(async () => {
@@ -149,7 +150,7 @@ test(
       name: "Typing product contract",
     });
     await joinMatrixRoom(fixture.actor, room.id);
-    await joinMatrixRoom(fixture.guest, room.id);
+    const guestRoom = await joinMatrixRoom(fixture.guest, room.id);
     const secondSession = randomUUID();
     await query(
       sql`INSERT INTO public.session(id,token,"userId","expiresAt","updatedAt") SELECT ${secondSession},${randomUUID()},"userId",now()+interval '1 day',now() FROM public.session WHERE id=${fixture.guest.authSessionId}`
@@ -159,6 +160,29 @@ test(
     const secondSeeded = await readMatrixTyping(secondViewer, { id: room.id });
     expect(seeded).toMatchObject({ status: "ready", userIds: [] });
     expect(seeded.cursor).toBeTruthy();
+    // A delayed native join callback acknowledges the already-persisted member;
+    // it must not change the audience epoch of an otherwise current cursor.
+    const config = await matrixConfiguration();
+    await acceptMatrixTransaction(
+      new Request("http://localhost/transactions", {
+        method: "PUT",
+        headers: { authorization: `Bearer ${config.homeserverToken.reveal()}` },
+        body: JSON.stringify({
+          events: [
+            {
+              event_id: `$delayed-join-${randomUUID()}`,
+              type: "m.room.member",
+              room_id: room.roomId,
+              sender: guestRoom.matrixId,
+              state_key: guestRoom.matrixId,
+              origin_server_ts: Date.now(),
+              content: { membership: "join" },
+            },
+          ],
+        }),
+      }),
+      randomUUID()
+    );
     await setMatrixTyping(fixture.actor, { id: room.id, typing: true });
     const first = await readMatrixTyping(fixture.guest, {
       id: room.id,

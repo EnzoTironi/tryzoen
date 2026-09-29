@@ -29,6 +29,14 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(options: StreamOptions) => AsyncIterable<MessageStreamEvent>>(),
 }));
 
+vi.mock("../../packages/companion-ui/src/session/history-pages", () => ({
+  useHistoryPages: () => ({
+    pending: false,
+    error: undefined,
+    load: async () => undefined,
+  }),
+}));
+
 vi.mock("react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react")>()),
   useEffect: (effect: EffectCallback) => {
@@ -86,7 +94,11 @@ async function* idleStream(
 }
 
 function Probe() {
-  const agent = useSessionAgent("conversation", new Client({ host: "" }));
+  const agent = useSessionAgent(
+    "conversation",
+    new Client({ host: "" }),
+    "account:session"
+  );
   useEffect(() => {
     mocks.agent = agent;
   }, [agent]);

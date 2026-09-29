@@ -37,6 +37,7 @@ import type { z } from "zod";
 import { CreateRoom } from "../rooms/create";
 import { CreateConversation } from "./create";
 import { useInboxSync } from "./sync";
+import { conversationTime } from "./time";
 
 function useConversationInbox(
   inbox: InboxData,
@@ -426,6 +427,7 @@ function RoomRow({
   readonly onOpen: (id: string) => void;
 }) {
   const { room } = item;
+  const time = item.activityAt > 0 ? conversationTime(item.activityAt) : null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -456,12 +458,9 @@ function RoomRow({
         </Text>
       </View>
       <View style={styles.rowMeta}>
-        {item.activityAt > 0 && (
-          <Text style={styles.time}>
-            {new Date(item.activityAt).toLocaleDateString([], {
-              day: "numeric",
-              month: "short",
-            })}
+        {time && (
+          <Text style={styles.time} accessibilityLabel={time.description}>
+            {time.label}
           </Text>
         )}
         {notifications && notifications.notificationCount > 0 && (

@@ -93,11 +93,11 @@ Acceptance: concurrent humans/bots do not create reply loops, repeated deliverie
 
 Dependencies: communications realtime/durable delivery and C3 for published specialists; safe shared-memory semantics before persistent room reflection. Existing mention support is not the complete HUMA policy.
 
-## Parallel execution contract
+## Implementation order and ownership
 
-1. Creator lane owns C1, then C2/C3; memory lane owns M1 then M2. Communications can proceed independently. Avoid concurrent edits to `shared/companion/creators.ts`, companion creator schema/UI and root tool registration without an explicit handoff.
-2. Source acquisition and marketplace presentation can parallelize after agreeing source/release and entitlement schemas. Publication must land after corpus authorization; paid access after entitlement enforcement. G1 lands after Matrix delivery semantics.
-3. Next smallest independent implementation: expose **private preview creation and result retrieval through chat**, composing existing creator services and the durable specialist workflow. This removes a concrete studio-only dependency without inventing publication, changing Matrix, or enabling dreams. Require compiled Eve plus isolated database tests and a browser conversation walkthrough.
+1. Work proceeds with one agent at the user's latest request. Creator work follows C1 then C2/C3; operational memory follows M1 then M2. Shared schemas, UI and callers change together.
+2. Publication follows corpus authorization; paid access follows entitlement enforcement. G1 follows Matrix delivery semantics. Preview creation and result retrieval through chat are now implemented; the checkpoints below record their boundaries.
+3. Next operational increment: isolate ingestion failure and bound work per namespace so one damaged or noisy tenant cannot block the others. Qualify this before opt-in dreaming, public publication or a capacity claim.
 4. Every slice records implemented/partial/unverified status, authorization tests, narrow runtime evidence, `pnpm check`, `pnpm build` and relevant cross-platform/browser evidence. Attach verified images/video to its PR with `gh --attach`. Do not rerun unrelated heavy suites concurrently against the same database.
 
 ## Research and version evidence
@@ -167,3 +167,44 @@ Validation so far:18 isolated runtime tests passed across grounded execution, ex
 `creator-release` now closes the remaining Studio-only approval step: candidate, read and list reuse the existing release owner; approve freezes the exact teaching and reviewed case references, shows them to the human, then asks confirmation and approval notes through native Eve questions. Cancelling either question writes no version. On resume, `approveCreatorRelease` rechecks live authorization, draft/evaluation revisions and human review references under its existing locks. No new database owner or migration is introduced. This approves a private snapshot-mode base version; real corpus indexing and grounded qualification remain explicit separate operations.
 
 The compiled native workflow suite passed10 scenarios, including cancellation at both questions, changed review evidence during the approval wait, and successful human approval after process restart. The existing snapshot claim contract is preserved: only teaching, question and kind reach snapshot/playbook children. Grounded children additionally receive their frozen evidence, and pilot IDs stay internal to authorization. The four evaluation/pilot/preview/grounded service suites passed22 tests with these exact payload assertions. Type checking and tool-inventory checks passed. Authored tool behavior follows the installed Eve `tools/workflows.mdx` and `tools/human-in-the-loop.md` contracts for durable steps and native human questions.
+
+### C2 uploaded sources and evaluation preservation — wave 8
+
+The chat can now arm a short-lived upload request for one new UTF-8 Markdown or
+text attachment. `creator-uploads` consumes the actual next human file event;
+model-provided bytes, URLs and older attachments cannot satisfy it. The request is
+bound to the live owner, workspace, authentication session, Eve session and draft
+revision, expires after 15 minutes and caps one file at 96 KB / 24,000 characters.
+It preserves original bytes and provenance. Acquisition remains distinct from
+native human rights/content review and adding the source to the draft. Status and
+cancellation are explicit. Migration 0090 stores intake metadata; neither source
+text nor credentials enter that queue table.
+
+Status exposes the source revision and current draft revision separately. A stale
+review request returns a conflict before asking the human, allowing the agent to
+reload the correct revisions. Approval still validates revisions transactionally;
+it cannot overwrite an edit that occurs while the question is pending. Compiled
+runtime tests cover restart, expiry, cancellation, exact bytes, revocation, replay
+and review conflicts. Browser QA imported a synthetic local file, displayed the
+rights question and confirmed the attributed teaching only after approval.
+
+Saving an evaluation through chat now merges cases by identity. Adding an
+insufficient-evidence case preserves the previously declared supported case.
+Removal is a distinct human-confirmed operation that rechecks the saved revision.
+Runtime tests and a real synthetic conversation verify the two cases coexist;
+this is coverage evidence, not a claim of creator expertise or answer quality.
+
+Two memory runtime defects found during that walkthrough are covered separately.
+Missing/empty continuation turn IDs no longer collapse different Akita native
+sessions into one already-ended session. The real native regression preserves
+independent receipts, and the local pending queue drained through its ordinary
+schedule. Eve's memory callback closure now handles SDK media in both history and
+turn input; ordinary attachments previously removed all enabled memory tools.
+The compiled regression covers URL, binary subarray and ArrayBuffer attachments,
+native approval, process restart, exact staged bytes and the subsequent tool
+catalog. The narrow dependency correction and its removal gate are documented in
+`patches/README.md`.
+
+YouTube/external extraction, public marketplace, paid access, dreaming and scale
+qualification remain open. The next M1 slice isolates tenant ingestion failures
+and bounds work fairly before any capacity claim.

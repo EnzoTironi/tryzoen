@@ -80,10 +80,14 @@ async function extendToMessageBoundary(
   signal?: AbortSignal
 ) {
   let page = initial;
+  let reads = Number(initial.events.length > 0);
   while (
+    reads < 8 &&
     page.startIndex > 0 &&
     receivedMessageCount(page.events) < messagesPerPage
   ) {
+    signal?.throwIfAborted();
+    reads += 1;
     const older = await readEventChunk(
       client,
       sessionId,

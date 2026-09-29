@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
 import { z } from "zod";
 import { creatorExampleSchema } from "@zoen/companion-ui/creators";
-import { creatorSourceSchema } from "../sources/schema";
+import {
+  creatorSourceSchema,
+  creatorSourceMetadataSchema,
+} from "../sources/schema";
 
 export const corpusPageSchema = z.strictObject({
   path: z.string().regex(/^notes\/[0-9a-f-]{36}\.md$/),
@@ -10,7 +13,7 @@ export const corpusPageSchema = z.strictObject({
   attribution: z.string().max(1000),
   rights: creatorExampleSchema.shape.rights.nullable(),
   title: z.string().max(120),
-  kind: z.enum(["guidance", "authored", "workspace-source"]),
+  kind: z.enum(["guidance", "authored", "workspace-source", "uploaded-source"]),
   start: z.number().int().nonnegative(),
   end: z.number().int().positive(),
   offsetUnit: z.literal("utf16"),
@@ -19,7 +22,7 @@ export const corpusPageSchema = z.strictObject({
   source: creatorSourceSchema
     .omit({ snapshot: true })
     .extend({
-      snapshot: creatorSourceSchema.shape.snapshot.omit({ content: true }),
+      snapshot: creatorSourceMetadataSchema,
     })
     .nullable(),
 });

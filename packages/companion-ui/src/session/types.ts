@@ -15,6 +15,7 @@ export interface ChatAgent {
   readonly events: readonly MessageStreamEvent[];
   readonly hasOlder: boolean;
   readonly isLoadingOlder: boolean;
+  readonly olderError?: Error;
   readonly loadOlder: () => Promise<void>;
   readonly respond: <TOutput = unknown>(
     inputResponses: readonly InputResponse[],

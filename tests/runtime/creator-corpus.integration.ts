@@ -133,9 +133,13 @@ test("actual Akita tool build/search preserves release source provenance and can
   expect(result.hits[0]?.source?.snapshot.digest).toBe(
     first.source.snapshot.digest
   );
-  expect(result.hits[0]?.source?.snapshot.fileRevision).toBe(
-    first.source.snapshot.fileRevision
-  );
+  const snapshot = result.hits[0]?.source?.snapshot;
+  if (
+    snapshot?.extraction !== "workspace-markdown" ||
+    first.source.snapshot.extraction !== "workspace-markdown"
+  )
+    throw new Error("Expected workspace source attribution");
+  expect(snapshot.fileRevision).toBe(first.source.snapshot.fileRevision);
   expect(result.hits[0]?.start).toBe(0);
   expect(result.hits[0]?.end).toBe(text.length);
   expect(

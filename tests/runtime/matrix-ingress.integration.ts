@@ -65,7 +65,7 @@ test("Matrix retries ignore refreshed unsigned age but reject changed semantic e
   }
 });
 
-test("late Matrix invitations do not remove an already joined member or invalidate approvals", async () => {
+test("late Matrix invitations and joins preserve a known audience while removals and new joins fence it", async () => {
   await using workspace = await workspaceFixture();
   const { actor, guest } = workspace;
   const binding = randomUUID();
@@ -122,8 +122,23 @@ test("late Matrix invitations do not remove an already joined member or invalida
           sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
         )
       )[0]?.epoch
-    ).not.toBe(epoch);
+    ).toBe(epoch);
     await receive("leave");
+    expect(
+      await query(
+        sql`SELECT user_id FROM matrix_room_members WHERE binding_id=${binding}`
+      )
+    ).toHaveLength(0);
+    const [removed] = await query<{ epoch: string }>(
+      sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
+    );
+    expect(removed?.epoch).not.toBe(epoch);
+    await receive("join");
+    const [rejoined] = await query<{ epoch: string }>(
+      sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
+    );
+    expect(rejoined?.epoch).not.toBe(removed?.epoch);
+    // An external join fences pending work; it does not grant app membership.
     expect(
       await query(
         sql`SELECT user_id FROM matrix_room_members WHERE binding_id=${binding}`

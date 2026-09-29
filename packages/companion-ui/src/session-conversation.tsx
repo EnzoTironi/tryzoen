@@ -22,7 +22,7 @@ export function SessionConversation({
   readonly reactions: ReactionData;
   readonly cacheScope: string;
 }) {
-  const agent = useSessionAgent(sessionId, client);
+  const agent = useSessionAgent(sessionId, client, cacheScope);
   const feedback = useMessageReactions(reactions, cacheScope, sessionId);
   const messages = useMemo(
     () => visibleConversationMessages(agent.data.messages, agent.events),
@@ -63,9 +63,9 @@ export function SessionConversation({
       }}
       onLoadOlder={
         agent.hasOlder
-          ? () => {
+          ? async () => {
               setActionError(undefined);
-              void agent.loadOlder().catch(() => {
+              await agent.loadOlder().catch(() => {
                 setActionError(
                   "Earlier messages couldn’t be loaded. Please try again."
                 );
@@ -74,6 +74,7 @@ export function SessionConversation({
           : undefined
       }
       loadingOlder={agent.isLoadingOlder}
+      olderError={agent.olderError?.message}
     />
   );
 }

@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { expect, test } from "vitest";
-import { saveCreatorEvaluation } from "../../server/creators/evaluation";
+import {
+  saveCreatorEvaluation,
+  upsertCreatorEvaluation,
+  removeCreatorEvaluationCase,
+} from "../../server/creators/evaluation";
 import {
   saveCreatorDraft,
   readCreatorDraft,
@@ -31,6 +35,105 @@ const sample = {
   criteria:
     "# Criteria\n\nAsk an open question. Never invent facts. Allow people to pass.",
 };
+
+test("chat case edits preserve omitted cases and retries, require explicit removal and enforce the combined bound", async () => {
+  await using workspace = await workspaceFixture();
+  const draft = await saveCreatorDraft(workspace.personal, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content,
+  });
+  const negative = {
+    ...sample,
+    id: randomUUID(),
+    expectedGrounding: "insufficient-evidence" as const,
+  };
+  const initial = await upsertCreatorEvaluation(workspace.personal, {
+    draftId: draft.id,
+    expectedRevision: null,
+    cases: [negative],
+  });
+  const positive = {
+    ...sample,
+    id: randomUUID(),
+    title: "Supported case",
+    expectedGrounding: "supported" as const,
+  };
+  const input = {
+    draftId: draft.id,
+    expectedRevision: initial.evaluation?.revision ?? null,
+    cases: [positive],
+  };
+  const added = await upsertCreatorEvaluation(workspace.personal, input);
+  expect(added.evaluation?.cases).toEqual([negative, positive]);
+  expect(await upsertCreatorEvaluation(workspace.personal, input)).toEqual(
+    added
+  );
+  const updatedCase = { ...positive, title: "Changed supported case" };
+  const edited = await upsertCreatorEvaluation(workspace.personal, {
+    ...input,
+    expectedRevision: added.evaluation?.revision ?? null,
+    cases: [updatedCase],
+  });
+  expect(edited.evaluation?.cases).toEqual([negative, updatedCase]);
+  await expect(
+    upsertCreatorEvaluation(workspace.personal, input)
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  await expect(
+    upsertCreatorEvaluation(workspace.personal, {
+      ...input,
+      expectedRevision: edited.evaluation?.revision ?? null,
+      cases: Array.from({ length: 19 }, () => ({
+        ...sample,
+        id: randomUUID(),
+      })),
+    })
+  ).rejects.toThrow(/Too big/);
+  for (const actor of [
+    workspace.guestPersonal,
+    { ...workspace.personal, authSessionId: undefined },
+  ]) {
+    await expect(upsertCreatorEvaluation(actor, input)).rejects.toBeInstanceOf(
+      WorkspaceAccessDenied
+    );
+    await expect(
+      removeCreatorEvaluationCase(actor, {
+        draftId: draft.id,
+        expectedRevision: edited.evaluation?.revision ?? null,
+        caseId: positive.id,
+      })
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  }
+  await expect(
+    removeCreatorEvaluationCase(workspace.personal, {
+      draftId: draft.id,
+      expectedRevision: added.evaluation?.revision ?? null,
+      caseId: negative.id,
+    })
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  const removal = {
+    draftId: draft.id,
+    expectedRevision: edited.evaluation?.revision ?? null,
+    caseId: positive.id,
+  };
+  const removed = await removeCreatorEvaluationCase(
+    workspace.personal,
+    removal
+  );
+  expect(removed.evaluation?.cases).toEqual([negative]);
+  expect(
+    await removeCreatorEvaluationCase(workspace.personal, removal)
+  ).toEqual(removed);
+  await expect(
+    upsertCreatorEvaluation(workspace.personal, input)
+  ).rejects.toBeInstanceOf(CreatorDraftConflict);
+  await query(
+    sql`DELETE FROM public.session WHERE id = ${workspace.personal.authSessionId}`
+  );
+  await expect(
+    removeCreatorEvaluationCase(workspace.personal, removal)
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
 
 test("evaluation cases are private, versioned separately from teaching, bounded and reject stale writes", async () => {
   await using workspace = await workspaceFixture();

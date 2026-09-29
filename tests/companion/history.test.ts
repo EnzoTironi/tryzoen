@@ -1,6 +1,9 @@
 import { Client, type MessageStreamEvent } from "eve/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readLatestSessionHistory } from "../../packages/companion-ui/src/session/history";
+import {
+  readLatestSessionHistory,
+  readOlderSessionHistory,
+} from "../../packages/companion-ui/src/session/history";
 
 describe("session history", () => {
   afterEach(() => {
@@ -65,3 +68,58 @@ function receivedMessage(index: number): MessageStreamEvent {
     type: "message.received",
   };
 }
+
+it("caps a history page at eight chunks when a long turn has no message boundary", async () => {
+  const fetchMock = vi.fn<() => Promise<Response>>(() =>
+    Promise.resolve(
+      new Response(
+        Array.from({ length: 128 }, (_, index) =>
+          JSON.stringify({
+            type: "session.waiting",
+            data: { continuationToken: "", wait: "next-user-message" },
+            meta: { id: `event-${index}`, at: "2026-09-28T00:00:00Z" },
+          })
+        ).join("\n"),
+        {
+          headers: {
+            "content-type": "application/x-ndjson",
+            "x-eve-stream-version": "25",
+            "x-eve-stream-tail-index": "4095",
+          },
+        }
+      )
+    )
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    const history = await readOlderSessionHistory(
+      new Client({ host: "" }),
+      "large",
+      4096
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(history.startIndex).toBe(3072);
+    expect(history.events).toHaveLength(1024);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+it("does not read a history chunk after cancellation", async () => {
+  const fetchMock = vi.fn<() => Promise<Response>>();
+  vi.stubGlobal("fetch", fetchMock);
+  const controller = new AbortController();
+  controller.abort();
+  try {
+    await expect(
+      readOlderSessionHistory(
+        new Client({ host: "" }),
+        "large",
+        4096,
+        controller.signal
+      )
+    ).rejects.toThrow(/abort/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

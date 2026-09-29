@@ -1,4 +1,5 @@
 import { RoomMessageControls } from "./message-controls";
+import { captureMessageAnchor } from "../conversation/scroll-anchor";
 import { MessageLinks } from "../cards/link";
 import { RoomAttachment } from "./attachment";
 import type { RoomData } from "./schema";
@@ -12,7 +13,6 @@ import {
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -129,7 +129,11 @@ export function RoomMessages({
           setAtBottom(nearBottom.current);
           restoreWebAnchor.current = nearBottom.current
             ? undefined
-            : captureMessageAnchor(list.current);
+            : captureMessageAnchor(
+                list.current?.getScrollableNode(),
+                "room-message",
+                true
+              );
           if (nearBottom.current) setLastSeen(messages.at(-1)?.id);
         }}
         scrollEventThrottle={100}
@@ -222,31 +226,6 @@ export function RoomMessages({
     </View>
   );
 }
-// React Native Web does not implement maintainVisibleContentPosition. Hold a
-// visible row when live messages or media change the inverted list's height.
-function captureMessageAnchor(
-  list: FlatList<z.infer<typeof roomMessageSchema>> | null
-) {
-  if (Platform.OS !== "web") return undefined;
-  const node: unknown = list?.getScrollableNode();
-  if (!(node instanceof HTMLElement)) return undefined;
-  const viewport = node.getBoundingClientRect();
-  const row = Array.from(
-    node.querySelectorAll('[data-testid="room-message"]')
-  ).find((item) => {
-    const bounds = item.getBoundingClientRect();
-    return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
-  });
-  if (!row) return undefined;
-  const offset = row.getBoundingClientRect().top - viewport.top;
-  return () => {
-    if (!row.isConnected) return;
-    const current =
-      row.getBoundingClientRect().top - node.getBoundingClientRect().top;
-    node.scrollTop += offset - current;
-  };
-}
-
 function MessageSeparator() {
   return <View style={styles.separator} />;
 }

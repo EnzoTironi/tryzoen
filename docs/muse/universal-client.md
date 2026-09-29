@@ -86,6 +86,12 @@ pnpm package:desktop
 
 For shared-component development, run `pnpm --filter @zoen/companion-ui dev` alongside the host. Mobile exports are JavaScript bundle checks, not signed native application builds. CI builds unsigned desktop packages on macOS, Windows, and Linux without publishing. Desktop release builds need signing, notarization, update infrastructure, and a deployed `/companion` route before distribution. No deployment is performed by this change.
 
+The pinned Eve media correction also participates in the upgrade gate: its
+compiled regression must preserve memory tool discovery after an attachment,
+native approval across restart and subsequent turns. Both SDK history and turn
+input need durable media serialization. See `patches/README.md`; no second memory
+runtime or permissive JSON fallback is introduced.
+
 ## Scale target: one million accounts
 
 A million accounts is a product target, not a concurrency estimate. Size infrastructure from measured active users, peak concurrent runs, event retention, browser minutes, attachment volume, and provider limits. The following are release requirements, not performance claims:

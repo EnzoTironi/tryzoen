@@ -25,6 +25,9 @@ import {
   withdrawCreatorSource,
 } from "../../server/creators/sources";
 import { creatorSourceExample } from "../../server/creators/sources/schema";
+import { query } from "@db/queries";
+import { sql } from "drizzle-orm";
+import { readCreatorIntake } from "../../server/creators/sources/intakes";
 import {
   createCreatorPreview,
   exportCreatorPreview,
@@ -59,6 +62,22 @@ beforeAll(async () => {
       import.meta.url
     ),
     join(directory, "agent/subagents/creator-specialist/instructions.md")
+  );
+  const channel = join(directory, "agent/channels/probe.ts");
+  await writeFile(
+    channel,
+    (await readFile(channel, "utf8")).replaceAll(
+      "message: z.string()",
+      'message: z.union([z.string(),z.array(z.union([z.object({type:z.literal("text"),text:z.string()}),z.object({type:z.literal("file"),data:z.string(),filename:z.string(),mediaType:z.string()})]))])'
+    )
+  );
+  const uploadHook = await readFile(
+    new URL("../../agent/hooks/creator-uploads.ts", import.meta.url),
+    "utf8"
+  );
+  await writeFile(
+    join(directory, "agent/hooks/creator-uploads.ts"),
+    uploadHook.replaceAll('"../../server/', '"../../../../../server/')
   );
   await compileEveFixture(directory);
 }, 90000);
@@ -132,6 +151,113 @@ function question(state: Awaited<ReturnType<typeof start>>) {
   if (!item) throw new Error("Expected human source review");
   return item;
 }
+
+test("native human file intake survives restart, preserves original bytes and requires rights review before teaching", async () => {
+  await using workspace = await workspaceFixture();
+  const actor = workspace.personal;
+  const draft = await saveCreatorDraft(actor, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content: {
+      title: "Synthetic uploaded source",
+      description: "",
+      playbook: "",
+      examples: [],
+    },
+  });
+  const principal = workspaceExecutionFor(actor).session.auth.current;
+  const auth = {
+    ...principal,
+    attributes: { ...principal.attributes, archiveProof: "enabled" },
+  };
+  let server = await runtime(await freePort(), "127.0.0.1", directory);
+  try {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        auth,
+        message: `creator-sources ${JSON.stringify({ action: "request-upload", draftId: draft.id, expectedDraftRevision: draft.revision, title: "Original method" })}`,
+      })
+    );
+    await server.settled(sessionId);
+    const [intake] = await query<{ id: string }>(
+      sql`SELECT id FROM creator_source_intakes WHERE draft_id=${draft.id}`
+    );
+    if (!intake) throw new Error("Native tool did not arm an upload request");
+    expect(await readCreatorIntake(actor, sessionId, intake.id)).toMatchObject({
+      status: "waiting",
+    });
+    await server.stop();
+    server = await runtime(await freePort(), "127.0.0.1", directory);
+    const content = "  # Original method\r\nPreserve café and whitespace.\n\n";
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: [
+        { type: "text", text: "Here is my synthetic source." },
+        {
+          type: "file",
+          filename: "method.md",
+          mediaType: "text/markdown",
+          data: `data:text/markdown;base64,${Buffer.from(content).toString("base64")}`,
+        },
+      ],
+    });
+    await server.settled(sessionId, 2);
+    expect(server.output()).not.toContain("Dynamic tool resolver");
+    const source = await readCreatorSource(actor, intake.id);
+    expect(source.snapshot).toMatchObject({
+      extraction: "chat-upload",
+      content,
+      digest: createHash("sha256").update(content).digest("hex"),
+      sessionId,
+    });
+    expect(source.status).toBe("acquired");
+    expect(source.rights).toBeNull();
+    expect((await readCreatorDraft(actor, draft.id)).content.examples).toEqual(
+      []
+    );
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-sources ${JSON.stringify({ action: "upload-status", id: intake.id })}`,
+    });
+    const statusEvents = await server.settled(sessionId, 3);
+    expect(JSON.stringify(statusEvents)).toContain("currentDraftRevision");
+    expect(JSON.stringify(statusEvents)).toContain(source.revision);
+    // Confusing the two revisions is recoverable before a human is asked.
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-sources ${JSON.stringify({ action: "review", id: source.id, expectedRevision: draft.revision, expectedDraftRevision: draft.revision })}`,
+    });
+    const conflictEvents = await server.settled(sessionId, 4);
+    expect(JSON.stringify(conflictEvents)).toContain(
+      "Nothing was approved or changed"
+    );
+    expect(
+      conflictEvents.some((event) => event.type === "input.requested")
+    ).toBe(false);
+    await server.request(`/probe/message/${sessionId}`, {
+      auth,
+      message: `creator-sources ${JSON.stringify({ action: "review", id: source.id, expectedRevision: source.revision, expectedDraftRevision: draft.revision })}`,
+    });
+    const events = await server.settled(sessionId, 5);
+    const request = question({ server, auth, sessionId, events });
+    expect(request.prompt).toContain(content);
+    expect(request.prompt).toContain(source.snapshot.digest);
+    await server.request(`/probe/input/${sessionId}`, {
+      auth,
+      responses: [{ requestId: request.requestId, optionId: "original" }],
+    });
+    await server.settled(sessionId, 6);
+    const reviewed = await readCreatorSource(actor, source.id);
+    expect(reviewed.status).toBe("reviewed");
+    expect((await readCreatorDraft(actor, draft.id)).content.examples).toEqual([
+      creatorSourceExample(reviewed),
+    ]);
+  } finally {
+    await server.stop();
+  }
+}, 90000);
 async function answer(
   state: Awaited<ReturnType<typeof start>>,
   optionId: string
@@ -186,6 +312,8 @@ test("human source review survives restart and actual preview snapshot retains p
   await state.server.settled(state.sessionId, 3);
   const exported = await exportCreatorPreview(actor, preview.id);
   expect(exported.status).toBe("completed");
+  if (source.snapshot.extraction !== "workspace-markdown")
+    throw new Error("Expected workspace snapshot");
   expect(exported.response).toContain(source.snapshot.digest);
   expect(exported.response).toContain(source.snapshot.fileRevision);
   expect(exported.response).toContain('"tools":[]');

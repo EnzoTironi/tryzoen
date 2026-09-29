@@ -22,21 +22,27 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  readLatestSessionHistory,
-  readOlderSessionHistory,
-  type SessionHistoryPage,
-} from "./history";
+import { readLatestSessionHistory, type SessionHistoryPage } from "./history";
+import { useHistoryPages } from "./history-pages";
 import type { ChatAgent } from "./types";
 import { conversationStreamEvents, isTerminalSession } from "./events";
 
 const messageReducer = defaultMessageReducer();
 
-export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
+export function useSessionAgent(
+  sessionId: string,
+  client: Client,
+  cacheScope: string
+): ChatAgent {
   const [history, setHistory] = useState<SessionHistoryPage>();
   const [status, setStatus] = useState<UseEveAgentStatus>("resuming");
   const [error, setError] = useState<Error>();
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const olderPages = useHistoryPages(
+    client,
+    sessionId,
+    cacheScope,
+    history?.startIndex
+  );
   const historyRef = useRef(history);
   const operationRef = useRef<Promise<void> | undefined>(undefined);
   const responseRef = useRef<Promise<MessageResponse> | undefined>(undefined);
@@ -214,30 +220,16 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
   );
 
   const loadOlder = async () => {
-    const current = historyRef.current;
-    if (!current || current.startIndex === 0 || isLoadingOlder) return;
-    setIsLoadingOlder(true);
-    try {
-      const older = await readOlderSessionHistory(
-        client,
-        sessionId,
-        current.startIndex
-      );
-      const latest = historyRef.current;
-      if (latest) {
-        const next = {
-          ...latest,
-          events: [...older.events, ...latest.events],
-          startIndex: older.startIndex,
-        };
-        historyRef.current = next;
-        setHistory(next);
-      }
-    } catch (cause) {
-      setError(toError(cause));
-    } finally {
-      setIsLoadingOlder(false);
-    }
+    const older = await olderPages.load();
+    const latest = historyRef.current;
+    if (!older || !latest || older.endIndex !== latest.startIndex) return;
+    const next = {
+      ...latest,
+      events: [...older.events, ...latest.events],
+      startIndex: older.startIndex,
+    };
+    historyRef.current = next;
+    setHistory(next);
   };
 
   const events = useMemo(
@@ -269,7 +261,8 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
     error,
     events,
     hasOlder: (history?.startIndex ?? 0) > 0,
-    isLoadingOlder,
+    isLoadingOlder: olderPages.pending,
+    olderError: olderPages.error,
     loadOlder,
     respond,
     resume,

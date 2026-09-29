@@ -45,7 +45,6 @@ test(
     const beforeJoin = await readMatrixInboxSummaries(fixture.guest, [room.id]);
     expect(beforeJoin.get(room.id)).toMatchObject({
       preview: null,
-      unread: null,
       summaryState: "pending",
     });
     await readMatrixMessages(fixture.guest, room.id);
@@ -122,7 +121,6 @@ test(
       (await readMatrixInboxSummaries(fixture.guest, [room.id])).get(room.id)
     ).toEqual({
       preview: "Non-agent message",
-      unread: null,
       summaryState: "ready",
     });
     const sender = await ensureMatrixIdentity(fixture.actor);
