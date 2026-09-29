@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";
-import { emptyOntology } from "@shared/workspaces/ontology";
+import { emptyOntology } from "@zoen/companion-ui/ontology";
 import type { ComponentProps } from "react";
 import { OntologyEntityForm } from "./entity-form";
 

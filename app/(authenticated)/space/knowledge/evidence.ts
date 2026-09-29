@@ -3,7 +3,7 @@ import type {
   OntologySchema,
   OntologySourceSchema,
   OntologyClaimSchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 
 type Graph = z.output<typeof OntologySchema>;
 

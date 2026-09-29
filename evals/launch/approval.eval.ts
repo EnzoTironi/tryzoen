@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineEval } from "eve/evals";
 import { equals } from "eve/evals/expect";
 import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
-import { OntologySchema } from "@shared/workspaces/ontology";
+import { OntologySchema } from "@zoen/companion-ui/ontology";
 
 const graphSchema = z.object({
   revision: GitRevisionSchema,

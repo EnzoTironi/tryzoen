@@ -11,6 +11,7 @@ import {
   Globe,
   Image as ImageIcon,
   Music,
+  Network,
   Plus,
   Search,
   Shapes,
@@ -35,6 +36,10 @@ import {
   type KnowledgeProposalData,
 } from "./library/knowledge";
 import { FileTree } from "./library/tree";
+import {
+  OntologyCollection,
+  type OntologyData,
+} from "./library/ontology/collection";
 
 const categories = [
   {
@@ -47,6 +52,7 @@ const categories = [
     icon: Shapes,
     pattern: /^(knowledge|artifacts)\//u,
   },
+  { label: "Knowledge", icon: Network, pattern: /^ontology\//u },
   {
     label: "Documents",
     icon: FileText,
@@ -77,10 +83,12 @@ export function Library({
   onOpen,
   onCreate,
   proposals,
+  ontology,
   ...state
 }: Omit<ComponentProps<typeof CompanionPage>, "title" | "children"> & {
   readonly items: readonly { id: string; title: string; description: string }[];
   readonly proposals: KnowledgeProposalData;
+  readonly ontology: OntologyData;
   readonly onOpen: (id: string) => void;
   readonly onCreate: (kind: "document" | "model") => void;
 }) {
@@ -93,15 +101,11 @@ export function Library({
   const [descending, setDescending] = useState(false);
   const [list, setList] = useState(false);
   const reviewing = category.label === "Review changes";
+  const knowledge = category.label === "Knowledge";
+  const fileControls = !["Review changes", "Knowledge"].includes(
+    category.label
+  );
   const systemFiles = category.label === "System files";
-  const matching = items
-    .filter(
-      (item) =>
-        (systemFiles || category.pattern.test(item.id)) &&
-        item.title.toLowerCase().includes(query.trim().toLowerCase())
-    )
-    // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
-    .sort((a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title));
   return (
     <View style={[styles.layout, compact && styles.compact]}>
       {(!compact || showCategories) && (
@@ -157,7 +161,7 @@ export function Library({
                   }}
                 />
               )}
-              {!systemFiles && !reviewing && (
+              {!systemFiles && fileControls && (
                 <IconButton
                   icon={list ? LayoutGrid : List}
                   label={list ? "Grid view" : "List view"}
@@ -173,7 +177,7 @@ export function Library({
                   setDescending(!descending);
                 }}
               />
-              {!reviewing && (
+              {fileControls && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
@@ -197,7 +201,9 @@ export function Library({
           }
           {...state}
         >
-          {reviewing ? (
+          {knowledge ? (
+            <OntologyCollection data={ontology} query={query} />
+          ) : reviewing ? (
             <KnowledgeProposals data={proposals} query={query} />
           ) : systemFiles ? (
             <FileTree
@@ -208,10 +214,11 @@ export function Library({
             />
           ) : (
             <LibraryFiles
-              matching={matching}
+              items={items}
+              descending={descending}
               list={list}
               query={query}
-              category={category.label}
+              category={category}
               settled={!state.loading && !state.error}
               onOpen={onOpen}
             />
@@ -222,20 +229,30 @@ export function Library({
   );
 }
 function LibraryFiles({
-  matching,
+  items,
+  descending,
   list,
   query,
   category,
   settled,
   onOpen,
 }: {
-  readonly matching: ComponentProps<typeof Library>["items"];
+  readonly items: ComponentProps<typeof Library>["items"];
+  readonly descending: boolean;
   readonly onOpen: ComponentProps<typeof Library>["onOpen"];
   readonly list: boolean;
   readonly query: string;
-  readonly category: string;
+  readonly category: (typeof categories)[number];
   readonly settled: boolean;
 }) {
+  const matching = items
+    .filter(
+      (item) =>
+        category.pattern.test(item.id) &&
+        item.title.toLowerCase().includes(query.trim().toLowerCase())
+    )
+    // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
+    .sort((a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title));
   return (
     <>
       <Text accessibilityRole="header" style={pageStyles.heading}>
@@ -277,7 +294,7 @@ function LibraryFiles({
         <Text style={pageStyles.copy}>
           {query
             ? "No files match your search."
-            : `No ${category.toLowerCase()} yet. Create something with Zoen to add it here.`}
+            : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
         </Text>
       )}
     </>

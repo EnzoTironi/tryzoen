@@ -4,7 +4,11 @@ import { ConnectedSearch } from "./search";
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
-import { companionKnowledgeData } from "@shared/companion/knowledge";
+import {
+  companionKnowledgeData,
+  companionOntologyData,
+} from "@shared/companion/knowledge";
+import { authClient } from "@web/auth/client";
 import { companionGoalsData } from "@shared/companion/goals";
 import {
   IdeaCollection,
@@ -95,17 +99,23 @@ function ConnectedLibrary({
   const utils = api.useUtils();
   const params = useSearchParams();
   const scope = params.get("space") ?? "personal";
+  const account = authClient.useSession();
+  const knowledgeScope = `${account.data?.session.id ?? "signed-out"}:${scope}`;
+  const ontology = useMemo(
+    () => companionOntologyData(getUntypedClient(utils.client), knowledgeScope),
+    [utils.client, knowledgeScope]
+  );
   const proposals = useMemo(
     () =>
       companionKnowledgeData(
         getUntypedClient(utils.client),
-        scope,
+        knowledgeScope,
         () => crypto.randomUUID(),
         () => {
           void utils.workspaces.files.invalidate();
         }
       ),
-    [utils, scope]
+    [utils, knowledgeScope]
   );
   const files = api.workspaces.files.useQuery({});
   const [path, setPath] = useState<string>();
@@ -122,6 +132,7 @@ function ConnectedLibrary({
   return (
     <Library
       proposals={proposals}
+      ontology={ontology}
       items={(files.data?.files ?? [])
         .filter((file) => !file.startsWith("proposals/knowledge/"))
         .map((file) => ({

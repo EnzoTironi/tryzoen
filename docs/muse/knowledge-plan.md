@@ -93,15 +93,15 @@ erasure and access before apply. It must not rewrite authored rules silently.
 
 ## Existing owners and actual gaps
 
-| Capability                         | Current owner and evidence                                                                                            | Remaining change                                                                                                                                                                                                 |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ontology objects/relations/actions | `shared/workspaces/ontology.ts`, `server/workspaces/ontology.ts`; bounded typed graph and source revision validation  | Attributed claims, evidence at field/relation level, temporal history and shared native Library dossiers                                                                                                         |
-| Published files                    | `server/workspaces/repository.ts` and `git.ts`                                                                        | Preserve existing CAS/idempotency when adding analytic files and multi-file proposals; do not introduce a second publisher                                                                                       |
-| Atomic publication                 | Candidate Git bundle built before a PostgreSQL transaction atomically swaps head/bundle and appends operation receipt | Current bounded bundle design has no filesystem/DB split publication. A move to independent retained repositories needs fencing/journal recovery first; not required merely to add another document type         |
-| Memory                             | `server/memory/ai-memory`, personal-memory authorization and namespace receipts                                       | Replace with unified file-backed claims/session owner; direct replacement without old-data conversion; scoped retrieval, new history/receipts, backup/restore, quotas and placement before safe candidate dreams |
-| Ingestion                          | Durable bounded source files, receipts and per-namespace capture                                                      | Source correction/erasure propagation, attributed temporal claims, safe consolidation                                                                                                                            |
-| Communication                      | Native Matrix ownership, scoped TanStack caches and delivery records                                                  | E2EE, push, public receipts, calls and full offline qualification remain in communications backlog                                                                                                               |
-| Analysis                           | Existing typed ontology actions are property changes, not a semantic query engine                                     | Qualify compiler, authorized sources, constrained executor, provenance and revision-aware caching                                                                                                                |
+| Capability                         | Current owner and evidence                                                                                                                       | Remaining change                                                                                                                                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ontology objects/relations/actions | `packages/companion-ui/src/library/ontology/schema.ts`, `server/workspaces/ontology.ts`; typed graph, scoped citations and world-valid intervals | Learned-claim/session replacement, complete bitemporal history and conversational corrections                                                                                                                    |
+| Published files                    | `server/workspaces/repository.ts` and `git.ts`                                                                                                   | Preserve existing CAS/idempotency when adding analytic files and multi-file proposals; do not introduce a second publisher                                                                                       |
+| Atomic publication                 | Candidate Git bundle built before a PostgreSQL transaction atomically swaps head/bundle and appends operation receipt                            | Current bounded bundle design has no filesystem/DB split publication. A move to independent retained repositories needs fencing/journal recovery first; not required merely to add another document type         |
+| Memory                             | `server/memory/ai-memory`, personal-memory authorization and namespace receipts                                                                  | Replace with unified file-backed claims/session owner; direct replacement without old-data conversion; scoped retrieval, new history/receipts, backup/restore, quotas and placement before safe candidate dreams |
+| Ingestion                          | Durable bounded source files, receipts and per-namespace capture                                                                                 | Source correction/erasure propagation, attributed temporal claims, safe consolidation                                                                                                                            |
+| Communication                      | Native Matrix ownership, scoped TanStack caches and delivery records                                                                             | E2EE, push, public receipts, calls and full offline qualification remain in communications backlog                                                                                                               |
+| Analysis                           | Existing typed ontology actions are property changes, not a semantic query engine                                                                | Qualify compiler, authorized sources, constrained executor, provenance and revision-aware caching                                                                                                                |
 
 The current repository stores bounded Git bundles in PostgreSQL (200 files, 256 KiB per file, 24 MiB bundle). It does not yet implement a persistent user filesystem or SQLite ontology projection. It already checks expected revisions, idempotent operation hashes and access again at commit. Replacing that transaction with two unrelated writes would regress durability.
 
@@ -259,3 +259,31 @@ exclusive dates, historical state, current source correction/deletion, action
 evidence replacement, invalid excerpts, access revocation and durable history.
 Akita remains the learned-memory runtime until K3 replaces its complete owner;
 semantic computation, private claims/sessions and dream review remain open.
+
+## K1 progress — shared Library dossiers
+
+The shared React Native Library now has a Knowledge category. Web/Electron and
+Expo consume the same typed read adapter and canonical ontology schemas. The
+former shared ontology schema file was removed; server validation errors remain
+with their concrete server owner. No duplicate graph shape or compatibility
+re-export was introduced.
+
+A record opens in the existing responsive sheet/modal. Its fields retain their
+own evidence and explicit validity intervals. Relationships open the related
+record by stable object ID; inbound/outbound direction is shown. A citation opens
+the historical source through the existing document-history adapter. Changed or
+unavailable current passages remain visible as warnings. Missing citations and
+unknown world-valid dates are stated explicitly rather than fabricated.
+
+The collection uses principal/session-and-workspace-scoped TanStack keys, retains
+its cached result during refresh, and removes records if revalidation fails.
+Source previews use path/revision keys within that same scope. Search runs over
+the bounded graph; at most 100 matching rows render and broader results ask for a
+more specific search. File filtering runs only in the file collection, not when
+a knowledge dossier or proposal collection is active.
+
+This is the shared read/evidence journey, not a new authoring form. The existing
+web administrator evidence editor remains available; conversational corrections,
+full historical/date selection in the Library and unified private learned memory
+still need their complete owner. No private session files, Akita dual writer,
+semantic executor or provider-freshness guarantee was added.

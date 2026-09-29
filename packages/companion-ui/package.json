@@ -99,6 +99,10 @@
     "./workspace-files": {
       "types": "./dist/library/files-schema.d.ts",
       "default": "./dist/library/files-schema.js"
+    },
+    "./ontology": {
+      "types": "./dist/library/ontology/schema.d.ts",
+      "default": "./dist/library/ontology/schema.js"
     }
   },
   "dependencies": {

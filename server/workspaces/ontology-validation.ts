@@ -1,7 +1,31 @@
 import { isValid } from "@shared/validation";
 import { z } from "zod";
 
-import { OntologyInvalid, OntologySchema } from "@shared/workspaces/ontology";
+import { OntologySchema } from "@zoen/companion-ui/ontology";
+
+export class OntologyInvalid extends Error {
+  readonly _tag = "OntologyInvalid";
+  declare readonly reason:
+    | "duplicate"
+    | "type"
+    | "property"
+    | "link"
+    | "source"
+    | "action";
+  constructor(input: {
+    readonly reason:
+      | "duplicate"
+      | "type"
+      | "property"
+      | "link"
+      | "source"
+      | "action";
+  }) {
+    super("OntologyInvalid");
+    this.name = "OntologyInvalid";
+    Object.assign(this, input);
+  }
+}
 
 export function ontologyCitations(graph: z.output<typeof OntologySchema>) {
   const citations = [

@@ -8,7 +8,7 @@ import {
   OntologySchema,
   OntologyActionSchema,
   OntologyReadSchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 
 import {
   applyOntologyAction,

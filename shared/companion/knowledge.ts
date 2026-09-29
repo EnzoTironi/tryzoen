@@ -1,10 +1,31 @@
-import type { KnowledgeProposalData } from "@zoen/companion-ui";
+import type { KnowledgeProposalData, OntologyData } from "@zoen/companion-ui";
+import { OntologyReadResultSchema } from "@zoen/companion-ui/ontology";
+import { companionDocumentHistory } from "./files";
 import {
   knowledgeProposalListSchema,
   knowledgeProposalReviewSchema,
 } from "@zoen/companion-ui/knowledge";
 import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { z } from "zod";
+
+export function companionOntologyData(
+  rpc: Parameters<typeof companionKnowledgeData>[0],
+  scope: string
+): OntologyData {
+  return {
+    cacheKey: ["ontology", scope],
+    async read(input) {
+      return OntologyReadResultSchema.parse(
+        await rpc.query("workspaces.ontology.read", input)
+      );
+    },
+    async source(citation) {
+      return companionDocumentHistory(rpc, citation.path, scope).read(
+        citation.revision
+      );
+    },
+  };
+}
 
 export function companionKnowledgeData(
   rpc: {

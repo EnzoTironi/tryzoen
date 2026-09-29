@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { useState } from "react";
-import type { OntologySchema } from "@shared/workspaces/ontology";
+import type { OntologySchema } from "@zoen/companion-ui/ontology";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";

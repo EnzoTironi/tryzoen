@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { defineDynamic, defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
-import { OntologyActionSchema } from "@shared/workspaces/ontology";
+import { OntologyActionSchema } from "@zoen/companion-ui/ontology";
 import { authorizeApprovalResponse } from "../../../agent/lib/approval-response";
 import { workspaceOperationId } from "../../../agent/lib/workspace-operation";
 import {

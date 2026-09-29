@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import {
   OntologyClaimSchema,
   emptyOntology,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 import { validateOntology } from "./ontology-validation";
 
 const citation = {

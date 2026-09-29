@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
-import { knowledgePathSchema } from "@zoen/companion-ui/knowledge";
+import { GitRevisionSchema } from "../files-schema";
+import { knowledgePathSchema } from "../knowledge-schema";
 
 const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const label = z.string().trim().min(1).max(120);
@@ -143,26 +143,11 @@ export const OntologyActionSchema = z.object({
   ...OntologyClaimSchema.shape,
 });
 
-export class OntologyInvalid extends Error {
-  readonly _tag = "OntologyInvalid";
-  declare readonly reason:
-    | "duplicate"
-    | "type"
-    | "property"
-    | "link"
-    | "source"
-    | "action";
-  constructor(input: {
-    readonly reason:
-      | "duplicate"
-      | "type"
-      | "property"
-      | "link"
-      | "source"
-      | "action";
-  }) {
-    super("OntologyInvalid");
-    this.name = "OntologyInvalid";
-    Object.assign(this, input);
-  }
-}
+export const OntologyReadResultSchema = z.strictObject({
+  graph: OntologySchema,
+  revision: GitRevisionSchema.nullable(),
+  validOn: z.iso.date().nullable(),
+  sourceCheckedAtRevision: GitRevisionSchema.nullable(),
+  sources: z.array(OntologySourceStateSchema).max(60),
+  mayManage: z.boolean(),
+});

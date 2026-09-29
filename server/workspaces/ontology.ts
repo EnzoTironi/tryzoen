@@ -1,3 +1,4 @@
+import { OntologyInvalid } from "./ontology-validation";
 import { jsonString } from "@shared/validation";
 import type { z } from "zod";
 import {
@@ -9,11 +10,10 @@ import {
 import {
   emptyOntology,
   OntologyActionSchema,
-  OntologyInvalid,
   OntologyReadSchema,
   ontologyPath,
   OntologySchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 import type { WorkspaceWriteSchema } from "./repository";
 import { WorkspaceRepository, WorkspaceRepositoryError } from "./repository";
 import { requireWorkspaceAccess, type WorkspaceActorSchema } from "./access";

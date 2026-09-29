@@ -2146,3 +2146,32 @@ The same evidence remains readable at 390×844 in the mobile sheet; desktop sizi
 was restored. Screenshots are attached to PR 155 with `gh --attach`. All records
 belong to the named synthetic local review workspace. This does not qualify the
 pending shared native Library dossier or physical mobile devices.
+
+### K1 / wave 43 — shared Library knowledge dossiers
+
+The shared React Native Library includes Knowledge records with field evidence,
+explicit valid intervals, directional relationships and historical source opening.
+The existing sheet primitive provides the mobile sheet/desktop modal. Web/Electron
+and Expo use the same read adapter. The canonical schema moved directly to
+`packages/companion-ui/src/library/ontology/schema.ts`; its old shared file was
+removed and every caller/evaluation changed together. Server validation errors
+remain with their concrete owner. Historical source reads compose the existing
+document-history adapter. Collection/source caches include the account session
+and workspace; failed revalidation removes the displayed record collection.
+Search renders at most 100 matches, and file filtering no longer runs when a
+knowledge or proposal collection is active.
+
+Final `pnpm check --concurrency=1` passes all nine tasks (281 files / 1,748 tests;
+1m1.761s), with no lint warnings. `pnpm build` passes in 24.135s. Eight isolated
+ontology and delegated-agent integration cases pass in 7.50s. Chrome verifies
+source opening, bidirectional record navigation and the 390×844 sheet; images
+are attached to PR 155 using `gh --attach`. No physical-device qualification or
+production deployment was performed.
+
+The structural quality pass reports 19 observations / eight gates: repetitive
+RPC adapter shapes, repeated edits to the Library adapters and the file-list JSX
+size. New JSX components/interfaces produce structural dead-code observations
+but are imported, rendered, type checked and covered by the browser journey.
+Library complexity no longer regresses, and historical reads reuse the owning
+adapter. The report is not clean; no finding was hidden or acknowledged away.
+This read journey does not implement a second memory authority or complete K3/K4.

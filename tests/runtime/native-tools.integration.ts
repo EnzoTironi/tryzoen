@@ -11,7 +11,7 @@ import {
   readNativeSkill,
 } from "../helpers/native-tools";
 import { toolContextFor } from "../helpers/tool-context";
-import { emptyOntology } from "../../shared/workspaces/ontology";
+import { emptyOntology } from "@zoen/companion-ui/ontology";
 import {
   publishOntology,
   readOntology,

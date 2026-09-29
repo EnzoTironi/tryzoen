@@ -27,7 +27,7 @@ import { readAgentGrantCapabilities } from "./bots";
 import {
   ontologyPath,
   type OntologyActionSchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 import { createHash } from "node:crypto";
 import {
   requireWorkspaceAccess,

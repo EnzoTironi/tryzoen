@@ -14,7 +14,10 @@ import {
   Library,
   type CompanionSection,
 } from "@zoen/companion-ui";
-import { companionKnowledgeData } from "../../../shared/companion/knowledge";
+import {
+  companionKnowledgeData,
+  companionOntologyData,
+} from "../../../shared/companion/knowledge";
 import { companionFeedData } from "../../../shared/companion/feed";
 import { companionIdeasData } from "../../../shared/companion/ideas";
 import { client } from "./conversation";
@@ -120,7 +123,8 @@ function LibrarySection({
 }) {
   const cache = useQueryClient();
   const session = auth.useSession();
-  const scope = session.data?.user.id ?? "signed-out";
+  const scope = session.data?.session.id ?? "signed-out";
+  const ontology = useMemo(() => companionOntologyData(rpc, scope), [scope]);
   const proposals = useMemo(
     () =>
       companionKnowledgeData(rpc, scope, randomUUID, () => {
@@ -146,6 +150,7 @@ function LibrarySection({
   return (
     <Library
       proposals={proposals}
+      ontology={ontology}
       items={(files.data?.files ?? [])
         .filter((file) => !file.startsWith("proposals/knowledge/"))
         .map((file) => ({

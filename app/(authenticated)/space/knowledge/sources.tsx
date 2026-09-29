@@ -6,7 +6,7 @@ import type {
   OntologySchema,
   OntologySourceSchema,
   OntologySourceStateSchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";

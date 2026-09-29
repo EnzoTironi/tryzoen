@@ -12,7 +12,7 @@ import {
   publishOntology,
   readOntology,
 } from "../../server/workspaces/ontology";
-import { emptyOntology } from "../../shared/workspaces/ontology";
+import { emptyOntology } from "@zoen/companion-ui/ontology";
 import { workspaceFixture } from "./workspace-fixture";
 import { invokeWorkspaceTool } from "../../server/tools/workspace";
 test("ontology actions retain sources and history, replay once, and reject foreign provenance or stale writes", async () => {

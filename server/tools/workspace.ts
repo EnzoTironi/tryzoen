@@ -16,7 +16,7 @@ import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { LearnedMemory } from "../memory/learned";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";
 import { readOntology } from "../workspaces/ontology";
-import { OntologyReadSchema } from "@shared/workspaces/ontology";
+import { OntologyReadSchema } from "@zoen/companion-ui/ontology";
 import {
   discoverKnowledge,
   DiscoverKnowledgeSchema,

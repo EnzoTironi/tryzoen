@@ -7,7 +7,7 @@ import {
   publishOntology,
   readOntology,
 } from "../../server/workspaces/ontology";
-import { emptyOntology } from "../../shared/workspaces/ontology";
+import { emptyOntology } from "@zoen/companion-ui/ontology";
 import { networkFixture } from "./network";
 
 export const launchFixture = async function (

@@ -66,3 +66,4 @@ export {
 } from "./conversation/gesture-preferences";
 
 export type { KnowledgeProposalData } from "./library/knowledge";
+export type { OntologyData } from "./library/ontology/collection";

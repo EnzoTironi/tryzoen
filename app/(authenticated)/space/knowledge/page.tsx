@@ -11,7 +11,7 @@ import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import { Textarea } from "@web/components/ui/textarea";
-import { OntologySchema } from "@shared/workspaces/ontology";
+import { OntologySchema } from "@zoen/companion-ui/ontology";
 import { OntologySources } from "./sources";
 import {
   OntologyEntityForm,
