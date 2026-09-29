@@ -524,11 +524,10 @@ documents workload bounds. The JSON reports elapsed time, dispatch percentiles,
 throughput and parent-process resource usage; it explicitly excludes PostgreSQL
 and native child-process memory. It does not reset a database.
 
-This is bounded, fair delivery, not a production capacity result. The minute
-schedule still invokes one dispatcher, with an upper bound of 125 sources per
-invocation; continuous benchmark dispatch excludes that cadence. Scheduler
-fan-out, large accepted corpora, paused/revoked backlog query plans, shared-volume
-placement, host loss and production latency/backlog SLOs remain release gates.
+This is bounded, fair delivery, not a production capacity result. Each dispatcher
+processes at most 125 sources. Large accepted corpora, paused/revoked backlog query
+plans, shared-volume placement, host loss and production latency/backlog SLOs
+remain release gates.
 
 Local comparison recorded in [the JSON report](evidence/session-delivery-2026-09-28.json):
 20 accounts × 25 sources, Node 24.21.0 on macOS arm64, local PostgreSQL and real
@@ -546,3 +545,32 @@ concurrent dispatch, locked accounts and residual organization membership.
 Existing corpus-loss, acknowledgement rollback, pausing and erasure tests continue
 to pass with the real native engine. Application checks passed 1,591 tests in 259
 files, types, lint, formatting and unused-code checks. Migration validation passed.
+
+### Bounded scheduled delivery
+
+The Eve minute schedule starts up to eight dispatch rounds. It stops starting
+rounds after 45 seconds or once every worker reports no eligible work. Active
+transactions are always awaited; the time budget is not a hard timeout that can
+leave a file write or native ingestion running without an owner. The existing
+engine timeout and rollback/replay path still govern individual failures.
+
+`ZOEN_MEMORY_INGESTION_CONCURRENCY` is validated at startup (1–4, default 1). The
+default retains the previously deployed single-dispatcher resource footprint
+while permitting multiple fair rounds within one tick. Raising it requires
+measuring database connections, native child RSS and the persistent volume.
+The local four-worker sample is evidence for testing an override, not a default
+production capacity assertion.
+
+Overlapping invocations share the active promise in one runtime process and
+receive its same success or failure. This is a local resource bound; replicas
+remain independent and their aggregate concurrency must be budgeted operationally.
+The existing PostgreSQL locks prevent simultaneous ingestion of one namespace.
+Each round waits for all workers, continues useful work after a damaged account
+backs off, and reports collected failures after the bounded work completes.
+There is no separate queue framework or detached background promise.
+
+Seven unit scenarios exercise coalescing, concurrency, empty queues, failures and
+budgets. The real-engine isolated test queues 175 sources across seven healthy
+accounts plus one damaged account: one scheduled invocation acknowledges all
+healthy sources, retains the damaged batch with one retry increment and reports
+the failure. This does not qualify production cron latency or host-loss recovery.

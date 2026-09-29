@@ -5,6 +5,7 @@ import { afterAll, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
 import { claimSession } from "@db/services/sessions";
+import archiveSchedule from "@agent/schedules/session-archive";
 import { workspaceFixture } from "./workspace-fixture";
 import { sessionSource } from "../../server/memory/session-files";
 import {
@@ -26,7 +27,11 @@ vi.mock("@shared/environment/env", async (original) => {
   const actual = await original<typeof import("@shared/environment/env")>();
   return {
     ...actual,
-    env: { ...actual.env, ZOEN_SESSION_ARCHIVE_DIR: directory },
+    env: {
+      ...actual.env,
+      ZOEN_SESSION_ARCHIVE_DIR: directory,
+      ZOEN_MEMORY_INGESTION_CONCURRENCY: 1,
+    },
   };
 });
 afterAll(() => rm(directory, { recursive: true, force: true }));
@@ -208,4 +213,40 @@ test("organization revocation fences queued sources even if the workspace member
       glob(join(directory, queued.namespaceId, "raw/eve/**/*.jsonl"))
     )
   ).toHaveLength(0);
+});
+
+test("one scheduled invocation drains multiple fair rounds and preserves damaged accounts for retry", async () => {
+  await using fixtures = new AsyncDisposableStack();
+  const brokenWorkspace = fixtures.use(await workspaceFixture());
+  const broken = await enqueue(brokenWorkspace.personal, 3);
+  await query(sql`UPDATE memory_session_sources SET payload = jsonb_set(payload, '{text}', '"damaged"')
+    WHERE namespace_id = ${broken.namespaceId} AND event_id = ${broken.ids[1]}`);
+  const healthy = [];
+  for (let i = 0; i < 7; i++) {
+    const workspace = fixtures.use(await workspaceFixture());
+    healthy.push(await enqueue(workspace.personal, 25));
+  }
+
+  const running = archiveSchedule.run();
+  expect(archiveSchedule.run()).toBe(running);
+  await expect(running).rejects.toBeInstanceOf(AggregateError);
+
+  for (const account of healthy) {
+    const [receipt] = await query<{ stored: number; pending: number }>(sql`
+      SELECT count(*) FILTER (WHERE stored_at IS NOT NULL)::int AS stored,
+        count(*) FILTER (WHERE stored_at IS NULL)::int AS pending
+      FROM memory_session_sources WHERE namespace_id = ${account.namespaceId}`);
+    expect(receipt).toEqual({ stored: 25, pending: 0 });
+    expect(
+      await Array.fromAsync(
+        glob(join(directory, account.namespaceId, "raw/eve/**/*.jsonl"))
+      )
+    ).toHaveLength(25);
+  }
+  const [deferred] = await query<{ pending: number; failures: number }>(sql`
+    SELECT count(*) FILTER (WHERE stored_at IS NULL)::int AS pending,
+      sum(delivery_failures)::int AS failures
+    FROM memory_session_sources WHERE namespace_id = ${broken.namespaceId}`);
+  expect(deferred).toEqual({ pending: 3, failures: 1 });
+  await expect(archiveSchedule.run()).resolves.toBeUndefined();
 });

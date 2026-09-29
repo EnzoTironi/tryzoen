@@ -124,14 +124,14 @@ export function companionRoomData(
         await rpc.mutation("workspaces.rooms.create", input)
       );
     },
-    async messages(input) {
+    async messages(input, signal) {
       return roomPageSchema.parse(
-        await rpc.query("workspaces.rooms.messages", input)
+        await rpc.query("workspaces.rooms.messages", input, { signal })
       );
     },
-    async thread(input) {
+    async thread(input, signal) {
       return roomThreadPageSchema.parse(
-        await rpc.query("workspaces.rooms.thread", input)
+        await rpc.query("workspaces.rooms.thread", input, { signal })
       );
     },
     async send(input) {

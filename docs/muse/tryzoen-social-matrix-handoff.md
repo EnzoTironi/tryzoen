@@ -1254,3 +1254,27 @@ See the [delivery and measurement contract](file-memory.md#fair-session-delivery
 The local capacity harness uses only disposable synthetic data in the isolated
 runtime database. Minute-cadence fan-out and production-volume capacity remain
 unqualified; this delivery fix is not a million-account result.
+
+### Foreground recovery and scheduled delivery — wave 10
+
+One Eve invocation can now execute several bounded archive rounds. The validated
+concurrency override defaults to one worker; overlapping ticks share their local
+promise, while database locks isolate accounts between replicas. Failed batches
+back off and remain visible after healthy work finishes. See the
+[scheduled delivery contract](file-memory.md#bounded-scheduled-delivery).
+
+Room and thread reads now consume TanStack cancellation through the actual tRPC
+transport. Background/offline transitions cancel only that scoped conversation
+and invalidate it for authorized resume. Drafts remain editable while sending is
+paused; returning online restores sending. Browser verification covered desktop,
+mobile, separate thread drafts and a real synthetic message after reconnect.
+These are navigation drafts, not durable offline storage or a background outbox.
+
+The isolated Synapse test covers a native limited sync plus 136 ordered messages
+across two history pages and rejects subsequent reads after membership revocation.
+Large-burst scroll-position retention and efficient content deltas remain open.
+The behavior relies on the existing [Matrix history model](https://spec.matrix.org/unstable/client-server-api/#room-event-format)
+and [TanStack sequential infinite refetch](https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries);
+no duplicate message store was added. Validation: 1,603 application tests, build,
+three Expo exports and 14 focused isolated runtime tests passed. Full parity and
+million-account production capacity are still unqualified. Continue with one agent.

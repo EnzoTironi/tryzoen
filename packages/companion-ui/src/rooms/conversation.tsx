@@ -1,4 +1,5 @@
 import { RoomSearch } from "./search";
+import { useRoomLifecycle } from "./lifecycle";
 import { useRoomTyping } from "./typing";
 import { RoomTypingIndicator } from "./typing-indicator";
 import { useState } from "react";
@@ -52,17 +53,20 @@ export function RoomConversation({
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const reactions = useRoomReactions(data, cacheScope, roomId);
+  const active = useRoomLifecycle(cacheScope, roomId);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
   const messages = useInfiniteQuery({
     queryKey: ["matrix-messages", cacheScope, roomId],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => data.messages({ id: roomId, from: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      data.messages({ id: roomId, from: pageParam }, signal),
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
     staleTime: 5_000,
+    enabled: active,
     refetchInterval: 10_000,
     retry: 1,
   });
@@ -153,6 +157,7 @@ export function RoomConversation({
             onTyping={typing.change}
             draft={draft}
             disabled={!room || messages.isError}
+            paused={!active}
             direct={room?.kind === "direct"}
           />
         </View>
@@ -195,6 +200,7 @@ export function RoomConversation({
             onCopyText={onCopyText}
             onProfile={setProfile}
             visible={!details && !profile && !searching}
+            active={active}
             typing={typing}
           />
         </View>
@@ -329,6 +335,7 @@ function RoomThread({
   onCopyText,
   onProfile,
   visible,
+  active,
   typing,
 }: Pick<
   Parameters<typeof RoomConversation>[0],
@@ -337,6 +344,7 @@ function RoomThread({
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
+  readonly active: boolean;
   readonly typing: ReturnType<typeof useRoomTyping>;
 }) {
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
@@ -344,13 +352,14 @@ function RoomThread({
   const result = useInfiniteQuery({
     queryKey: ["matrix-thread", cacheScope, roomId, root.id],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      data.thread({ id: roomId, rootId: root.id, from: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      data.thread({ id: roomId, rootId: root.id, from: pageParam }, signal),
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
     refetchInterval: 10_000,
+    enabled: active,
     retry: 1,
   });
   const replies = Array.from(
@@ -417,6 +426,7 @@ function RoomThread({
         draft={draft}
         thread
         disabled={!result.data || result.isError}
+        paused={!active}
       />
     </>
   );

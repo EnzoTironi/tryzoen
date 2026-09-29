@@ -175,7 +175,10 @@ it("loads more than five cursor pages and stops at the end of the room history",
   expect(observer.getCurrentResult().hasNextPage).toBe(false);
   await observer.fetchNextPage({ cancelRefetch: false });
   expect(data.messages).toHaveBeenCalledTimes(7);
-  expect(data.messages).toHaveBeenLastCalledWith({ id: "binding", from: "6" });
+  expect(data.messages).toHaveBeenLastCalledWith(
+    { id: "binding", from: "6" },
+    expect.any(AbortSignal)
+  );
 });
 
 it("coalesces simultaneous history requests and stops a repeated cursor", async () => {

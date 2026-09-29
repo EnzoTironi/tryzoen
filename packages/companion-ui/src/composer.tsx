@@ -42,6 +42,7 @@ export function Composer({
   onCancel,
   busy = false,
   disabled = false,
+  sendDisabled = false,
   initialDraft,
   value,
   onChangeText,
@@ -60,6 +61,7 @@ export function Composer({
   readonly onCancel?: () => void;
   readonly busy?: boolean;
   readonly disabled?: boolean;
+  readonly sendDisabled?: boolean;
   readonly initialDraft?: ConversationDraft;
   readonly value?: string;
   readonly onChangeText?: (text: string) => void;
@@ -122,6 +124,7 @@ export function Composer({
     (Boolean(draft.trim()) || files.length > 0) &&
     draft.length <= maxLength &&
     !disabled &&
+    !sendDisabled &&
     !sending &&
     !picking &&
     !recording;

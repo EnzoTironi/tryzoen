@@ -234,10 +234,12 @@ export interface RoomData {
     input: z.infer<typeof roomCreateSchema>
   ) => Promise<z.infer<typeof roomSchema>>;
   messages: (
-    input: z.infer<typeof roomReadSchema>
+    input: z.infer<typeof roomReadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomPageSchema>>;
   thread: (
-    input: z.infer<typeof roomThreadSchema>
+    input: z.infer<typeof roomThreadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomThreadPageSchema>>;
   send: (input: z.infer<typeof roomSendSchema>) => Promise<void>;
 }

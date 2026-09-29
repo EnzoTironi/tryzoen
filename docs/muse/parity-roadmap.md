@@ -340,3 +340,45 @@ O CI do commit anterior está integralmente aprovado; esta rodada será revalida
 - Referências primárias: [Apple Messages](https://support.apple.com/en-nz/104982), [organização no iMessage](https://support.apple.com/en-ie/guide/iphone/iphe9b48b89e/27/ios/27), [Slack threads](https://slack.com/help/articles/115000769927-Use-threads-to-organize-discussions), [Slack huddles](https://slack.com/help/articles/4402059015315-Use-huddles-in-Slack), [WhatsApp privacidade](https://www.whatsapp.com/privacy), [WhatsApp chamadas](https://www.whatsapp.com/calling?lang=en), [Ando](https://www.ando.so/blog/introducing-ando), [Buzz](https://github.com/block/buzz), [Matrix](https://spec.matrix.org/latest/client-server-api/).
 
 O inventário ainda tem lacunas de observação de Muse, especialmente integrações externas, permissões nativas, checkout e alguns visores. Novas descobertas entram aqui com evidência; uma afirmação promocional de um produto não substitui o teste do Zoen.
+
+### Décima rodada — 29/09/2026
+
+A entrega de sessões agora usa o agendamento Eve existente para até oito rodadas,
+parando de iniciar trabalho após 45 segundos ou quando a fila elegível fica vazia.
+A concorrência por processo é configurável de um a quatro workers, com padrão um;
+chamadas sobrepostas compartilham a execução ativa. Transações iniciadas são
+aguardadas e falhas continuam visíveis depois da entrega das contas saudáveis.
+O teste com o Akita real entregou 175 fontes de sete contas, preservando a conta
+corrompida para retry. Não houve nova migração nem implantação em produção.
+
+Grupos e threads agora propagam o cancelamento TanStack até o transporte tRPC.
+Ao sair, perder rede ou ir para segundo plano, o cliente cancela as consultas
+daquela conversa e exige revalidação na retomada. O compositor continua editável
+sem rede, com aviso discreto e envio desabilitado. Os rascunhos permanecem
+separados por conta, espaço, conversa e thread durante a navegação; isso não é
+persistência offline após fechar o app nem uma fila de envio em segundo plano.
+
+No Synapse isolado, um intervalo com 135 novas mensagens produziu sync limitado.
+Duas páginas recuperaram as 136 mensagens incluindo a âncora anterior, sem
+omissões ou duplicações; revogar a membership bloqueou o cursor e a nova sync.
+Isso qualifica recuperação paginada neste cenário. Retenção automática da posição
+após grandes rajadas, sync incremental de conteúdo e custo de refetch de muitas
+páginas continuam abertos. A semântica segue o histórico paginado do Matrix e o
+refetch sequencial documentado pelo TanStack, sem uma segunda base de mensagens.
+
+Validação: `pnpm check` passou com 262 arquivos e 1.603 testes; `pnpm build` e
+exports Expo web/iOS/Android passaram. Cinco arquivos isolados de runtime passaram
+com 14 testes, incluindo entrega, sync, histórico, busca e permissões Matrix.
+O commit anterior `e28f470e` também passou nos seis checks do GitHub.
+
+A revisão visual do build confirmou: rascunho principal preservado e editável
+sem rede, envio desabilitado; retomada online, rascunho separado da thread; mesma
+experiência em viewport mobile com todas as funções na barra inferior; mensagem
+sintética enviada depois da reconexão e campo esvaziado. As emulações temporárias
+de rede e viewport foram removidas. [Evidências da rodada 10](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5882822766) acompanham o PR 152.
+
+Revisão estrutural sem supressões: o ripwire registrou 19 achados (11 bloqueantes
+na classificação da ferramenta), principalmente churn de contratos/componentes,
+adapters de transporte com validação repetida e harness de testes. Os caminhos
+foram revisados com testes e `--pr-context`; os componentes grandes preexistentes
+continuam sendo dívida, sem alegação de qualidade estrutural concluída.

@@ -155,6 +155,12 @@ export const env = createEnv({
       .string()
       .regex(/^(?:\/|[A-Za-z]:[\\/])/)
       .optional(),
+    ZOEN_MEMORY_INGESTION_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .default(1),
     ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
     ZOEN_ERASURE_JOURNAL_ENDPOINT: z
       .url()
