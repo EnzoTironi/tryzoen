@@ -8,7 +8,9 @@ import {
   readKnowledgeProposal,
   listKnowledgeProposals,
   reviewKnowledgeProposal,
+  discoverKnowledge,
 } from "../../server/workspaces/knowledge";
+import { knowledgeRoutingPath } from "@zoen/companion-ui/knowledge";
 import { callNativeTool } from "../helpers/native-tools";
 import { workspaceExecutionFor, workspaceFixture } from "./workspace-fixture";
 
@@ -20,6 +22,170 @@ const evidence = [
     excerpt: "Budgets are planned amounts, not expenses.",
   },
 ];
+
+test("discovery loads published canonical files at one revision and retains record identity across a file move", async () => {
+  await using fixture = await workspaceFixture();
+  const { actor, guest, personal, repository } = fixture;
+  const id = randomUUID();
+  const budgetPath = "knowledge/definitions/budget.md";
+  const definition = "A budget is planned before work begins.";
+  const routing = {
+    version: 1,
+    records: [
+      {
+        id,
+        title: "Project budget",
+        summary: "Planned amounts, separate from expenses",
+        terms: ["budget", "spending"],
+        paths: [budgetPath],
+      },
+    ],
+  };
+  const initial = await repository.publish(actor, {
+    operationId: randomUUID(),
+    expectedRevision: null,
+    changes: [
+      {
+        path: "knowledge/purpose.md",
+        content: "Plan a project before committing money.",
+      },
+      {
+        path: budgetPath,
+        content: definition,
+      },
+      { path: knowledgeRoutingPath, content: JSON.stringify(routing) },
+    ],
+  });
+  const execution = workspaceExecutionFor(guest);
+  const discovery = await callNativeTool(
+    execution,
+    "workspace_knowledge_discover",
+    { query: "budget" }
+  );
+  expect(discovery).toMatchObject({
+    revision: initial.revision,
+    records: [{ id }],
+    documents: [],
+  });
+  const loaded = await discoverKnowledge(guest, { ids: [id] });
+  expect(loaded.documents).toEqual([
+    {
+      path: budgetPath,
+      content: definition,
+      nextOffset: null,
+    },
+  ]);
+  expect((await discoverKnowledge(personal, { ids: [id] })).records).toEqual(
+    []
+  );
+  await expect(
+    repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: initial.revision,
+      path: budgetPath,
+      content: null,
+    })
+  ).rejects.toMatchObject({ reason: "invalid_input" });
+  expect((await repository.read(actor)).revision).toBe(initial.revision);
+  const renamed = "knowledge/definitions/project-budget.md";
+  const moved = await repository.publish(actor, {
+    operationId: randomUUID(),
+    expectedRevision: initial.revision,
+    changes: [
+      { path: budgetPath, content: null },
+      { path: renamed, content: definition },
+      {
+        path: knowledgeRoutingPath,
+        content: JSON.stringify({
+          ...routing,
+          records: [{ ...routing.records[0], paths: [renamed] }],
+        }),
+      },
+    ],
+  });
+  const current = await discoverKnowledge(guest, { ids: [id] });
+  expect(current.revision).toBe(moved.revision);
+  expect(current.records[0]).toMatchObject({ id, paths: [renamed] });
+  expect(
+    (await repository.read(actor, knowledgeRoutingPath, initial.revision))
+      .content
+  ).toBe(JSON.stringify(routing));
+  await query(
+    sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${guest.userId}`
+  );
+  await expect(discoverKnowledge(guest, { ids: [id] })).rejects.toBeInstanceOf(
+    WorkspaceAccessDenied
+  );
+});
+
+test("routing rejects invalid or missing references and discovery stays bounded without creating knowledge", async () => {
+  await using fixture = await workspaceFixture();
+  const { actor, repository } = fixture;
+  const projectPath = "knowledge/definitions/projects.md";
+  const record = {
+    id: randomUUID(),
+    title: "Projects",
+    summary: "Synthetic scope",
+    terms: ["projects"],
+    paths: [projectPath],
+  };
+  await expect(
+    repository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: null,
+      path: knowledgeRoutingPath,
+      content: JSON.stringify({ version: 1, records: [record] }),
+    })
+  ).rejects.toMatchObject({ reason: "invalid_input" });
+  await expect(
+    repository.publish(actor, {
+      operationId: randomUUID(),
+      expectedRevision: null,
+      changes: [
+        { path: projectPath, content: "A" },
+        {
+          path: knowledgeRoutingPath,
+          content: JSON.stringify({ version: 1, records: [record, record] }),
+        },
+      ],
+    })
+  ).rejects.toThrow(Error);
+  const long = "a".repeat(5000);
+  const firstId = randomUUID();
+  const records = Array.from({ length: 20 }, (_, index) => ({
+    ...record,
+    id: index === 0 ? firstId : randomUUID(),
+    title: `Project ${index}`,
+    terms: [index === 19 ? "specific" : "ordinary"],
+  }));
+  const initial = await repository.publish(actor, {
+    operationId: randomUUID(),
+    expectedRevision: null,
+    changes: [
+      { path: projectPath, content: long },
+      {
+        path: knowledgeRoutingPath,
+        content: JSON.stringify({ version: 1, records }),
+      },
+    ],
+  });
+  expect(await discoverKnowledge(actor, {})).toMatchObject({
+    more: true,
+    records: Array(12).fill(expect.anything()),
+    documents: [],
+  });
+  expect(
+    (await discoverKnowledge(actor, { query: "specific" })).records
+  ).toHaveLength(1);
+  const loaded = await discoverKnowledge(actor, {
+    ids: [firstId, randomUUID()],
+  });
+  expect(loaded.records).toHaveLength(1);
+  expect(loaded.documents).toEqual([
+    { path: projectPath, content: long.slice(0, 4000), nextOffset: 4000 },
+  ]);
+  expect((await repository.read(actor)).revision).toBe(initial.revision);
+});
 
 test("publishes an evidenced multi-file proposal once, with atomic history and no cross-workspace access", async () => {
   await using fixture = await workspaceFixture();

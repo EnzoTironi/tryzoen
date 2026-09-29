@@ -9,6 +9,8 @@ import {
   knowledgeProposalPathSchema,
   knowledgeProposalSchema,
   knowledgePathSchema,
+  knowledgeRoutingPath,
+  knowledgeRoutingSchema,
 } from "@zoen/companion-ui/knowledge";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -153,17 +155,18 @@ const replay = async function (
     });
   return previous?.revision ?? null;
 };
-async function validateWorkspaceChange(
+async function validateKnowledgeChange(
   input: z.output<typeof WorkspaceChangeSchema>,
   source: WorkspacePublicationSource
 ) {
   if (
     source.kind === "agent" &&
-    /^knowledge\/(?:models|definitions|routing)\//u.test(input.path)
+    (input.path === "knowledge/purpose.md" ||
+      /^knowledge\/(?:models|definitions|routing)\//u.test(input.path))
   )
     throw new WorkspaceAccessDenied();
-  if (input.path === ontologyPath && source.kind !== "ontology")
-    throw new WorkspaceAccessDenied();
+  if (input.path === knowledgeRoutingPath && input.content !== null)
+    await jsonString(knowledgeRoutingSchema).parseAsync(input.content);
   if (isValid(knowledgeProposalPathSchema, input.path)) {
     // Drafts are created by the proposal tool and resolved by the reviewer.
     // The generic editor cannot bypass review by deleting or replacing a draft.
@@ -186,6 +189,15 @@ async function validateWorkspaceChange(
       input.content !== null)
   )
     throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+}
+
+async function validateWorkspaceChange(
+  input: z.output<typeof WorkspaceChangeSchema>,
+  source: WorkspacePublicationSource
+) {
+  await validateKnowledgeChange(input, source);
+  if (input.path === ontologyPath && source.kind !== "ontology")
+    throw new WorkspaceAccessDenied();
   if (
     isValid(PublishedToolPath, input.path) &&
     !["tool-publication", "tool-rollback", "tool-disable"].includes(source.kind)
@@ -604,6 +616,30 @@ export const WorkspaceRepository = {
         changes,
         message: `Update ${input.changes.map(({ path }) => path).join(", ")}\n\nZoen-Metadata: ${JSON.stringify(metadata)}`,
       });
+      if (
+        input.changes.some((change) => change.path.startsWith("knowledge/"))
+      ) {
+        const tree = await readWorkspaceGit(
+          candidate.bundle,
+          candidate.revision
+        );
+        if (tree.files.includes(knowledgeRoutingPath)) {
+          const index = await readWorkspaceGit(
+            candidate.bundle,
+            candidate.revision,
+            knowledgeRoutingPath
+          );
+          const routing = jsonString(knowledgeRoutingSchema).parse(
+            index.content
+          );
+          if (
+            routing.records.some((record) =>
+              record.paths.some((path) => !tree.files.includes(path))
+            )
+          )
+            throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+        }
+      }
       return await withDatabaseTransaction(async () => {
         await requireWorkspaceAccess(actor, admin);
         const prior = await replay(actor.workspaceId, input.operationId, hash);

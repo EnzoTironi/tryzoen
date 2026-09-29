@@ -181,3 +181,36 @@ and field-level provenance. The retained filesystem, unified claim/session
 owner, bitemporal queries, projections and safe consolidation remain K3/K4 work.
 The actual memory runtime is still Akita; this slice supplies its replacement's
 review/publication boundary rather than installing a second memory engine.
+
+## K1 progress — scoped discovery and stable routing records
+
+`knowledge/routing/index.json` is an authored file in the same published tree.
+Its strict versioned schema contains up to 60 records: UUID, title, meaning,
+search terms and up to three canonical knowledge paths. Record IDs stay with
+the concept when its labels or paths change; a file move and routing update
+publish together. The publisher rejects missing references in the resulting
+tree, including a generic editor deletion that would break an existing route.
+This is a small routing document, not a second graph or memory authority.
+
+The native `workspace_knowledge_discover` reads the authorized purpose/routing
+at one head, searches terms and returns at most 12 matching records. Loading up
+to six returned IDs reads only their canonical files, with a 24,000-character
+total excerpt budget and offsets for longer text. Reads detect head changes
+instead of mixing revisions. IDs do not grant access: invisible references
+remove the entire record, unknown IDs return no files and every read checks
+current membership. No unpublished draft or private learned-memory corpus is
+searched. More than 12 matches requires a narrower topic.
+
+The workspace instructions now start domain discovery from published meaning,
+distinguish files from live source data, and propose missing purpose/definitions/
+routing as one reviewed change. Generic agent saves cannot publish purpose or
+canonical routing. Actual native discovery, search/load bounds, unknown IDs,
+cross-workspace isolation, record identity through a move, broken-reference
+rejection and access revocation pass the isolated integration.
+
+Stable IDs currently cover explicitly registered routing records. General
+ontology field/relation provenance, private claim/session retention, historical
+and valid-time retrieval, source erasure and reviewed consolidation still need
+their unified owner. The Akita implementation remains active until that whole
+contract and its callers can be replaced together; this slice does not add an
+Akita importer, a dual writer or an alternate memory engine.

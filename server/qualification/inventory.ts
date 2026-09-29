@@ -166,6 +166,16 @@ const rows: readonly QualificationRow[] = [
   coordinator("web_fetch", "none", boundaries, "contract"),
   coordinator("workspace-save", "none", launchExecutor, "contract"),
   coordinator("workspace_files_list", "none", files),
+  coordinator(
+    "workspace-knowledge-propose",
+    "none",
+    "tests/runtime/workspace-knowledge.integration.ts"
+  ),
+  coordinator(
+    "workspace_knowledge_discover",
+    "none",
+    "tests/runtime/workspace-knowledge.integration.ts"
+  ),
   coordinator("workspace_files_read", "none", files),
   coordinator("workspace_files_search", "none", files),
   coordinator(

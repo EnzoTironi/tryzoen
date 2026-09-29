@@ -2077,3 +2077,25 @@ file selection, citations, successful publication and the updated visual editor.
 The definition and model histories both show revision `466bc6b` from the same
 publication. Image evidence and a clearly labeled screenshot-sequence video
 are attached to the current pull request using `gh --attach`.
+
+[PR 155](https://github.com/EnzoTironi/tryzoen/pull/155) contains the publication
+boundary and subsequent scoped discovery. Its
+[visual evidence](https://github.com/EnzoTironi/tryzoen/pull/155#issuecomment-5897771787)
+uses synthetic files only. The published routing index supplies stable concept
+IDs, bounded topic discovery and canonical file loading at one head. Moves
+update routing in the same publication; dangling references are rejected. The
+native tool and workspace instructions use these records before domain answers.
+This does not replace the private Akita owner or execute a semantic model.
+
+The first CI runtime pass exposed customer-tool publication callers passing
+`slug`/rollback metadata into the stricter file-write input. Those callers now
+send only the owned write fields. Both new native tools have qualification
+inventory entries pointing at their real isolated tests; validation was not
+loosened and behavior tests remain enabled.
+
+Final discovery/fix validation: all nine `pnpm check` tasks and `pnpm build`
+pass. The 23 isolated cases across knowledge, customer tools/connectors and
+qualification pass; this includes all failing CI journeys. The discovery
+structural delta still records eight findings / three churn gates, without
+acknowledgements; the new knowledge policy and discovery function retain size/
+complexity observations. This is not a clean structural-quality claim.

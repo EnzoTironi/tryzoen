@@ -40,7 +40,7 @@ export default defineDynamic({
       return {
         "workspace-knowledge-propose": defineTool({
           description:
-            "Propose a coherent change to workspace knowledge or analysis models for human review in Library. Available only in a private signed-in app conversation. Read the workspace head first. Supply exact file contents, affected paths, dependencies and evidence from authorized files at their revisions or cited web sources. This only saves a proposal. It does not approve definitions or execute models. An administrator reviews all files as one change; never claim a proposal was published.",
+            "Propose a coherent change to workspace knowledge or analysis models for human review in Library. Available only in a private signed-in app conversation. Read the workspace head first. Supply exact file contents, affected paths, dependencies and evidence from authorized files at their revisions or cited web sources. For domain discovery propose knowledge/purpose.md, canonical definitions and knowledge/routing/index.json together. The routing JSON is {version:1,records:[{id:<UUID>,title,summary,terms:[<topic>],paths:[<published knowledge paths>]}]}, up to 60 records and 3 paths each. Preserve each record's UUID across label changes or file moves; update its paths in the same proposal when moving a definition. A routing reference must exist in the resulting revision. This only saves a proposal. It does not approve definitions or execute models. An administrator reviews all files as one change; never claim a proposal was published.",
           inputSchema: ProposeKnowledgeSchema.omit({ operationId: true }),
           execute: (input, execution) =>
             withSignal(execution.abortSignal, async () => {
@@ -68,7 +68,7 @@ export default defineDynamic({
           inputSchema: z
             .object({
               path: WorkspacePathSchema.regex(
-                /^(?:knowledge\/(?!models\/|definitions\/|routing\/)|proposals\/(?:skills|tools)\/)/u
+                /^(?:knowledge\/(?!models\/|definitions\/|routing\/|purpose\.md$)|proposals\/(?:skills|tools)\/)/u
               ),
               expectedRevision: z.nullable(GitRevisionSchema),
               content: z.string().max(262_144),

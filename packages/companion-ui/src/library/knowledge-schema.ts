@@ -5,6 +5,31 @@ import { WorkspacePathSchema, GitRevisionSchema } from "./files-schema";
 export const knowledgePathSchema = WorkspacePathSchema.refine((path) =>
   path.startsWith("knowledge/")
 );
+export const knowledgeRoutingPath = "knowledge/routing/index.json";
+export const knowledgeRoutingSchema = z.strictObject({
+  version: z.literal(1),
+  records: z
+    .array(
+      z.strictObject({
+        id: z.uuid(),
+        title: z.string().trim().min(1).max(120),
+        summary: z.string().trim().min(1).max(1000),
+        terms: z.array(z.string().trim().min(1).max(80)).max(20),
+        paths: z
+          .array(
+            knowledgePathSchema.refine((path) => path !== knowledgeRoutingPath)
+          )
+          .min(1)
+          .max(3)
+          .refine((paths) => new Set(paths).size === paths.length),
+      })
+    )
+    .max(60)
+    .refine(
+      (records) =>
+        new Set(records.map((record) => record.id)).size === records.length
+    ),
+});
 const revision = GitRevisionSchema;
 export const knowledgeProposalPathSchema = WorkspacePathSchema.refine((path) =>
   path.startsWith("proposals/knowledge/")

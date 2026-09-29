@@ -3,6 +3,8 @@ import {
   knowledgeProposalPathSchema,
   knowledgeProposalReviewSchema,
   knowledgeProposalSchema,
+  knowledgeRoutingPath,
+  knowledgeRoutingSchema,
 } from "@zoen/companion-ui/knowledge";
 import { z } from "zod";
 import { isValid, jsonString } from "@shared/validation";
@@ -35,6 +37,92 @@ export const ReviewKnowledgeSchema = WorkspaceWriteSchema.pick({
 function privateReview(actor: z.output<typeof WorkspaceActorSchema>) {
   if (!actor.authSessionId || actor.agentGrantId || actor.groupBindingId)
     throw new WorkspaceAccessDenied();
+}
+
+export const DiscoverKnowledgeSchema = z.strictObject({
+  query: z.string().trim().min(1).max(200).optional(),
+  ids: z.array(z.uuid()).max(6).optional(),
+});
+
+/** A routing file names published knowledge; it cannot create visibility. */
+export async function discoverKnowledge(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof DiscoverKnowledgeSchema>
+) {
+  const input = DiscoverKnowledgeSchema.parse(raw);
+  const listing = await WorkspaceRepository.read(actor);
+  const roots = await WorkspaceRepository.selection(actor, [
+    "knowledge/purpose.md",
+    knowledgeRoutingPath,
+  ]);
+  if (roots.revision !== listing.revision)
+    throw new WorkspaceRepositoryError({ reason: "conflict" });
+  const routing = roots.documents.find(
+    (document) => document.path === knowledgeRoutingPath
+  );
+  const records = routing
+    ? jsonString(knowledgeRoutingSchema)
+        .parse(routing.content)
+        .records.filter((record) =>
+          record.paths.every((path) => listing.files.includes(path))
+        )
+    : [];
+  const terms = input.query?.toLocaleLowerCase().split(/\s+/u) ?? [];
+  const ranked = records
+    .map((record) => ({
+      record,
+      score: terms.reduce(
+        (score, term) =>
+          score +
+          Number(
+            [record.title, record.summary, ...record.terms]
+              .join(" ")
+              .toLocaleLowerCase()
+              .includes(term)
+          ),
+        0
+      ),
+    }))
+    .filter((item) => terms.length === 0 || item.score > 0)
+    .toSorted(
+      (a, b) => b.score - a.score || a.record.id.localeCompare(b.record.id)
+    );
+  const selected = records.filter((record) => input.ids?.includes(record.id));
+  const paths = [...new Set(selected.flatMap((record) => record.paths))];
+  const loaded = paths.length
+    ? await WorkspaceRepository.selection(actor, paths)
+    : { revision: roots.revision, documents: [] };
+  if (loaded.revision !== roots.revision)
+    throw new WorkspaceRepositoryError({ reason: "conflict" });
+  let remaining = 24_000;
+  const documents = loaded.documents.map((document) => {
+    const content = document.content.slice(0, Math.min(4000, remaining));
+    remaining -= content.length;
+    return {
+      path: document.path,
+      content,
+      nextOffset:
+        content.length < document.content.length ? content.length : null,
+    };
+  });
+  const purpose = roots.documents.find(
+    (document) => document.path === "knowledge/purpose.md"
+  );
+  return {
+    revision: roots.revision,
+    purpose: purpose
+      ? {
+          path: purpose.path,
+          content: purpose.content.slice(0, 3000),
+          nextOffset: purpose.content.length > 3000 ? 3000 : null,
+        }
+      : null,
+    records: input.ids
+      ? selected
+      : ranked.map((item) => item.record).slice(0, 12),
+    more: !input.ids && ranked.length > 12,
+    documents,
+  };
 }
 
 export async function proposeKnowledge(
