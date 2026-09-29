@@ -1286,3 +1286,24 @@ dos donos existentes, wrappers RPC tipados e tamanho/condições do formulário;
 a indicação de componente sem uso é uma limitação da análise de chamadas JSX.
 [Menu, revisão e recibo, com imagens e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895341092)
 anexados com `gh --attach`. Não houve deploy de produção.
+
+### Rodada 37 — continuidade das ações de mensagem — 29/09/2026
+
+Corrigida perda de rascunho reproduzida no navegador: com uma thread aberta,
+a passagem ao layout mobile desmontava a conversa principal e seu formulário.
+A conversa permanece montada, mas sem envio, paginação ou leitura enquanto
+oculta. O gravador recebe o mesmo bloqueio de envio e interrompe a captura.
+Os formulários de ações agora pertencem à lista, fora de suas linhas recicladas;
+a mensagem revisada é um snapshot estável. Erro de acesso ou troca de escopo
+descarta a seleção antes de apresentá-la no novo contexto.
+
+Check serial: 280 arquivos / 1.740 testes, nove tarefas; build passou. No browser,
+texto e motivo foram preservados ao alternar desktop → 390×844 → desktop com
+thread aberta. Após cancelar, apenas o compositor da thread estava visível no
+mobile. Não houve submissão da denúncia de teste. Interrupção de microfone em
+aparelho físico continua não qualificada. A revisão estrutural apontou cinco
+regressões, duas major (tamanho e condições de RoomMessages); nenhuma supressão
+ou camada artificial foi adicionada para alterar a medição.
+
+[Imagens e sequência visual](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895589746)
+anexadas com `gh --attach`. Sem deploy de produção.

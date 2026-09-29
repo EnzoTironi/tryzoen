@@ -5,7 +5,7 @@ import { MessageDelivery } from "../conversation/delivery";
 import { AttachmentCard } from "../attachments/card";
 import { projectOutgoingRoomMessages, type RoomMessageView } from "./outgoing";
 import type { useRoomDraft } from "./draft";
-import { RoomMessageControls } from "./message-controls";
+import { RoomMessageControls, RoomMessageDialog } from "./message-controls";
 import { captureMessageAnchor } from "../conversation/scroll-anchor";
 import { MessageLinks } from "../cards/link";
 import { RoomAttachment } from "./attachment";
@@ -92,6 +92,19 @@ export function RoomMessages({
   readonly fetching: boolean;
   readonly onMore: () => void;
 }) {
+  // A reviewed message belongs to the conversation, not a recycled list row.
+  const [dialog, setDialog] =
+    useState<
+      Pick<
+        ComponentProps<typeof RoomMessageDialog>,
+        "action" | "item" | "roomId" | "cacheScope"
+      >
+    >();
+  if (
+    dialog &&
+    (error || dialog.roomId !== roomId || dialog.cacheScope !== cacheScope)
+  )
+    setDialog(undefined);
   const projected = useMemo(
     () => projectOutgoingRoomMessages(confirmedMessages, outgoing),
     [confirmedMessages, outgoing]
@@ -227,6 +240,9 @@ export function RoomMessages({
               style={[styles.messageLine, item.mine && styles.outgoingLine]}
             >
               <RoomMessage
+                onAction={(action) => {
+                  setDialog({ action, item, roomId, cacheScope });
+                }}
                 data={data}
                 roomId={roomId}
                 cacheScope={cacheScope}
@@ -261,6 +277,19 @@ export function RoomMessages({
           </View>
         )}
       />
+      {dialog &&
+        !error &&
+        dialog.roomId === roomId &&
+        dialog.cacheScope === cacheScope && (
+          <RoomMessageDialog
+            {...dialog}
+            data={data}
+            onProfile={onProfile}
+            onClose={() => {
+              setDialog(undefined);
+            }}
+          />
+        )}
       <LatestMessagesButton
         visible={!atBottom && !error && messages.length > 0}
         newer={newer}
@@ -307,6 +336,7 @@ function LatestMessagesButton({
 }
 
 function RoomMessage({
+  onAction,
   data,
   roomId,
   cacheScope,
@@ -341,6 +371,7 @@ function RoomMessage({
   | "onReact"
   | "receipts"
 > & {
+  readonly onAction: ComponentProps<typeof RoomMessageControls>["onAction"];
   readonly onRemoveSend?: (id: string) => void;
   readonly item: RoomMessageView;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
@@ -428,11 +459,8 @@ function RoomMessage({
               />
             ) : (
               <RoomMessageControls
+                onAction={onAction}
                 messageLink={messageLink}
-                onProfile={onProfile}
-                data={data}
-                roomId={roomId}
-                cacheScope={cacheScope}
                 item={item}
                 reaction={reaction}
                 onReact={onReact}

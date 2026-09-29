@@ -2,7 +2,7 @@ import { ReportRoomMessage } from "./report-message";
 import { PinRoomMessage } from "./pins";
 import { RoomReactors } from "./reactors";
 import { SaveRoomMessage } from "./save-message";
-import { useState, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MessageCircle } from "lucide-react-native";
 import type { z } from "zod";
@@ -15,9 +15,7 @@ import type { RoomMessages } from "./messages";
 import type { roomMessageSchema, roomReactionSummarySchema } from "./schema";
 
 export function RoomMessageControls({
-  data,
-  roomId,
-  cacheScope,
+  onAction,
   item,
   reaction,
   onReact,
@@ -26,32 +24,22 @@ export function RoomMessageControls({
   messageLink,
   onThread,
   onUnread,
-  onProfile,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
-  | "data"
-  | "roomId"
-  | "cacheScope"
-  | "onReact"
-  | "onReply"
-  | "onCopy"
-  | "messageLink"
-  | "onThread"
-  | "onUnread"
-  | "onProfile"
+  "onReact" | "onReply" | "onCopy" | "messageLink" | "onThread" | "onUnread"
 > & {
+  readonly onAction: (
+    action: ComponentProps<typeof RoomMessageDialog>["action"]
+  ) => void;
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
-  const [action, setAction] = useState<
-    "save" | "edit" | "delete" | "forward" | "reactors" | "pin" | "report"
-  >();
   return (
     <>
       <RoomReactionSummary
         reaction={item.redacted ? undefined : reaction}
         onOpen={() => {
-          setAction("reactors");
+          onAction("reactors");
         }}
       />
       <View style={[styles.actions, item.mine && styles.outgoing]}>
@@ -60,12 +48,12 @@ export function RoomMessageControls({
             messageLink={messageLink?.(item.id)}
             onUnread={onUnread}
             onPin={() => {
-              setAction("pin");
+              onAction("pin");
             }}
             onViewReactions={
               reaction?.reactions.length
                 ? () => {
-                    setAction("reactors");
+                    onAction("reactors");
                   }
                 : undefined
             }
@@ -77,15 +65,15 @@ export function RoomMessageControls({
                 : undefined
             }
             onForward={() => {
-              setAction("forward");
+              onAction("forward");
             }}
             onSave={() => {
-              setAction("save");
+              onAction("save");
             }}
             onEdit={
               item.mine && !item.media
                 ? () => {
-                    setAction("edit");
+                    onAction("edit");
                   }
                 : undefined
             }
@@ -93,13 +81,13 @@ export function RoomMessageControls({
               item.mine
                 ? undefined
                 : () => {
-                    setAction("report");
+                    onAction("report");
                   }
             }
             onDelete={
               item.mine
                 ? () => {
-                    setAction("delete");
+                    onAction("delete");
                   }
                 : undefined
             }
@@ -119,19 +107,6 @@ export function RoomMessageControls({
         )}
         <RoomThreadAction item={item} onThread={onThread} />
       </View>
-      {action && (
-        <RoomMessageDialog
-          action={action}
-          data={data}
-          cacheScope={cacheScope}
-          roomId={roomId}
-          item={item}
-          onProfile={onProfile}
-          onClose={() => {
-            setAction(undefined);
-          }}
-        />
-      )}
     </>
   );
 }
@@ -226,7 +201,7 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: colors.wash },
 });
 
-function RoomMessageDialog({
+export function RoomMessageDialog({
   action,
   data,
   cacheScope,
@@ -235,9 +210,10 @@ function RoomMessageDialog({
   onClose,
   onProfile,
 }: Pick<
-  ComponentProps<typeof RoomMessageControls>,
-  "data" | "cacheScope" | "roomId" | "item" | "onProfile"
+  ComponentProps<typeof RoomMessages>,
+  "data" | "cacheScope" | "roomId" | "onProfile"
 > & {
+  readonly item: z.infer<typeof roomMessageSchema>;
   readonly action:
     | "save"
     | "edit"

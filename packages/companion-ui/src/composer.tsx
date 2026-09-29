@@ -196,6 +196,7 @@ export function Composer({
         <AudioMessageRecorder
           triggerRef={audioRecorder}
           disabled={
+            sendDisabled ||
             disabled ||
             sending ||
             picking ||

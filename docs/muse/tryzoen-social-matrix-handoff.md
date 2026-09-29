@@ -1946,3 +1946,15 @@ tests, nine tasks), build and desktop/mobile browser review. Shared radio/tab
 controls now expose actual selection in React Native Web through native-supported
 ARIA aliases. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895341092.
 Blocking, appeals, staffing and review SLA remain separate release gates.
+
+### Message dialog continuity — wave 37
+
+Main room content stays mounted while a mobile thread hides it, with its
+composer/pagination inactive. Microphone capture receives the same disabled
+state. Message dialogs moved outside virtualized rows and retain the selected
+snapshot; errors or scope changes clear it. This fixes a browser-reproduced
+report draft loss across the responsive breakpoint with a thread open.
+
+Serial check (280 files / 1,740 tests), build and desktop/mobile round trip
+passed. No synthetic report submitted, no production deployment.
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895589746.

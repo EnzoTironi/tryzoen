@@ -153,93 +153,97 @@ export function RoomConversation({
   return (
     <View style={styles.layout}>
       <ConnectionStatus top={66} reconnecting={typing.reconnecting} />
-      {(!root || wide || messages.isError) && (
-        <View style={styles.main}>
-          <RoomHeader
-            onPins={() => {
-              setPins(true);
-            }}
-            room={room}
-            presence={
-              room?.kind === "direct" ? typing.presence[0]?.state : undefined
-            }
-            compact={compact}
-            onBack={onBack}
-            onProfile={showProfile}
-            onSearch={() => {
-              setSearching(true);
-            }}
-          />
-          {unread.isError && (
-            <Text accessibilityRole="alert" style={styles.caption}>
-              Não foi possível marcar como não lida. Tente novamente.
-            </Text>
+      <View
+        style={[
+          styles.main,
+          root && !wide && !messages.isError && styles.hidden,
+        ]}
+      >
+        <RoomHeader
+          onPins={() => {
+            setPins(true);
+          }}
+          room={room}
+          presence={
+            room?.kind === "direct" ? typing.presence[0]?.state : undefined
+          }
+          compact={compact}
+          onBack={onBack}
+          onProfile={showProfile}
+          onSearch={() => {
+            setSearching(true);
+          }}
+        />
+        {unread.isError && (
+          <Text accessibilityRole="alert" style={styles.caption}>
+            Não foi possível marcar como não lida. Tente novamente.
+          </Text>
+        )}
+        <RoomMessages
+          receipts={typing.receipts.filter(
+            (receipt) =>
+              receipt.threadId === null || receipt.threadId === "main"
           )}
-          <RoomMessages
-            receipts={typing.receipts.filter(
-              (receipt) =>
-                receipt.threadId === null || receipt.threadId === "main"
-            )}
-            onUnread={
-              unread.isPending
-                ? undefined
-                : () => {
-                    unread.mutate();
-                  }
-            }
-            data={data}
-            roomId={roomId}
-            cacheScope={cacheScope}
-            avatarUri={avatarUri}
-            onCopy={onCopyText}
-            messageLink={messageLink}
-            outgoing={draft.outgoing}
-            onRetrySend={draft.retry}
-            onSettleSend={draft.settle}
-            onReply={draft.replyTo}
-            onProfile={setProfile}
-            members={current?.pages[0]?.members ?? []}
-            reactions={
-              reactions.result.isError ? [] : (reactions.result.data ?? [])
-            }
-            onReact={reactions.setReaction}
-            onVisibleMessagesChange={(ids) => {
-              reactions.showMessages(ids);
-              showReadMessages(ids);
-            }}
-            messages={timeline.filter((message) => !message.rootId)}
-            onThread={setRoot}
-            loading={messages.isPending}
-            error={Boolean(messages.error)}
-            onRetry={() => {
-              void messages.refetch();
-            }}
-            hasMore={messages.hasNextPage}
-            loadingMore={messages.isFetchingNextPage}
-            fetching={messages.isFetching}
-            onMore={() => {
-              if (
-                messages.hasNextPage &&
-                !messages.isFetching &&
-                !messages.isError
-              )
-                void messages.fetchNextPage({ cancelRefetch: false });
-            }}
-          />
-          <RoomTypingIndicator
-            userIds={typing.userIds}
-            members={current?.pages[0]?.members ?? []}
-          />
-          <RoomComposer
-            onTyping={typing.change}
-            draft={draft}
-            disabled={!room || messages.isError}
-            paused={!active}
-            visible={visible}
-            direct={room?.kind === "direct"}
-          />
-        </View>
-      )}
+          onUnread={
+            unread.isPending
+              ? undefined
+              : () => {
+                  unread.mutate();
+                }
+          }
+          data={data}
+          roomId={roomId}
+          cacheScope={cacheScope}
+          avatarUri={avatarUri}
+          onCopy={onCopyText}
+          messageLink={messageLink}
+          outgoing={draft.outgoing}
+          onRetrySend={draft.retry}
+          onSettleSend={draft.settle}
+          onReply={draft.replyTo}
+          onProfile={setProfile}
+          members={current?.pages[0]?.members ?? []}
+          reactions={
+            reactions.result.isError ? [] : (reactions.result.data ?? [])
+          }
+          onReact={reactions.setReaction}
+          onVisibleMessagesChange={(ids) => {
+            reactions.showMessages(ids);
+            showReadMessages(ids);
+          }}
+          messages={timeline.filter((message) => !message.rootId)}
+          onThread={setRoot}
+          loading={messages.isPending}
+          error={Boolean(messages.error)}
+          onRetry={() => {
+            void messages.refetch();
+          }}
+          hasMore={messages.hasNextPage}
+          loadingMore={messages.isFetchingNextPage}
+          fetching={messages.isFetching}
+          onMore={() => {
+            if (
+              timelineVisible &&
+              messages.hasNextPage &&
+              !messages.isFetching &&
+              !messages.isError
+            )
+              void messages.fetchNextPage({ cancelRefetch: false });
+          }}
+        />
+        <RoomTypingIndicator
+          userIds={typing.userIds}
+          members={current?.pages[0]?.members ?? []}
+        />
+        <RoomComposer
+          onTyping={typing.change}
+          draft={draft}
+          disabled={!room || messages.isError}
+          paused={!active}
+          visible={timelineVisible}
+          direct={room?.kind === "direct"}
+        />
+      </View>
       {root && !messages.isError && (
         <View style={[styles.thread, !wide && styles.fullThread]}>
           <View style={styles.header}>
@@ -607,6 +611,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   main: { flex: 1, minWidth: 0 },
+  hidden: { display: "none" },
   header: {
     minHeight: 78,
     flexDirection: "row",
