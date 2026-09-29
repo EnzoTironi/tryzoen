@@ -51,8 +51,12 @@ export function Welcome({
   initialDraft,
   avatarUri,
   onSend,
+  onDraftChange,
   disabled = false,
-}: Pick<ComponentProps<typeof Composer>, "onSend" | "disabled"> & {
+}: Pick<
+  ComponentProps<typeof Composer>,
+  "onSend" | "disabled" | "onDraftChange"
+> & {
   readonly name?: string;
   readonly initialDraft?: ConversationDraft;
   readonly avatarUri?: string;
@@ -70,9 +74,13 @@ export function Welcome({
     },
     revision: 0,
   });
-  const rememberDraft = useCallback((draft: ConversationDraft) => {
-    setSuggestion((current) => ({ ...current, draft }));
-  }, []);
+  const rememberDraft = useCallback(
+    (draft: ConversationDraft) => {
+      setSuggestion((current) => ({ ...current, draft }));
+      onDraftChange?.({ ...draft, text: replyMessage(draft.text, reply) });
+    },
+    [onDraftChange, reply]
+  );
   return (
     <ScrollView
       contentContainerStyle={styles.scroll}

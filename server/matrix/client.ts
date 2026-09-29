@@ -1,6 +1,7 @@
 import { operationSignal, withTimeout } from "../operations/async";
 import { TimeoutError } from "../operations/async";
 import { z } from "zod";
+import { readBody } from "../http/body";
 import { env } from "@shared/environment";
 export class MatrixError extends Error {
   readonly _tag = "MatrixError";
@@ -8,10 +9,10 @@ export class MatrixError extends Error {
     | "unavailable"
     | "forbidden"
     | "conflict"
+    | "obsolete-subscription"
+    | "expired-position"
     | "not-found";
-  constructor(input: {
-    readonly reason: "unavailable" | "forbidden" | "conflict" | "not-found";
-  }) {
+  constructor(input: { readonly reason: MatrixError["reason"] }) {
     super("MatrixError");
     this.name = "MatrixError";
     Object.assign(this, input);
@@ -38,14 +39,26 @@ export const matrixConfiguration = async () => {
 
 /** Only a configured homeserver is reachable. Tokens never enter URLs or logs. */
 export const matrixRequest = async function (
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   body?: z.core.util.JSONType,
   userId?: string,
-  version: "v1" | "v3" = "v3"
+  requestOptions: {
+    version?:
+      | ""
+      | "v1"
+      | "v3"
+      | "unstable/org.matrix.simplified_msc3575"
+      | "unstable/io.element.msc4306";
+    maxResponseBytes?: number;
+  } = {}
 ) {
   const config = await matrixConfiguration();
-  const url = new URL(`/_matrix/client/${version}/${path}`, config.url);
+  const version = requestOptions.version ?? "v3";
+  const url = new URL(
+    `/_matrix/client/${version ? `${version}/` : ""}${path}`,
+    config.url
+  );
   if (userId) url.searchParams.set("user_id", userId);
   return await withTimeout(async () => {
     try {
@@ -62,17 +75,24 @@ export const matrixRequest = async function (
         if (body !== undefined && method !== "GET")
           options.body = JSON.stringify(body);
         const response = await fetch(url, options);
+        const payload: unknown = requestOptions.maxResponseBytes
+          ? JSON.parse(
+              (
+                await readBody(response.body, requestOptions.maxResponseBytes)
+              ).toString("utf8")
+            )
+          : await response.json();
         if (!response.ok) {
           const error = z
             .object({
               errcode: z.optional(z.string()),
             })
-            .parse(await response.json());
+            .parse(payload);
           throw new MatrixError({
             reason: matrixFailureReason(error.errcode, response.status),
           });
         }
-        return z.json().parse(await response.json());
+        return z.json().parse(payload);
       })(operationSignal());
     } catch (error) {
       throw error instanceof MatrixError
@@ -88,6 +108,9 @@ function matrixFailureReason(
   code: string | undefined,
   status: number
 ): MatrixError["reason"] {
+  if (code === "M_UNKNOWN_POS") return "expired-position";
+  if (code === "IO.ELEMENT.MSC4306.M_CONFLICTING_UNSUBSCRIPTION")
+    return "obsolete-subscription";
   if (code === "M_USER_IN_USE" || code === "M_ROOM_IN_USE") return "conflict";
   if (status === 403) return "forbidden";
   if (status === 404) return "not-found";
@@ -140,41 +163,54 @@ export const deactivateMatrixUser = async function (matrixId: string) {
     deactivated: true as const,
   };
 };
-export const MatrixEventSchema = z.object({
+const matrixRelation = z.object({
+  rel_type: z.string().optional(),
+  event_id: z.string().optional(),
+  key: z.string().optional(),
+  "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
+});
+const matrixContent = z.object({
+  redacts: z.string().optional(),
+  body: z.string().optional(),
+  url: z.string().optional(),
+  filename: z.string().optional(),
+  info: z
+    .object({ mimetype: z.string().optional(), size: z.number().optional() })
+    .optional(),
+  msgtype: z.string().optional(),
+  membership: z.string().optional(),
+  "m.relates_to": matrixRelation.optional(),
+});
+const matrixEvent = z.object({
+  redacts: z.string().optional(),
   event_id: z.string(),
-  room_id: z.optional(z.string()),
+  room_id: z.string().optional(),
   type: z.string(),
   sender: z.string(),
-  state_key: z.optional(z.string()),
+  state_key: z.string().optional(),
   "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
-  origin_server_ts: z.optional(z.number()),
-  unsigned: z
-    .object({
+  origin_server_ts: z.number().optional(),
+  content: matrixContent.extend({
+    "m.new_content": matrixContent.optional(),
+    "org.zoen.edit_operation": z.string().optional(),
+    "org.zoen.forwarded": z.boolean().optional(),
+    "org.zoen.transaction_id": z.string().max(100).optional(),
+  }),
+});
+const redaction = z.object({ redacted_because: z.json().optional() });
+export const MatrixEventSchema = matrixEvent.extend({
+  unsigned: redaction
+    .extend({
       "m.relations": z
         .object({
           "m.thread": z
             .object({ count: z.number().int().nonnegative() })
             .optional(),
+          "m.replace": matrixEvent
+            .extend({ unsigned: redaction.optional() })
+            .optional(),
         })
         .optional(),
     })
     .optional(),
-  content: z.object({
-    body: z.optional(z.string()),
-    url: z.string().optional(),
-    filename: z.string().optional(),
-    info: z
-      .object({ mimetype: z.string().optional(), size: z.number().optional() })
-      .optional(),
-    msgtype: z.optional(z.string()),
-    membership: z.optional(z.string()),
-    "m.relates_to": z.optional(
-      z.object({
-        rel_type: z.optional(z.string()),
-        event_id: z.optional(z.string()),
-        key: z.optional(z.string()),
-        "m.in_reply_to": z.object({ event_id: z.string() }).optional(),
-      })
-    ),
-  }),
 });

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import { query, transaction } from "@db/queries";
+import type { memorySessionSources } from "@db/schema/session-memory";
 import {
   acceptMemoryCorpus,
   memoryCorpusInitialized,
@@ -47,69 +48,130 @@ export async function captureSessionSource(
       throw new Error(
         "Session archive is full. Restore archive delivery before continuing."
       );
-    await query(sql`INSERT INTO memory_session_sources (namespace_id, event_id, digest, payload)
-      VALUES (${partition.id}, ${source.eventId}, ${digest}, ${payload}::jsonb)`);
+    // Capture holds the namespace lock. A new event must not bypass a failed
+    // earlier event or move a noisy account ahead of accounts already waiting.
+    await query(sql`INSERT INTO memory_session_sources (namespace_id, event_id, digest, payload, available_at)
+      VALUES (${partition.id}, ${source.eventId}, ${digest}, ${payload}::jsonb,
+        COALESCE((SELECT available_at FROM memory_session_sources
+          WHERE namespace_id = ${partition.id} AND stored_at IS NULL
+          ORDER BY capture_sequence LIMIT 1), clock_timestamp()))`);
   });
 }
 
-/** Filesystem failure retains the outbox. Replay verifies the immutable file. */
+/** The outer locks survive a failed batch's savepoint rollback. */
+async function deliverNamespace(root: string, visited: readonly string[]) {
+  return transaction(async () => {
+    const [head] = await query<
+      Pick<
+        typeof memorySessionSources.$inferSelect,
+        "namespaceId" | "eventId" | "deliveryFailures"
+      >
+    >(sql`
+      SELECT s.namespace_id AS "namespaceId", s.event_id AS "eventId", s.delivery_failures AS "deliveryFailures"
+      FROM memory_session_sources s JOIN workspace_memory_namespace n ON n.namespace_id = s.namespace_id
+      JOIN workspace_memberships m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
+      JOIN workspaces w ON w.id = n.workspace_id
+      WHERE s.stored_at IS NULL AND n.enabled AND s.available_at <= statement_timestamp()
+        ${
+          visited.length
+            ? sql`AND s.namespace_id NOT IN (${sql.join(
+                visited.map((id) => sql`${id}::uuid`),
+                sql`, `
+              )})`
+            : sql``
+        }
+        AND (w.organization_id IS NULL OR EXISTS (
+          SELECT 1 FROM organization_memberships o
+          WHERE o.organization_id = w.organization_id AND o.user_id = n.user_id
+          FOR SHARE SKIP LOCKED))
+      ORDER BY s.available_at, s.capture_sequence LIMIT 1
+      FOR SHARE OF w, m SKIP LOCKED FOR UPDATE OF n, s SKIP LOCKED`);
+    if (!head) return null;
+    let stored: number;
+    try {
+      stored = await transaction(() =>
+        deliverNamespaceBatch(root, head.namespaceId)
+      );
+    } catch (error) {
+      const delaySeconds = Math.min(
+        3600,
+        60 * 2 ** Math.min(head.deliveryFailures, 6)
+      );
+      await query(sql`UPDATE memory_session_sources
+        SET available_at = statement_timestamp() + ${delaySeconds} * interval '1 second'
+        WHERE namespace_id = ${head.namespaceId} AND stored_at IS NULL`);
+      await query(sql`UPDATE memory_session_sources
+        SET delivery_failures = delivery_failures + 1, last_failed_at = clock_timestamp()
+        WHERE namespace_id = ${head.namespaceId} AND event_id = ${head.eventId}`);
+      return { namespaceId: head.namespaceId, stored: 0, failed: true, error };
+    }
+    // At most 1,000 pending records exist per namespace. Moving the remaining
+    // batch behind other waiting accounts prevents one account monopolizing
+    // every schedule tick, without building a second queue or index service.
+    await query(sql`UPDATE memory_session_sources SET available_at = statement_timestamp()
+      WHERE namespace_id = ${head.namespaceId} AND stored_at IS NULL`);
+    return { namespaceId: head.namespaceId, stored, failed: false };
+  });
+}
+
+async function deliverNamespaceBatch(root: string, namespaceId: string) {
+  const records = await query<
+    Pick<
+      typeof memorySessionSources.$inferSelect,
+      "eventId" | "captureSequence" | "payload" | "digest"
+    >
+  >(sql`SELECT event_id AS "eventId", capture_sequence::float8 AS "captureSequence", payload, digest
+    FROM memory_session_sources WHERE namespace_id = ${namespaceId} AND stored_at IS NULL
+    ORDER BY capture_sequence LIMIT 25 FOR UPDATE`);
+  // The namespace lock serializes engines and fences revocation/erasure.
+  await using engine = env.ZOEN_AI_MEMORY_BINARY
+    ? await openMemoryEngine(
+        env.ZOEN_AI_MEMORY_BINARY,
+        root,
+        namespaceId,
+        "ai-memory",
+        {
+          requireExisting: await memoryCorpusInitialized(
+            namespaceId,
+            "ai-memory"
+          ),
+        }
+      )
+    : null;
+  for (const record of records) {
+    const source = sessionSourceSchema.parse(record.payload);
+    if (
+      createHash("sha256").update(JSON.stringify(source)).digest("hex") !==
+      record.digest
+    )
+      throw new Error("Session source failed integrity verification.");
+    await writeSessionSource(root, namespaceId, source, record.captureSequence);
+    if (engine) await ingestSessionSource(engine, namespaceId, source);
+    await query(sql`UPDATE memory_session_sources SET payload = NULL, stored_at = now()
+          WHERE namespace_id = ${namespaceId} AND event_id = ${record.eventId}`);
+  }
+  if (engine) await acceptMemoryCorpus(namespaceId, "ai-memory");
+  return records.length;
+}
+
+/** Failed accounts back off independently; successful accounts remain committed. */
 export async function drainSessionSources() {
   const root = env.ZOEN_SESSION_ARCHIVE_DIR;
   if (!root) return { stored: 0, configured: false };
-  return transaction(async () => {
-    const batch = await query<{
-      namespaceId: string;
-      eventId: string;
-      captureSequence: string;
-      payload: unknown;
-      digest: string;
-    }>(sql`
-      SELECT s.namespace_id AS "namespaceId", s.event_id AS "eventId", s.capture_sequence::text AS "captureSequence", s.payload, s.digest
-      FROM memory_session_sources s JOIN workspace_memory_namespace n ON n.namespace_id = s.namespace_id
-      JOIN workspace_memberships m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
-      WHERE s.stored_at IS NULL AND n.enabled ORDER BY s.capture_sequence LIMIT 25
-      FOR SHARE OF m SKIP LOCKED FOR UPDATE OF n, s SKIP LOCKED`);
-    let stored = 0;
-    for (const [namespaceId, records] of Map.groupBy(
-      batch,
-      (record) => record.namespaceId
-    )) {
-      // Own one engine at a time; the namespace lock serializes other workers
-      // and prevents revocation/erasure from racing a live private engine.
-      await using engine = env.ZOEN_AI_MEMORY_BINARY
-        ? await openMemoryEngine(
-            env.ZOEN_AI_MEMORY_BINARY,
-            root,
-            namespaceId,
-            "ai-memory",
-            {
-              requireExisting: await memoryCorpusInitialized(
-                namespaceId,
-                "ai-memory"
-              ),
-            }
-          )
-        : null;
-      for (const record of records) {
-        const source = sessionSourceSchema.parse(record.payload);
-        if (
-          createHash("sha256").update(JSON.stringify(source)).digest("hex") !==
-          record.digest
-        )
-          throw new Error("Session source failed integrity verification.");
-        await writeSessionSource(
-          root,
-          namespaceId,
-          source,
-          Number(record.captureSequence)
-        );
-        if (engine) await ingestSessionSource(engine, namespaceId, source);
-        await query(sql`UPDATE memory_session_sources SET payload = NULL, stored_at = now()
-          WHERE namespace_id = ${namespaceId} AND event_id = ${record.eventId}`);
-        stored++;
-      }
-      if (engine) await acceptMemoryCorpus(namespaceId, "ai-memory");
-    }
-    return { stored, configured: true };
-  });
+  const visited: string[] = [];
+  const failures: unknown[] = [];
+  let stored = 0;
+  for (let count = 0; count < 5; count++) {
+    const result = await deliverNamespace(root, visited);
+    if (!result) break;
+    visited.push(result.namespaceId);
+    stored += result.stored;
+    if (result.failed) failures.push(result.error);
+  }
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      `Session archive delivery failed for ${failures.length} account(s); ${stored} source(s) stored.`
+    );
+  return { stored, configured: true };
 }

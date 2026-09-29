@@ -11,10 +11,10 @@ import { wakeMatrixService } from "./matrix-fixture";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
   closeMatrixRoom,
   reconcileMatrixRooms,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { matrixRequest } from "../../server/matrix/client";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import { readNativeReceipt } from "../../server/messaging/native-receipts";

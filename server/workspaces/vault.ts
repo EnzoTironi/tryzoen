@@ -1,3 +1,4 @@
+import { credentialPermissionsSchema } from "@shared/vault/permissions";
 import { Secret } from "@shared/environment/secret";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -16,6 +17,7 @@ import type { AccessScope } from "@shared/identity/access-scope";
 import { env } from "@shared/environment";
 import {
   requireWorkspaceAccess,
+  requireWorkspaceMembership,
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "./access";
@@ -106,55 +108,50 @@ export const eraseVaultwardenUser = async function (rawUserId: string) {
   };
 };
 export const listDelegatedVaultItems = async function (scope: AccessScope) {
-  await requireWorkspaceMember(scope);
-  const rows = await query<{
-    account: string;
-    handle: string;
-    kind: string;
-    label: string;
-  }>(sql`SELECT i.account, i.id AS handle, i.kind, i.label
-      FROM vault_item_delegations d
-      JOIN vault_agent_identities a ON a.id = d.identity_id
-      JOIN vault_items i ON i.id = d.item_id AND i.workspace_id = d.workspace_id
-      WHERE d.workspace_id = ${scope.workspaceId} AND d.revoked_at IS NULL
-        AND a.revoked_at IS NULL AND d.expires_at > now()
-      ORDER BY i.label`);
-  return await z.array(delegatedItemSchema).parseAsync(
-    rows.map((row) => ({
-      account: row.account,
-      available: true,
-      handle: row.handle,
-      kind: row.kind,
-      label: row.label,
-    }))
-  );
+  return withDatabaseTransaction(async () => {
+    await requireWorkspaceMembership(scope);
+    const rows = await query<{
+      account: string;
+      handle: string;
+      kind: string;
+      label: string;
+    }>(sql`SELECT i.account, i.id AS handle, i.kind, i.label
+        FROM vault_item_delegations d
+        JOIN vault_agent_identities a ON a.id = d.identity_id
+        JOIN vault_items i ON i.id = d.item_id AND i.workspace_id = d.workspace_id
+        WHERE d.workspace_id = ${scope.workspaceId} AND d.revoked_at IS NULL
+          AND a.revoked_at IS NULL AND d.expires_at > now()
+        ORDER BY i.label`);
+    return await z.array(delegatedItemSchema).parseAsync(
+      rows.map((row) => ({
+        account: row.account,
+        available: true,
+        handle: row.handle,
+        kind: row.kind,
+        label: row.label,
+      }))
+    );
+  });
 };
 export const inspectVaultDelegations = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const access = await requireWorkspaceAccess(actor);
-  const rows =
-    await query(sql`SELECT d.id, d.item_id AS "itemId", v.label, d.expires_at::text AS "expiresAt"
+  return withDatabaseTransaction(async () => {
+    const access = await requireWorkspaceAccess(actor);
+    const rows =
+      await query(sql`SELECT d.id, d.item_id AS "itemId", v.label, d.expires_at::text AS "expiresAt"
       FROM vault_item_delegations d JOIN vault_agent_identities a ON a.id = d.identity_id
       LEFT JOIN vault_items v ON v.id = d.item_id AND v.workspace_id = d.workspace_id
       WHERE d.workspace_id = ${actor.workspaceId} AND a.workspace_id = d.workspace_id
         AND d.revoked_at IS NULL AND a.revoked_at IS NULL AND d.expires_at > now()`);
-  return {
-    mayManage:
-      access.role !== "member" &&
-      !!actor.authSessionId &&
-      !actor.groupBindingId,
-    items: await z
-      .array(
-        z.object({
-          id: z.string(),
-          itemId: z.string(),
-          label: z.string().nullable(),
-          expiresAt: z.string(),
-        })
-      )
-      .parseAsync(rows),
-  };
+    return credentialPermissionsSchema.parse({
+      mayManage:
+        access.role !== "member" &&
+        !!actor.authSessionId &&
+        !actor.groupBindingId,
+      items: rows,
+    });
+  });
 };
 export const delegateVaultItem = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
@@ -234,44 +231,40 @@ export const releaseDelegatedSecret = async function (
   scope: AccessScope,
   itemId: string
 ) {
-  await requireWorkspaceMember(scope);
-  const handle = await Promise.try(async () =>
-    z.uuid().parseAsync(itemId)
-  ).catch(() => {
-    throw new WorkspaceAccessDenied();
+  return withDatabaseTransaction(async () => {
+    await requireWorkspaceMembership(scope);
+    const handle = await Promise.try(async () =>
+      z.uuid().parseAsync(itemId)
+    ).catch(() => {
+      throw new WorkspaceAccessDenied();
+    });
+    const rows = await query<{
+      id: string;
+      identity_id: string;
+      wrapping_key: string;
+      wrapped_secret: string;
+    }>(sql`SELECT d.id, a.id AS identity_id, a.wrapping_key, d.wrapped_secret
+        FROM vault_item_delegations d
+        JOIN vault_agent_identities a ON a.id = d.identity_id
+        WHERE d.item_id = ${handle} AND d.workspace_id = ${scope.workspaceId}
+          AND d.revoked_at IS NULL AND a.revoked_at IS NULL AND d.expires_at > now()
+          AND a.workspace_id = ${scope.workspaceId}
+        FOR SHARE OF d, a`);
+    const grant = rows[0];
+    if (!grant) throw new WorkspaceAccessDenied();
+    const key = await installationKey();
+    const identityKey = await unwrapIdentityKey(
+      key,
+      grant.wrapping_key,
+      identityAad(scope.workspaceId, grant.identity_id)
+    );
+    const secret = await openEnvelope(
+      identityKey,
+      grant.wrapped_secret,
+      delegateAad(grant.identity_id, handle, grant.id)
+    );
+    return new Secret(secret.toString("utf8"));
   });
-  const rows = await query<{
-    id: string;
-    identity_id: string;
-    wrapping_key: string;
-    wrapped_secret: string;
-  }>(sql`SELECT d.id, a.id AS identity_id, a.wrapping_key, d.wrapped_secret
-      FROM vault_item_delegations d
-      JOIN vault_agent_identities a ON a.id = d.identity_id
-      WHERE d.item_id = ${handle} AND d.workspace_id = ${scope.workspaceId}
-        AND d.revoked_at IS NULL AND a.revoked_at IS NULL AND d.expires_at > now()
-        AND a.workspace_id = ${scope.workspaceId}
-      FOR SHARE OF d, a`);
-  const grant = rows[0];
-  if (!grant) throw new WorkspaceAccessDenied();
-  const key = await installationKey();
-  const identityKey = await unwrapIdentityKey(
-    key,
-    grant.wrapping_key,
-    identityAad(scope.workspaceId, grant.identity_id)
-  );
-  const secret = await openEnvelope(
-    identityKey,
-    grant.wrapped_secret,
-    delegateAad(grant.identity_id, handle, grant.id)
-  );
-  return new Secret(secret.toString("utf8"));
-};
-const requireWorkspaceMember = async function (scope: AccessScope) {
-  const rows = await query(sql`SELECT 1 FROM workspace_memberships
-      WHERE workspace_id = ${scope.workspaceId} AND user_id = ${scope.userId} FOR SHARE`);
-  if (!rows.length) throw new WorkspaceAccessDenied();
-  return true;
 };
 const ensureAgentIdentity = async function (scope: AccessScope) {
   const existing = await query<{

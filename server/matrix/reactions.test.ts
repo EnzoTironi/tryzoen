@@ -1,16 +1,22 @@
 import { ZodError } from "zod";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
-import { readMatrixReactions, setMatrixReaction } from "./reactions";
+import {
+  readMatrixReactions,
+  setMatrixReaction,
+  readMatrixReactors,
+} from "./reactions";
 import type { matrixRequest } from "./client";
 const mocks = vi.hoisted(() => ({
   request: vi.fn<typeof matrixRequest>(),
   access: vi.fn<() => Promise<void>>(),
+  members: vi.fn<typeof import("./members").readRoomMembers>(),
 }));
 vi.mock("@db/queries", () => ({
   transaction: (fn: () => Promise<unknown>) => fn(),
   query: async () => [],
 }));
+vi.mock("./members", () => ({ readRoomMembers: mocks.members }));
 vi.mock("./rooms", () => ({
   joinMatrixRoom: async () => {
     await mocks.access();
@@ -21,6 +27,7 @@ vi.mock("./rooms", () => ({
 vi.mock("./client", async (original) => ({
   ...(await original<typeof import("./client")>()),
   matrixRequest: mocks.request,
+  matrixConfiguration: async () => ({ botId: "@bot:test" }),
 }));
 const actor = {
   userId: "person",
@@ -43,6 +50,15 @@ const reaction = {
 beforeEach(() => {
   mocks.access.mockReset().mockResolvedValue(undefined);
   mocks.request.mockReset();
+  mocks.members.mockReset().mockResolvedValue([
+    {
+      id: "@person:test",
+      name: "Ana",
+      mine: true,
+      bot: false,
+      username: "ana",
+    },
+  ]);
 });
 it("counts distinct senders and ignores redacted and unrelated annotations", async () => {
   mocks.request.mockResolvedValue({
@@ -147,4 +163,53 @@ it("only redacts the viewer's selected previous reaction, preserving other parti
     },
     "@person:test"
   );
+});
+
+it("returns a bounded native reactor page with current member attribution and deduplication", async () => {
+  mocks.request
+    .mockResolvedValueOnce({
+      event_id: "$message",
+      type: "m.room.message",
+      sender: "@person:test",
+      content: { body: "Hello" },
+    })
+    .mockResolvedValueOnce({
+      chunk: [
+        reaction,
+        { ...reaction, event_id: "$duplicate" },
+        {
+          ...reaction,
+          event_id: "$removed",
+          unsigned: { redacted_because: {} },
+        },
+      ],
+      next_batch: "native-next",
+    });
+  expect(
+    await readMatrixReactors(actor, {
+      id,
+      messageId: "$message",
+      cursor: "native-token",
+    })
+  ).toMatchObject({
+    items: [{ emoji: "❤️", person: { name: "Ana", username: "ana" } }],
+    nextCursor: "native-next",
+  });
+  expect(mocks.request.mock.calls[1]?.[1]).toContain("from=native-token");
+});
+it("revalidates access after reading the reactor page", async () => {
+  mocks.access
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error("Access revoked"));
+  mocks.request
+    .mockResolvedValueOnce({
+      event_id: "$message",
+      type: "m.room.message",
+      sender: "@person:test",
+      content: { body: "Hello" },
+    })
+    .mockResolvedValueOnce({ chunk: [reaction] });
+  await expect(
+    readMatrixReactors(actor, { id, messageId: "$message" })
+  ).rejects.toThrow("Access revoked");
 });

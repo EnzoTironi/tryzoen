@@ -4,7 +4,10 @@ import { isValid } from "@shared/validation";
 import { z } from "zod";
 
 import type { SessionAuthContext } from "eve/context";
-import { accessScopeForUser } from "@shared/identity/access-scope";
+import {
+  accessScopeForUser,
+  type AccessScope,
+} from "@shared/identity/access-scope";
 
 const identifier = z
   .string()
@@ -107,6 +110,32 @@ const requireConversationNetwork = async function (input: {
   }
 };
 
+/** Membership only; callers authenticate the principal and hold the transaction through the protected read. */
+export async function requireWorkspaceMembership(scope: AccessScope) {
+  const memberships = await query<{
+    role: string;
+    organization_id: string | null;
+  }>(sql`
+    SELECT m.role, w.organization_id FROM workspace_memberships m
+    JOIN workspaces w ON w.id = m.workspace_id
+    WHERE m.user_id = ${scope.userId} AND m.workspace_id = ${scope.workspaceId}
+    FOR SHARE OF m, w`);
+  const membership = memberships[0];
+  if (!membership) throw new WorkspaceAccessDenied();
+  if (membership.organization_id === null) {
+    if (
+      scope.workspaceId !== accessScopeForUser(scope.userId).workspaceId ||
+      membership.role !== "owner"
+    )
+      throw new WorkspaceAccessDenied();
+  } else {
+    const org = await query(sql`SELECT user_id FROM organization_memberships
+      WHERE organization_id = ${membership.organization_id} AND user_id = ${scope.userId} FOR SHARE`);
+    if (org.length !== 1) throw new WorkspaceAccessDenied();
+  }
+  return membership;
+}
+
 /** Call inside the transaction that reads or publishes protected data. */
 export const requireWorkspaceAccess = async function (
   input: z.output<typeof WorkspaceActorSchema>,
@@ -131,28 +160,8 @@ export const requireWorkspaceAccess = async function (
   )
     throw new WorkspaceAccessDenied();
 
-  const memberships = await query<{
-    role: string;
-    organization_id: string | null;
-  }>(sql`
-    SELECT m.role, w.organization_id FROM workspace_memberships m
-    JOIN workspaces w ON w.id = m.workspace_id
-    WHERE m.user_id = ${actor.userId} AND m.workspace_id = ${actor.workspaceId}
-    FOR SHARE OF m, w`);
-  const membership = memberships[0];
-  if (!membership || (manage && membership.role === "member"))
-    throw new WorkspaceAccessDenied();
-  if (membership.organization_id === null) {
-    if (
-      actor.workspaceId !== accessScopeForUser(actor.userId).workspaceId ||
-      membership.role !== "owner"
-    )
-      throw new WorkspaceAccessDenied();
-  } else {
-    const org = await query(sql`SELECT user_id FROM organization_memberships
-      WHERE organization_id = ${membership.organization_id} AND user_id = ${actor.userId} FOR SHARE`);
-    if (org.length !== 1) throw new WorkspaceAccessDenied();
-  }
+  const membership = await requireWorkspaceMembership(actor);
+  if (manage && membership.role === "member") throw new WorkspaceAccessDenied();
   if (actor.agentGrantId) {
     const grants = await query<{
       id: string;
@@ -200,7 +209,7 @@ export const requireWorkspaceAccess = async function (
     )
       throw new WorkspaceAccessDenied();
     const rooms = await query(sql`SELECT b.id FROM workspace_group_bindings b
-        JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${actor.userId}
+        JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${actor.userId} AND m.state = 'joined'
         JOIN matrix_identities i ON i.user_id = m.user_id AND i.matrix_id = ${actor.matrixIdentityId}
         WHERE b.id = ${actor.groupBindingId} AND b.epoch = ${actor.groupEpoch}
           AND b.workspace_id = ${actor.workspaceId} AND b.channel = 'matrix' AND b.revoked_at IS NULL FOR SHARE OF b, m, i`);

@@ -4,7 +4,7 @@ import {
   paymentCardSecretStringSchema,
   paymentCardType,
   serializePaymentCard,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 
 describe("payment card vault values", () => {
   it("serializes a complete structured card secret", () => {

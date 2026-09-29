@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Client } from "eve/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -38,11 +39,14 @@ beforeEach(() => {
   mocks.send.mockResolvedValue({});
   mocks.save.mockResolvedValue(undefined);
   renderToStaticMarkup(
-    <NewConversation
-      client={new Client({ host: "" })}
-      save={mocks.save}
-      onCreated={mocks.created}
-    />
+    <QueryClientProvider client={new QueryClient()}>
+      <NewConversation
+        cacheScope="test:account"
+        client={new Client({ host: "" })}
+        save={mocks.save}
+        onCreated={mocks.created}
+      />
+    </QueryClientProvider>
   );
 });
 it("does not create a session until the user submits", () => {

@@ -104,3 +104,16 @@ export const deviceBoundSchema = z.object({
   channel: channelProviderSchema,
   expiresAt: z.string(),
 });
+
+/** Public linked-channel metadata; no challenge, session, or provider secrets. */
+export const linkedChannelIdentitySchema = z.object({
+  id: z.uuid(),
+  channel: channelProviderSchema,
+  senderId: z
+    .string()
+    .min(1)
+    .refine((value) => value === value.trim(), "Expected trimmed text"),
+});
+export const channelUnlinkResultSchema = z.object({
+  status: z.enum(["revoked", "last_access"]),
+});

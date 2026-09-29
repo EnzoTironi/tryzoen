@@ -8,7 +8,7 @@ import {
   serializeLoginVaultPayload,
   serializePaymentCard,
   type VaultItemKind,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 import {
   classifyNativeLoginControl,
   frameOriginExpression,

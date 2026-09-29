@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxToolInvoker } from "../core";
 import { makeQuickJsExecutor } from "./index";
+import { getQuickJS } from "quickjs-emscripten";
 
 class UnknownToolError extends Error {
   constructor({ path }: { path: string }) {
@@ -30,6 +31,9 @@ const executor = makeQuickJsExecutor({ timeoutMs: 5_000 });
 
 describe("quickjs executor", () => {
   it("interrupts compute while an unawaited host call is in flight and cancels that call", async () => {
+    // This case measures cancellation after entering the VM, not cold WASM
+    // startup consuming the short execution budget before the tool is invoked.
+    await getQuickJS();
     let ended = false;
     const result = await makeQuickJsExecutor({
       timeoutMs: 100,

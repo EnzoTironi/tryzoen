@@ -10,12 +10,14 @@ export function ConversationReview({
   client,
   sessionId,
   approvals = false,
+  cacheScope,
 }: {
   readonly client: Client;
+  readonly cacheScope: string;
   readonly sessionId: string;
   readonly approvals?: boolean;
 }) {
-  const agent = useSessionAgent(sessionId, client);
+  const agent = useSessionAgent(sessionId, client, cacheScope);
   const [error, setError] = useState<string>();
   const parts = agent.data.messages.flatMap((message) =>
     message.parts.filter(

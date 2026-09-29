@@ -9,12 +9,14 @@ export function IconButton({
   onPress,
   selected = false,
   disabled = false,
+  quiet = false,
 }: {
   readonly label: string;
   readonly icon: ComponentType<LucideProps>;
   readonly onPress: () => void;
   readonly selected?: boolean;
   readonly disabled?: boolean;
+  readonly quiet?: boolean;
 }) {
   return (
     <Pressable
@@ -30,7 +32,11 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Icon size={24} strokeWidth={1.8} color={colors.ink} />
+      <Icon
+        size={quiet ? 19 : 24}
+        strokeWidth={1.8}
+        color={quiet && !selected ? colors.muted : colors.ink}
+      />
     </Pressable>
   );
 }

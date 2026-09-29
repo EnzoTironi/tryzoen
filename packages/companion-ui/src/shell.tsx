@@ -24,6 +24,7 @@ import { IconButton } from "./icon-button";
 import { colors } from "./theme";
 import { AgentPanel, type AgentPanelTab } from "./agent-panel";
 import { ConversationNavigation } from "./chats/navigation";
+import { CompanionVisibility } from "./visibility";
 
 const sections = [
   { id: "chat", label: "Conversation", icon: MessageCircle },
@@ -59,11 +60,13 @@ export function CompanionShell({
   conversationOpen = false,
   onShowInbox,
   hideConversationHeader = false,
+  contentVisible = true,
 }: {
   readonly children: ReactNode;
   readonly conversationOpen?: boolean;
   readonly onShowInbox?: () => void;
   readonly hideConversationHeader?: boolean;
+  readonly contentVisible?: boolean;
   readonly section?: CompanionSection;
   readonly title?: string;
   readonly avatarUri?: string;
@@ -122,31 +125,35 @@ export function CompanionShell({
           />
         </View>
       )}
-      <ConversationNavigation
-        active={section === "chat"}
-        renderConversations={renderConversations}
-        conversationOpen={conversationOpen}
-        onShowInbox={onShowInbox}
+      <CompanionVisibility
+        value={contentVisible && (!showAgent || !renderAgentPanel)}
       >
-        {(toggle) => (
-          <View style={styles.body}>
-            {section === "chat" && !hideConversationHeader && (
-              <CompanionHeader
-                compact={compact}
-                title={title}
-                avatarUri={avatarUri}
-                agentName={agentName}
-                onNewConversation={onNewConversation}
-                onOpenConversations={toggle}
-                onOpenAgent={() => {
-                  setShowAgent(true);
-                }}
-              />
-            )}
-            <View style={styles.content}>{children}</View>
-          </View>
-        )}
-      </ConversationNavigation>
+        <ConversationNavigation
+          active={section === "chat"}
+          renderConversations={renderConversations}
+          conversationOpen={conversationOpen}
+          onShowInbox={onShowInbox}
+        >
+          {(toggle) => (
+            <View style={styles.body}>
+              {section === "chat" && !hideConversationHeader && (
+                <CompanionHeader
+                  compact={compact}
+                  title={title}
+                  avatarUri={avatarUri}
+                  agentName={agentName}
+                  onNewConversation={onNewConversation}
+                  onOpenConversations={toggle}
+                  onOpenAgent={() => {
+                    setShowAgent(true);
+                  }}
+                />
+              )}
+              <View style={styles.content}>{children}</View>
+            </View>
+          )}
+        </ConversationNavigation>
+      </CompanionVisibility>
       {compact && (
         <View style={styles.bottomBar}>
           {sections

@@ -1,3 +1,11 @@
+import { RoomPrivacySettings } from "./privacy";
+import { GroupMembership } from "./membership";
+import { RoomNotificationSettings } from "./notifications";
+import { PresenceIndicator } from "./presence";
+import type { roomPresenceSchema } from "./schema";
+import { RenameRoom } from "./rename";
+import { EditRoomAvatar } from "./avatar";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   ChevronDown,
@@ -12,31 +20,81 @@ import { ConversationAvatar } from "../chats/avatar";
 import { IconButton } from "../icon-button";
 import { SheetSurface } from "../sheet";
 import { colors } from "../theme";
-import type { roomPageSchema } from "./schema";
+import type { RoomData, roomPageSchema } from "./schema";
 
 export function RoomDetails({
+  data,
+  cacheScope,
   page,
+  presence,
   avatarUri,
   onClose,
+  onLeft,
+  onChanged,
   onConversation,
   onProfile,
 }: {
+  readonly data: RoomData;
+  readonly cacheScope: string;
   readonly page: z.infer<typeof roomPageSchema>;
+  readonly presence?: z.infer<typeof roomPresenceSchema>[];
   readonly avatarUri?: string;
   readonly onClose: () => void;
+  readonly onLeft: () => void;
+  readonly onChanged: () => Promise<unknown>;
   readonly onConversation: () => void;
   readonly onProfile: (
     person: z.infer<typeof roomPageSchema>["members"][number]
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [panel, setPanel] = useState<
+    "rename" | "avatar" | "manage" | "leave"
+  >();
+  const closePanel = () => {
+    setPanel(undefined);
+  };
+  const permissions = useQuery({
+    queryKey: ["matrix-room-directory", cacheScope],
+    queryFn: () => data.list(),
+    retry: false,
+  });
   const people = page.members.filter((member) => !member.bot).length;
   const bots = page.members.filter((member) => member.bot).length;
   const members = expanded ? page.members : page.members.slice(0, 6);
+  if (panel === "manage" || panel === "leave")
+    return (
+      <GroupMembership
+        data={data}
+        cacheScope={cacheScope}
+        page={page}
+        leaving={panel === "leave"}
+        onClose={closePanel}
+        onLeft={onLeft}
+        onChanged={onChanged}
+      />
+    );
+  if (panel === "rename")
+    return (
+      <RenameRoom
+        data={data}
+        cacheScope={cacheScope}
+        room={page.room}
+        onClose={closePanel}
+      />
+    );
+  if (panel === "avatar")
+    return (
+      <EditRoomAvatar
+        data={data}
+        cacheScope={cacheScope}
+        room={page.room}
+        onClose={closePanel}
+      />
+    );
   return (
     <SheetSurface
       title="Informações do grupo"
-      dismissLabel="Fechar informações do grupo"
       onClose={onClose}
       maxWidth={480}
       panelStyle={styles.panel}
@@ -48,7 +106,12 @@ export function RoomDetails({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={styles.portrait}>
-            <ConversationAvatar name={page.room.label} group size={100} />
+            <ConversationAvatar
+              name={page.room.label}
+              uri={page.room.avatarUri ?? undefined}
+              group
+              size={100}
+            />
             {bots > 0 && (
               <View style={styles.agentPortrait}>
                 <ConversationAvatar name="Zoen" uri={avatarUri} size={36} />
@@ -58,6 +121,38 @@ export function RoomDetails({
           <Text accessibilityRole="header" style={styles.name}>
             {page.room.label}
           </Text>
+          {permissions.data?.mayManage && !permissions.isError && (
+            <View style={{ flexDirection: "row" }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Editar nome do grupo"
+                onPress={() => {
+                  setPanel("rename");
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text style={styles.actionText}>Editar nome</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Editar foto do grupo"
+                onPress={() => {
+                  setPanel("avatar");
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text style={styles.actionText}>Editar foto</Text>
+              </Pressable>
+            </View>
+          )}
           <Text style={styles.subtitle}>
             {people}
             {page.membersTruncated ? "+" : ""}{" "}
@@ -81,6 +176,20 @@ export function RoomDetails({
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Participantes
           </Text>
+          {permissions.data?.mayManage && !permissions.isError && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Gerenciar participantes"
+              onPress={() => {
+                setPanel("manage");
+              }}
+              style={styles.more}
+            >
+              <Text style={styles.actionText}>
+                Adicionar ou remover pessoas
+              </Text>
+            </Pressable>
+          )}
           <View style={styles.card}>
             {members.map((member, index) => (
               <Pressable
@@ -108,6 +217,14 @@ export function RoomDetails({
                       {member.name}
                     </Text>
                     {member.bot && <Text style={styles.badge}>IA</Text>}
+                    {!member.bot && !member.mine && (
+                      <PresenceIndicator
+                        state={
+                          presence?.find((person) => person.id === member.id)
+                            ?.state
+                        }
+                      />
+                    )}
                   </View>
                   <Text style={styles.memberCaption}>
                     {member.bot
@@ -140,6 +257,16 @@ export function RoomDetails({
             </Text>
           )}
         </View>
+        <RoomNotificationSettings
+          data={data}
+          cacheScope={cacheScope}
+          roomId={page.room.id}
+        />
+        <RoomPrivacySettings
+          data={data}
+          cacheScope={cacheScope}
+          roomId={page.room.id}
+        />
         <View style={styles.section}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Sobre esta conversa
@@ -174,6 +301,18 @@ export function RoomDetails({
             Uma conversa compartilhada com os membros deste espaço.
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sair do grupo"
+          onPress={() => {
+            setPanel("leave");
+          }}
+          style={styles.messageAction}
+        >
+          <Text style={[styles.actionText, { color: colors.danger }]}>
+            Sair do grupo
+          </Text>
+        </Pressable>
       </ScrollView>
     </SheetSurface>
   );

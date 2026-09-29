@@ -4,7 +4,7 @@ The product target is the complete Muse experience: its interaction model and vi
 
 The client now connects the main Muse-style surfaces to durable Zoen data. It is **not full Muse feature parity**. It must remain an opt-in route until the acceptance work below is complete.
 
-The [interface audit](interface-audit.md) records the observed screens, nested menus, platform differences and behavior gaps. Use it as the parity checklist. In particular, Muse's editorial Feed, personalized Ideas and four-tab agent-status surface are broader than the current connected sections.
+The [interface audit](interface-audit.md) records observed Muse screens and evidence gaps. The [parity roadmap](parity-roadmap.md) consolidates the latest implementation state, the user's social/creator vision and the delivery order across Muse, iMessage, WhatsApp, Slack and Ando references. Its linked implementation plans supersede stale gap descriptions in older checkpoints.
 
 The shared settings panel now uses the reference row order and a rounded compact sheet, with a centered desktop dialog. The web adapter keeps the underlying screen mounted and connects General, Connectors, Wallet, Credential vault, Permissions, Messaging channels, Devices and Data controls to existing account operations. Vault reads use 20-item keyset pages and only return masked metadata. Devices currently lists authenticated app/browser sessions, not OS pairing. Permissions currently controls credential delegations, not all browser/network grants. Help and legal information remain basic; native mobile settings still need the shared panel adapter. This is not full settings parity.
 
@@ -85,6 +85,12 @@ pnpm package:desktop
 ```
 
 For shared-component development, run `pnpm --filter @zoen/companion-ui dev` alongside the host. Mobile exports are JavaScript bundle checks, not signed native application builds. CI builds unsigned desktop packages on macOS, Windows, and Linux without publishing. Desktop release builds need signing, notarization, update infrastructure, and a deployed `/companion` route before distribution. No deployment is performed by this change.
+
+The pinned Eve media correction also participates in the upgrade gate: its
+compiled regression must preserve memory tool discovery after an attachment,
+native approval across restart and subsequent turns. Both SDK history and turn
+input need durable media serialization. See `patches/README.md`; no second memory
+runtime or permissive JSON fallback is introduced.
 
 ## Scale target: one million accounts
 
@@ -220,3 +226,32 @@ identity; it no longer sits underneath the large avatar and duplicate full-width
 back controls. Desktop and 390 × 844 mobile Chrome checks verified navigation
 and the increased reading space. This browser evidence does not qualify native
 keyboard or physical-device behavior.
+
+## Group photo transport — 2026-09-29
+
+The shared group information sheet/modal supports an administrator choosing,
+previewing, replacing or removing its photo. The existing web/Expo attachment
+adapter supplies one JPEG, PNG, WebP or AVIF within the 3 MiB request envelope.
+The server verifies a decodable raster, caps input at 24 million pixels, applies
+EXIF orientation, center-crops to 192×192, strips metadata and encodes WebP.
+The encoded thumbnail is capped at 24 KiB; decoding has a five-second processing
+limit. HEIC and interactive crop controls are not part of this slice.
+
+Sharp 0.35.5 is the current stable direct server dependency. It replaces the
+previous transitive 0.35.4 within Next's compatible range; it does not ship in
+the React Native client. The native Matrix `m.room.avatar` state points to this
+normalized media. The group binding keeps the bounded display projection so
+authorized inbox reads do not fan out into one media request per row. Originals
+and original filenames are not uploaded to Matrix or stored in the projection.
+
+Photo writes share the membership/name lock, recheck administrative authority
+and compare the displayed revision. A native operation marker and digest allow
+an accepted write to be reconciled after a lost response without another upload.
+An upload whose response is lost before publishing room state can still leave
+an unreferenced homeserver blob; homeserver media retention remains operational
+work. Removing the photo clears the current state and projection, not historical
+Matrix state or copies already received by participants. Native external state
+writers have no compare-and-set guarantee.
+
+Reference: [Matrix room avatar](https://spec.matrix.org/latest/client-server-api/#mroomavatar),
+[Sharp input bounds](https://sharp.pixelplumbing.com/api-constructor/).

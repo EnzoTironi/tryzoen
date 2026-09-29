@@ -31,8 +31,6 @@ export default {
         "taze.config.ts",
         // Standalone real PostgreSQL check invoked by test:google-membership.
         "server/google-workspace/membership.integration.ts",
-        // Standalone real account/channel controls check invoked by test:account-channels.
-        "server/accounts/controls.integration.ts",
         // Live TG group mention e2e (manual /env.local); fixture harness is CI proof.
         "scripts/groups-live-e2e.ts",
         // Launched in a separate process before web/worker traffic is admitted.
@@ -44,6 +42,8 @@ export default {
         "react-native-svg",
         // Eve evaluates shared reaction schemas from root-authored module bundles.
         "unicode-emoji-json",
+        // Eve also resolves the shared vault schema's parser from its root bundle.
+        "credit-card-type",
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
         // Imported through the owning Tailwind stylesheet rather than TypeScript.

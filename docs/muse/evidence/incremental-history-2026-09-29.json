@@ -1,0 +1,59 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build; synthetic account and Matrix room; Chrome",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784",
+  "baseline": {
+    "durationMs": 147118,
+    "historyRequests": 1,
+    "roomSyncRequests": 16,
+    "truncated": false,
+    "hasMore": false
+  },
+  "arrival": {
+    "durationMs": 34227,
+    "historyRequests": 0,
+    "roomSyncRequests": 4,
+    "truncated": false,
+    "hasMore": false
+  },
+  "arrivalResponse": {
+    "status": "ready",
+    "reset": false,
+    "added": 1,
+    "updated": 0
+  },
+  "edit": {
+    "durationMs": 54073,
+    "historyRequests": 0,
+    "truncated": false,
+    "hasMore": false
+  },
+  "thread": {
+    "durationMs": 27065,
+    "historyRequests": 0,
+    "truncated": false,
+    "hasMore": false
+  },
+  "readingPosition": {
+    "durationMs": 25454,
+    "before": {
+      "height": 166,
+      "text": "Nota 039",
+      "top": 332
+    },
+    "after": {
+      "height": 166,
+      "text": "Nota 039",
+      "top": 332.1875
+    },
+    "historyRequests": 0,
+    "truncated": false,
+    "hasMore": false,
+    "jumpToLatestVerified": true
+  },
+  "limits": [
+    "Local functional comparison, not production capacity",
+    "Redactions, membership changes, gaps and a 200-message live head still reconcile loaded pages",
+    "Physical devices and large bursts during recovery are not qualified"
+  ]
+}

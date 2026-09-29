@@ -1,3 +1,12 @@
+import { MessageReaders } from "./readers";
+import type { roomReadReceiptSchema } from "./schema";
+import { MessageInteraction } from "../conversation/interaction";
+import { MessageDelivery } from "../conversation/delivery";
+import { AttachmentCard } from "../attachments/card";
+import { projectOutgoingRoomMessages, type RoomMessageView } from "./outgoing";
+import type { useRoomDraft } from "./draft";
+import { RoomMessageControls, RoomMessageDialog } from "./message-controls";
+import { captureMessageAnchor } from "../conversation/scroll-anchor";
 import { MessageLinks } from "../cards/link";
 import { RoomAttachment } from "./attachment";
 import type { RoomData } from "./schema";
@@ -11,29 +20,33 @@ import {
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   type ViewToken,
 } from "react-native";
-import { ArrowDown, MessageCircle } from "lucide-react-native";
+import { ArrowDown } from "lucide-react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { colors } from "../theme";
 import { ConversationAvatar } from "../chats/avatar";
-import { MessageActions } from "../message-actions";
 import { AssistantMarkdown } from "../markdown";
 import type { roomReactionSummarySchema, roomMemberSchema } from "./schema";
 import type { roomMessageSchema } from "./schema";
+
+const noOutgoing: ReturnType<typeof useRoomDraft>["outgoing"] = [];
 
 export function RoomMessages({
   data,
   roomId,
   cacheScope,
-  messages,
+  messages: confirmedMessages,
+  outgoing = noOutgoing,
+  onRetrySend,
+  onSettleSend,
   onThread,
+  onUnread,
   loading,
   error,
   onRetry,
@@ -43,10 +56,12 @@ export function RoomMessages({
   onMore,
   avatarUri,
   onCopy,
+  messageLink,
   onReply,
   onProfile,
   members,
   reactions,
+  receipts,
   onReact,
   onVisibleMessagesChange,
 }: {
@@ -54,14 +69,20 @@ export function RoomMessages({
   readonly roomId: string;
   readonly cacheScope: string;
   readonly onCopy?: (text: string) => Promise<void>;
+  readonly messageLink?: (id: string) => string;
   readonly onReply: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly members: z.infer<typeof roomMemberSchema>[];
+  readonly receipts: z.infer<typeof roomReadReceiptSchema>[];
   readonly reactions: z.infer<typeof roomReactionSummarySchema>[];
   readonly onReact: (id: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange: (ids: string[]) => void;
   readonly avatarUri?: string;
   readonly messages: z.infer<typeof roomMessageSchema>[];
+  readonly outgoing?: ReturnType<typeof useRoomDraft>["outgoing"];
+  readonly onRetrySend?: (id: string) => void;
+  readonly onSettleSend?: (ids: string[]) => void;
+  readonly onUnread?: () => void;
   readonly onThread?: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly loading: boolean;
   readonly error: boolean;
@@ -71,7 +92,28 @@ export function RoomMessages({
   readonly fetching: boolean;
   readonly onMore: () => void;
 }) {
-  const list = useRef<FlatList<z.infer<typeof roomMessageSchema>>>(null);
+  // A reviewed message belongs to the conversation, not a recycled list row.
+  const [dialog, setDialog] =
+    useState<
+      Pick<
+        ComponentProps<typeof RoomMessageDialog>,
+        "action" | "item" | "roomId" | "cacheScope"
+      >
+    >();
+  if (
+    dialog &&
+    (error || dialog.roomId !== roomId || dialog.cacheScope !== cacheScope)
+  )
+    setDialog(undefined);
+  const projected = useMemo(
+    () => projectOutgoingRoomMessages(confirmedMessages, outgoing),
+    [confirmedMessages, outgoing]
+  );
+  const messages = projected.messages;
+  useEffect(() => {
+    if (projected.settled.length) onSettleSend?.(projected.settled);
+  }, [projected, onSettleSend]);
+  const list = useRef<FlatList<RoomMessageView>>(null);
   const nearBottom = useRef(true);
   const restoreWebAnchor = useRef<(() => void) | undefined>(undefined);
   const [atHistoryEdge, setAtHistoryEdge] = useState<number>();
@@ -99,7 +141,11 @@ export function RoomMessages({
       }: {
         viewableItems: ViewToken<z.infer<typeof roomMessageSchema>>[];
       }) => {
-        visible.current(viewableItems.map(({ item }) => item.id));
+        visible.current(
+          viewableItems
+            .filter(({ item }) => !item.id.startsWith("local:"))
+            .map(({ item }) => item.id)
+        );
       }
   );
   return (
@@ -129,7 +175,11 @@ export function RoomMessages({
           setAtBottom(nearBottom.current);
           restoreWebAnchor.current = nearBottom.current
             ? undefined
-            : captureMessageAnchor(list.current);
+            : captureMessageAnchor(
+                list.current?.getScrollableNode(),
+                "room-message",
+                true
+              );
           if (nearBottom.current) setLastSeen(messages.at(-1)?.id);
         }}
         scrollEventThrottle={100}
@@ -190,17 +240,35 @@ export function RoomMessages({
               style={[styles.messageLine, item.mine && styles.outgoingLine]}
             >
               <RoomMessage
+                onAction={(action) => {
+                  setDialog({ action, item, roomId, cacheScope });
+                }}
                 data={data}
                 roomId={roomId}
                 cacheScope={cacheScope}
                 item={item}
                 onThread={onThread}
+                onUnread={onUnread}
+                onRetrySend={onRetrySend}
+                onRemoveSend={
+                  onSettleSend
+                    ? (id) => {
+                        onSettleSend([id]);
+                      }
+                    : undefined
+                }
                 avatarUri={avatarUri}
                 onCopy={onCopy}
+                messageLink={messageLink}
                 onReply={onReply}
                 onProfile={onProfile}
                 members={members}
                 onReact={onReact}
+                receipts={receipts.filter(
+                  (receipt) =>
+                    receipt.messageId === item.id &&
+                    receipt.userId !== item.senderId
+                )}
                 reaction={reactions.find(
                   (reaction) => reaction.messageId === item.id
                 )}
@@ -209,6 +277,19 @@ export function RoomMessages({
           </View>
         )}
       />
+      {dialog &&
+        !error &&
+        dialog.roomId === roomId &&
+        dialog.cacheScope === cacheScope && (
+          <RoomMessageDialog
+            {...dialog}
+            data={data}
+            onProfile={onProfile}
+            onClose={() => {
+              setDialog(undefined);
+            }}
+          />
+        )}
       <LatestMessagesButton
         visible={!atBottom && !error && messages.length > 0}
         newer={newer}
@@ -222,31 +303,6 @@ export function RoomMessages({
     </View>
   );
 }
-// React Native Web does not implement maintainVisibleContentPosition. Hold a
-// visible row when live messages or media change the inverted list's height.
-function captureMessageAnchor(
-  list: FlatList<z.infer<typeof roomMessageSchema>> | null
-) {
-  if (Platform.OS !== "web") return undefined;
-  const node: unknown = list?.getScrollableNode();
-  if (!(node instanceof HTMLElement)) return undefined;
-  const viewport = node.getBoundingClientRect();
-  const row = Array.from(
-    node.querySelectorAll('[data-testid="room-message"]')
-  ).find((item) => {
-    const bounds = item.getBoundingClientRect();
-    return bounds.bottom > viewport.top && bounds.top < viewport.bottom;
-  });
-  if (!row) return undefined;
-  const offset = row.getBoundingClientRect().top - viewport.top;
-  return () => {
-    if (!row.isConnected) return;
-    const current =
-      row.getBoundingClientRect().top - node.getBoundingClientRect().top;
-    node.scrollTop += offset - current;
-  };
-}
-
 function MessageSeparator() {
   return <View style={styles.separator} />;
 }
@@ -280,34 +336,47 @@ function LatestMessagesButton({
 }
 
 function RoomMessage({
+  onAction,
   data,
   roomId,
   cacheScope,
   item,
   onThread,
+  onUnread,
   avatarUri,
   onCopy,
+  messageLink,
   onReply,
   onProfile,
   members,
   reaction,
+  receipts,
   onReact,
+  onRetrySend,
+  onRemoveSend,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
   | "data"
   | "roomId"
   | "cacheScope"
   | "onThread"
+  | "onUnread"
+  | "onRetrySend"
   | "avatarUri"
   | "onCopy"
+  | "messageLink"
   | "onReply"
   | "onProfile"
   | "members"
   | "onReact"
+  | "receipts"
 > & {
-  readonly item: z.infer<typeof roomMessageSchema>;
+  readonly onAction: ComponentProps<typeof RoomMessageControls>["onAction"];
+  readonly onRemoveSend?: (id: string) => void;
+  readonly item: RoomMessageView;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const outgoing = item.outgoing;
   const person = members.find((member) => member.id === item.senderId) ?? {
     id: item.senderId,
     name: item.sender,
@@ -337,6 +406,7 @@ function RoomMessage({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Ver perfil de ${person.name}`}
+            disabled={!!item.outgoing}
             onPress={profile}
           >
             <Text style={styles.sender}>
@@ -344,6 +414,12 @@ function RoomMessage({
             </Text>
           </Pressable>
           {item.bot && <Text style={styles.badge}>IA</Text>}
+          {item.forwarded && !item.redacted && (
+            <Text style={styles.time}>Encaminhada</Text>
+          )}
+          {item.editId && !item.redacted && (
+            <Text style={styles.time}>Editada</Text>
+          )}
           <Text style={styles.time}>
             {item.timestamp
               ? new Date(item.timestamp).toLocaleTimeString([], {
@@ -353,80 +429,85 @@ function RoomMessage({
               : ""}
           </Text>
         </View>
-        <View
-          style={
-            item.media
-              ? { maxWidth: "100%" }
-              : [styles.bubble, item.mine && styles.blue]
-          }
-        >
-          {item.reply && (
-            <View style={styles.quote}>
-              <Text style={styles.sender}>{item.reply.sender}</Text>
-              <Text numberOfLines={3} style={styles.caption}>
-                {item.reply.text}
-              </Text>
-            </View>
-          )}
-          {item.media ? (
-            <RoomAttachment
-              item={item}
-              data={data}
-              roomId={roomId}
-              cacheScope={cacheScope}
-            />
-          ) : (
-            <AssistantMarkdown text={item.text} />
-          )}
-        </View>
-        {!item.media && <MessageLinks text={item.text} />}
-        {reaction && reaction.reactions.length > 0 && (
-          <View style={styles.reactions}>
-            {reaction.reactions
-              .filter((entry) => entry.emoji !== reaction.mine)
-              .map((entry) => (
-                <View key={entry.emoji} style={styles.reaction}>
-                  <Text
-                    accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
-                    style={styles.reactionText}
-                  >
-                    {entry.emoji} {entry.count}
-                    {reaction.complete ? "" : "+"}
-                  </Text>
-                </View>
-              ))}
-          </View>
-        )}
-        <MessageActions
-          text={item.text}
+        <MessageInteraction
           outgoing={item.mine}
-          onCopy={onCopy}
+          reaction={reaction?.mine}
+          onQuickReact={(emoji) => onReact(item.id, emoji)}
+          disabled={!!outgoing || !!item.redacted}
           onReply={() => {
             onReply(item);
           }}
-          reaction={reaction?.mine}
-          reactionCount={
-            reaction?.reactions.find((entry) => entry.emoji === reaction.mine)
-              ?.count
+          footer={
+            outgoing ? (
+              <MessageDelivery
+                onRemove={
+                  onRemoveSend
+                    ? () => {
+                        onRemoveSend(outgoing.id);
+                      }
+                    : undefined
+                }
+                status={outgoing.status}
+                queued={outgoing.queued}
+                onRetry={
+                  onRetrySend
+                    ? () => {
+                        onRetrySend(outgoing.id);
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <RoomMessageControls
+                onAction={onAction}
+                messageLink={messageLink}
+                item={item}
+                reaction={reaction}
+                onReact={onReact}
+                onReply={onReply}
+                onCopy={onCopy}
+                onThread={onThread}
+                onUnread={onUnread}
+              />
+            )
           }
-          onReact={(emoji) => onReact(item.id, emoji)}
-        />
-        {onThread && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
-            onPress={() => {
-              onThread(item);
-            }}
-            style={styles.reply}
+        >
+          <View
+            style={
+              item.media || item.outgoing?.file
+                ? { maxWidth: "100%" }
+                : [styles.bubble, item.mine && styles.blue]
+            }
           >
-            <MessageCircle size={14} color={colors.accent} />
-            <Text style={styles.replyText}>
-              {item.replies
-                ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
-                : "Responder em thread"}
-            </Text>
-          </Pressable>
+            {item.reply && (
+              <View style={styles.quote}>
+                <Text style={styles.sender}>{item.reply.sender}</Text>
+                <Text numberOfLines={3} style={styles.caption}>
+                  {item.reply.text}
+                </Text>
+              </View>
+            )}
+            {item.outgoing?.file ? (
+              <AttachmentCard file={item.outgoing.file} />
+            ) : item.media ? (
+              <RoomAttachment
+                item={item}
+                data={data}
+                roomId={roomId}
+                cacheScope={cacheScope}
+              />
+            ) : (
+              <AssistantMarkdown text={item.text} compact />
+            )}
+          </View>
+          {!item.redacted && !item.media && <MessageLinks text={item.text} />}
+        </MessageInteraction>
+        {!outgoing && !item.redacted && (
+          <MessageReaders
+            receipts={receipts}
+            members={members}
+            onProfile={onProfile}
+          />
         )}
       </View>
     </>
@@ -442,14 +523,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 4,
   },
-  reactions: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  reaction: {
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  reactionText: { fontSize: 13, color: colors.ink },
   list: { flex: 1, minHeight: 0 },
   latest: {
     position: "absolute",
@@ -468,7 +541,7 @@ const styles = StyleSheet.create({
   },
   latestText: { fontSize: 13, fontWeight: "600", color: colors.accent },
   content: { paddingHorizontal: 24, paddingVertical: 24 },
-  separator: { height: 20 },
+  separator: { height: 12 },
   messageLine: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   outgoingLine: { justifyContent: "flex-end" },
   day: {
@@ -477,7 +550,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 24,
   },
-  row: { alignItems: "flex-start", gap: 6, flexShrink: 1, maxWidth: "92%" },
+  row: { alignItems: "flex-start", gap: 4, flexShrink: 1, maxWidth: "92%" },
   outgoing: { alignItems: "flex-end" },
   attribution: { flexDirection: "row", alignItems: "center", gap: 7 },
   sender: { fontSize: 12, color: colors.muted, fontWeight: "500" },
@@ -489,23 +562,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  time: { fontSize: 10, color: colors.muted },
+  time: { fontSize: 11, color: colors.muted },
   bubble: {
     maxWidth: "100%",
     backgroundColor: "#f0f0f2",
-    borderRadius: 19,
+    borderRadius: 21,
     paddingHorizontal: 16,
-    paddingVertical: 11,
+    paddingVertical: 10,
   },
   blue: { backgroundColor: "#cfe7ff" },
   text: { color: colors.ink, fontSize: 15, lineHeight: 23 },
-  reply: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 7,
-  },
-  replyText: { color: colors.accent, fontSize: 12 },
   empty: {
     fontSize: 15,
     color: colors.muted,

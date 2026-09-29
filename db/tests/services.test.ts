@@ -226,7 +226,8 @@ describe("database services", () => {
     expect(await browsers.deleteBrowserSession(bob, "browser-alice")).toBe(
       false
     );
-    const { serializeLoginVaultPayload } = await import("@shared/vault/schema");
+    const { serializeLoginVaultPayload } =
+      await import("@zoen/companion-ui/vault");
     await browserTraces.beginBrowserTrace(alice, {
       sessionId: "worker-alice",
       startedAt: "2026-08-31T00:00:00.000Z",

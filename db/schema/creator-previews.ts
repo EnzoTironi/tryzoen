@@ -13,6 +13,8 @@ import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import type {
   creatorDraftContentSchema,
+  creatorGroundingSchema,
+  creatorGroundedAnswerSchema,
   creatorPreviewReviewContentSchema,
   creatorPreviewModelSchema,
   creatorEvaluationSnapshotSchema,
@@ -46,6 +48,12 @@ export const creatorPreviews = pgTable(
     status: text("status").notNull().default("pending"),
     invocation: text("invocation"),
     response: text("response"),
+    grounding:
+      jsonb("grounding").$type<z.infer<typeof creatorGroundingSchema>>(),
+    groundedAnswer:
+      jsonb("grounded_answer").$type<
+        z.infer<typeof creatorGroundedAnswerSchema>
+      >(),
     review:
       jsonb("review").$type<
         z.infer<typeof creatorPreviewReviewContentSchema>
@@ -70,11 +78,17 @@ export const creatorPreviews = pgTable(
   (table) => [
     check(
       "creator_previews_kind_check",
-      sql`${table.kind} IN ('answer', 'playbook') AND (${table.kind} = 'answer' OR ${table.evaluation} IS NULL)`
+      sql`${table.kind} IN ('answer', 'playbook', 'grounded-answer') AND (${table.kind} IN ('answer', 'grounded-answer') OR ${table.evaluation} IS NULL)`
     ),
     check(
       "creator_previews_pilot_check",
-      sql`${table.pilotId} IS NULL OR (${table.kind} = 'answer' AND ${table.evaluation} IS NULL)`
+      sql`${table.pilotId} IS NULL OR (${table.kind} IN ('answer', 'grounded-answer') AND ${table.evaluation} IS NULL)`
+    ),
+    check(
+      "creator_previews_grounding_check",
+      sql`(${table.kind} = 'grounded-answer') = (${table.grounding} IS NOT NULL)
+      AND (${table.grounding} IS NULL OR (jsonb_typeof(${table.grounding}) = 'object' AND octet_length(${table.grounding}::text) <= 131072 AND (${table.evaluation} IS NOT NULL OR ${table.pilotId} IS NOT NULL)))
+      AND (${table.groundedAnswer} IS NULL OR (${table.kind} = 'grounded-answer' AND ${table.status} = 'completed' AND octet_length(${table.groundedAnswer}::text) <= 65536))`
     ),
     uniqueIndex("creator_previews_source_idx").on(
       table.sourceSessionId,

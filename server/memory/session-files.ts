@@ -222,6 +222,7 @@ export async function eraseSessionSources(root: string, namespaceId: string) {
   await erasePrivateSubtree(root, [namespace, "raw", "eve"]);
   await erasePrivateSubtree(root, [namespace, "ai-memory"]);
   await erasePrivateSubtree(root, [namespace, "learned-memory"]);
+  await erasePrivateSubtree(root, [namespace, "creator-knowledge"]);
 }
 
 async function erasePrivateSubtree(root: string, components: string[]) {

@@ -83,10 +83,8 @@ export function CreatorExample({
             key={option.value}
             accessibilityRole="radio"
             accessibilityLabel={option.label}
-            accessibilityState={{
-              checked: confirmed && value.rights === option.value,
-              disabled: busy,
-            }}
+            aria-checked={confirmed && value.rights === option.value}
+            aria-disabled={busy}
             disabled={busy}
             style={styles.choice}
             onPress={() => {

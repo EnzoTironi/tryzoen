@@ -7,12 +7,23 @@ import {
 } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RoomConversation } from "./conversation";
+import { useRoomSync } from "./sync";
 import type { RoomData } from "./schema";
 
 vi.mock("react-native", () => import("react-native-web"));
 vi.mock("lucide-react-native", () => import("lucide-react"));
 vi.mock("../markdown", () => ({
   AssistantMarkdown: ({ text }: { text: string }) => <p>{text}</p>,
+}));
+vi.mock("./sync", () => ({
+  useRoomSync: vi.fn<typeof useRoomSync>(() => ({
+    userIds: [],
+    presence: [],
+    receipts: [],
+    reconnecting: false,
+    accessDenied: false,
+    change: vi.fn<(value: boolean) => void>(),
+  })),
 }));
 const mocks = vi.hoisted(() => ({
   revoked: false,
@@ -55,19 +66,51 @@ vi.mock("@tanstack/react-query", async (original) => ({
       },
     };
   },
-  useQuery: () => ({
-    data: [
-      {
-        messageId: "$message",
-        mine: null,
-        mineEventId: null,
-        complete: true,
-        reactions: [{ emoji: "❤️", count: 2 }],
-      },
-    ],
+  useQuery: (options: { queryKey: readonly string[] }) => ({
+    data:
+      options.queryKey[0] === "matrix-outbox"
+        ? []
+        : [
+            {
+              messageId: "$message",
+              mine: null,
+              mineEventId: null,
+              complete: true,
+              reactions: [{ emoji: "❤️", count: 2 }],
+            },
+          ],
   }),
 }));
 const data: RoomData = {
+  pins: vi.fn<RoomData["pins"]>(),
+  pin: vi.fn<RoomData["pin"]>(),
+  reactors: vi.fn<RoomData["reactors"]>(),
+  readReceiptPreference: vi.fn<RoomData["readReceiptPreference"]>(),
+  setReadReceiptPreference: vi.fn<RoomData["setReadReceiptPreference"]>(),
+  presencePreference: vi.fn<RoomData["presencePreference"]>(),
+  setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
+  notifications: vi.fn<RoomData["notifications"]>(),
+  rename: vi.fn<RoomData["rename"]>(),
+  setAvatar: vi.fn<RoomData["setAvatar"]>(),
+  changeMembership: vi.fn<RoomData["changeMembership"]>(),
+  setNotifications: vi.fn<RoomData["setNotifications"]>(),
+  setTyping: vi.fn<RoomData["setTyping"]>(),
+  readSync: vi.fn<RoomData["readSync"]>(),
+  search: vi.fn<RoomData["search"]>(),
+  setUnread: vi.fn<RoomData["setUnread"]>(),
+  markRead: vi.fn<RoomData["markRead"]>(),
+  savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
+  clearUnavailableSavedMessages:
+    vi.fn<RoomData["clearUnavailableSavedMessages"]>(),
+  savedMessageState: vi.fn<RoomData["savedMessageState"]>(),
+  savedMessages: vi.fn<RoomData["savedMessages"]>(),
+  saveMessage: vi.fn<RoomData["saveMessage"]>(),
+  context: vi.fn<RoomData["context"]>(),
+  editMessage: vi.fn<RoomData["editMessage"]>(),
+  reportMessage: vi.fn<RoomData["reportMessage"]>(),
+  deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
+  forwardDestinations: vi.fn<RoomData["forwardDestinations"]>(),
+  forwardMessage: vi.fn<RoomData["forwardMessage"]>(),
   people: vi.fn<RoomData["people"]>(),
   openDirect: vi.fn<RoomData["openDirect"]>(),
   directs: vi.fn<RoomData["directs"]>(),
@@ -84,6 +127,7 @@ const data: RoomData = {
 beforeEach(() => {
   mocks.revoked = false;
   mocks.direct = false;
+  vi.mocked(useRoomSync).mockClear();
 });
 function render() {
   return renderToStaticMarkup(
@@ -102,8 +146,7 @@ it("renders native reaction counts, profile links and the same message actions i
   const html = render();
   expect(html).toContain("Synthetic private text");
   expect(html).toContain("❤️: 2 reações");
-  expect(html).toContain("Copy message");
-  expect(html).toContain("Reply to message");
+  expect(html).toContain("Message actions");
   expect(html).toContain("Perfil de Member");
 });
 it("hides cached messages and reactions once room authorization fails", () => {
@@ -118,7 +161,8 @@ it("renders direct conversation identity without group or agent participation co
   mocks.direct = true;
   const html = render();
   expect(html).toContain("@ana · conversa direta");
-  expect(html).toContain("Perfil da pessoa");
+  expect(html).toContain('aria-label="Detalhes de Ana"');
+  expect(html).toContain('aria-label="Ver perfil da conversa"');
   expect(html).toContain("Mensagem direta");
   expect(html).not.toContain("Pessoas e Zoen");
   expect(html).not.toContain("Detalhes do grupo");
@@ -139,6 +183,7 @@ it("loads more than five cursor pages and stops at the end of the room history",
         roomId: "!room:test",
         label: "Test",
         kind: "group",
+        workspaceId: "workspace",
         epoch: "1",
       },
       members: [],
@@ -162,7 +207,10 @@ it("loads more than five cursor pages and stops at the end of the room history",
   expect(observer.getCurrentResult().hasNextPage).toBe(false);
   await observer.fetchNextPage({ cancelRefetch: false });
   expect(data.messages).toHaveBeenCalledTimes(7);
-  expect(data.messages).toHaveBeenLastCalledWith({ id: "binding", from: "6" });
+  expect(data.messages).toHaveBeenLastCalledWith(
+    { id: "binding", from: "6" },
+    expect.any(AbortSignal)
+  );
 });
 
 it("coalesces simultaneous history requests and stops a repeated cursor", async () => {
@@ -172,6 +220,7 @@ it("coalesces simultaneous history requests and stops a repeated cursor", async 
       roomId: "!room:test",
       label: "Test",
       kind: "group",
+      workspaceId: "workspace",
       epoch: "1",
     },
     members: [],
@@ -194,4 +243,29 @@ it("coalesces simultaneous history requests and stops a repeated cursor", async 
   ]);
   expect(data.messages).toHaveBeenCalledTimes(2);
   expect(observer.getCurrentResult().hasNextPage).toBe(false);
+});
+
+it("keeps reconnection enabled after a read failure while hiding cached private content", () => {
+  mocks.revoked = true;
+  const html = render();
+  expect(html).not.toContain("Synthetic private text");
+  expect(html).toContain("Tentar novamente");
+  expect(useRoomSync).toHaveBeenLastCalledWith(data, "viewer", "binding", true);
+});
+
+it("explains revoked access without showing history or a reconnect loop", () => {
+  vi.mocked(useRoomSync).mockReturnValueOnce({
+    userIds: [],
+    presence: [],
+    receipts: [],
+    reconnecting: false,
+    accessDenied: true,
+    change: vi.fn<(value: boolean) => void>(),
+  });
+  const html = render();
+  expect(html).toContain("Conversa indisponível");
+  expect(html).toContain("Voltar às conversas");
+  expect(html).not.toContain("Synthetic private text");
+  expect(html).not.toContain("Mensagem ao grupo");
+  expect(html).not.toContain("Reconectando");
 });

@@ -43,6 +43,7 @@ export type { DocumentHistoryData } from "./document-history";
 
 export { ConversationInbox } from "./chats/inbox";
 export { RoomConversation } from "./rooms/conversation";
+export { roomMessageUrl, parseRoomMessageLocation } from "./rooms/links";
 export { DiscoverBots } from "./creators/discover";
 
 export { ComposerReferenceProvider } from "./references/provider";
@@ -54,3 +55,12 @@ export {
   type ComposerEditorProps,
   type ComposerEditorHandle,
 } from "./composer/editor";
+export { VaultCollection } from "./vault/collection";
+export { VaultItemForm } from "./vault/form";
+export type { VaultData } from "./vault/data";
+
+export {
+  GesturePreferenceProvider,
+  MessageGestureSettings,
+  type GesturePreferenceStorage,
+} from "./conversation/gesture-preferences";

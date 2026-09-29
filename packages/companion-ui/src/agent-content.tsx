@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useState, type ComponentProps } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
 import { View } from "react-native";
@@ -8,6 +8,8 @@ import { LearnedNotes, type LearnedNotesData } from "./learned/notes";
 import { PersonalMemory } from "./personal-memory";
 import { Upcoming, type UpcomingItem } from "./upcoming";
 import { ActionButton } from "./button";
+import { AgentActivity } from "./activity/list";
+import type { ActivityData } from "./activity/schema";
 import { ConversationReview } from "./conversation-review";
 import type { AgentPanelTab } from "./agent-panel";
 import { AgentIdentity } from "./agent-identity";
@@ -15,7 +17,7 @@ import { UpcomingHistory, type ScheduleHistoryPage } from "./upcoming-history";
 import type { DocumentHistoryData } from "./document-history";
 
 /** Authenticated platform adapter. Data is already mapped for the shared views. */
-export interface AgentPanelData {
+export interface AgentPanelData extends ActivityData {
   learned: LearnedNotesData;
   documentHistory: (path: string, cacheScope: string) => DocumentHistoryData;
   identity: () => Promise<{
@@ -65,7 +67,6 @@ export function AgentPanelContent({
   client,
   onPrompt,
   onConversation,
-  renderConversations,
 }: {
   readonly tab: AgentPanelTab;
   readonly data: AgentPanelData;
@@ -73,12 +74,6 @@ export function AgentPanelContent({
   readonly client: Client;
   readonly onPrompt: (text: string) => void;
   readonly onConversation: (id: string) => void;
-  readonly renderConversations: (props: {
-    title: string;
-    intro: string;
-    allowCreate: boolean;
-    onConversation: (id?: string) => void;
-  }) => ReactNode;
 }) {
   if (tab === "identity")
     return (
@@ -106,10 +101,11 @@ export function AgentPanelContent({
     );
   return (
     <ActivitySection
-      key={tab}
+      key={`${cacheScope}:${tab}`}
       approvals={tab === "approvals"}
       client={client}
-      renderConversations={renderConversations}
+      data={data}
+      cacheScope={cacheScope}
     />
   );
 }
@@ -117,21 +113,22 @@ export function AgentPanelContent({
 function ActivitySection({
   approvals,
   client,
-  renderConversations,
+  data,
+  cacheScope,
 }: Pick<
   ComponentProps<typeof AgentPanelContent>,
-  "client" | "renderConversations"
+  "client" | "data" | "cacheScope"
 > & { readonly approvals: boolean }) {
   const [selected, setSelected] = useState<string>();
   if (!selected)
-    return renderConversations({
-      title: approvals ? "Approval history" : "Activity",
-      intro: approvals
-        ? "Choose a conversation to review its permission requests and decisions."
-        : "Open a conversation to see its tools and completed work.",
-      allowCreate: false,
-      onConversation: setSelected,
-    });
+    return (
+      <AgentActivity
+        data={data}
+        cacheScope={cacheScope}
+        approvals={approvals}
+        onSelect={setSelected}
+      />
+    );
   return (
     <>
       <ActionButton
@@ -140,9 +137,11 @@ function ActivitySection({
           setSelected(undefined);
         }}
       >
-        All conversations
+        Voltar à atividade
       </ActionButton>
       <ConversationReview
+        key={`${cacheScope}:${selected}`}
+        cacheScope={cacheScope}
         client={client}
         sessionId={selected}
         approvals={approvals}

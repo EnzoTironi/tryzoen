@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  Animated,
   ActivityIndicator,
   FlatList,
   Pressable,
@@ -7,24 +8,44 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
+  type LayoutRectangle,
 } from "react-native";
-import { Plus, X } from "lucide-react-native";
+import { ArrowLeft, Plus, X } from "lucide-react-native";
+import { useSheetDrag, SheetGrabber } from "../sheet-drag";
 import { CompanionOverlay } from "../overlay";
 import { IconButton } from "../icon-button";
 import { colors } from "../theme";
 import { quickReactions, reactionCategories } from "./catalog";
 
 export default function ReactionPicker({
+  anchor,
+  outgoing,
   selected,
   onSelect,
   onClose,
   children,
 }: {
+  readonly anchor: LayoutRectangle;
+  readonly outgoing: boolean;
   readonly selected?: string | null;
-  readonly onSelect: (emoji: string | null) => Promise<void>;
+  readonly onSelect?: (emoji: string | null) => Promise<void>;
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  const { width, height } = useWindowDimensions();
+  const compact = width < 720;
+  const drag = useSheetDrag(compact, onClose);
+  const [panelHeight, setPanelHeight] = useState(0);
+  const menuWidth = Math.min(304, width - 24);
+  const left = Math.max(
+    12,
+    Math.min(
+      width - menuWidth - 12,
+      anchor.x + anchor.width - (outgoing ? menuWidth : 28)
+    )
+  );
+  const top = Math.max(12, Math.min(anchor.y + 30, height - panelHeight - 12));
   const [expanded, setExpanded] = useState(false);
   const [category, setCategory] = useState(0);
   const [pending, setPending] = useState(false);
@@ -32,7 +53,7 @@ export default function ReactionPicker({
   const [columns, setColumns] = useState(7);
   const current = reactionCategories[category] ?? reactionCategories[0];
   const select = async (emoji: string) => {
-    if (pending) return;
+    if (pending || !onSelect) return;
     setPending(true);
     setError(false);
     try {
@@ -44,7 +65,12 @@ export default function ReactionPicker({
       setPending(false);
     }
   };
-  const renderEmoji = (entry: (typeof quickReactions)[number]) => (
+  const renderEmoji = (
+    entry: Pick<
+      (typeof reactionCategories)[number]["items"][number],
+      "emoji" | "name"
+    >
+  ) => (
     <Pressable
       key={entry.emoji}
       accessibilityRole="button"
@@ -72,31 +98,54 @@ export default function ReactionPicker({
     </Pressable>
   );
   return (
-    <CompanionOverlay title="Message reactions" onClose={onClose}>
-      <View style={styles.backdrop}>
+    <CompanionOverlay title="Ações da mensagem" onClose={onClose}>
+      <View style={[styles.backdrop, compact && styles.mobileBackdrop]}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss reactions"
+          accessible={false}
+          tabIndex={-1}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           onPress={onClose}
           style={StyleSheet.absoluteFill}
         />
-        <View
-          style={styles.panel}
+        <Animated.View
+          style={[
+            styles.panel,
+            { transform: [{ translateY: drag.offset }] },
+            compact
+              ? [styles.mobilePanel, { maxHeight: height * 0.82 }]
+              : {
+                  width: menuWidth,
+                  maxHeight: height - 24,
+                  left,
+                  top,
+                  opacity: panelHeight ? 1 : 0,
+                },
+          ]}
           onLayout={({ nativeEvent }) => {
+            setPanelHeight(nativeEvent.layout.height);
             setColumns(
               Math.max(1, Math.floor((nativeEvent.layout.width - 24) / 44))
             );
           }}
         >
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>
-              {expanded ? current.name : "Message"}
-            </Text>
-            {pending && (
-              <ActivityIndicator accessibilityLabel="Saving reaction" />
-            )}
-            <IconButton icon={X} label="Close reactions" onPress={onClose} />
-          </View>
+          {compact && <SheetGrabber handlers={drag.handlers} />}
+          {expanded && (
+            <View style={styles.header}>
+              <IconButton
+                icon={ArrowLeft}
+                label="Voltar às ações"
+                onPress={() => {
+                  setExpanded(false);
+                }}
+              />
+              <Text accessibilityRole="header" style={styles.title}>
+                {current.name}
+              </Text>
+              <IconButton icon={X} label="Fechar reações" onPress={onClose} />
+            </View>
+          )}
           {expanded ? (
             <>
               <ScrollView
@@ -110,7 +159,6 @@ export default function ReactionPicker({
                     accessibilityRole="tab"
                     accessibilityLabel={item.name}
                     aria-selected={category === index}
-                    accessibilityState={{ selected: category === index }}
                     onPress={() => {
                       setCategory(index);
                     }}
@@ -137,45 +185,67 @@ export default function ReactionPicker({
             </>
           ) : (
             <>
-              <View style={styles.quick}>
-                {quickReactions.map(renderEmoji)}
-                <IconButton
-                  icon={Plus}
-                  label="More reactions"
-                  onPress={() => {
-                    setExpanded(true);
-                  }}
-                />
-              </View>
-              <View style={styles.actions}>{children}</View>
+              {onSelect && (
+                <View style={styles.quick}>
+                  {quickReactions.slice(0, 5).map(renderEmoji)}
+                  <IconButton
+                    icon={Plus}
+                    label="Mais reações"
+                    onPress={() => {
+                      setExpanded(true);
+                    }}
+                  />
+                </View>
+              )}
+              <ScrollView
+                style={styles.actions}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
             </>
+          )}
+          {pending && (
+            <ActivityIndicator
+              accessibilityLabel="Salvando reação"
+              style={styles.pending}
+            />
           )}
           {error && (
             <Text accessibilityRole="alert" style={styles.error}>
-              Couldn’t save your reaction. Try again.
+              Não foi possível salvar a reação. Tente novamente.
             </Text>
           )}
-        </View>
+        </Animated.View>
       </View>
     </CompanionOverlay>
   );
 }
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(252,252,252,0.45)",
-    padding: 8,
+  backdrop: { flex: 1 },
+  mobileBackdrop: {
+    backgroundColor: "rgba(0,0,0,0.16)",
+    justifyContent: "flex-end",
   },
   panel: {
-    width: 340,
-    maxWidth: "100%",
-    maxHeight: "90%",
-    padding: 12,
-    borderRadius: 24,
+    position: "absolute",
+    padding: 8,
+    borderRadius: 18,
     backgroundColor: colors.canvas,
-    boxShadow: "0 8px 48px rgba(0,0,0,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    boxShadow: "0 8px 32px rgba(0,0,0,0.16)",
+  },
+  mobilePanel: {
+    position: "relative",
+    width: "100%",
+    padding: 12,
+    paddingBottom: 28,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   header: {
     flexDirection: "row",
@@ -184,16 +254,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: { flex: 1, fontSize: 16, fontWeight: "600", color: colors.ink },
-  quick: { flexDirection: "row", flexWrap: "wrap", paddingVertical: 8 },
+  quick: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 2,
+    paddingBottom: 8,
+  },
   emoji: {
     width: 44,
     height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 22,
+    borderRadius: 13,
+    backgroundColor: colors.wash,
   },
   glyph: { fontSize: 26 },
-  selected: { backgroundColor: colors.wash },
+  selected: {
+    backgroundColor: "#dceaff",
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
   pressed: { opacity: 0.6 },
   categories: { flexGrow: 0, marginVertical: 8 },
   categoryRow: { gap: 2 },
@@ -206,11 +286,7 @@ const styles = StyleSheet.create({
   },
   categoryGlyph: { fontSize: 20 },
   grid: { height: 308, flexGrow: 0, flexShrink: 1 },
-  actions: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingTop: 8,
-    gap: 2,
-  },
+  actions: { flexGrow: 0, flexShrink: 1 },
+  pending: { padding: 6 },
   error: { fontSize: 14, color: colors.danger, padding: 8 },
 });

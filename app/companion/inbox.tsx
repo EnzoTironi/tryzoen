@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { getUntypedClient } from "@trpc/client";
 import { ConversationInbox, RoomConversation } from "@zoen/companion-ui";
 import { companionChatData } from "@shared/companion/chats";
+import { companionInboxData } from "@shared/companion/inbox";
 import { companionRoomData } from "@shared/companion/rooms";
 import { api } from "@web/trpc/client";
 import { downloadConversationArchive } from "@web/files/download";
@@ -11,12 +12,16 @@ import type { ComponentProps } from "react";
 export function ConnectedInbox(
   props: Omit<
     ComponentProps<typeof ConversationInbox>,
-    "data" | "rooms" | "onExport" | "avatarUri"
+    "data" | "inbox" | "rooms" | "onExport" | "avatarUri"
   > & { readonly workspaceId: string | null }
 ) {
   const { client } = api.useUtils();
   const data = useMemo(
     () => companionChatData(getUntypedClient(client)),
+    [client]
+  );
+  const inbox = useMemo(
+    () => companionInboxData(getUntypedClient(client)),
     [client]
   );
   const rooms = useMemo(
@@ -28,6 +33,7 @@ export function ConnectedInbox(
     <ConversationInbox
       {...props}
       data={data}
+      inbox={inbox}
       rooms={rooms}
       avatarUri="/marketing/zoen-avatar.webp"
       onExport={(id) =>
@@ -54,6 +60,9 @@ export function ConnectedRoom(
       {...props}
       data={data}
       onCopyText={(text) => navigator.clipboard.writeText(text)}
+      linkOrigin={
+        typeof window === "undefined" ? undefined : window.location.origin
+      }
       avatarUri="/marketing/zoen-avatar.webp"
     />
   );

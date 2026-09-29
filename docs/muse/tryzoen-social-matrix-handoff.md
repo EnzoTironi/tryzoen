@@ -1,5 +1,15 @@
 # Social/Matrix implementation handoff
 
+The current cross-product backlog and execution order live in
+[the parity roadmap](parity-roadmap.md). This document retains the decisions and
+historical verification checkpoints behind that plan; later evidence supersedes
+older gap descriptions.
+
+On 2026-09-29 the user deferred further creator work and prioritized other product
+features. Existing interviews and pilots remain, but new acquisition, publication
+and monetization work is paused. Continue communication and personal-memory work
+with one agent and proportionate validation.
+
 Updated 2026-09-28 from the user-provided `tryzoen-social-matrix-handoff.md` and the HUMA and Tutor CoPilot PDFs. This reconciles that handoff with the running code; it does not replace Muse parity work or claim a completed social client.
 
 ## Direction and proposals
@@ -1144,3 +1154,888 @@ retained exactly the same measured vertical positions (187.5, 373.5 and 559.5px)
 The latest shortcut showed the new message. Web scroll anchoring supplies the
 behavior missing from React Native Web's maintainVisibleContentPosition; native
 uses the platform implementation. Physical-device scrolling remains unqualified.
+
+### Integrated parity checkpoint — 2026-09-28, wave 6
+
+The active delivery is PR 152 on `codex/conversation-parity`. The later verified
+slices supersede the earlier open-item list above: global activity-ordered inbox
+pagination and bounded native Matrix sync, private read markers, own-message
+editing/deletion, saved references with exact event context and participant
+profiles, plus focused-room typing are implemented. Matrix remains the source of
+message content, relations and private account data. These slices do not yet
+qualify notification counts, full gap reconciliation, offline, push, E2EE or calls.
+
+Creator teaching and evaluation use the chat workflow. Approved versions freeze
+reviewed sources and an Akita 2.4.1 corpus; private grounded evaluations preserve
+exact excerpts and reject invalid citations. A real synthetic chat test retrieved
+the fictional source, correctly abstained from inventing a novel quotation and
+saved the review separately. Grounded evaluations cannot qualify or silently
+change existing snapshot pilots. Public publishing, YouTube ingestion and
+creator-qualified grounded pilots remain open.
+
+Shared settings now work inside the Expo panel with named overlays, keyboard focus
+containment on web, channels, credential delegation and signed-in sessions. Vault
+CRUD, provider onboarding and physical-device qualification remain separate work.
+The mobile navigation remains visible; the web overlay is a modal on desktop.
+
+Wave 6 passed `pnpm check` (245 files / 1,518 tests), `pnpm build`, database
+migration validation and Expo web/iOS/Android exports. Isolated runtime coverage
+includes five Matrix and nineteen creator tests. Structural findings remain
+recorded, without suppression. See [the parity roadmap](parity-roadmap.md) for
+current acceptance criteria, evidence and the three parallel implementation lanes.
+No production database was reset and no full-parity or capacity claim is made.
+
+### Integrated parity checkpoint — 2026-09-28, wave 7
+
+The subsequent slice qualifies native Synapse notification counts on the isolated
+homeserver. Human appservice identities are nonexclusive for native push rules;
+a Synapse module blocks reserved-identity registration and interactive/SSO login.
+Bot identities remain exclusive. The application feature is off by default and
+requires a qualified deployment. Encrypted bounded cursors retain native counts,
+re-bootstrap on scope changes and hide unknown counts during failures. Browser QA
+verified incoming preview/count changes and receipt-driven clearing after the
+message was actually visible. This is not OS push, global unread-message counting,
+gap reconciliation, offline storage or E2EE.
+
+Creator qualification now records exact approved release, corpus digest,
+evaluation revision and human-reviewed grounded cases. At least one declared
+supported case and one declared insufficient-evidence case must pass; changes to
+evidence invalidate qualification. Explicitly qualified new pilots use grounded
+responses, while existing snapshot pilots keep their behavior. Revocation and
+membership are checked around execution; participant conversations remain private.
+Base private-release review/approval is also available through native chat
+questions with readable teaching, examples, provenance and review notes. Runtime
+tests cover qualified pilots; browser evidence covers synthetic base approval,
+not a real creator endorsement or marketplace publication.
+
+The web and Expo vault share bounded listing, masked details, creation and
+confirmed removal. Authorization is transactional, secret drafts never enter the
+mutation cache and cancellation/background clears sensitive drafts. Local
+validation preserves editable values; uncertain transport failures clear secrets.
+Editing, revealing and payment-provider setup remain separate work. The completed
+question-card lifecycle and rich composer clearing also work in the running UI.
+
+Wave 7 passed `pnpm check` (251 files / 1,558 tests), `pnpm build`, migration
+validation, Expo web/iOS/Android exports and the focused isolated runtime suites.
+Same-major security patch overrides leave `pnpm audit` without known advisories.
+Migration 0089 is local/test only. Nine verified screenshots and their clearly
+labelled screenshot-sequence video accompany PR 152; physical devices remain
+unqualified. Structural findings are recorded without suppression in the roadmap.
+
+### Integrated parity checkpoint — wave 8
+
+Wave 8 implements native search within one
+authorized Matrix conversation, human-reviewed creator Markdown/text uploads and
+automatic TanStack agent-history pagination. Search revalidates every hit and
+opens exact authorized context. The source hook accepts only a newly submitted
+human file for an armed, bounded intake; content/rights approval remains separate.
+Adding an evaluation case preserves omitted cases; explicit removal asks the
+human. History preserves the visible reading position while prepending and keeps
+the active Eve stream separate from immutable older pages.
+
+Browser QA verified search/context/draft preservation at desktop and mobile
+sizes, source review through the real conversation, continued memory-tool use
+after an attachment, and automatic history in both chat surfaces. Compiled
+regressions cover the two memory failures uncovered by that walkthrough: missing
+continuation IDs in native Akita ingestion and non-JSON SDK media in Eve's durable
+memory callbacks. A local runtime patch handles media in history and turn input
+without changing the strict validation of other context fields.
+
+Next operational work is fair, bounded namespace ingestion with isolated failure,
+durable retry and measured throughput. Continue with one agent as requested. The
+public-marketplace, external-source, device, offline, encryption, calling and
+capacity gates in the roadmap remain open.
+
+### Session delivery isolation — wave 9
+
+Memory archive delivery commits one authorized namespace at a time. Failed
+accounts retain exact pending sources and durable backoff; healthy accounts keep
+their acknowledgements. Bounded batches rotate waiting accounts, new capture
+cannot bypass a failed head, and concurrent workers skip locked namespaces.
+Organization membership is fenced alongside workspace access. The unchanged
+native Akita engine still verifies ingestion and immutable file replay.
+
+See the [delivery and measurement contract](file-memory.md#fair-session-delivery-and-durable-retry--2026-09-28).
+The local capacity harness uses only disposable synthetic data in the isolated
+runtime database. Minute-cadence fan-out and production-volume capacity remain
+unqualified; this delivery fix is not a million-account result.
+
+### Foreground recovery and scheduled delivery — wave 10
+
+One Eve invocation can now execute several bounded archive rounds. The validated
+concurrency override defaults to one worker; overlapping ticks share their local
+promise, while database locks isolate accounts between replicas. Failed batches
+back off and remain visible after healthy work finishes. See the
+[scheduled delivery contract](file-memory.md#bounded-scheduled-delivery).
+
+Room and thread reads now consume TanStack cancellation through the actual tRPC
+transport. Background/offline transitions cancel only that scoped conversation
+and invalidate it for authorized resume. Drafts remain editable while sending is
+paused; returning online restores sending. Browser verification covered desktop,
+mobile, separate thread drafts and a real synthetic message after reconnect.
+These are navigation drafts, not durable offline storage or a background outbox.
+
+The isolated Synapse test covers a native limited sync plus 136 ordered messages
+across two history pages and rejects subsequent reads after membership revocation.
+Large-burst scroll-position retention and efficient content deltas remain open.
+The behavior relies on the existing [Matrix history model](https://spec.matrix.org/unstable/client-server-api/#room-event-format)
+and [TanStack sequential infinite refetch](https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries);
+no duplicate message store was added. Validation: 1,603 application tests, build,
+three Expo exports and 14 focused isolated runtime tests passed. Full parity and
+million-account production capacity are still unqualified. Continue with one agent.
+
+### Credential editing and revocation — wave 11
+
+The shared vault form now handles creation and editing, with no creation-only
+alias. An explicit cancellable POST reads a selected revision into local editor
+state; decrypted payloads do not enter TanStack caches. Sensitive fields hide
+after 30 seconds; backgrounding or five minutes closes the editor. The server
+rejects stale edits, preserves item IDs and atomically replaces encrypted content
+while revoking prior grants. Grant creation and replacement share a workspace
+lock. Native payment and new-password hints avoid misclassifying card fields as
+login credentials. Authenticated tRPC responses are private and not cacheable.
+
+Delegated-secret reads now reuse the central workspace/organization/personal-owner
+membership predicate, retaining locks through decryption. Regression tests proved
+the previous stale-membership access before the fix. Full principal authentication
+still belongs to the caller; the extracted membership check is not a substitute
+for authenticating a session, channel, schedule or grant.
+
+Desktop/mobile browser checks used only synthetic credentials/cards. A preexisting
+local test item could not decrypt and was left intact; a newly created item was
+updated and read back successfully. Physical-device and payment qualification,
+step-up authentication and production capacity remain open. Continue without
+subagents as requested.
+
+Validation: 1,611 application tests, the build, three Expo exports and the complete
+isolated runtime suite (414 tests / 105 files) passed. The test database alone was
+recreated before that run. [Wave 11 visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883295480)
+contains four screenshots and a labelled screenshot-sequence video, attached
+with `gh --attach` after verifying the running build. The latest blank card form
+did not autofill site credentials; reopening the synthetic item after restart
+preserved its saved content.
+
+### Durable memory erasure — wave 12
+
+The erasure queue now acknowledges one partition per transaction and persists
+bounded exponential retry metadata on failure. Other accounts still complete;
+workers skip locked receipts. Account request locks serialize final acknowledgement
+across concurrent namespace workers. Only `file_memory` is marked erased when
+all that account's receipts are gone; historical provider obligations stay intact.
+Interrupted filesystem deletion is replayable without losing the receipt.
+
+The Eve schedule awaits up to eight batches of five each minute within a 45-second
+soft budget and shares overlapping in-process ticks. It does not abort an active
+filesystem operation. Additive migration 0092 adds retry metadata and its index.
+The new regression was reproduced against the earlier implementation; six new
+runtime cases plus existing memory/corpus tests passed (28 total).
+
+[A local query measurement](evidence/memory-erasure-query-2026-09-29.json) used a
+million delayed receipts plus one eligible receipt. One index search returned
+one row in 0.017 ms; the synthetic transaction was rolled back. This measures a
+warm queue selection only. It does not qualify filesystem throughput, placement,
+replicas or million-account operation. Checks passed with 1,614 tests and the
+build passed. Migration 0092 was applied only to the local isolated/review databases.
+The full runtime suite passed (106 files / 420 tests), as did the migration check.
+[The actual Eve cron experiment](evidence/memory-erasure-cron-2026-09-29.json)
+confirmed healthy progress, durable failure and successful retry after repairing
+a synthetic marker and restarting the app, without changing retry timestamps.
+The existing account's learned notes remained available in both browser sizes;
+[screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883517046)
+were attached with `gh --attach`. No new memory UI was introduced in wave 12.
+
+### Shared memory cards and document editor — wave 13
+
+Personal notes, learned memories and historical excerpts reuse the shared resource
+card and Markdown renderer. Private previews disable remote images; unsafe URLs
+remain non-interactive text. Existing authorization, confirmation, relationship
+and history behavior is retained.
+
+Personal notes now use the visual editor. The old plain textarea screen has been
+removed from `DocumentEditor`; non-Markdown files and a missing visual adapter
+use the existing source editor within the same shell. Save reads the current
+editor handle, validates length and closes only after successful persistence.
+
+Verified production UI at desktop and mobile viewport sizes, visual editing and
+unsaved-change discard. A real Akita query returned an earlier synthetic memory
+excerpt, then closing history restored the current note. `pnpm check` passed
+267 files / 1,624 tests, `pnpm build` passed, and Expo exported all platforms.
+This client-only change does not rerun or replace wave 12's 420 runtime checks.
+Screenshots and a labelled screenshot-sequence video were attached with `gh --attach`.
+Native-device and production-capacity qualification remain open.
+
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883699640
+
+### Reaction lifetime and visibility — wave 14
+
+Room and thread reactions now observe active/online state and local overlays.
+The hidden room timeline pauses when a narrow thread opens. Cancelled reaction
+queries propagate their AbortSignal through the shared transport. Delayed reads
+cannot start a write after the view loses ownership; already accepted writes do
+not overwrite a reopened view's cache. Retries retain the same operation ID.
+
+Five regressions were reproduced against the previous implementation. Eighteen
+focused tests and the full application check (268 files / 1,632 tests) passed,
+as did the production build and Expo exports. No server procedure or database
+changed; wave 12 remains the latest full isolated runtime qualification (420 tests).
+
+The production UI persisted a synthetic reaction across reload and shared it
+with the mobile thread, then removed it through that thread. The bottom bar
+remains visible. [Network evidence](evidence/reaction-visibility-2026-09-29.json)
+records three background-modal reaction reads in 86.2 seconds before the fix,
+zero in 51.4 seconds after it, and resumed fetching on close. Global settings
+overlays and incremental message-history sync remain separate open work.
+[Four screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883888398)
+were attached with `gh --attach`. This is not a production load qualification.
+
+### Room changes and typing share native sync — wave 15
+
+The typing-only reader is replaced by `readMatrixRoomSync` and the shared
+`useRoomSync` hook. One bounded native long-poll covers typing and timeline-change
+signals. The old read contract was removed from server, adapters and web/mobile
+callers. Publication still belongs to `setMatrixTyping` and its existing publisher.
+
+Room/thread history queries no longer refetch periodically. A change or reset
+invalidates the matching history and awaits active sequential refetch before
+acknowledging the sync cursor. If pagination is already in flight, its work is
+left intact and that sync cursor is replayed. Inactive history remains stale.
+Errors show a reconnecting notice and revalidate history authorization. Background,
+offline and disposal continue cancelling the observer.
+
+[An idle browser measurement](evidence/room-sync-2026-09-29.json) changed from five
+history reads plus five typing reads in 48.5 seconds to zero history reads plus
+four combined sync reads in 49.6 seconds. Synapse checks covered new, edited and
+redacted messages, limited timelines and revoked membership. QueryClient tests
+cover pending pagination, delayed results and failure propagation. Application
+checks passed (1,644 tests), as did build and three Expo exports.
+
+Incremental content application is still open: actual changes currently refetch
+loaded pages. This is reduced idle work, not million-user capacity qualification.
+
+A second review tab delivered a new synthetic message and thread reply without
+reloading the receiving desktop/mobile views. Three screenshots and a labelled
+screenshot sequence were [attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884262828).
+
+### Global panels suspend covered observers — wave 16
+
+The shared shell exposes content visibility to inbox and Matrix room/thread
+lifecycle owners. Settings and Agent Activity pause covered sync, reactions and
+history. Closing revalidates access and resumes; online/focus events cannot
+restart a hidden observer. Delayed responses are ignored. The composer keeps
+its draft without a misleading reconnecting hint. Eve execution and the agent
+panel's own data are not stopped.
+
+[The production-build browser observation](evidence/global-visibility-2026-09-29.json)
+measured 8 room-sync, 3 reaction and 11 inbox-sync reads behind Settings in 106.7
+seconds before the fix, and zero in 62.2 seconds afterward. Agent Activity also
+kept covered queries at zero in 76.6 seconds. Closing resumed all four query
+families including history; the inspected sync response was HTTP 200 / ready.
+A synthetic draft survived both transitions.
+
+Combined waves 15/16 validation passed: application check 268 files / 1,647 tests,
+production build, all Expo exports, and the full isolated runtime suite with
+107 files / 421 tests. Initial full runs exposed two fixture races: initial
+Matrix membership projection and repeated parked events during interview restart.
+Fixtures now await confirmed projection and the next question/completed action;
+production authorization and workflows were not weakened.
+
+Four actual screenshots and a labelled 20-second screenshot sequence were
+[attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884555065).
+Structural review reports 31 observations, 16 gating, without suppressions.
+Incremental content patching, native-device and production-capacity qualification
+remain open. Do not infer throughput or million-account readiness from idle UI.
+
+### Incremental content application — wave 17
+
+Focused native sync batches now project new events, validated edits and thread
+roots into the existing infinite caches. Batches hold at most 20 events and exact
+relationship reads run at concurrency four. Authorization is checked again after
+projection. Concurrent local writes or pagination replay the unacknowledged cursor;
+inactive queries remain stale. The 200-message live-head cap, redactions, membership
+changes and gaps use sequential history recovery without fabricating native cursors.
+
+[Browser measurements](evidence/incremental-history-2026-09-29.json) found zero
+history reads for a new arrival, an edit and a mobile thread reply. Three arrivals
+kept an older reading anchor within 0.1875 px and the new-message button reached
+the final arrival. These are synthetic functional comparisons, not load tests.
+
+Application check passed 270 files / 1,664 tests, production build and all Expo
+exports passed, and three focused isolated Synapse tests passed. The previous full
+runtime suite passed 421 tests at `86ed2531`; the next CI run repeats it. An unchanged
+QuickJS cancellation test timed out once, then its 18 focused tests and the whole
+check passed without weakening assertions. Structural review remains open with
+11 observations / six gating. Large-burst recovery, bounded total cache retention,
+physical-device qualification and production capacity remain release gates.
+
+Six screenshots and a labelled 24-second screenshot sequence were
+[attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884911784).
+
+### Compact message presentation — wave 18
+
+Shared room actions now wrap in one row, with quieter icons and 44 px action
+and thread targets. Conversation Markdown owns no duplicate outer paragraph
+padding but separates blocks; document previews keep their layout. A short
+message measures 166 → 110 px on desktop. Copy feedback, quoted reply/removal,
+persistent reaction, mobile thread navigation and visual rich-text editing were
+verified against the production build. Mobile bottom navigation remains visible.
+
+Check passed 270 files / 1,664 tests, as did build and all Expo exports. A narrow
+React Native test mock was updated to the web adapter without removing private
+image/link assertions. No server or database behavior changed. Quality delta:
+four observations, zero gating; the reported unused separator is a library callback.
+[Five screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885161314)
+were attached with `gh --attach`. [Local measurements](evidence/message-density-2026-09-29.json)
+do not qualify physical devices, enlarged text or the smaller profile-name links.
+
+### Native reaction invalidation — wave 19
+
+Room sync now includes native reaction events and returns a scoped invalidation
+signal. Reaction-only batches do not reload history. The independent 30-second
+reaction timer is removed. A pending older reaction read holds the cursor until
+fresh counts are applied; inactive query variants become stale, reset recovers
+the views, and authorization failures invalidate both history and counts.
+Cross-room native events are rejected. Removal still follows conservative
+redaction history recovery.
+
+The production-build browser comparison found five idle reaction reads / 169 s
+before versus zero / 424 s after. A second-tab addition caused one count read and
+zero history reads; removal caused one of each. Observed 448/321 ms timings
+include automation, not an SLO. [Measurements](evidence/reaction-sync-2026-09-29.json).
+Check passed 270 files / 1,669 tests; build and Expo exports passed. Three focused
+real Synapse tests cover separate-account counts/removal, access loss and prior
+message/edit/thread/gap behavior. Eight structural observations remain, including
+six churn gates; no suppressions. No database change.
+
+[Four screenshots and a 16-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822)
+were attached with `gh --attach`. Physical devices, full parity and production
+capacity remain unqualified.
+
+### Reviewed native message forwarding — wave 20
+
+Existing same-workspace DMs/groups are discoverable with authorized SQL, stable
+20-item cursor pages and literal name/username search. The shared UI requires
+selection, content review and explicit confirmation. The server rechecks both
+memberships and the reviewed revision, copies only allowed content to a native
+Matrix transaction, verifies its receipt and marks it forwarded. It strips source
+attribution, quote/thread relations and mention instructions. Forwarded content
+does not invoke the agent; file bytes remain on the existing native media owner.
+
+Production-build browser verification covered username search, draft preservation,
+text delivery, identical downloaded file and an original changed in another tab.
+The old preview blocked sending until explicit review; the updated copy arrived.
+[Measurements](evidence/message-forwarding-2026-09-29.json) and [seven screenshots plus a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885992122).
+Check passed 272 files / 1,687 tests, production build and all Expo exports passed.
+Two isolated real Synapse tests cover another member, DM isolation, revocation,
+retry, paginated destinations and file access after source redaction. All six CI
+checks on the preceding `f59d7c9a` passed. No dependency or migration was added.
+Structural review: 28 observations, nine gating; no suppressions.
+
+This is one reviewed copy at a time within a workspace. Lost acknowledgement plus
+subsequent source editing requires inspecting the destination and reviewing a new
+version; no global exactly-once claim. Physical devices, bounded total history
+retention and production-capacity qualification remain open.
+
+### Verified native removals and automatic recovery — wave 21
+
+Native redactions now read and verify the exact target, including room, event
+kind and homeserver confirmation. Reaction removals invalidate counts without
+history recovery. Loaded main-message removals patch a tombstone while retaining
+page cursors. Unknown targets, stripped edit ancestry and removed replies still
+recover history to retain valid content and thread counts. Exact reads retain
+the existing concurrency bound of four.
+
+Browser verification exposed a reconnect loop being disabled by its own history
+error. The authorized observer now keeps its backoff while private content stays
+hidden. Stopping and restarting the production server recovered the conversation
+and its draft without reload or manual retry. A second-tab message removal and
+reaction removal each caused zero history reads. Observation windows include
+automation and are not latency measurements; an invalid deletion baseline was
+discarded. [Measurements](evidence/redaction-recovery-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests, production build and all Expo exports passed.
+Three isolated real Synapse tests exercise reaction/edit/reply/root removal,
+gap recovery and revocation. All six CI checks on `b6b31ea1` passed. No dependency
+or migration was added. Structural review: seven observations / one churn gate,
+without suppressions; the local classifier has complexity 24. Six actual captures
+and a labelled 24-second screenshot sequence were [attached via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5886337421).
+Bounded total history, large bursts, physical devices, full parity and production
+capacity remain open.
+
+### Per-person native conversation mute — wave 22
+
+Group details and direct-conversation profiles now expose the same notification
+control in desktop modals and mobile sheets. It mutes new alerts, including
+explicit mentions, until reactivated. Messages remain available. Loading and
+save failures are visible; an uncertain save requires a fresh read before editing.
+
+`server/matrix/notifications.ts` owns an exact-room, per-person native override
+rule with empty actions. The native Matrix rule is the authority; no duplicate
+preference table was introduced. A person/room advisory transaction lock serializes
+writes, a desired boolean makes repetition safe, and access and saved state are
+verified again. The shared schema/RPC adapter serves web, Electron and Expo.
+
+The running build was checked for group mute, close/reopen persistence, reactivation
+and direct mute at desktop and 390 × 844 mobile sizes. Both synthetic preferences
+were restored. [Five screenshots and a 15-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887210251)
+were attached with `gh --attach`; this is not a continuous recording.
+[Evidence record](evidence/conversation-notifications-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests, production build and all Expo exports passed.
+One focused real PostgreSQL/Synapse test covers notification counts, explicit
+mentions, repeated writes, reactivation, person/room isolation and rejected
+unauthorized reads/writes. All six CI checks on `f45e300d` passed. No dependency
+or migration was added. Structural review: 16 observations / five gates, without
+suppression; direct RPC adapter patterns and existing size/churn remain visible.
+
+Further creator work is deferred. The bounded-history experiment is excluded
+because gap traversal and reading-position preservation need separate qualification;
+existing infinite pagination remains. This does not supply native OS push,
+offline delivery, physical-device or million-user capacity qualification.
+
+### Administrative group-name editing — wave 23
+
+Group details now offer a shared desktop modal/mobile sheet for renaming to
+administrators. Ordinary members do not see the action; the server enforces
+the existing administrative, workspace and session boundaries independently.
+Errors preserve the proposal. A stale expected name returns a conflict and
+requires explicitly loading the latest name before editing again.
+
+`server/matrix/group-name.ts` writes and verifies native `m.room.name`, then
+updates the existing SQL binding label under the membership advisory lock.
+The room ID and epoch stay unchanged. Successful repetition is safe; concurrent
+product edits are serialized. The existing native sync filter now observes
+name events and triggers authorized history recovery. Local caches patch room
+metadata while retaining messages and page cursors; no new observer or store.
+
+The running production build confirmed administrator editing, member visibility,
+remote inbox/conversation updates without reload, an unchanged unsent draft,
+and conflict recovery between two windows. The synthetic name was restored and
+the temporary draft cleared. [Five screenshots and a labelled 15-second sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887918856)
+were attached using `gh --attach`. [Evidence record](evidence/group-name-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests; production build passed. Two focused real
+PostgreSQL/Synapse tests cover native state, remote sync, retries, concurrent
+edits, failed native writes and authorization. All six checks on `a7137cef`
+passed. No dependency or migration was added. Expo exports were not repeated
+in this increment; this is not physical-device qualification. Structural review
+has 13 observations / three gates, without suppression: direct RPC wrappers
+and existing component size remain visible; the new component has a JSX caller.
+
+The native write and SQL projection are not a distributed transaction. A failure
+after the native write is visible and can require retry; there is no global
+exactly-once or external Matrix-client CAS guarantee. Additional creator work,
+full parity and production capacity remain outside this completed increment.
+
+### Workspace group participation — wave 24
+
+Shared participant management now supports leave and administrator add/re-add or
+remove of existing workspace people. Current workspace-wide discovery remains
+for people who have never left; this is not external invitations or independent
+private-group ACLs. Workspace admins cannot be removed by these controls.
+
+`server/matrix/membership.ts` owns the native and application lifecycle using the
+existing room advisory lock. The SQL projection retains departed membership;
+reads cannot auto-rejoin it. Departure denies product access before native leave
+or kick. Persisted pending/due state is reconciled by the existing Eve delivery
+schedule: ten due entries, one-minute retries, and a 30-second budget for starting
+work. Current native membership is verified; delayed callbacks cannot undo a
+newer authorized join. Initial join reuses the same bounded native state read
+instead of enumerating every joined member.
+
+Inbox, history, media, inbound sender authority and group-agent authorization
+honor departed state. A focused revoked room is excluded from inbox sync rather
+than breaking that sync; a fresh authorization denial yields an empty `denied`
+room-sync result. Stale epochs still retry rather than reporting permanent loss.
+The UI hides history/composer on denial and offers a return to conversations.
+Voluntary leave retains only the user's draft among room query caches.
+
+Check passes 272 files / 1,703 tests. Five real PostgreSQL/Synapse tests across
+three suites cover lifecycle, isolation, preserved messages, native retirement
+failure/recovery and delayed callbacks. Additive migrations 0093–0094 have been
+applied only to isolated runtime and local review databases. No dependencies were
+added. Native and SQL writes are not a distributed transaction; pending native
+retirement is visible rather than silently treated as complete. Further creator
+work remains deferred; this increment does not claim complete parity, native OS
+push, E2EE or production capacity.
+
+Wave 24 visual verification and production build passed. Administrator removal,
+re-addition with preserved history and mobile leave confirmation were checked;
+the synthetic memberships were restored. [Visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406)
+was attached with `gh --attach`. [Record](evidence/group-membership-2026-09-29.json).
+Draft preservation on leave was not separately proven visually.
+
+### Optimistic delivery and navigation caches — wave 25
+
+`conversation/outbox.ts` owns a bounded TanStack-backed local queue; native Eve
+and Matrix remain the delivery authorities. Enqueue clears the composer and
+accepts another message immediately. Errors/retry stay on the affected message;
+late responses never restore over the next draft. Matrix text/file transactions
+retain their operation IDs on retry and reconcile exact own-event transaction
+IDs, including partial media delivery. Eve correlates its public response stream's
+receipt to the local echo, never text. The live projection waits for outstanding
+receipts when the continuous stream outruns a POST acknowledgement; collection
+continues. Uncertain Eve sends require manual review/retry because public delivery
+identity/idempotency options are unavailable in the pinned SDK.
+
+The persistent companion layout owns account-scoped QueryClient lifetime; its
+workspace provider still isolates workspace changes. Providers clear on unmount,
+queued sends check cache ownership before starting, and late mutation results
+cannot recreate cleared entries. Native browser history changes section query
+parameters; session route changes retain server authorization. Live session
+history and drafts use the same cache and resume at the existing cursor. Default
+inactive retention is 30 minutes. Feed likes and native mute use serialized
+optimistic mutations. Global textfield styles include dialog portals, with quiet
+neutral focus and a forced-color fallback.
+
+The running build verified group/thread/agent bursts under 3.5-second simulated
+latency, continued typing, unique confirmations and draft retention. Cached Feed
+and chat reopened without loading screens under five-second latency. Desktop,
+390x844 mobile and modal focus were inspected; no console errors. [Five images
+and a labelled 15-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889698768) were attached with
+`gh --attach`. [Record](evidence/instant-messaging-2026-09-29.json).
+
+Check: 273 files / 1,704 tests; production build passed. Five focused real
+PostgreSQL/Synapse tests passed. Structural review records 47 observations / 28
+gates without suppression, primarily owner size/complexity/churn; the delivery
+indicator is shared. No new dependencies/migrations in this wave. Expo exports
+and physical-device testing were not repeated.
+
+The queue is memory-only, capped at 20 entries per conversation. Reload/crash
+persistence, fully offline delivery, global layout stability and production
+capacity are not supplied by this increment. Cold visits still load data.
+Creator expansion remains deferred.
+
+### Durable local drafts and outbox — wave 26
+
+This supersedes wave 25's memory-only queue limitation. `conversation/persistence.ts`
+subscribes to successful TanStack updates for four explicit local query families.
+It restores before mounting composers, persists separate outbox records, batches
+draft removal and queue admission atomically, and awaits disk commit before a
+transport starts. `session/draft.ts` shares draft ownership between new and
+existing agent conversations. Pending transport promises/options remain ephemeral.
+
+Platform adapters use `idb` 8.0.3 (MIT) and `expo-sqlite` 57.0.3 (MIT, Expo SDK 57
+bundled version). Session-scoped reads/writes are bounded to 200 records / 32 MiB;
+browser transactions maintain usage counters rather than reading payloads on each
+keystroke. Logout revokes local session scopes and deletes records atomically,
+including protection against another tab's late write. Native network state feeds
+TanStack's online manager. Unrelated server caches and credentials are excluded.
+
+Matrix recovery occurs when its conversation opens, using the original operation
+and per-file transaction IDs. It may replay an uncertain native PUT safely. Eve
+has no public equivalent idempotency key in the pinned SDK; unknown submissions
+recover as failed/reviewable, with no automatic agent replay. Receipt-bearing
+entries reconcile with native history. Removing a failed local echo does not
+redact a delivered remote event. The initial session still uses Eve's atomic
+owner-establishing create rather than speculative prewarming.
+
+Browser evidence closes an offline tab with a queued synthetic message, opens a
+fresh tab and verifies exactly one native message plus the next retained draft.
+It also verifies group reload and a new-agent draft on reload, and inspects the
+390×844 layout. Native SQLite/device execution and cold offline boot are not
+claimed. [Record](evidence/durable-messaging-2026-09-29.json).
+
+Regression coverage exercises session isolation, logout revocation, independent
+tab entries, atomic quota rejection, uncertain-agent recovery and commit failures.
+The previous CI's two Matrix sync failures expected an exception after membership
+revocation; they now assert the deliberate `denied` result with empty content.
+Corrupt/replayed cursor and unauthorized typing checks retain their rejection
+expectations. The focused real PostgreSQL/Synapse suites passed (3 tests).
+
+References: [idb](https://github.com/jakearchibald/idb),
+[Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/).
+Remaining gates include account-wide background draining, cold offline startup,
+physical-device validation, encrypted local storage, push/E2EE/calls, global cache
+retention and demonstrated production capacity. Creator expansion remains deferred.
+
+Visual evidence attached with `gh --attach`: [screenshots and screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5890406756).
+Validation: `pnpm check` (274 files / 1,710 tests), `pnpm build`, and the three
+isolated Matrix runtime tests passed. Structural review recorded 41 observations /
+10 gates without suppressions; existing owner complexity/size/churn remains visible.
+
+### Compact actions, touch gestures and native presence — wave 27
+
+`conversation/interaction.tsx` owns bubble anchoring, desktop context/keyboard
+access, touch hold and right-swipe reply through existing RN PanResponder/Animated.
+`message-actions.tsx` supplies real capabilities and grouped items; the existing
+reaction picker renders a 304 px desktop popover or compact mobile sheet. Its
+lazy fallback no longer inserts a loading row into a message. Private agent chat,
+Matrix rooms and threads share the interaction surface. Long-press release
+suppresses the compatibility click before it can land on a new sheet item.
+Reply changes focus the current composer while preserving its draft.
+
+`server/matrix/presence.ts` owns native account-data opt-in and presence writes.
+Default is off. An advisory lock serializes privacy changes/heartbeats; explicit
+opt-out is written before offline so another active client cannot republish.
+Room sync filters at most 100 authorized human participants, revalidates membership
+after the native long poll, emits only sender/state, and reuses the ephemeral
+client sync map with 30-second expiry. Background/offline/unmount clears state.
+`set_presence=offline` remains on native sync; only the consent-aware heartbeat
+publishes online. Do not replace this with typing heuristics or a SQL presence loop.
+
+`conversation/connection.tsx` adds a non-layout-shifting offline/reconnect overlay.
+Paused TanStack mutations derive queued delivery state without persisting promises
+or changing transport records. No new database table or migration is needed.
+
+Validation: check 274 files / 1,712 tests; production build; three isolated real
+PostgreSQL/Synapse suites (4 tests); Expo web/iOS/Android exports. Exports preceded
+the final web long-press click suppression; final check/build include it. Compatible
+Expo patch cohort upgraded to expo 57.0.26, constants/modules-core 57.0.20,
+document-picker 57.0.3. pnpm release-age exceptions name only these exact versions.
+
+Browser verification covered the private agent, groups, thread menus, native
+reaction selection, touch hold/release, swipe reply, focus and draft preservation.
+[Five screenshots and labelled mobile screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5891392313)
+were attached using `gh --attach`. [Record](evidence/message-interactions-2026-09-29.json).
+Structural quality reports 34 observations / 15 gates (no quality acknowledgements):
+JSX size/complexity, sync growth and repeated settings layout remain visible.
+
+Remaining: real-device gesture/accessibility qualification, media-control gesture
+policy, draggable-sheet dismissal, haptics, configurable double tap, per-message
+unread/pinning/report actions and full reactor details. Controls inside media/link
+cards keep their native interactions and expose actions through the ellipsis.
+Native push, E2EE, calls, cold offline boot, background draining and production
+capacity are still release gates. Creator expansion remains deferred.
+
+### Native message organization and Sliding Sync — wave 28
+
+- `server/matrix/reactions.ts` reads bounded annotation pages and resolves only
+  authorized member profiles; room authority is checked again before returning.
+- `server/matrix/pins.ts` owns native pins, authorization, a 50-entry limit and
+  reviewed-revision conflicts. Group writes require workspace management rights;
+  DMs honor Matrix power levels, including v12 creator authority. The advisory
+  lock serializes Zoen writes, not third-party Matrix clients.
+- `server/matrix/read-position.ts` serializes private reminders with receipts.
+  Marking unread never rewinds fully-read position; visible main-timeline reads
+  clear the marker, while threaded reads retain their own receipt scope.
+- Shared `rooms/reactors.tsx`, `rooms/pins.tsx` and the existing compact menu own
+  the UI. Mobile sheets and desktop modals reuse the shared primitives.
+- Inbox metadata now uses `sync/sliding.ts`, bounded to the authorized visible
+  head (31 rooms, one event each, 1 MiB response). Unique connection IDs avoid
+  cross-tab connection collisions. Opaque positions travel inside the existing
+  account/session-bound encrypted cursor. M_UNKNOWN_POS gets one fresh bootstrap.
+  Account data and room state are stripped to the fields needed by the UI.
+- `chats/notifications.ts` reconciles TanStack notification snapshots while
+  preserving concurrent optimistic reminders. Unread rollback changes only the
+  reminder and preserves newer native notification counters.
+
+The installed Synapse v1.160.0 advertises simplified Sliding Sync. Its filtered
+v3 sync discarded room account data, confirmed against the running server and
+its FilterCollection implementation. The new inbox endpoint requires
+`org.matrix.simplified_msc3575`; do not silently fall back to a full-account sync.
+Reference: https://github.com/matrix-org/matrix-spec-proposals/blob/main/proposals/4186-simplified-sliding-sync.md
+
+MSC4306 thread subscriptions are present but disabled in the running homeserver.
+Follow-thread notification parity remains open; do not call a bookmark a native
+subscription or present its controls as active without a tested server rollout.
+No database migration, new dependency, or production deployment in this wave.
+
+### Private message links — wave 29
+
+Shared `rooms/links.ts` owns a validated canonical web locator containing the
+room UUID, exact Matrix event and workspace. The room schema and every SQL
+projection now carry workspaceId; the real inbox integration asserts it.
+Compact message actions copy the link only for committed, non-redacted messages.
+Web and Expo supply their application origin through the existing adapters.
+
+`app/companion/connected.tsx` rejects ambiguous query parameters and opens the
+existing authorized `RoomMessageContext`, including the thread-root affordance.
+Closing removes the message parameter through native history without reloading
+or discarding the room draft. Auth callbacks retain the destination query. No
+URL provides a public capability and no new read endpoint bypasses membership.
+
+Check: 275 files / 1,721 tests, nine tasks. Build passed. Separate isolated real
+Postgres/Synapse runs cover context authorization and inbox workspace projection
+(two files / two tests). Browser desktop/mobile verified exact event targeting,
+thread root navigation, clean sidebar and retained draft; zero console errors.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892527473) includes screenshots and a labelled screenshot sequence.
+Structural delta: 23 observations / 11 gates, zero acknowledgements.
+OS-level universal/app links and private Eve message links remain open.
+
+### Message gestures — wave 30
+
+`conversation/double-tap.ts` recognizes intentional touch pairs and uses the
+existing reaction transport. `gesture-preferences.tsx` owns a device-only TanStack
+preference; platform storage adapters contain no account content. Mouse selection,
+interactive children, scrolling and long presses keep their existing semantics.
+Read coordinates from `nativeEvent.touches`, including on React Native Web.
+`sheet-drag.tsx` is shared by SheetSurface and the compact ReactionPicker. Its
+44px grabber owns the drag, leaving scrolling and document selection untouched.
+Short or cancelled drags reset; desktop dialogs are unchanged.
+
+Check passed: 277 files / 1,726 tests, nine tasks; build passed. Expo all-platform
+exports preceded the final web touch fix; browser plus final check/build cover
+that fix. Browser proved actual Matrix reactions, saved preferences, offline error
+and retry, short/complete drags, and retained drafts. Physical devices and haptics
+are not qualified. [Visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892916585).
+Structural delta: 26 observations / 10 gates, zero acknowledgements.
+
+The remote full runtime suite caught an unread-count regression: this Synapse's
+Sliding Sync returns dummy zero counters. The follow-up must source counters from
+bounded v3 sync while keeping native account-data markers. Do not suppress the
+notification integration test or treat a zero from Sliding Sync as authoritative.
+
+### Authoritative native notification counters — wave 31
+
+The wave-28 Sliding Sync migration regressed counters: Synapse 1.160.0's handler
+hardcodes zero. `sync/counters.ts` reads bounded v3 sync for authoritative push-rule
+and receipt counts. `sync/sliding.ts` joins that stream with metadata/account-data
+in parallel. Both positions travel in the same existing encrypted scope-bound
+cursor. Dummy sliding fields are discarded; each response is independently size-
+and scope-checked, and leave events win over stale joins. No local counter, room-
+by-room fan-out or account-wide sync was introduced.
+
+The full remote suite first caught an outdated equality missing markedUnread;
+fixing the expectation exposed the real zero-counter regression locally. Isolated
+notification and organization suites now pass (two files / two tests). Check:
+277 files / 1,729 tests and nine tasks passed. The initial check/build hit ENOSPC;
+only regenerable Next/Homebrew caches were removed, with user data preserved.
+Source: https://github.com/element-hq/synapse/blob/v1.160.0/synapse/handlers/sliding_sync/__init__.py
+Final production build passed after cache cleanup. This correction does not
+change the rendered UI; wave 30 visual evidence still covers those components.
+
+### Optimistic reactions — wave 32
+
+Both reaction hooks use TanStack mutations and pending mutation projections;
+confirmed query data remains untouched until the provider accepts the write.
+Mutation scopes serialize room writes across timeline/thread instances. Native
+replacement reads the latest confirmed event ID at execution time, preserving
+existing idempotent retry. Private-agent reads normalize missing reactions to
+null for the requested bounded page. Success updates loaded pages without an
+immediate redundant refetch. Shared interaction owns error display while menus
+close immediately; unsuccessful previews disappear without rewriting the cache.
+
+Check: 278 files / 1,733 tests and nine tasks; build passed. Browser desktop and
+390×844 confirmed immediate menu close/preview at 2.5-second latency, rollback
+offline, retry, retained drafts, private-agent persistence and touch reactions.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893325236).
+Structural delta: ten observations / six gates, zero acknowledgements. Reactions
+are explicitly retryable, not persisted in the message outbox. No production changes.
+
+### Native thread subscriptions — wave 33
+
+`server/matrix/thread-subscriptions.ts` owns MSC4306 GET/PUT/DELETE with provider
+capability detection, root validation, actor/room/root serialization and membership
+revalidation. The shared thread button uses TanStack pending state and confirmed
+cache; failure offers readback before another toggle. No duplicate persistence.
+The isolated server and generated configuration enable the experimental feature;
+production is unchanged. See infrastructure/matrix/README.md for compatibility
+and changed notification semantics. Room mute still overrides followed threads.
+
+Two isolated runtime tests passed (notifications and subscriptions). Full serial
+check: 279 files / 1,736 tests, nine tasks; build passed. Initial parallel checking
+hit host resource pressure; serial checking passed without altered test deadlines.
+Browser confirmed instant pending state, reload persistence and mobile unfollow.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893689261).
+Structural review: 17 observations / eight gates, no acknowledgements. Followed
+thread inbox and background push remain open; wave 39 below adds automatic following on reply.
+CI for preceding commit 757a6057 passed all six jobs before this push.
+
+### Message reports (wave 36, 2026-09-29)
+
+DM/group/thread menus now expose an explicit selected-event report with a
+reviewed reason. The native Synapse queue owns moderation; a private PostgreSQL
+admission receipt prevents duplicate provider POSTs and caps new admissions at
+ten per rolling day. Lost acknowledgements remain uncertain without automatic
+retry. Human sessions, membership and exact message revisions are checked.
+Migration 0095 is additive and was applied only to isolated/review databases.
+See `docs/operations/matrix-moderation.md` for admin review and retention limits.
+
+Real PostgreSQL/Synapse tests passed, as did the full check (280 files / 1,740
+tests, nine tasks), build and desktop/mobile browser review. Shared radio/tab
+controls now expose actual selection in React Native Web through native-supported
+ARIA aliases. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895341092.
+Blocking, appeals, staffing and review SLA remain separate release gates.
+
+### Message dialog continuity — wave 37
+
+Main room content stays mounted while a mobile thread hides it, with its
+composer/pagination inactive. Microphone capture receives the same disabled
+state. Message dialogs moved outside virtualized rows and retain the selected
+snapshot; errors or scope changes clear it. This fixes a browser-reproduced
+report draft loss across the responsive breakpoint with a thread open.
+
+Serial check (280 files / 1,740 tests), build and desktop/mobile round trip
+passed. No synthetic report submitted, no production deployment.
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895589746.
+
+### Group photos — wave 38
+
+Shared details now expose admin-only photo review/replacement/removal. The
+server normalizes accepted rasters to metadata-free 192×192 WebP (24 KiB cap),
+writes native Matrix avatar state and its bounded authorized display projection.
+Revision checks share the membership lock; the native operation marker repairs
+lost acknowledgements without duplicate publication/upload. Migration 0096 was
+applied only to isolated/review DBs. Sharp is pinned to stable 0.35.5.
+
+Real PostgreSQL/Synapse avatar integration passed, plus the full check (280 files /
+1,740 tests), build and desktop/mobile UI upload/save/reload/removal.
+Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895904261.
+Photo source files are never persisted; native historical state/media retention
+is separate from clearing the currently displayed photo. See universal-client.md.
+
+### Follow threads when replying — wave 39
+
+`server/matrix/send.ts` now owns message publication and activity projection;
+callers were moved directly without a re-export compatibility layer. A successful
+thread reply requests native MSC4306 following with its actual cause event ID.
+The subscription owner validates author/root and uses the same per-person lock
+as manual writes. Native ordering rejects a late automatic replay after an unfollow;
+a newer reply follows again, and a manual subscription remains manual.
+
+A three-second bound applies to this secondary operation. Provider unavailability
+returns a confirmed message receipt plus an unconfirmed alert setting, without
+requesting a duplicate send. The shared thread control offers explicit checking.
+TanStack refreshes native state on success and preserves newer manual cache writes
+and account teardown against late receipts. No background subscription retry is
+claimed. Unsupported homeservers keep their existing hidden control.
+
+Real PostgreSQL/Synapse acceptance covers text/file replies, isolation, duplicate
+send identity, manual precedence, unsubscribe/replay ordering, unsupported servers,
+and missing/lost acknowledgements. Full check: 280 files / 1,742 tests and nine tasks.
+Global followed-thread inbox, background push and device qualification remain open.
+
+Build and desktop/mobile browser checks passed. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896204935.
+
+### Native analytic source files — K1 initial slice / wave 40
+
+`WorkspacePathSchema` accepts `.malloy` under `knowledge/models/`, through the
+existing publisher, authorization, history, search and export. The shared Library
+has an analysis-model category and its creation prompt asks for source in that
+namespace. Existing web/Expo source editors preserve model text. No compiler,
+query engine, credentials, migration or production deployment was added.
+
+The isolated PostgreSQL/Git integration covers unchanged source content, scoped
+member reads, personal isolation, replay, stale revision, history and export.
+Multi-file proposal review, stable model identity, retained filesystem, attributed
+temporal claims and governed execution are still open in `knowledge-plan.md`.
+
+Full check passes 280 files / 1,742 tests and all nine tasks; production build
+passes. Browser verification covers category, source editing, save/reopen and
+historical preview. The source editor now contains long filenames at mobile
+width. Model execution, physical-device behavior and full K1 remain unqualified.
+Evidence attached with `gh --attach`: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896581619.
+
+### TextQL priority and one knowledge system — user clarification
+
+TextQL is now explicitly the main ontology/product reference. Reviewed its
+skills at `31123f39645d3b7872319ee8b304dae0f0f0a12f`, starter kits at
+`72c9a5df9da1e52f094a7faf80d3eb5aebbc653e` and ontology product page. No
+vendor pack or runtime was installed. `knowledge-plan.md` supersedes the earlier
+permanent Akita decision: one file-backed knowledge authority for sessions,
+claims and authored definitions, with derived search/graph projections. Akita
+is still the actual running owner in this commit; its direct replacement must
+update callers and behavior tests together. The subsequent greenfield instruction
+explicitly removes the need to convert old corpora or preserve development data.
+No new memory engine or runtime replacement happened in this slice.
+
+Next K1 work must prioritize chat-led scoped discovery, bounded routing and
+reviewable multi-file publication. Malloy is only a provisional computation
+candidate; source-file support does not determine the ontology architecture.
+
+The user confirmed on 2026-09-29 that there are no production users or production
+data. Updated root AGENTS.md to supersede the persistent-rollout assumption.
+Greenfield removal of obsolete code/schemas/APIs/configuration is authorized;
+no backward-compatibility, dual writes/reads or data backfills unless requested.
+Correctness invariants and deterministic setup remain required, and applied
+migration rewrites require resetting affected development/test databases.

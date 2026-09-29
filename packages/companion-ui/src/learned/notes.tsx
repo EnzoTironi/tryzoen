@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CompanionPage, pageStyles } from "../page";
@@ -15,8 +16,12 @@ import type {
 } from "./schema";
 import { MemoryHistory } from "./history";
 import { MemoryRelations } from "./relations";
+import { MemoryCard } from "../cards/memory";
+import { IconButton } from "../icon-button";
+import { MemoryBackup } from "./backup";
 
 export interface LearnedNotesData {
+  backup: () => Promise<void>;
   relate: (
     input: z.infer<typeof learnedMemoryRelationEditSchema>,
     operationId: string
@@ -161,14 +166,21 @@ export function LearnedNotes({
         </Text>
       )}
       {memory.data?.documents.map((note) => (
-        <View key={note.id} style={pageStyles.section}>
-          <Text selectable style={pageStyles.rowTitle}>
-            {note.text}
-          </Text>
-          {!!note.updated && (
-            <Text style={pageStyles.copy}>Updated {note.updated}</Text>
-          )}
-          <View style={styles.actions}>
+        <MemoryCard
+          key={note.id}
+          document={note}
+          action={
+            <IconButton
+              label="Edit note"
+              icon={Pencil}
+              disabled={actionsDisabled || memory.data.needsAttention}
+              onPress={() => {
+                edit(note.id, note.text);
+              }}
+            />
+          }
+        >
+          <View style={styles.noteActions}>
             <ActionButton
               quiet
               disabled={actionsDisabled || memory.data.needsAttention}
@@ -178,17 +190,9 @@ export function LearnedNotes({
             >
               {`Relationships (${note.relations.length})`}
             </ActionButton>
-            <ActionButton
-              quiet
-              disabled={actionsDisabled || memory.data.needsAttention}
-              onPress={() => {
-                edit(note.id, note.text);
-              }}
-            >
-              Edit note
-            </ActionButton>
-            <ActionButton
-              quiet
+            <IconButton
+              label="Remove note"
+              icon={Trash2}
               disabled={actionsDisabled}
               onPress={() => {
                 setRemoving({
@@ -196,16 +200,20 @@ export function LearnedNotes({
                   operationId: data.newOperationId(),
                 });
               }}
-            >
-              Remove note
-            </ActionButton>
+            />
           </View>
-        </View>
+        </MemoryCard>
       ))}
       {!memory.isError && memory.data?.documents.length === 0 && (
         <Text style={pageStyles.copy}>
           Things you ask Zoen to remember will appear here.
         </Text>
+      )}
+      {memory.data && (
+        <MemoryBackup
+          disabled={actionsDisabled || memory.data.needsAttention}
+          onBackup={data.backup}
+        />
       )}
       {!!memory.data?.documents.length && (
         <View style={pageStyles.section}>
@@ -318,6 +326,12 @@ export function LearnedNotes({
   );
 }
 const styles = StyleSheet.create({
+  noteActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",

@@ -20,10 +20,10 @@ import { acceptMatrixTransaction } from "../../server/matrix/inbound";
 import {
   createMatrixRoom,
   readMatrixMessages,
-  sendMatrixMessage,
   closeMatrixRoom,
   reconcileMatrixRooms,
 } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { matrixDeliveryActor } from "../../server/matrix/authority";
 import { pendingMatrixEvents } from "../../server/matrix/delivery";
 

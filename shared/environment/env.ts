@@ -155,6 +155,12 @@ export const env = createEnv({
       .string()
       .regex(/^(?:\/|[A-Za-z]:[\\/])/)
       .optional(),
+    ZOEN_MEMORY_INGESTION_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .default(1),
     ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
     ZOEN_ERASURE_JOURNAL_ENDPOINT: z
       .url()
@@ -172,6 +178,10 @@ export const env = createEnv({
         .transform((value) => new Secret(value))
     ),
     ZOEN_MATRIX_URL: z.url().optional(),
+    ZOEN_MATRIX_NATIVE_NOTIFICATIONS: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     ZOEN_VAULTWARDEN_URL: z
       .url()
       .refine((value) => {

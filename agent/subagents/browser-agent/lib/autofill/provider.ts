@@ -10,7 +10,7 @@ import {
   parseLoginVaultPayload,
   parsePaymentCardSecret,
   type VaultItemKind,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 import type { AutofillClaim, DetectedAutofillSurface } from "./protocol";
 import type { AutofillFillTarget, AutofillVaultAdapter } from "./service";
 

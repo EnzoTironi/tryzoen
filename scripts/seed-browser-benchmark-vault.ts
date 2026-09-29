@@ -3,7 +3,7 @@ import { replaceUserProfile } from "../db/services/user-profile";
 import { ensureScope } from "../db/services/scope";
 import { saveVaultItem } from "../db/services/vault";
 import { accessScopeForUser } from "../shared/identity/access-scope";
-import { serializePaymentCard } from "../shared/vault/schema";
+import { serializePaymentCard } from "@zoen/companion-ui/vault";
 
 const scope = accessScopeForUser("better-auth:browser-benchmark");
 await ensureScope(scope);

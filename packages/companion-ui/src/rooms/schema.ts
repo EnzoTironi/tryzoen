@@ -1,16 +1,18 @@
-import type { inlineAttachmentSchema } from "../attachments/schema";
+import { inlineAttachmentSchema } from "../attachments/schema";
 import { conversationDraftSchema } from "../session/input";
 import { z } from "zod";
 import { messageReactionSchema } from "../reactions/schema";
 
 export const roomSchema = z.object({
   id: z.string(),
+  workspaceId: z.string().min(1).max(200),
   roomId: z.string(),
   label: z.string(),
   epoch: z.string(),
   kind: z.enum(["group", "direct"]),
   username: z.string().nullable().optional(),
   avatarUri: z.string().nullable().optional(),
+  avatarRevision: z.uuid().nullable().optional(),
 });
 export const directPersonSchema = z.object({
   name: z.string(),
@@ -39,12 +41,74 @@ export const roomReadSchema = z.object({
   id: z.uuid(),
   from: z.string().min(1).max(2048).optional(),
 });
+export const roomNotificationsReadSchema = roomReadSchema.pick({ id: true });
+export const roomNotificationsSchema = z.object({ muted: z.boolean() });
+export const roomNotificationsWriteSchema = roomNotificationsReadSchema.extend({
+  muted: z.boolean(),
+});
+export const roomTypingWriteSchema = z.object({
+  id: z.uuid(),
+  typing: z.boolean(),
+});
+export const roomSyncReadSchema = z.object({
+  id: z.uuid(),
+  cursor: z.string().min(1).max(16384).optional(),
+});
 export const roomThreadSchema = roomReadSchema.extend({
   rootId: z.string().startsWith("$").max(255),
+});
+export const threadSubscriptionReadSchema = roomThreadSchema.pick({
+  id: true,
+  rootId: true,
+});
+export const threadSubscriptionWriteSchema =
+  threadSubscriptionReadSchema.extend({ following: z.boolean() });
+export const threadSubscriptionSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("unsupported") }),
+  z.object({ status: z.literal("unconfirmed") }),
+  z.object({
+    status: z.literal("ready"),
+    following: z.boolean(),
+    automatic: z.boolean(),
+  }),
+]);
+export const roomSendResultSchema = z.object({
+  event_id: roomThreadSchema.shape.rootId,
+  subscription: threadSubscriptionSchema.optional(),
 });
 export const roomCreateSchema = z.object({
   operationId: z.uuid(),
   name: z.string().trim().min(1).max(80),
+});
+export const roomRenameSchema = roomCreateSchema.pick({ name: true }).extend({
+  id: roomReadSchema.shape.id,
+  expectedName: roomCreateSchema.shape.name,
+});
+export const roomRenameResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  room: roomSchema,
+});
+export const roomAvatarFileSchema = inlineAttachmentSchema.refine((file) =>
+  ["image/jpeg", "image/png", "image/webp", "image/avif"].includes(
+    file.mediaType
+  )
+);
+export const roomAvatarWriteSchema = z.object({
+  id: roomReadSchema.shape.id,
+  operationId: z.uuid(),
+  expectedRevision: z.uuid().nullable(),
+  file: roomAvatarFileSchema.nullable(),
+});
+export const roomMembershipChangeSchema = z.discriminatedUnion("action", [
+  z.object({ id: z.uuid(), action: z.literal("leave") }),
+  z.object({
+    id: z.uuid(),
+    action: z.enum(["add", "remove"]),
+    username: directOpenSchema.shape.username,
+  }),
+]);
+export const roomMembershipResultSchema = z.object({
+  nativePending: z.boolean(),
 });
 export const roomSendSchema = z
   .object({
@@ -63,7 +127,44 @@ export const roomSendSchema = z
         files: input.files ?? [],
       }).success
   );
+export const roomDeleteSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageId: roomThreadSchema.shape.rootId,
+  operationId: z.uuid(),
+});
+export const roomReportSchema = roomDeleteSchema
+  .omit({ operationId: true })
+  .extend({
+    expectedRevision: roomThreadSchema.shape.rootId,
+    reason: z.string().trim().min(1).max(2000),
+  });
+export const roomReportResultSchema = z.object({
+  status: z.enum(["submitted", "uncertain", "limited", "changed"]),
+});
+export const roomEditSchema = roomDeleteSchema.extend({
+  text: z.string().trim().min(1).max(8000),
+  expectedRevision: roomThreadSchema.shape.rootId,
+});
+export const roomForwardSchema = roomDeleteSchema.extend({
+  destinationId: roomReadSchema.shape.id,
+  expectedRevision: roomThreadSchema.shape.rootId,
+});
+export const roomForwardDestinationsSchema = z.object({
+  id: roomReadSchema.shape.id,
+  query: z.string().trim().max(80),
+  before: z.uuid().optional(),
+});
+export const roomReadPositionSchema = z.object({
+  id: roomReadSchema.shape.id,
+  messageId: roomThreadSchema.shape.rootId,
+  rootId: roomThreadSchema.shape.rootId.optional(),
+});
 export const roomMessageSchema = z.object({
+  transactionId: z.string().max(100).optional(),
+  redacted: z.boolean().optional(),
+  forwarded: z.boolean().optional(),
+  editId: z.string().optional(),
+  editedAt: z.number().optional(),
   id: z.string(),
   media: z
     .object({
@@ -84,7 +185,55 @@ export const roomMessageSchema = z.object({
     .object({ id: z.string(), text: z.string(), sender: z.string() })
     .nullable(),
 });
+export const roomPresencePreferenceSchema = z.object({ sharing: z.boolean() });
+export const roomPresenceWriteSchema = roomReadSchema
+  .pick({ id: true })
+  .extend(roomPresencePreferenceSchema.shape);
+export const roomPresenceSchema = z.object({
+  id: z.string().max(255),
+  state: z.enum(["online", "unavailable", "offline"]),
+});
+export const readReceiptPreferenceSchema = z.object({ enabled: z.boolean() });
+export const readReceiptPreferenceWriteSchema = roomReadSchema
+  .pick({ id: true })
+  .extend(readReceiptPreferenceSchema.shape);
+export const roomReadReceiptSchema = z.object({
+  userId: z.string().max(255),
+  messageId: z.string().max(255),
+  threadId: z.string().max(255).nullable(),
+  timestamp: z.number().int().nonnegative(),
+});
+export const roomSyncPageSchema = z.object({
+  status: z.enum(["ready", "unavailable", "denied"]),
+  cursor: z.string().max(16384).nullable(),
+  timelineChanged: z.boolean(),
+  reactionsChanged: z.boolean(),
+  pinsChanged: z.boolean(),
+  reset: z.boolean(),
+  changes: z
+    .object({
+      added: z.array(roomMessageSchema).max(20),
+      updated: z.array(roomMessageSchema).max(20),
+    })
+    .nullable(),
+  userIds: z.array(z.string().max(255)).max(100),
+  presence: z.array(roomPresenceSchema).max(100),
+  receipts: z.array(roomReadReceiptSchema).max(1000),
+  expiresAt: z.number().int().nonnegative(),
+});
+export const roomEditResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  message: roomMessageSchema,
+});
+export const roomForwardResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("sent"),
+    messageId: roomThreadSchema.shape.rootId,
+  }),
+  z.object({ status: z.literal("changed"), message: roomMessageSchema }),
+]);
 export const roomMemberSchema = z.object({
+  mayRemove: z.boolean().optional(),
   id: z.string(),
   name: z.string(),
   mine: z.boolean(),
@@ -132,7 +281,144 @@ export const roomMediaReadSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
 });
 
+export const roomPinsReadSchema = roomReadSchema.pick({ id: true }).extend({
+  includeMessages: z.boolean().optional(),
+});
+export const roomPinsSchema = z.object({
+  messageIds: z.array(roomThreadSchema.shape.rootId).max(50),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+  mayManage: z.boolean(),
+  messages: z.array(roomMessageSchema).max(50),
+});
+export const roomPinWriteSchema = roomMediaReadSchema.extend({
+  pinned: z.boolean(),
+  expectedRevision: roomPinsSchema.shape.revision,
+});
+export const roomPinResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  pins: roomPinsSchema,
+});
+
+export const roomReactorsReadSchema = roomMediaReadSchema.extend({
+  cursor: z.string().min(1).max(4096).optional(),
+});
+export const roomReactorsPageSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        eventId: roomThreadSchema.shape.rootId,
+        emoji: z.string().min(1).max(32),
+        person: roomMemberSchema,
+      })
+    )
+    .max(100),
+  nextCursor: z.string().max(4096).nullable(),
+});
+
+export const roomSearchQuerySchema = z.object({
+  id: z.uuid(),
+  query: z.string().trim().min(1).max(200),
+  senderId: z.string().min(1).max(255).optional(),
+  cursor: z.string().min(1).max(16384).optional(),
+});
+export const roomSearchPageSchema = z.object({
+  items: z.array(roomMessageSchema).max(20),
+  nextCursor: z.string().max(16384).nullable(),
+});
+
+export const roomUnreadSchema = z.object({ id: z.uuid(), unread: z.boolean() });
+
 export interface RoomData {
+  readReceiptPreference: (
+    input: { id: string },
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof readReceiptPreferenceSchema>>;
+  setReadReceiptPreference: (
+    input: z.infer<typeof readReceiptPreferenceWriteSchema>
+  ) => Promise<z.infer<typeof readReceiptPreferenceSchema>>;
+  threadSubscription: (
+    input: z.infer<typeof threadSubscriptionReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof threadSubscriptionSchema>>;
+  setThreadSubscription: (
+    input: z.infer<typeof threadSubscriptionWriteSchema>
+  ) => Promise<z.infer<typeof threadSubscriptionSchema>>;
+  setUnread: (input: z.infer<typeof roomUnreadSchema>) => Promise<void>;
+  pins: (
+    input: z.infer<typeof roomPinsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomPinsSchema>>;
+  pin: (
+    input: z.infer<typeof roomPinWriteSchema>
+  ) => Promise<z.infer<typeof roomPinResultSchema>>;
+  reactors: (
+    input: z.infer<typeof roomReactorsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomReactorsPageSchema>>;
+  presencePreference: (
+    input: { id: string },
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomPresencePreferenceSchema>>;
+  setPresencePreference: (
+    input: z.infer<typeof roomPresenceWriteSchema>
+  ) => Promise<z.infer<typeof roomPresencePreferenceSchema>>;
+  changeMembership: (
+    input: z.infer<typeof roomMembershipChangeSchema>
+  ) => Promise<z.infer<typeof roomMembershipResultSchema>>;
+  rename: (
+    input: z.infer<typeof roomRenameSchema>
+  ) => Promise<z.infer<typeof roomRenameResultSchema>>;
+  setAvatar: (
+    input: z.infer<typeof roomAvatarWriteSchema>
+  ) => Promise<z.infer<typeof roomRenameResultSchema>>;
+  notifications: (
+    input: z.infer<typeof roomNotificationsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomNotificationsSchema>>;
+  setNotifications: (
+    input: z.infer<typeof roomNotificationsWriteSchema>
+  ) => Promise<z.infer<typeof roomNotificationsSchema>>;
+  search: (
+    input: z.infer<typeof roomSearchQuerySchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof roomSearchPageSchema>>;
+  setTyping: (input: z.infer<typeof roomTypingWriteSchema>) => Promise<void>;
+  readSync: (
+    input: z.infer<typeof roomSyncReadSchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof roomSyncPageSchema>>;
+  savedCleanupState: () => Promise<z.infer<typeof savedCleanupStateSchema>>;
+  clearUnavailableSavedMessages: (
+    input: z.infer<typeof savedCleanupSchema>
+  ) => Promise<z.infer<typeof saveMessageResultSchema>>;
+  savedMessageState: (
+    input: z.infer<typeof roomMediaReadSchema>
+  ) => Promise<z.infer<typeof savedMessageStateSchema>>;
+  savedMessages: (
+    input: z.infer<typeof savedMessagesQuerySchema>
+  ) => Promise<z.infer<typeof savedMessagesPageSchema>>;
+  saveMessage: (
+    input: z.infer<typeof saveMessageSchema>
+  ) => Promise<z.infer<typeof saveMessageResultSchema>>;
+  context: (
+    input: z.infer<typeof roomMediaReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomContextSchema>>;
+  editMessage: (
+    input: z.infer<typeof roomEditSchema>
+  ) => Promise<z.infer<typeof roomEditResultSchema>>;
+  markRead: (input: z.infer<typeof roomReadPositionSchema>) => Promise<void>;
+  deleteMessage: (input: z.infer<typeof roomDeleteSchema>) => Promise<void>;
+  reportMessage: (
+    input: z.infer<typeof roomReportSchema>
+  ) => Promise<z.infer<typeof roomReportResultSchema>>;
+  forwardDestinations: (
+    input: z.infer<typeof roomForwardDestinationsSchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof directListSchema>>;
+  forwardMessage: (
+    input: z.infer<typeof roomForwardSchema>
+  ) => Promise<z.infer<typeof roomForwardResultSchema>>;
   people: (
     input: z.infer<typeof directPeopleSearchSchema>
   ) => Promise<z.infer<typeof directPeopleSchema>>;
@@ -146,7 +432,8 @@ export interface RoomData {
     input: z.infer<typeof roomMediaReadSchema>
   ) => Promise<z.infer<typeof inlineAttachmentSchema>>;
   reactions: (
-    input: z.infer<typeof roomReactionsReadSchema>
+    input: z.infer<typeof roomReactionsReadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomReactionsPageSchema>>;
   react: (
     input: z.infer<typeof roomReactionWriteSchema>
@@ -157,10 +444,62 @@ export interface RoomData {
     input: z.infer<typeof roomCreateSchema>
   ) => Promise<z.infer<typeof roomSchema>>;
   messages: (
-    input: z.infer<typeof roomReadSchema>
+    input: z.infer<typeof roomReadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomPageSchema>>;
   thread: (
-    input: z.infer<typeof roomThreadSchema>
+    input: z.infer<typeof roomThreadSchema>,
+    signal?: AbortSignal
   ) => Promise<z.infer<typeof roomThreadPageSchema>>;
-  send: (input: z.infer<typeof roomSendSchema>) => Promise<void>;
+  send: (
+    input: z.infer<typeof roomSendSchema>
+  ) => Promise<z.infer<typeof roomSendResultSchema>>;
 }
+
+export const savedMessageCursorSchema = z.object({
+  revision: z.string().length(64),
+  after: z.uuid(),
+});
+export const savedMessagesQuerySchema = z.object({
+  cursor: savedMessageCursorSchema.nullish(),
+});
+export const savedMessageItemSchema = z.object({
+  key: z.uuid(),
+  reference: roomMediaReadSchema,
+  room: roomSchema.nullable(),
+  message: roomMessageSchema.nullable(),
+  savedAt: z.number().int().nonnegative(),
+});
+export const savedMessagesPageSchema = z.object({
+  revision: z.string().length(64),
+  items: z.array(savedMessageItemSchema).max(20),
+  nextCursor: savedMessageCursorSchema.nullable(),
+  reset: z.boolean(),
+});
+export const saveMessageSchema = roomMediaReadSchema.extend({
+  saved: z.boolean(),
+  expectedRevision: z.string().length(64),
+});
+export const saveMessageResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  revision: z.string().length(64),
+});
+export const roomContextSchema = z.object({
+  members: z.array(roomMemberSchema).max(100),
+  room: roomSchema,
+  target: roomMessageSchema,
+  messages: z.array(roomMessageSchema).max(41),
+  root: roomMessageSchema.nullable(),
+});
+export const savedMessageStateSchema = z.object({
+  saved: z.boolean(),
+  revision: z.string().length(64),
+});
+
+export const savedCleanupStateSchema = z.object({
+  revision: z.string().length(64),
+  count: z.number().int().min(0).max(100),
+});
+export const savedCleanupSchema = savedCleanupStateSchema.pick({
+  revision: true,
+});

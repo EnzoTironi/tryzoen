@@ -24,15 +24,10 @@ The user explicitly opens the messenger and completes the confirmed request.
 Link mode returns to `/account`; expired, conflicting and stale-session requests
 have actionable states. Ordinary sign-in keeps its original copy and flow.
 
-The focused integration check uses real PostgreSQL and Better Auth, creates
-isolated synthetic channel identities, logs in and links through the public
-Better Auth challenge endpoints, and confirms synthetic verified senders through
-the real account service. It checks initial membership, ownership, denial after
-membership removal, last-access preservation, revocation and session invalidation. It requires the
-initialized `companion_runtime_test` database and makes no provider calls:
+The isolated runtime checks use real PostgreSQL and Better Auth. `account-channel-controls.integration.ts` seeds synthetic already-linked identities and checks own-only metadata, foreign rejection, last-access preservation, unlink/session invalidation, removed-membership denial, and concurrent unlink ordering. `channel-auth.integration.ts` checks the public challenge and verified link lifecycle. They require the initialized loopback `companion_runtime_test` database and make no provider calls. The obsolete standalone harness that assumed unlinked senders could create accounts has been removed.
 
 ```sh
-TELEGRAM_BOT_ID="account-controls-$(uuidgen)" TELEGRAM_BOT_USERNAME=account_controls_test_bot pnpm test:account-channels
+pnpm test:account-channels
 ```
 
 Frontend tests render both purposes and exercise pure error presentation. They do

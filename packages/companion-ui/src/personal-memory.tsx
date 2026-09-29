@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Pencil } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { CompanionPage, pageStyles } from "./page";
 import { ActionButton } from "./button";
-import { colors } from "./theme";
 import { DocumentEditor } from "./document-editor";
+import { MemoryCard } from "./cards/memory";
+import { IconButton } from "./icon-button";
 
 export interface MemoryDocumentView {
   readonly id: string;
@@ -75,23 +77,19 @@ export function PersonalMemory({
           Personal notes
         </Text>
         {documents.map((document) => (
-          <View key={document.id} style={styles.document}>
-            <Text style={pageStyles.rowTitle}>{document.title}</Text>
-            <Text style={pageStyles.copy}>Updated {document.updated}</Text>
-            <Text selectable style={styles.note}>
-              {document.text || "No notes in this document."}
-            </Text>
-            <View style={styles.actions}>
-              <ActionButton
-                quiet
+          <MemoryCard
+            key={document.id}
+            document={document}
+            action={
+              <IconButton
+                label="Edit notes"
+                icon={Pencil}
                 onPress={() => {
                   setEditing(document);
                 }}
-              >
-                Edit notes
-              </ActionButton>
-            </View>
-          </View>
+              />
+            }
+          />
         ))}
         {!loading && !error && documents.length === 0 && (
           <Text style={pageStyles.copy}>
@@ -111,6 +109,7 @@ export function PersonalMemory({
       </Text>
       {editing && (
         <DocumentEditor
+          markdown
           title="Edit personal notes"
           label="Personal notes"
           description="Put each fact or preference on its own line. Saving replaces this document’s notes."
@@ -129,11 +128,4 @@ export function PersonalMemory({
 const styles = StyleSheet.create({
   profileRow: { paddingVertical: 10, gap: 4 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
-  document: {
-    paddingVertical: 20,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  note: { fontSize: 16, lineHeight: 25, color: colors.ink },
 });

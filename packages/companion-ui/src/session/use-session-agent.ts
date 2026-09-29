@@ -8,35 +8,62 @@ import {
   type MessageResponse,
   type MessageStreamEvent,
   type RespondTurnOptions,
-  type SendTurnOptions,
 } from "eve/client";
 import type { EveMessageData, UseEveAgentStatus } from "eve/react";
-import type { UserContent } from "ai";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSessionSubmissions, optimisticSessionMessage } from "./submissions";
 import {
-  type Dispatch,
   type RefObject,
-  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import {
-  readLatestSessionHistory,
-  readOlderSessionHistory,
-  type SessionHistoryPage,
-} from "./history";
+import { readLatestSessionHistory, type SessionHistoryPage } from "./history";
+import { useHistoryPages } from "./history-pages";
 import type { ChatAgent } from "./types";
 import { conversationStreamEvents, isTerminalSession } from "./events";
 
 const messageReducer = defaultMessageReducer();
 
-export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
-  const [history, setHistory] = useState<SessionHistoryPage>();
-  const [status, setStatus] = useState<UseEveAgentStatus>("resuming");
+export function useSessionAgent(
+  sessionId: string,
+  client: Client,
+  cacheScope: string
+): ChatAgent {
+  const queryClient = useQueryClient();
+  const historyKey = useMemo(
+    () => ["agent-live-history", cacheScope, sessionId],
+    [cacheScope, sessionId]
+  );
+  const cached = useQuery<SessionHistoryPage>({
+    queryKey: historyKey,
+    queryFn: skipToken,
+    staleTime: Infinity,
+    gcTime: 30 * 60_000,
+    structuralSharing: false,
+  });
+  const history = cached.data;
+  const publishHistory = useCallback(
+    (page: SessionHistoryPage) => {
+      if (
+        queryClient.getQueryCache().find({ queryKey: historyKey, exact: true })
+      )
+        queryClient.setQueryData(historyKey, page);
+    },
+    [historyKey, queryClient]
+  );
+  const [status, setStatus] = useState<UseEveAgentStatus>(
+    history ? "ready" : "resuming"
+  );
   const [error, setError] = useState<Error>();
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const olderPages = useHistoryPages(
+    client,
+    sessionId,
+    cacheScope,
+    history?.startIndex
+  );
   const historyRef = useRef(history);
   const operationRef = useRef<Promise<void> | undefined>(undefined);
   const responseRef = useRef<Promise<MessageResponse> | undefined>(undefined);
@@ -44,7 +71,11 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
   const streamController = useRef<AbortController | undefined>(undefined);
 
   const followSession = useCallback(
-    async (startIndex: number, signal: AbortSignal) => {
+    async (
+      startIndex: number,
+      signal: AbortSignal,
+      onPage: typeof publishHistory
+    ) => {
       const session = client.sessions.attach(sessionId, {
         streamIndex: startIndex,
       });
@@ -55,7 +86,8 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
         for await (const event of session.stream({ signal, startIndex })) {
           if (signal.aborted) return;
           nextIndex += 1;
-          appendSessionEvent(historyRef, setHistory, event, nextIndex);
+          const next = appendSessionEvent(historyRef, event, nextIndex);
+          if (next) onPage(next);
           if (isCurrentTurnBoundaryEvent(event)) {
             setStatus(
               operationRef.current ||
@@ -87,7 +119,7 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
     streamController.current?.abort();
     const controller = new AbortController();
     streamController.current = controller;
-    setStatus("resuming");
+    if (!historyRef.current) setStatus("resuming");
     setError(undefined);
     try {
       const current =
@@ -95,7 +127,7 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
         (await readLatestSessionHistory(client, sessionId, controller.signal));
       if (controller.signal.aborted) return;
       historyRef.current = current;
-      setHistory(current);
+      publishHistory(current);
       const tail = current.events.at(-1);
       setStatus(
         (tail && !isCurrentTurnBoundaryEvent(tail)) ||
@@ -103,13 +135,13 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
           ? "streaming"
           : "ready"
       );
-      void followSession(current.endIndex, controller.signal);
+      void followSession(current.endIndex, controller.signal, publishHistory);
     } catch (cause) {
       if (controller.signal.aborted) return;
       setError(toError(cause));
       setStatus("error");
     }
-  }, [client, followSession, sessionId]);
+  }, [client, followSession, sessionId, publishHistory]);
 
   useEffect(() => {
     const startup = setTimeout(() => void resume(), 0);
@@ -168,36 +200,6 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
     []
   );
 
-  const send = useCallback(
-    async <TOutput>(
-      message: string | UserContent,
-      options?: SendTurnOptions<TOutput>
-    ) => {
-      const activeOperation = operationRef.current;
-      if (activeOperation && options?.turnPolicy === "steer") {
-        if (isTerminalSession(historyRef.current?.events ?? []))
-          throw new Error("This conversation has ended. Start a new chat.");
-        const current = historyRef.current;
-        if (!current) throw new Error("The conversation is still loading.");
-        const session = client.sessions.attach(sessionId, {
-          streamIndex: current.endIndex,
-        });
-        const response = await session.send(message, options);
-        await response.result();
-        await activeOperation;
-        return;
-      }
-
-      await runOperation(async (current) => {
-        const session = client.sessions.attach(sessionId, {
-          streamIndex: current.endIndex,
-        });
-        return await session.send(message, options);
-      });
-    },
-    [client, runOperation, sessionId]
-  );
-
   const respond = useCallback(
     async <TOutput>(
       inputResponses: readonly InputResponse[],
@@ -214,44 +216,59 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
   );
 
   const loadOlder = async () => {
-    const current = historyRef.current;
-    if (!current || current.startIndex === 0 || isLoadingOlder) return;
-    setIsLoadingOlder(true);
-    try {
-      const older = await readOlderSessionHistory(
-        client,
-        sessionId,
-        current.startIndex
-      );
-      const latest = historyRef.current;
-      if (latest) {
-        const next = {
-          ...latest,
-          events: [...older.events, ...latest.events],
-          startIndex: older.startIndex,
-        };
-        historyRef.current = next;
-        setHistory(next);
-      }
-    } catch (cause) {
-      setError(toError(cause));
-    } finally {
-      setIsLoadingOlder(false);
-    }
+    const older = await olderPages.load();
+    const latest = historyRef.current;
+    if (!older || !latest || older.endIndex !== latest.startIndex) return;
+    const next = {
+      ...latest,
+      events: [...older.events, ...latest.events],
+      startIndex: older.startIndex,
+    };
+    historyRef.current = next;
+    publishHistory(next);
   };
 
   const events = useMemo(
     () => conversationStreamEvents(history?.events ?? emptyEvents),
     [history?.events]
   );
-  const data = useMemo<EveMessageData>(
-    () =>
-      events.reduce(
-        (current, event) => messageReducer.reduce(current, event),
-        messageReducer.initial()
-      ),
-    [events]
+  const submissions = useSessionSubmissions(
+    client,
+    sessionId,
+    cacheScope,
+    historyRef,
+    responseRef,
+    events
   );
+  const data = useMemo<EveMessageData>(() => {
+    const visibleEvents =
+      submissions.pendingFromIndex === undefined
+        ? events
+        : conversationStreamEvents(
+            (history?.events ?? emptyEvents).slice(
+              0,
+              Math.max(
+                0,
+                submissions.pendingFromIndex - (history?.startIndex ?? 0)
+              )
+            )
+          );
+    const projected = visibleEvents.reduce(
+      (current, event) => messageReducer.reduce(current, event),
+      messageReducer.initial()
+    );
+    const messages = [...projected.messages];
+    for (const entry of submissions.entries) {
+      if (entry.receipt) {
+        const confirmed = messageReducer.reduce(
+          messageReducer.initial(),
+          entry.receipt
+        );
+        messages.push(...confirmed.messages);
+      } else messages.push(optimisticSessionMessage(entry));
+    }
+    return { ...projected, messages };
+  }, [events, history, submissions.entries, submissions.pendingFromIndex]);
 
   return {
     cancel: async () => {
@@ -266,15 +283,28 @@ export function useSessionAgent(sessionId: string, client: Client): ChatAgent {
       }
     },
     data,
+    delivery: new Map(
+      submissions.entries.map(({ id, status: deliveryStatus, queued }) => [
+        id,
+        { status: deliveryStatus, queued },
+      ])
+    ),
     error,
     events,
     hasOlder: (history?.startIndex ?? 0) > 0,
-    isLoadingOlder,
+    isLoadingOlder: olderPages.pending,
+    olderError: olderPages.error,
     loadOlder,
     respond,
     resume,
-    send,
-    status,
+    send: submissions.send,
+    retrySend: submissions.retry,
+    removeSend: submissions.remove,
+    status:
+      submissions.entries.some((entry) => entry.status === "sending") &&
+      status === "ready"
+        ? "submitted"
+        : status,
   };
 }
 
@@ -282,12 +312,11 @@ const emptyEvents: readonly MessageStreamEvent[] = [];
 
 function appendSessionEvent(
   historyRef: RefObject<SessionHistoryPage | undefined>,
-  setHistory: Dispatch<SetStateAction<SessionHistoryPage | undefined>>,
   event: MessageStreamEvent,
   endIndex: number
 ) {
   const current = historyRef.current;
-  if (!current) return;
+  if (!current) return undefined;
   const next = {
     ...current,
     endIndex,
@@ -298,7 +327,7 @@ function appendSessionEvent(
       : [...current.events, event],
   };
   historyRef.current = next;
-  setHistory(next);
+  return next;
 }
 
 function toError(cause: unknown) {

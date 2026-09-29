@@ -15,14 +15,7 @@ import {
   Wallet,
   X,
 } from "lucide-react-native";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SheetSurface } from "./sheet";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
@@ -76,7 +69,6 @@ export function SettingsPanel({
   readonly children?: ReactNode;
   readonly translate?: (text: string) => string;
 }) {
-  const compact = useWindowDimensions().width < 720;
   const title = translate(
     pages.find((item) => item.id === page)?.label ?? "Settings"
   );
@@ -86,7 +78,6 @@ export function SettingsPanel({
       onClose={onClose}
       maxWidth={560}
       panelStyle={styles.panel}
-      dismissLabel={translate("Close settings")}
     >
       <View style={styles.header}>
         {page && (
@@ -99,13 +90,11 @@ export function SettingsPanel({
         <Text accessibilityRole="header" style={styles.title}>
           {title}
         </Text>
-        {(!compact || page) && (
-          <IconButton
-            label={translate("Close settings")}
-            icon={X}
-            onPress={onClose}
-          />
-        )}
+        <IconButton
+          label={translate("Close settings")}
+          icon={X}
+          onPress={onClose}
+        />
       </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -146,7 +135,7 @@ export function SettingsPanel({
             <View style={styles.divider} />
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: signingOut }}
+              aria-disabled={signingOut}
               disabled={signingOut}
               onPress={onSignOut}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}

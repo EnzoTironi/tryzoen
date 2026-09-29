@@ -12,17 +12,22 @@ import {
 import { companionAgentData } from "@shared/companion/agent-data";
 import { api } from "@web/trpc/client";
 import { browserSessionClient } from "@web/eve/client";
-import { ConnectedSearch } from "./search";
+import { downloadMemoryBackup } from "@web/files/download";
 
 function useAgentData() {
   const { client } = api.useUtils();
   const params = useSearchParams();
+  const space = params.get("space");
   const data = useMemo(
     () =>
-      companionAgentData(getUntypedClient(client), () => crypto.randomUUID()),
-    [client]
+      companionAgentData(
+        getUntypedClient(client),
+        () => crypto.randomUUID(),
+        () => downloadMemoryBackup(window.location.origin, space)
+      ),
+    [client, space]
   );
-  return { data, cacheScope: params.get("space") ?? "personal" };
+  return { data, cacheScope: space ?? "personal" };
 }
 export function ConnectedAgentName() {
   return <AgentName {...useAgentData()} />;
@@ -43,6 +48,7 @@ export function ConnectedAgentHeader({
   );
 }
 export function ConnectedAgentPanel(props: {
+  readonly cacheScope: string;
   readonly tab: AgentPanelTab;
   readonly onPrompt: (text: string) => void;
   readonly onConversation: (id: string) => void;
@@ -50,10 +56,9 @@ export function ConnectedAgentPanel(props: {
   const connection = useAgentData();
   return (
     <AgentPanelContent
-      {...props}
       {...connection}
+      {...props}
       client={browserSessionClient}
-      renderConversations={(options) => <ConnectedSearch {...options} />}
     />
   );
 }

@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { colors } from "../theme";
 
@@ -11,6 +17,7 @@ export function ResourceCard({
   action,
   children,
   tint = colors.accent,
+  style,
 }: {
   title: string;
   detail?: string;
@@ -18,9 +25,10 @@ export function ResourceCard({
   action?: ReactNode;
   children?: ReactNode;
   tint?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, style]}>
       <View style={styles.row}>
         <View style={[styles.tile, { backgroundColor: tint }]}>
           <Icon size={27} color="#fff" strokeWidth={1.6} />

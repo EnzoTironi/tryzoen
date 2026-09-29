@@ -1,0 +1,80 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build; synthetic account and Matrix room; Chrome",
+  "before": {
+    "buttons": [
+      {
+        "height": 14,
+        "label": "Ver perfil de Zoen UI Review",
+        "width": 28.65625
+      },
+      {
+        "height": 44,
+        "label": "Message actions",
+        "width": 44
+      },
+      {
+        "height": 44,
+        "label": "Reply to message",
+        "width": 44
+      },
+      {
+        "height": 44,
+        "label": "Copy message",
+        "width": 44
+      },
+      {
+        "height": 28,
+        "label": "Abrir thread de Zoen UI Review: Teste sintético: rajada incremental 3 de 3.",
+        "width": 141.7265625
+      }
+    ],
+    "height": 166
+  },
+  "after": {
+    "buttons": [
+      {
+        "height": 14,
+        "label": "Ver perfil de Zoen UI Review",
+        "width": 28.65625
+      },
+      {
+        "height": 44,
+        "label": "Message actions",
+        "width": 44
+      },
+      {
+        "height": 44,
+        "label": "Reply to message",
+        "width": 44
+      },
+      {
+        "height": 44,
+        "label": "Copy message",
+        "width": 44
+      },
+      {
+        "height": 44,
+        "label": "Abrir thread de Zoen UI Review: Teste sintético: rajada incremental 3 de 3.",
+        "width": 79.9140625
+      }
+    ],
+    "height": 110
+  },
+  "reductionPercent": 33.734939759036145,
+  "verified": [
+    "Copy feedback",
+    "Quoted reply and removal",
+    "Persisted red-heart reaction",
+    "Open thread and return on mobile",
+    "Visual editor saves bold text, separate paragraphs and bullet list",
+    "Mobile bottom navigation retained"
+  ],
+  "limits": [
+    "Viewport emulation, not a physical device",
+    "Measurements apply to the same short desktop message",
+    "Existing profile text links are smaller than the message action targets",
+    "No production load qualification"
+  ],
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885161314"
+}

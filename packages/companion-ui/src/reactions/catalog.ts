@@ -73,10 +73,4 @@ export const reactionCategories = [
     ),
   },
 ] as const;
-export const quickReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"].map(
-  (value) => {
-    const entry = emoji.find((item) => item.emoji === value);
-    if (!entry) throw new Error(`Missing quick reaction: ${value}`);
-    return entry;
-  }
-);
+export { quickReactions } from "./quick";

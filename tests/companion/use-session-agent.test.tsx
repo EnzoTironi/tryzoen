@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Client,
   type MessageStreamEvent,
@@ -21,12 +22,21 @@ const mocks = vi.hoisted(() => ({
       message: unknown,
       options: unknown
     ) => Promise<{
+      [Symbol.asyncIterator]: () => AsyncGenerator<MessageStreamEvent>;
       result: () => Promise<void>;
       cancel: () => Promise<void>;
     }>
   >(),
   stream:
     vi.fn<(options: StreamOptions) => AsyncIterable<MessageStreamEvent>>(),
+}));
+
+vi.mock("../../packages/companion-ui/src/session/history-pages", () => ({
+  useHistoryPages: () => ({
+    pending: false,
+    error: undefined,
+    load: async () => undefined,
+  }),
 }));
 
 vi.mock("react", async (importOriginal) => ({
@@ -53,7 +63,9 @@ vi.mock("eve/client", async (importOriginal) => ({
 
 import { useSessionAgent } from "../../packages/companion-ui/src/session/use-session-agent";
 
+let queryClient: QueryClient;
 beforeEach(() => {
+  queryClient = new QueryClient();
   mocks.agent = undefined;
   mocks.effects.length = 0;
   mocks.history.mockReset();
@@ -61,6 +73,10 @@ beforeEach(() => {
   mocks.cancel.mockReset();
   mocks.cancelResponse.mockReset();
   mocks.send.mockReset().mockResolvedValue({
+    [Symbol.asyncIterator]: async function* () {
+      yield receipt("default");
+      yield waiting;
+    },
     result: async () => undefined,
     cancel: mocks.cancelResponse,
   });
@@ -86,7 +102,11 @@ async function* idleStream(
 }
 
 function Probe() {
-  const agent = useSessionAgent("conversation", new Client({ host: "" }));
+  const agent = useSessionAgent(
+    "conversation",
+    new Client({ host: "" }),
+    "account:session"
+  );
   useEffect(() => {
     mocks.agent = agent;
   }, [agent]);
@@ -103,7 +123,11 @@ it("reloads failed initial history before accepting another message", async () =
   mocks.history
     .mockRejectedValueOnce(new Error("Temporary connection failure"))
     .mockResolvedValueOnce({ events: [waiting], startIndex: 0, endIndex: 1 });
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
     expect(mocks.history).toHaveBeenCalledTimes(1);
@@ -111,10 +135,11 @@ it("reloads failed initial history before accepting another message", async () =
   await mocks.agent?.resume();
   expect(mocks.history).toHaveBeenCalledTimes(2);
   await mocks.agent?.send("Continue this conversation");
-  expect(mocks.send).toHaveBeenCalledWith(
-    "Continue this conversation",
-    undefined
-  );
+  await vi.waitFor(() => {
+    expect(mocks.send).toHaveBeenCalledWith("Continue this conversation", {
+      turnPolicy: "steer",
+    });
+  });
   for (const cleanup of cleanups) cleanup?.();
 });
 
@@ -144,44 +169,155 @@ it("follows turns received after an idle boundary and detaches without cancellin
       )
     );
   });
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await observed.promise;
   await mocks.agent?.send("Reply from this tab");
   expect(mocks.stream).toHaveBeenCalledTimes(1);
-  expect(mocks.attach).toHaveBeenLastCalledWith("conversation", {
-    streamIndex: 3,
+  await vi.waitFor(() => {
+    expect(mocks.attach).toHaveBeenLastCalledWith("conversation", {
+      streamIndex: 3,
+    });
   });
   for (const cleanup of cleanups) cleanup?.();
   expect(mocks.stream.mock.calls[0]?.[0].signal?.aborted).toBe(true);
   expect(mocks.cancel).not.toHaveBeenCalled();
 });
 
-it("rejects a second ordinary submission instead of dropping its message", async () => {
+it("enqueues consecutive messages immediately while the first turn is still working", async () => {
   mocks.history.mockResolvedValue({
     events: [waiting],
     startIndex: 0,
     endIndex: 1,
   });
   const completion = Promise.withResolvers<void>();
-  mocks.send.mockResolvedValue({
-    result: () => completion.promise,
-    cancel: mocks.cancelResponse,
+  let sequence = 0;
+  mocks.send.mockImplementation(async () => {
+    const id = `send-${++sequence}`;
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield receipt(id);
+        await completion.promise;
+        yield waiting;
+      },
+      result: () => completion.promise,
+      cancel: mocks.cancelResponse,
+    };
   });
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
     expect(mocks.stream).toHaveBeenCalledTimes(1);
   });
-  const first = mocks.agent?.send("First message");
-  await expect(mocks.agent?.send("Keep this draft")).rejects.toThrow(
-    "already processing"
-  );
-  expect(mocks.send).toHaveBeenCalledTimes(1);
+  await mocks.agent?.send("Identical message");
+  await mocks.agent?.send("Identical message");
+  await vi.waitFor(() => {
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+  expect(
+    queryClient.getQueryData([
+      "agent-outbox",
+      "account:session",
+      "conversation",
+    ])
+  ).toEqual([
+    expect.objectContaining({ status: "accepted", receipt: receipt("send-1") }),
+    expect.objectContaining({ status: "accepted", receipt: receipt("send-2") }),
+  ]);
   completion.resolve();
-  await first;
   for (const cleanup of cleanups) cleanup?.();
 });
+
+it("keeps one echo per submission when live history arrives before its send receipt", async () => {
+  const initial = { events: [waiting], startIndex: 0, endIndex: 1 };
+  queryClient.setQueryData(
+    ["agent-live-history", "account:session", "conversation"],
+    initial
+  );
+  mocks.history.mockResolvedValue(initial);
+  const acknowledged = Promise.withResolvers<void>();
+  let sequence = 0;
+  mocks.send.mockImplementation(async () => {
+    const id = `received-${++sequence}`;
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        await acknowledged.promise;
+        yield receipt(id);
+        yield waiting;
+      },
+      result: async () => undefined,
+      cancel: mocks.cancelResponse,
+    };
+  });
+  const render = () => {
+    renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <Probe />
+      </QueryClientProvider>
+    );
+    mocks.effects.at(-1)?.();
+    return mocks.agent?.data.messages;
+  };
+  render();
+  await mocks.agent?.send("Identical message");
+  await mocks.agent?.send("Identical message");
+  queryClient.setQueryData(
+    ["agent-live-history", "account:session", "conversation"],
+    {
+      events: [waiting, receipt("received-1")],
+      startIndex: 0,
+      endIndex: 2,
+    }
+  );
+  expect(render()).toHaveLength(2);
+  expect(
+    mocks.agent?.data.messages.every((message) => message.metadata?.optimistic)
+  ).toBe(true);
+  acknowledged.resolve();
+  await vi.waitFor(() => {
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+  await vi.waitFor(() => {
+    expect(
+      queryClient.getQueryData([
+        "agent-outbox",
+        "account:session",
+        "conversation",
+      ])
+    ).toEqual([
+      expect.objectContaining({ status: "accepted" }),
+      expect.objectContaining({ status: "accepted" }),
+    ]);
+  });
+  queryClient.setQueryData(
+    ["agent-live-history", "account:session", "conversation"],
+    {
+      events: [waiting, receipt("received-1"), receipt("received-2")],
+      startIndex: 0,
+      endIndex: 3,
+    }
+  );
+  expect(render()).toHaveLength(2);
+  expect(
+    mocks.agent?.data.messages.some((message) => message.metadata?.optimistic)
+  ).toBe(false);
+});
+
+function receipt(id: string): MessageStreamEvent {
+  return {
+    type: "message.received",
+    data: { message: "Identical message", sequence: 1, turnId: id },
+    meta: { id, at: "2026-09-29T12:00:00.000Z" },
+  };
+}
 
 it("releases a stopped turn at its native boundary and accepts the next message", async () => {
   mocks.history.mockResolvedValue({
@@ -194,7 +330,15 @@ it("releases a stopped turn at its native boundary and accepts the next message"
   const completion = Promise.withResolvers<void>();
   mocks.send.mockImplementationOnce(async () => {
     started.resolve();
-    return { result: () => completion.promise, cancel: mocks.cancelResponse };
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield receipt("long-message");
+        await completion.promise;
+        yield waiting;
+      },
+      result: () => completion.promise,
+      cancel: mocks.cancelResponse,
+    };
   });
   mocks.cancelResponse.mockImplementation(async () => {
     stopped.resolve();
@@ -216,7 +360,11 @@ it("releases a stopped turn at its native boundary and accepts the next message"
     completion.resolve();
     yield* idleStream([], signal);
   });
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
     expect(mocks.stream).toHaveBeenCalledTimes(1);
@@ -231,9 +379,12 @@ it("releases a stopped turn at its native boundary and accepts the next message"
   expect(mocks.stream.mock.calls[0]?.[0].signal?.aborted).toBe(false);
 
   await mocks.agent?.send("Continue with a different request");
+  await vi.waitFor(() => {
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
   expect(mocks.send).toHaveBeenLastCalledWith(
     "Continue with a different request",
-    undefined
+    { turnPolicy: "steer" }
   );
   expect(mocks.attach).toHaveBeenLastCalledWith("conversation", {
     streamIndex: 4,
@@ -252,7 +403,11 @@ it("waits for an early submission response and cancels only its exact turn", asy
     Promise.withResolvers<Awaited<ReturnType<typeof mocks.send>>>();
   const completion = Promise.withResolvers<void>();
   mocks.send.mockReturnValueOnce(accepted.promise);
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
     expect(mocks.stream).toHaveBeenCalledTimes(1);
@@ -263,6 +418,11 @@ it("waits for an early submission response and cancels only its exact turn", asy
   expect(mocks.cancel).not.toHaveBeenCalled();
   expect(mocks.cancelResponse).not.toHaveBeenCalled();
   accepted.resolve({
+    [Symbol.asyncIterator]: async function* () {
+      yield receipt("early");
+      await completion.promise;
+      yield waiting;
+    },
     result: () => completion.promise,
     cancel: mocks.cancelResponse,
   });
@@ -283,7 +443,11 @@ it("does not cancel a different turn when the pending send is rejected", async (
   const accepted =
     Promise.withResolvers<Awaited<ReturnType<typeof mocks.send>>>();
   mocks.send.mockReturnValueOnce(accepted.promise);
-  renderToStaticMarkup(<Probe />);
+  renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <Probe />
+    </QueryClientProvider>
+  );
   const cleanups = mocks.effects.map((effect) => effect());
   await vi.waitFor(() => {
     expect(mocks.stream).toHaveBeenCalledTimes(1);
@@ -294,7 +458,7 @@ it("does not cancel a different turn when the pending send is rejected", async (
   const results = Promise.allSettled([running, cancellation]);
   accepted.reject(new Error("session_not_ready"));
   expect(await results).toEqual([
-    { status: "rejected", reason: new Error("session_not_ready") },
+    { status: "fulfilled", value: undefined },
     { status: "rejected", reason: new Error("session_not_ready") },
   ]);
   expect(mocks.cancelResponse).not.toHaveBeenCalled();
@@ -321,7 +485,11 @@ it.each([
       startIndex: 0,
       endIndex: 1,
     });
-    renderToStaticMarkup(<Probe />);
+    renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <Probe />
+      </QueryClientProvider>
+    );
     const cleanups = mocks.effects.map((effect) => effect());
     await vi.waitFor(() => {
       expect(mocks.stream).toHaveBeenCalledTimes(1);

@@ -23,7 +23,8 @@ import {
   InputGroupInput,
 } from "@web/components/ui/input-group";
 import { Label } from "@web/components/ui/label";
-import type { VaultItem } from "@shared/vault/schema";
+import type { VaultItem } from "@zoen/companion-ui/vault";
+
 import { api } from "@web/trpc/client";
 import { VaultDelegation } from "./delegation";
 import { cn } from "@web/components/class-names";

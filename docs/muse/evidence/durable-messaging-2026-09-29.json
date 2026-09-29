@@ -1,0 +1,51 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5890406756",
+  "environment": "Local production build; synthetic owner; real Matrix; Chrome desktop and 390x844 viewport",
+  "verifiedFlows": {
+    "groupDraftAfterReload": true,
+    "newAgentDraftAfterReload": true,
+    "offlineTabClosedBeforeReconnection": true,
+    "freshTabRecoveredMatrixQueue": true,
+    "confirmedNativeMessageCount": 1,
+    "recoveredMessage": "Teste sintético — retomada depois de fechar a aba.",
+    "nextDraftPreserved": true,
+    "mobileBottomBarPreserved": true,
+    "newTabConsoleErrors": 0
+  },
+  "storage": {
+    "web": "IndexedDB via idb 8.0.3",
+    "native": "expo-sqlite 57.0.3; compiled, not device-tested",
+    "scope": "authenticated session with account/workspace query keys",
+    "recordLimit": 200,
+    "byteLimit": 33554432,
+    "outboxLimitPerConversation": 20,
+    "excluded": [
+      "credentials",
+      "server query caches",
+      "transport promises and AbortSignals"
+    ]
+  },
+  "validation": {
+    "check": "passed: 274 files / 1710 tests",
+    "runtime": "3 tests across Matrix typing and room-sync suites passed against isolated PostgreSQL/Synapse",
+    "focusedRecovery": "14 tests passed after final first-turn commit barrier",
+    "build": "passed",
+    "quality": {
+      "observations": 41,
+      "gatingFindings": 10,
+      "suppressionsAdded": 0,
+      "assessment": "Existing owner size/complexity and churn remain visible. New concrete persistence owner combines per-record serialization and transactional write sequencing; shared delivery/draft owners avoid platform UI duplication."
+    }
+  },
+  "limitations": [
+    "cold offline application bootstrap",
+    "account-wide draining without opening the conversation",
+    "uncertain Eve submission automatic replay intentionally prohibited",
+    "physical-device SQLite execution",
+    "forced OS crash not simulated",
+    "local-at-rest encryption and E2EE",
+    "production capacity not demonstrated"
+  ],
+  "video": "15-second screenshot sequence; not a continuous recording"
+}

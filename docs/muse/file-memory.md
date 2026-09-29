@@ -462,3 +462,146 @@ churn, the existing learned-notes component growing from complexity 25 to 28 and
 264 to 274 lines, and the longer runtime CI job. No clean structural-quality claim
 is made. These migrations and simulations ran only on local isolated/review data;
 production rollout and fresh remote CI remain separate checks.
+
+## Fair session delivery and durable retry — 2026-09-28
+
+Session delivery now commits each namespace independently. One dispatch visits at
+most five distinct authorized namespaces and acknowledges at most 25 sources per
+namespace. A successful account remains committed if a later account fails. The
+native Akita engine, immutable source files, digest checks and corpus-acceptance
+receipts remain the existing owners; this adds no secondary queue service.
+
+The pending index orders sources by `available_at` and capture sequence. A
+successful batch moves its remaining sources behind accounts already waiting.
+Every source in that namespace receives the same statement timestamp; capture
+holds the namespace lock and inherits the oldest pending source's eligibility.
+A new event therefore cannot bypass earlier failed events. The per-namespace
+index preserves capture order within a batch. Existing limits of 1,000 pending
+records and 8 MiB per namespace bound the rescheduling update.
+
+A savepoint rolls back the failed batch's database acknowledgements while its
+outer namespace/membership locks remain held. Retry eligibility is persisted for
+the whole pending namespace: 60 seconds, then exponential delay up to one hour.
+The oldest attempted source retains its failure count and last failure time;
+raw exception text and private file content are not copied into diagnostic
+columns. Files written before a failed batch remain immutable and are verified
+on replay. After attempting other accounts, an aggregate error keeps the schedule
+failure visible with the count stored successfully. Cancellation or a failed
+outer database commit does not acknowledge delivery.
+
+`SKIP LOCKED` permits another dispatcher to make progress on a different account.
+Organization membership is also checked and locked for team scopes; a leftover
+workspace membership after organization revocation cannot authorize ingestion.
+Personal pause, account deletion and workspace membership fences remain in place.
+These queue locks follow PostgreSQL's documented [locking clauses](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE);
+[statement timestamps](https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT)
+keep one batch's priority stable, unlike a clock value evaluated separately for
+each row.
+
+Migration 0091 adds delivery metadata and replaces only the two pending indexes.
+It does not rewrite the applied chain, reset data, import already acknowledged
+sources or initialize lost corpora. Apply it before deploying the new worker.
+Large-table migration locking and production query plans still need qualification.
+
+Operational checks should track the age/count/bytes of eligible pending sources,
+accounts in backoff, repeated failures, batch duration and acknowledged throughput.
+`delivery_failures`/`last_failed_at` describe failed batch attempts associated with
+the queue head, not failed model answers. Repair storage/integrity first; the
+next eligible retry uses ordinary replay. Do not clear receipts, fabricate a
+fresh accepted corpus or edit private source bodies to make delivery appear done.
+
+Run the reproducible local measurement alone, after the isolated runtime services
+are started and migrated:
+
+```sh
+node --env-file=tests/runtime/.env.example --import tsx scripts/session-archive-capacity.ts --binary /tmp/zoen-ai-memory-runtime/ai-memory --accounts 20 --sources 25 --workers 4 > /tmp/archive-capacity.json
+```
+
+The command accepts only the isolated loopback database, requires no pending
+sources, creates private disposable corpora, runs the actual Akita executable,
+verifies every account's receipts and disposes only its own fixtures. `--help`
+documents workload bounds. The JSON reports elapsed time, dispatch percentiles,
+throughput and parent-process resource usage; it explicitly excludes PostgreSQL
+and native child-process memory. It does not reset a database.
+
+This is bounded, fair delivery, not a production capacity result. Each dispatcher
+processes at most 125 sources. Large accepted corpora, paused/revoked backlog query
+plans, shared-volume placement, host loss and production latency/backlog SLOs
+remain release gates.
+
+Local comparison recorded in [the JSON report](evidence/session-delivery-2026-09-28.json):
+20 accounts × 25 sources, Node 24.21.0 on macOS arm64, local PostgreSQL and real
+Akita 2.4.1. With no concurrent test/build command, one worker acknowledged all
+500 sources in 10.87 seconds (46.0/s); four workers took 6.43 seconds (77.8/s).
+Dispatch p95 increased from 2.77 to 6.43 seconds as workers shared resources.
+This is one small sample per configuration, with fresh private corpora. It proves
+receipt completion under this workload and motivates further measurements; it
+does not set a default production concurrency, qualify the cron cadence or cover
+large historical indexes, inactive-account scans, peak child RSS or network disks.
+
+Verification: all 405 isolated runtime tests in 104 files passed after this queue
+change. The five new tests cover isolation/backoff/replay, bounded fairness,
+concurrent dispatch, locked accounts and residual organization membership.
+Existing corpus-loss, acknowledgement rollback, pausing and erasure tests continue
+to pass with the real native engine. Application checks passed 1,591 tests in 259
+files, types, lint, formatting and unused-code checks. Migration validation passed.
+
+### Bounded scheduled delivery
+
+The Eve minute schedule starts up to eight dispatch rounds. It stops starting
+rounds after 45 seconds or once every worker reports no eligible work. Active
+transactions are always awaited; the time budget is not a hard timeout that can
+leave a file write or native ingestion running without an owner. The existing
+engine timeout and rollback/replay path still govern individual failures.
+
+`ZOEN_MEMORY_INGESTION_CONCURRENCY` is validated at startup (1–4, default 1). The
+default retains the previously deployed single-dispatcher resource footprint
+while permitting multiple fair rounds within one tick. Raising it requires
+measuring database connections, native child RSS and the persistent volume.
+The local four-worker sample is evidence for testing an override, not a default
+production capacity assertion.
+
+Overlapping invocations share the active promise in one runtime process and
+receive its same success or failure. This is a local resource bound; replicas
+remain independent and their aggregate concurrency must be budgeted operationally.
+The existing PostgreSQL locks prevent simultaneous ingestion of one namespace.
+Each round waits for all workers, continues useful work after a damaged account
+backs off, and reports collected failures after the bounded work completes.
+There is no separate queue framework or detached background promise.
+
+Seven unit scenarios exercise coalescing, concurrency, empty queues, failures and
+budgets. The real-engine isolated test queues 175 sources across seven healthy
+accounts plus one damaged account: one scheduled invocation acknowledges all
+healthy sources, retains the damaged batch with one retry increment and reports
+the failure. This does not qualify production cron latency or host-loss recovery.
+
+## Learned corpus download
+
+The learned-memory screen downloads `zoen-learned-memory.zip` through the
+authenticated `/api/workspaces/memory/backup` route. It is a complete snapshot of
+**one private learned corpus**, not a full account or volume backup. Its native
+`akita.tar.gz` contains the online SQLite snapshot, wiki including Git history,
+and configuration. The outer ZIP also includes Zoen's `zoen-operations` receipts
+and a versioned manifest with namespace, engine release, timestamp and SHA-256
+digests. Raw sessions, the separate session engine, personal profile, published
+workspace files and PostgreSQL records are explicitly excluded.
+
+Exports require a live human session and workspace membership, hold the existing
+namespace lock through snapshot creation, and recheck access before releasing the
+bytes. Paused learning does not prevent export; an uncertain pending mutation does.
+An accepted corpus with missing files is never initialized as an empty replacement.
+No native engine token/address is exposed. Responses use private/no-store caching.
+The native response has a 30-second fetch deadline and 48 MiB compressed limit;
+receipts are limited to 10,000 private regular files, 16 KiB each and 16 MiB total.
+ZIP packaging uses maintained MIT-licensed fflate 0.8.3 without recompressing the
+native archive. Oversized or incomplete exports fail; no partial archive is sent.
+
+`tests/runtime/memory-backup.integration.ts` exercises the actual 2.4.1 engine,
+PostgreSQL authorization, two users, paused memory, uncertain writes and revoked
+sessions. A fresh private quarantine restores current and historical content and
+Zoen's idempotency receipts. Native restore can remove an existing target before
+validating an archive; it is **never** called on a live corpus by this feature.
+There is no self-service restore endpoint. Restoring snapshots into production
+still requires current erasure/tombstone checks, owner mapping, an offline fence
+and coordinated PostgreSQL/volume recovery. Downloaded copies retain their own
+lifecycle and can contain previously removed Git versions.

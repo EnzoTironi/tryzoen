@@ -1,0 +1,85 @@
+{
+  "experiment": "Sequential local comparisons after checks completed; synthetic new corpora and no concurrent test/build command. One sample per configuration, not a production SLO.",
+  "reports": [
+    {
+      "schema": 1,
+      "measuredAt": "2026-09-29T02:30:53.526Z",
+      "workload": {
+        "accounts": 20,
+        "sourcesPerAccount": 25,
+        "workers": 1,
+        "sourceKind": "message.received"
+      },
+      "engine": "ai-memory 2.4.1",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "node": "v24.21.0"
+      },
+      "stored": 500,
+      "rounds": 4,
+      "setupMs": 1172.1551249999998,
+      "elapsedMs": 10868.249791,
+      "sourcesPerSecond": 46.005567558269604,
+      "dispatchMs": {
+        "p50": 2730.7708749999993,
+        "p95": 2765.8442909999994,
+        "max": 2765.8442909999994
+      },
+      "parentProcess": {
+        "cpuMicroseconds": {
+          "user": 1345035,
+          "system": 656143
+        },
+        "finalRssBytes": 349995008
+      },
+      "receiptsVerified": true,
+      "limits": [
+        "Loopback PostgreSQL and temporary local disk, not production topology",
+        "Minute scheduler cadence is excluded; dispatch is continuous",
+        "Parent process metrics exclude native child processes and PostgreSQL",
+        "No embeddings, LLM dreaming, cold/large corpora, outage injection or one-million-account claim"
+      ]
+    },
+    {
+      "schema": 1,
+      "measuredAt": "2026-09-29T02:31:04.768Z",
+      "workload": {
+        "accounts": 20,
+        "sourcesPerAccount": 25,
+        "workers": 4,
+        "sourceKind": "message.received"
+      },
+      "engine": "ai-memory 2.4.1",
+      "host": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "node": "v24.21.0"
+      },
+      "stored": 500,
+      "rounds": 1,
+      "setupMs": 1147.037875,
+      "elapsedMs": 6425.888625,
+      "sourcesPerSecond": 77.81024994033413,
+      "dispatchMs": {
+        "p50": 6097.529417,
+        "p95": 6425.809666,
+        "max": 6425.809666
+      },
+      "parentProcess": {
+        "cpuMicroseconds": {
+          "user": 1396199,
+          "system": 819119
+        },
+        "finalRssBytes": 294748160
+      },
+      "receiptsVerified": true,
+      "limits": [
+        "Loopback PostgreSQL and temporary local disk, not production topology",
+        "Minute scheduler cadence is excluded; dispatch is continuous",
+        "Parent process metrics exclude native child processes and PostgreSQL",
+        "No embeddings, LLM dreaming, cold/large corpora, outage injection or one-million-account claim"
+      ]
+    }
+  ]
+}

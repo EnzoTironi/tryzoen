@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo } from "react";
+import { authClient } from "@web/auth/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
 import { SessionConversation, NewConversation } from "@zoen/companion-ui";
@@ -20,6 +21,8 @@ export function ConnectedConversation({
   readonly sessionId?: string;
   readonly draftScope: string;
 }) {
+  const account = authClient.useSession();
+  const historyScope = `${draftScope}:${account.data?.session.id ?? "signed-out"}`;
   const router = useRouter();
   const params = useSearchParams();
   const workspaceId = params.get("space");
@@ -39,9 +42,9 @@ export function ConnectedConversation({
   const { mutateAsync: saveChat } = api.chats.save.useMutation();
   return sessionId ? (
     <SessionConversation
-      key={`${draftScope}:${sessionId}`}
+      key={`${historyScope}:${sessionId}`}
       reactions={reactions}
-      cacheScope={draftScope}
+      cacheScope={historyScope}
       sessionId={sessionId}
       initialDraft={draft}
       client={browserSessionClient}
@@ -49,6 +52,7 @@ export function ConnectedConversation({
     />
   ) : (
     <NewConversation
+      cacheScope={historyScope}
       key={token}
       client={browserSessionClient}
       avatarUri="/marketing/zoen-avatar.webp"

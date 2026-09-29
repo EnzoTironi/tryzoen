@@ -20,6 +20,7 @@ import { pageStyles } from "../page";
 import { ConversationAvatar } from "./avatar";
 import { colors } from "../theme";
 import { chatTitleSchema, type ChatData, type chatPageSchema } from "./schema";
+import { conversationTime } from "./time";
 
 type ConversationAction =
   | Parameters<ChatData["change"]>[0]["change"]
@@ -260,6 +261,7 @@ function ConversationPreview({
   chat,
   dense,
 }: Pick<Parameters<typeof ConversationRow>[0], "chat" | "dense">) {
+  const time = conversationTime(chat.updatedAt);
   return (
     <>
       <Text
@@ -268,19 +270,17 @@ function ConversationPreview({
       >
         {chat.title}
       </Text>
-      {dense && (
-        <Text numberOfLines={1} style={pageStyles.copy}>
-          Zoen ·{" "}
-          {new Date(chat.updatedAt).toLocaleDateString([], {
-            day: "numeric",
-            month: "short",
-          })}
+      {dense && time && (
+        <Text
+          numberOfLines={1}
+          style={pageStyles.copy}
+          accessibilityLabel={`Zoen · ${time.description}`}
+        >
+          Zoen · {time.label}
         </Text>
       )}
-      {!dense && (
-        <Text style={pageStyles.copy}>
-          {new Date(chat.updatedAt).toLocaleString()}
-        </Text>
+      {!dense && time && (
+        <Text style={pageStyles.copy}>{time.description}</Text>
       )}
     </>
   );

@@ -3,6 +3,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
+import { MemoryCard } from "../cards/memory";
 import { pageStyles } from "../page";
 import type { LearnedNotesData } from "./notes";
 
@@ -114,15 +115,12 @@ export function MemoryHistory({
             </Text>
           )}
           {search.data.hits.map((hit) => (
-            <View key={hit.versionId} style={styles.result}>
-              <Text selectable style={pageStyles.rowTitle}>
-                {hit.title}
-              </Text>
+            <MemoryCard
+              key={hit.versionId}
+              document={{ title: hit.title, text: hit.excerpt, updated: "" }}
+            >
               <Text style={pageStyles.copy}>Historical excerpt</Text>
-              <Text selectable style={pageStyles.copy}>
-                {hit.excerpt}
-              </Text>
-            </View>
+            </MemoryCard>
           ))}
           <Text style={pageStyles.copy}>
             These are matching excerpts from saved versions. They do not replace
@@ -138,5 +136,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 16 },
   field: { flex: 1, gap: 8 },
   results: { gap: 16, marginTop: 16 },
-  result: { gap: 8, paddingVertical: 12 },
 });

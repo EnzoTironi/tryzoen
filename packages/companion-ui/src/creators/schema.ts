@@ -1,10 +1,25 @@
 import { z } from "zod";
+import {
+  creatorGroundingSchema,
+  creatorGroundedAnswerSchema,
+} from "./grounding";
+export {
+  creatorGroundingSchema,
+  creatorGroundedAnswerSchema,
+} from "./grounding";
 
 export const creatorExampleSchema = z
   .object({
     id: z.uuid(),
     title: z.string().trim().min(1).max(120),
-    content: z.string().trim().min(1).max(24000),
+    content: z
+      .string()
+      .min(1)
+      .max(24000)
+      .refine(
+        (value) => value.trim().length > 0,
+        "Example content cannot be blank."
+      ),
     source: z.string().trim().min(1).max(1000),
     rights: z.enum(["original", "permission", "public-domain"]),
   })
@@ -32,6 +47,7 @@ export const creatorEvaluationCaseSchema = z.strictObject({
   title: z.string().trim().min(1).max(120),
   question: z.string().trim().min(1).max(4000),
   criteria: z.string().trim().min(1).max(4000),
+  expectedGrounding: z.enum(["supported", "insufficient-evidence"]).optional(),
 });
 
 export const creatorEvaluationCasesSchema = z
@@ -89,7 +105,8 @@ export const creatorPreviewRequestSchema = z.strictObject({
   id: z.uuid(),
   draftId: z.uuid(),
   revision: z.uuid(),
-  kind: z.enum(["answer", "playbook"]),
+  kind: z.enum(["answer", "playbook", "grounded-answer"]),
+  releaseId: z.uuid().optional(),
   question: creatorEvaluationCaseSchema.shape.question,
   pilotId: z.uuid().optional(),
   caseRef: z.strictObject({ id: z.uuid(), revision: z.uuid() }).optional(),
@@ -122,6 +139,10 @@ export const creatorPreviewSchema = creatorPreviewRequestSchema
   .omit({ caseRef: true })
   .extend({
     pilotId: z.uuid().nullable(),
+    releaseId: z.uuid().nullable(),
+    answerMode: z.enum(["snapshot", "grounded"]),
+    grounding: creatorGroundingSchema.nullable(),
+    groundedAnswer: creatorGroundedAnswerSchema.nullable(),
     evaluation: creatorEvaluationSnapshotSchema.nullable(),
     title: z.string().min(1).max(80),
     status: z.enum(["pending", "running", "completed", "failed", "expired"]),
@@ -140,7 +161,14 @@ export const creatorPreviewExportSchema = creatorPreviewSchema.extend({
 });
 
 export const creatorReleaseEvidenceSchema = creatorPreviewSchema
-  .omit({ kind: true, pilotId: true })
+  .omit({
+    kind: true,
+    pilotId: true,
+    answerMode: true,
+    grounding: true,
+    groundedAnswer: true,
+    releaseId: true,
+  })
   .strip()
   .extend({
     status: z.literal("completed"),
@@ -238,6 +266,7 @@ export const creatorPilotInviteSchema = z.strictObject({
   releaseId: z.uuid(),
   username: z.string().regex(/^[a-z][a-z0-9_]{2,29}$/),
   shareTeaching: z.literal(true),
+  qualificationId: z.uuid().optional(),
 });
 
 export const creatorPilotActionSchema = z.strictObject({
@@ -246,6 +275,8 @@ export const creatorPilotActionSchema = z.strictObject({
 });
 
 export const creatorPilotSchema = z.object({
+  qualificationId: z.uuid().nullable(),
+  answerMode: z.enum(["snapshot", "grounded"]),
   username: z.string().nullable(),
   id: z.uuid(),
   releaseId: z.uuid(),
@@ -263,6 +294,10 @@ export const creatorPilotSchema = z.object({
 export const creatorPilotListSchema = z.array(creatorPilotSchema).max(100);
 export const creatorPilotTeachingSchema = creatorPilotSchema.extend({
   content: creatorDraftContentSchema,
+  manifestDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
 });
 
 export const creatorPilotFeedbackSchema = z.object({
@@ -279,3 +314,43 @@ export const creatorPilotFeedbackSaveSchema = z.strictObject({
   content: creatorPilotFeedbackSchema.shape.content,
   shareWithCreator: z.literal(true),
 });
+
+export const creatorQualificationEvidenceSchema = creatorPreviewSchema.extend({
+  kind: z.literal("grounded-answer"),
+  answerMode: z.literal("grounded"),
+  status: z.literal("completed"),
+  response: z.string().min(1).max(32000),
+  pilotId: z.null(),
+  grounding: creatorGroundingSchema,
+  groundedAnswer: creatorGroundedAnswerSchema,
+  evaluation: creatorEvaluationSnapshotSchema.extend({
+    case: creatorEvaluationCaseSchema.extend({
+      expectedGrounding: z.enum(["supported", "insufficient-evidence"]),
+    }),
+  }),
+  review: creatorPreviewReviewSchema.extend({
+    content: creatorPreviewReviewContentSchema.extend({
+      verdict: z.literal("useful"),
+    }),
+  }),
+  models: z.array(creatorPreviewModelSchema).min(1).max(8),
+  startedAt: z.number(),
+  finishedAt: z.number(),
+});
+export const creatorQualificationRequestSchema = z.strictObject({
+  id: z.uuid(),
+  releaseId: z.uuid(),
+  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  evaluationRevision: z.uuid(),
+  evidence: z
+    .array(z.strictObject({ id: z.uuid(), reviewRevision: z.uuid() }))
+    .min(2)
+    .max(20),
+  notes: z.string().trim().min(1).max(8000),
+});
+export const creatorQualificationSchema = creatorQualificationRequestSchema
+  .omit({ evidence: true })
+  .extend({
+    evidence: z.array(creatorQualificationEvidenceSchema).min(2).max(20),
+    createdAt: z.number(),
+  });

@@ -13,13 +13,6 @@ export const vaultItemKinds = [
 
 export const vaultItemKindSchema = z.enum(vaultItemKinds);
 
-const vaultCreateItemKindSchema = vaultItemKindSchema.extract([
-  "login",
-  "payment",
-  "address",
-  "contact",
-]);
-
 export const vaultItemSchema = z.object({
   account: z.string(),
   createdAt: z.string(),
@@ -36,6 +29,21 @@ export const vaultPageInputSchema = z.object({
     .object({ updatedAt: z.iso.datetime(), id: z.string().min(1).max(160) })
     .nullish(),
 });
+
+export const vaultPageSchema = z.object({
+  items: z.array(vaultItemSchema),
+  nextCursor: vaultPageInputSchema.shape.cursor,
+  mayManage: z.boolean(),
+});
+export type VaultItem = z.infer<typeof vaultItemSchema>;
+export type VaultItemKind = z.infer<typeof vaultItemKindSchema>;
+
+const vaultCreateItemKindSchema = vaultItemKindSchema.extract([
+  "login",
+  "payment",
+  "address",
+  "contact",
+]);
 
 const boundedValue = z.string().trim().min(1).max(20_000);
 const optionalBoundedValue = z
@@ -224,6 +232,17 @@ export const vaultCreateItemSchema = z
     }
   });
 
+export const vaultItemRevisionSchema = vaultItemSchema
+  .pick({ id: true, updatedAt: true })
+  .extend({
+    id: z.string().min(1).max(160),
+    updatedAt: z.iso.datetime(),
+  });
+export const vaultUpdateItemSchema = z.object({
+  item: vaultItemRevisionSchema,
+  value: vaultCreateItemSchema,
+});
+
 export const vaultImportItemsSchema = z
   .array(
     vaultCreateItemSchema.refine((item) => item.kind === "login", {
@@ -254,8 +273,6 @@ export const vaultSetupRequestSchema = z.union([
 
 export type VaultCreateItem = z.infer<typeof vaultCreateItemSchema>;
 export type VaultImportItems = z.infer<typeof vaultImportItemsSchema>;
-export type VaultItem = z.infer<typeof vaultItemSchema>;
-export type VaultItemKind = z.infer<typeof vaultItemKindSchema>;
 export type VaultSetupRequest = z.infer<typeof vaultSetupRequestSchema>;
 
 export function serializeLoginVaultPayload(

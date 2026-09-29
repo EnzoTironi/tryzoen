@@ -1,9 +1,16 @@
+import {
+  retrieveCreatorGrounding,
+  validateGroundedAnswer,
+  verifyCreatorGrounding,
+} from "./grounding";
 import { creatorPreviewProjection } from "./preview-record";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   creatorDraftContentSchema,
+  creatorGroundingSchema,
+  type creatorGroundedAnswerSchema,
   type creatorDraftSchema,
   creatorPreviewListSchema,
   creatorPreviewRequestSchema,
@@ -70,6 +77,7 @@ export function createCreatorPreview(
         preview.draftId !== input.draftId ||
         preview.revision !== input.revision ||
         preview.kind !== input.kind ||
+        preview.releaseId !== (input.releaseId ?? null) ||
         preview.question !== input.question ||
         preview.pilotId !== (input.pilotId ?? null) ||
         (preview.evaluation?.case.id ?? null) !== (input.caseRef?.id ?? null) ||
@@ -87,6 +95,7 @@ export function createCreatorPreview(
       throw new Error(
         "For a preview, shorten the playbook and examples to a combined 48 KB. Nothing will be silently omitted."
       );
+    const grounding = await retrieveCreatorGrounding(actor, input);
     const [capacity] = await query<{
       total: number;
       today: number;
@@ -105,8 +114,8 @@ export function createCreatorPreview(
         "You can run one preview at a time, up to 10 in 24 hours and 100 saved previews in this workspace. A pending preview expires after five minutes."
       );
     const rows =
-      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, pilot_id, revision, kind, snapshot, question, evaluation)
-      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.pilotId ?? null}, ${input.revision}, ${input.kind}, ${JSON.stringify(snapshot)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb)
+      await query(sql`INSERT INTO creator_previews (id, workspace_id, user_id, draft_id, pilot_id, revision, kind, snapshot, question, evaluation, grounding)
+      VALUES (${input.id}, ${actor.workspaceId}, ${actor.userId}, ${input.draftId}, ${input.pilotId ?? null}, ${input.revision}, ${input.kind}, ${JSON.stringify(snapshot)}::jsonb, ${input.question}, ${evaluation ? JSON.stringify(evaluation) : null}::jsonb, ${grounding ? JSON.stringify(grounding) : null}::jsonb)
       ON CONFLICT (id) DO NOTHING RETURNING ${creatorPreviewProjection}`);
     if (!rows[0]) throw new WorkspaceAccessDenied();
     return creatorPreviewSchema.parse(rows[0]);
@@ -124,7 +133,9 @@ async function readPreviewSources(
   }
   const pilot = await requireActiveCreatorPilot(actor, input.pilotId);
   if (
-    input.kind !== "answer" ||
+    input.kind !==
+      (pilot.answerMode === "grounded" ? "grounded-answer" : "answer") ||
+    input.releaseId ||
     input.caseRef ||
     input.draftId !== pilot.draftId ||
     input.revision !== pilot.revision
@@ -181,18 +192,39 @@ export function claimCreatorPreview(
     const [claimed] =
       await query(sql`UPDATE creator_previews SET status = 'running', invocation = ${invocation}, started_at = clock_timestamp(), source_session_id = ${origin.sessionId}, source_turn_id = ${origin.turnId}
       WHERE id = ${id} AND status = 'pending' AND expires_at > now()
-      RETURNING snapshot, question, kind`);
+      RETURNING snapshot, question, kind, grounding, pilot_id AS "pilotId"`);
     if (!claimed)
       throw new Error(
         "This preview has already started or expired. Open its saved result in Creator studio."
       );
-    return z
+    const claimedSnapshot = z
       .object({
         snapshot: creatorDraftContentSchema,
         question: creatorPreviewRequestSchema.shape.question,
         kind: creatorPreviewRequestSchema.shape.kind,
+        pilotId: z.uuid().nullable(),
+        grounding: creatorGroundingSchema.nullable(),
       })
       .parse(claimed);
+    if (claimedSnapshot.grounding)
+      await verifyCreatorGrounding(
+        actor,
+        claimedSnapshot.grounding,
+        claimedSnapshot.pilotId ?? undefined
+      );
+    const modelInput = {
+      snapshot: claimedSnapshot.snapshot,
+      question: claimedSnapshot.question,
+      kind: claimedSnapshot.kind,
+    };
+    // Pilot identifiers authorize execution here; they are not model context.
+    return claimedSnapshot.kind === "grounded-answer"
+      ? {
+          ...modelInput,
+          snapshot: { ...modelInput.snapshot, examples: [] },
+          grounding: claimedSnapshot.grounding,
+        }
+      : modelInput;
   });
 }
 
@@ -200,14 +232,45 @@ export function finishCreatorPreview(
   actor: z.infer<typeof WorkspaceActorSchema>,
   id: string,
   invocation: string,
-  response: string | null
+  response: string | z.infer<typeof creatorGroundedAnswerSchema> | null
 ) {
-  const answer = z.string().trim().min(1).max(32000).nullable().parse(response);
   return transaction(async () => {
     await requirePreview(actor, id);
+    const [record] = await query(
+      sql`SELECT kind, grounding, pilot_id AS "pilotId" FROM creator_previews WHERE id=${id}`
+    );
+    const source = z
+      .object({
+        kind: creatorPreviewRequestSchema.shape.kind,
+        pilotId: z.uuid().nullable(),
+        grounding: creatorGroundingSchema.nullable(),
+      })
+      .parse(record);
+    if (source.grounding)
+      await verifyCreatorGrounding(
+        actor,
+        source.grounding,
+        source.pilotId ?? undefined
+      );
+    let grounded: z.infer<typeof creatorGroundedAnswerSchema> | null = null;
+    if (source.kind === "grounded-answer" && response !== null) {
+      try {
+        grounded = validateGroundedAnswer(
+          response,
+          creatorGroundingSchema.parse(source.grounding)
+        );
+      } catch {
+        // Invalid model output is terminal failure; never save unsupported prose.
+        // Authorization and corpus checks above must still throw and fail closed.
+      }
+    }
+    const answer =
+      source.kind === "grounded-answer"
+        ? (grounded?.answer ?? null)
+        : z.string().trim().min(1).max(32000).nullable().parse(response);
     // Completion retries are safe. Late results never turn an expired request into a success.
     const updated =
-      await query(sql`UPDATE creator_previews SET status = ${answer === null ? "failed" : "completed"}, response = ${answer}, finished_at = clock_timestamp()
+      await query(sql`UPDATE creator_previews SET status = ${answer === null ? "failed" : "completed"}, response = ${answer}, grounded_answer = ${grounded ? JSON.stringify(grounded) : null}::jsonb, finished_at = clock_timestamp()
       WHERE id = ${id} AND invocation = ${invocation} AND status = 'running' AND expires_at > now() RETURNING id`);
     return { recorded: updated.length > 0 };
   });

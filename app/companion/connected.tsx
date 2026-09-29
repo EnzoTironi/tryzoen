@@ -1,4 +1,5 @@
 "use client";
+import { startBrowserAudioRecording } from "@web/files/audio-recording";
 import { renderBrowserMedia } from "@web/files/media";
 import { api } from "@web/trpc/client";
 import { useState } from "react";
@@ -21,6 +22,7 @@ import {
 } from "@web/files/attachments";
 
 import { ConnectedInbox, ConnectedRoom } from "./inbox";
+import { parseRoomMessageLocation } from "@zoen/companion-ui";
 import { ConnectedSections } from "./sections";
 import { ConnectedSettings } from "./settings";
 import {
@@ -56,13 +58,20 @@ export function ConnectedCompanion({
   const section = sections.find((candidate) => candidate === view) ?? "chat";
   const token = params.get("draft");
   const roomId = params.get("room");
+  const messageLocation = parseRoomMessageLocation(params);
   const conversationOpen = Boolean(
     sessionId ?? roomId ?? token ?? params.get("compose")
   );
   const [draftError, setDraftError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = (path: string) => {
-    router.push(workspaceHref(path, workspaceId));
+    const href = workspaceHref(path, workspaceId);
+    if (
+      new URL(href, window.location.origin).pathname ===
+      window.location.pathname
+    )
+      window.history.pushState(null, "", href);
+    else router.push(href, { scroll: false });
   };
   const openConversation = (id?: string) => {
     navigate(
@@ -71,7 +80,15 @@ export function ConnectedCompanion({
   };
   const navigateSection = (next: CompanionSection) => {
     if (next === "settings") setSettingsOpen(true);
-    else navigate(`/companion?view=${next}`);
+    else {
+      const query = new URLSearchParams(params);
+      query.set("view", next);
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}?${query.toString()}`
+      );
+    }
   };
   const stagePrompt = (prompt: string) => {
     try {
@@ -87,6 +104,9 @@ export function ConnectedCompanion({
   };
   return (
     <div className={styles.viewport}>
+      {params.has("message") && !messageLocation && (
+        <p role="alert">Este link de mensagem é inválido.</p>
+      )}
       {draftError && (
         <p role="alert">
           Couldn’t open the draft. Allow storage for this site and try again.
@@ -97,6 +117,7 @@ export function ConnectedCompanion({
           pick={pickBrowserAttachments}
           save={saveBrowserAttachment}
           renderMedia={renderBrowserMedia}
+          startAudioRecording={startBrowserAudioRecording}
         >
           <LinkPreviewProvider
             cacheScope={draftScope}
@@ -109,6 +130,7 @@ export function ConnectedCompanion({
             >
               <CompanionShell
                 section={section}
+                contentVisible={!settingsOpen}
                 conversationOpen={conversationOpen}
                 onShowInbox={() => {
                   navigate("/companion");
@@ -122,6 +144,7 @@ export function ConnectedCompanion({
                 )}
                 renderAgentPanel={(tab, close) => (
                   <ConnectedAgentPanel
+                    cacheScope={draftScope}
                     tab={tab}
                     onPrompt={(prompt) => {
                       close();
@@ -164,6 +187,16 @@ export function ConnectedCompanion({
                   />
                 ) : roomId ? (
                   <ConnectedRoom
+                    selectedMessage={messageLocation?.messageId}
+                    onCloseMessage={() => {
+                      const query = new URLSearchParams(params);
+                      query.delete("message");
+                      window.history.replaceState(
+                        null,
+                        "",
+                        `${window.location.pathname}?${query.toString()}`
+                      );
+                    }}
                     key={`${draftScope}:${roomId}`}
                     roomId={roomId}
                     onOpenRoom={(id) => {

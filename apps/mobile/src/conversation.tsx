@@ -22,7 +22,7 @@ export function MobileConversation({
   readonly onCreated: (id: string, draft?: ConversationDraft) => void;
 }) {
   const account = auth.useSession();
-  const cacheScope = account.data?.user.id ?? "anonymous";
+  const cacheScope = `${account.data?.user.id ?? "anonymous"}:${account.data?.session.id ?? "signed-out"}`;
   return sessionId ? (
     <SessionConversation
       key={`${cacheScope}:${sessionId}`}
@@ -37,6 +37,7 @@ export function MobileConversation({
     />
   ) : (
     <NewConversation
+      cacheScope={cacheScope}
       client={client}
       initialDraft={initialDraft}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}

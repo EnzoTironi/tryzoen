@@ -1,20 +1,12 @@
-import { uploadMatrixMedia } from "./media/upload";
-import { directRoomMembers, findDirectRoom } from "./direct";
+import { joinNativeGroup } from "./membership";
+import { readRoomMembers } from "./members";
+import { findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import {
-  roomSchema,
-  roomMemberSchema,
-  type roomCreateSchema,
-  type roomSendSchema,
-} from "@zoen/companion-ui/rooms";
-import {
-  projectMatrixMessage,
-  readMatrixText,
-  readRoomMessage,
-} from "./messages";
+import { roomSchema, type roomCreateSchema } from "@zoen/companion-ui/rooms";
+import { projectMatrixMessage, readRoomMessage } from "./messages";
 
 import {
   requireWorkspaceAccess,
@@ -46,9 +38,10 @@ export const requireMatrixRoom = async function (
   const config = await matrixConfiguration();
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
+    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, avatar_uri AS "avatarUri", avatar_revision AS "avatarRevision", 'group' AS kind FROM workspace_group_bindings
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND channel = 'matrix'
-      AND installation_id = ${config.serverName} AND revoked_at IS NULL FOR SHARE`);
+      AND installation_id = ${config.serverName} AND revoked_at IS NULL
+      ${manage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined')`} FOR SHARE`);
   if (rows.length !== 1) throw new WorkspaceAccessDenied();
   return await roomSchema.parseAsync(rows[0]);
 };
@@ -66,8 +59,8 @@ export const listMatrixRooms = async function (
   });
 
   const rows =
-    await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
-    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL ORDER BY created_at LIMIT 20`);
+    await query(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId", label, epoch, avatar_uri AS "avatarUri", avatar_revision AS "avatarRevision", 'group' AS kind FROM workspace_group_bindings
+    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined') ORDER BY created_at LIMIT 20`);
   return {
     configured,
     mayManage: !!access.organizationId && access.role !== "member",
@@ -153,29 +146,7 @@ export const joinMatrixRoom = async function (
       sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${id} AND user_id = ${actor.userId}`
     );
     if (!members.length) {
-      const joined = await z
-        .object({
-          joined: z.record(z.string(), z.unknown()),
-        })
-        .parseAsync(
-          await matrixRequest(
-            "GET",
-            `rooms/${encodeURIComponent(room.roomId)}/joined_members`
-          )
-        );
-      if (!(matrixId in joined.joined)) {
-        await matrixRequest(
-          "POST",
-          `rooms/${encodeURIComponent(room.roomId)}/invite`,
-          { user_id: matrixId }
-        );
-        await matrixRequest(
-          "POST",
-          `join/${encodeURIComponent(room.roomId)}`,
-          {},
-          matrixId
-        );
-      }
+      await joinNativeGroup(room.roomId, matrixId);
       await query(
         sql`INSERT INTO matrix_room_members(binding_id, user_id) VALUES (${id}, ${actor.userId}) ON CONFLICT DO NOTHING`
       );
@@ -197,7 +168,9 @@ export const readMatrixMessages = async function (
     const room = await joinMatrixRoom(actor, id);
     await requireWorkspaceAccess(actor);
     const base = `rooms/${encodeURIComponent(room.roomId)}`;
-    const parent = rootId ? await readRoomMessage(room, rootId) : undefined;
+    const parent = rootId
+      ? await readRoomMessage(room, rootId, true)
+      : undefined;
     if (parent?.content["m.relates_to"]?.rel_type === "m.thread")
       throw new WorkspaceAccessDenied();
     const endpoint = rootId
@@ -208,7 +181,7 @@ export const readMatrixMessages = async function (
       endpoint + (from ? `&from=${encodeURIComponent(from)}` : ""),
       undefined,
       room.matrixId,
-      rootId ? "v1" : "v3"
+      { version: rootId ? "v1" : "v3" }
     );
     const events = await z
       .object({
@@ -217,21 +190,7 @@ export const readMatrixMessages = async function (
         next_batch: z.string().optional(),
       })
       .parseAsync(response);
-    const members =
-      room.kind === "direct"
-        ? await directRoomMembers(actor, id)
-        : z.array(roomMemberSchema).parse(
-            await query(sql`
-      SELECT i.matrix_id AS id, u.name AS name, d.username,
-        i.user_id = ${actor.userId} AS mine, false AS bot, u.image AS "avatarUri"
-      FROM matrix_identities i
-      JOIN public.user u ON ('better-auth:' || u.id) = i.user_id
-      LEFT JOIN user_directory d ON d.user_id = u.id
-      JOIN matrix_room_members m ON m.user_id = i.user_id
-      JOIN workspace_memberships w ON w.user_id = i.user_id AND w.workspace_id = ${actor.workspaceId}
-      WHERE m.binding_id = ${id} ORDER BY i.matrix_id LIMIT 100
-    `)
-          );
+    const members = await readRoomMembers(actor, id, room.kind);
     await requireMatrixRoom(actor, id);
     const config = await matrixConfiguration();
     const project = (event: z.infer<typeof MatrixEventSchema>) =>
@@ -254,85 +213,15 @@ export const readMatrixMessages = async function (
       membersTruncated: members.length > 99,
       nextCursor: (rootId ? events.next_batch : events.end) ?? null,
       messages: events.chunk
-        .filter((event) => event.type === "m.room.message")
+        .filter(
+          (event) =>
+            event.type === "m.room.message" &&
+            event.content["m.relates_to"]?.rel_type !== "m.replace"
+        )
         .toReversed()
         .map(project),
       ...(parent ? { parent: project(parent) } : {}),
     };
-  });
-};
-
-export const sendMatrixMessage = async function (
-  actor: z.output<typeof WorkspaceActorSchema>,
-  input: z.output<typeof roomSendSchema>
-) {
-  return await withDatabaseTransaction(async () => {
-    const room = await joinMatrixRoom(actor, input.id);
-    await requireWorkspaceAccess(actor);
-    if (input.rootId) {
-      const parent = await readRoomMessage(room, input.rootId);
-      if (parent.content["m.relates_to"]?.rel_type === "m.thread")
-        throw new WorkspaceAccessDenied();
-    }
-    const reply = input.replyTo
-      ? await readRoomMessage(room, input.replyTo)
-      : undefined;
-    const replyThread = reply?.content["m.relates_to"];
-    if (reply && reply.event_id !== input.rootId) {
-      const threadId =
-        replyThread?.rel_type === "m.thread" ? replyThread.event_id : undefined;
-      if (threadId !== input.rootId) throw new WorkspaceAccessDenied();
-    }
-    const replyTarget = reply?.event_id ?? input.rootId;
-    const relation = {
-      ...(input.rootId
-        ? {
-            rel_type: "m.thread",
-            event_id: input.rootId,
-            is_falling_back: !reply,
-          }
-        : {}),
-      ...(replyTarget ? { "m.in_reply_to": { event_id: replyTarget } } : {}),
-    };
-    const body = reply
-      ? `> <${reply.sender}> ${readMatrixText(reply.content).text.slice(0, 4000).replaceAll("\n", "\n> ")}\n\n${input.text}`
-      : input.text;
-    const sent = [];
-    if (input.text)
-      sent.push(
-        await matrixRequest(
-          "PUT",
-          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
-          {
-            msgtype: "m.text",
-            body,
-            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
-          },
-          room.matrixId
-        )
-      );
-    for (const [index, file] of (input.files ?? []).entries()) {
-      await requireMatrixRoom(actor, input.id);
-      const media = await uploadMatrixMedia(file, room.matrixId);
-      const category = file.mediaType.split("/")[0] ?? "application";
-      sent.push(
-        await matrixRequest(
-          "PUT",
-          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}.file.${index}`,
-          {
-            ...media,
-            msgtype: ["image", "audio", "video"].includes(category)
-              ? `m.${category}`
-              : "m.file",
-            body: file.filename ?? "Attachment",
-            filename: file.filename ?? "Attachment",
-            ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
-          },
-          room.matrixId
-        )
-      );
-    }
-    return await z.object({ event_id: z.string() }).parseAsync(sent[0]);
   });
 };
 
@@ -360,7 +249,7 @@ export const reconcileMatrixRooms = async function () {
     SELECT m.binding_id AS "bindingId", m.user_id AS "userId", i.matrix_id AS "matrixId", b.conversation_id AS "roomId"
     FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
     JOIN matrix_identities i ON i.user_id = m.user_id
-    WHERE b.channel = 'matrix' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
+    WHERE b.channel = 'matrix' AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
       SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
       JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
       WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id

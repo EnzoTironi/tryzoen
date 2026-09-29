@@ -42,6 +42,7 @@ export function readCreatorReleaseCandidate(
       );
       const reviewed = creatorReleaseEvidenceSchema.safeParse(latest);
       if (
+        latest?.answerMode !== "snapshot" ||
         !reviewed.success ||
         JSON.stringify(reviewed.data.evaluation.case) !== JSON.stringify(item)
       ) {

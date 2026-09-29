@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useConversationDraft } from "./session/draft";
 import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
@@ -22,19 +23,25 @@ export function SessionConversation({
   readonly reactions: ReactionData;
   readonly cacheScope: string;
 }) {
-  const agent = useSessionAgent(sessionId, client);
+  const { draft, saveDraft } = useConversationDraft(
+    cacheScope,
+    sessionId,
+    initialDraft
+  );
+  const agent = useSessionAgent(sessionId, client, cacheScope);
   const feedback = useMessageReactions(reactions, cacheScope, sessionId);
   const messages = useMemo(
     () => visibleConversationMessages(agent.data.messages, agent.events),
     [agent.data.messages, agent.events]
   );
   const [actionError, setActionError] = useState<string>();
-  const busy = agent.status === "streaming" || agent.status === "submitted";
   return (
     <Conversation
       key={sessionId}
       messages={messages}
-      initialDraft={initialDraft}
+      delivery={agent.delivery}
+      initialDraft={draft}
+      onDraftChange={saveDraft}
       onCopyText={onCopyText}
       onVisibleMessagesChange={feedback.showMessages}
       reactions={
@@ -51,9 +58,9 @@ export function SessionConversation({
           ? "Couldn’t load reactions. Reopen the conversation to try again."
           : undefined)
       }
-      onSend={(text) =>
-        agent.send(text, busy ? { turnPolicy: "steer" } : undefined)
-      }
+      onSend={agent.send}
+      onRetrySend={agent.retrySend}
+      onRemoveSend={agent.removeSend}
       onRespond={agent.respond}
       onCancel={() => {
         setActionError(undefined);
@@ -63,9 +70,9 @@ export function SessionConversation({
       }}
       onLoadOlder={
         agent.hasOlder
-          ? () => {
+          ? async () => {
               setActionError(undefined);
-              void agent.loadOlder().catch(() => {
+              await agent.loadOlder().catch(() => {
                 setActionError(
                   "Earlier messages couldn’t be loaded. Please try again."
                 );
@@ -74,6 +81,7 @@ export function SessionConversation({
           : undefined
       }
       loadingOlder={agent.isLoadingOlder}
+      olderError={agent.olderError?.message}
     />
   );
 }

@@ -1,9 +1,23 @@
 import {
+  activityQuerySchema,
+  activityPageSchema,
+} from "@zoen/companion-ui/activity";
+import { listAgentActivity } from "@db/services/agent-activity";
+import { syncConversationInbox } from "../../server/matrix/sync";
+import { withSignal } from "../../server/operations/async";
+import {
   chatQuerySchema,
   chatPageSchema,
   chatChangeSchema,
 } from "@zoen/companion-ui/chats";
 import { listChatLibrary, changeChat } from "@db/services/chat-library";
+import { listConversationInbox } from "@db/services/inbox";
+import {
+  inboxQuerySchema,
+  inboxPageSchema,
+  inboxSyncQuerySchema,
+  inboxSyncPageSchema,
+} from "@zoen/companion-ui/inbox";
 import {
   feedCursorSchema,
   feedPageSchema,
@@ -65,6 +79,24 @@ import {
 
 // Product queries use the same ownership and storage boundaries as agent tools.
 export const companionRouter = {
+  activity: workspaceProcedure
+    .input(activityQuerySchema)
+    .output(activityPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listAgentActivity(ctx.actor, input))
+    ),
+  inboxSync: workspaceProcedure
+    .input(inboxSyncQuerySchema)
+    .output(inboxSyncPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => syncConversationInbox(ctx.actor, input))
+    ),
+  inbox: workspaceProcedure
+    .input(inboxQuerySchema)
+    .output(inboxPageSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listConversationInbox(ctx.actor, input))
+    ),
   reactions: workspaceProcedure
     .input(reactionReadSchema)
     .output(reactionPageSchema)

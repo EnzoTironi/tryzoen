@@ -2,7 +2,7 @@
 
 The application uses `eve@0.63.0` and the public Workflow PostgreSQL adapter.
 
-`eve@0.63.0` has three narrowly scoped corrections. In its bundled Workflow core, the existing
+`eve@0.63.0` has four narrowly scoped corrections. In its bundled Workflow core, the existing
 `WORKFLOW_MAX_INLINE_STEPS` setting accepts zero. Upstream currently rejects zero
 and restores the default of three. Zoen's supervisor and compiled runtime tests
 set it to zero so new steps use Workflow's existing durable step dispatcher.
@@ -52,6 +52,18 @@ previous receipt. Eve 0.67.2's published epilogue still omits this history, as
 verified on 2026-09-28; upgrading alone does not resolve it. Remove this correction
 when an upstream release supplies settled history through its public memory
 capture contract and these regressions pass without the patch.
+
+The memory-tool callback closure now serializes SDK file/image media before its
+existing strict JSON validation: URLs become their string representation and
+binary content becomes base64. These are supported SDK media representations;
+the original history is not mutated. Other context fields still undergo the
+same JSON validation. Without this correction, an ordinary file attachment makes
+every enabled memory provider's tool catalog disappear with a serialization
+warning. A compiled-runtime regression reproduces that failure and exercises
+native approval, process restart, exact attachment bytes and the next turn's
+catalog. Remove this correction when upstream accepts SDK media in durable memory
+callbacks and that regression passes without the patch. No diagnostic logging
+of message contents or credentials is included.
 
 `@workflow/world-postgres@5.0.0-beta.44` commits terminal step state and its
 `step_completed` or `step_failed` replay event in one transaction. Upstream writes

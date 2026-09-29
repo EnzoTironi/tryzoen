@@ -19,9 +19,78 @@ export default defineAgent({
           } = request;
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
+          for (const name of [
+            "creator-evaluation-remove",
+            "creator-qualification",
+            "creator-pilot",
+            "creator-release",
+          ]) {
+            if (
+              lastUserMessage?.startsWith(`${name} `) &&
+              !toolResults.some((result) => result.name === name)
+            )
+              return {
+                toolCalls: [
+                  {
+                    name,
+                    input: JSON.parse(lastUserMessage.slice(name.length + 1)),
+                  },
+                ],
+              };
+          }
+          if (
+            lastUserMessage?.startsWith("creator-sources ") &&
+            !messages
+              .slice(
+                messages.findLastIndex((message) => message.role === "user") + 1
+              )
+              .some((message) => message.role === "tool")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-sources",
+                  input: JSON.parse(
+                    lastUserMessage.slice("creator-sources ".length)
+                  ),
+                },
+              ],
+            };
+          if (
+            lastUserMessage?.startsWith("creator-interview ") &&
+            !toolResults.some((result) => result.name === "creator-interview")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-interview",
+                  input: JSON.parse(
+                    lastUserMessage.slice("creator-interview ".length)
+                  ),
+                },
+              ],
+            };
+          if (
+            lastUserMessage?.startsWith("creator-review ") &&
+            !toolResults.some((result) => result.name === "creator-review")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "creator-review",
+                  input: {
+                    id: lastUserMessage.slice("creator-review ".length),
+                  },
+                },
+              ],
+            };
           if (
             lastUserMessage?.startsWith("creator-authoring ") &&
-            !toolResults.some((result) => result.name === "creator-library")
+            !messages
+              .slice(
+                messages.findLastIndex((message) => message.role === "user") + 1
+              )
+              .some((message) => message.role === "tool")
           )
             return {
               toolCalls: [

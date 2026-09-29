@@ -1,7 +1,8 @@
+import * as matrix from "../../server/matrix/client";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { query } from "@db/queries";
 import { env } from "@shared/environment/env";
 import { acceptMatrixTransaction } from "../../server/matrix/inbound";
@@ -65,7 +66,7 @@ test("Matrix retries ignore refreshed unsigned age but reject changed semantic e
   }
 });
 
-test("late Matrix invitations do not remove an already joined member or invalidate approvals", async () => {
+test("late Matrix invitations and joins preserve a known audience while removals and new joins fence it", async () => {
   await using workspace = await workspaceFixture();
   const { actor, guest } = workspace;
   const binding = randomUUID();
@@ -80,6 +81,19 @@ test("late Matrix invitations do not remove an already joined member or invalida
   await query(
     sql`INSERT INTO matrix_room_members(binding_id,user_id) VALUES(${binding},${guest.userId})`
   );
+  let nativeMembership = "join";
+  const original = matrix.matrixRequest;
+  const nativeState = vi
+    .spyOn(matrix, "matrixRequest")
+    .mockImplementation(async (...args) => {
+      if (
+        args[0] === "GET" &&
+        args[1] ===
+          `rooms/${encodeURIComponent(room)}/state/m.room.member/${encodeURIComponent(member)}`
+      )
+        return { membership: nativeMembership };
+      return original(...args);
+    });
   const transactions: string[] = [];
   const events: string[] = [];
   const receive = async (membership: string) => {
@@ -122,14 +136,46 @@ test("late Matrix invitations do not remove an already joined member or invalida
           sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
         )
       )[0]?.epoch
-    ).not.toBe(epoch);
+    ).toBe(epoch);
+    nativeMembership = "leave";
     await receive("leave");
     expect(
       await query(
-        sql`SELECT user_id FROM matrix_room_members WHERE binding_id=${binding}`
+        sql`SELECT user_id FROM matrix_room_members WHERE binding_id=${binding} AND state = 'joined'`
+      )
+    ).toHaveLength(0);
+    const [removed] = await query<{ epoch: string }>(
+      sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
+    );
+    expect(removed?.epoch).not.toBe(epoch);
+    nativeMembership = "join";
+    await receive("join");
+    const [rejoined] = await query<{ epoch: string }>(
+      sql`SELECT epoch FROM workspace_group_bindings WHERE id=${binding}`
+    );
+    expect(rejoined?.epoch).not.toBe(removed?.epoch);
+    await query(
+      sql`UPDATE matrix_room_members SET state = 'joined', native_pending = false WHERE binding_id = ${binding}`
+    );
+    await receive("leave");
+    expect(
+      (
+        await query<{ epoch: string }>(
+          sql`SELECT epoch FROM workspace_group_bindings WHERE id = ${binding}`
+        )
+      )[0]?.epoch
+    ).toBe(rejoined?.epoch);
+    await query(
+      sql`UPDATE matrix_room_members SET state = 'left' WHERE binding_id = ${binding}`
+    );
+    // An external join fences pending work; it does not grant app membership.
+    expect(
+      await query(
+        sql`SELECT user_id FROM matrix_room_members WHERE binding_id=${binding} AND state = 'joined'`
       )
     ).toHaveLength(0);
   } finally {
+    nativeState.mockRestore();
     for (const id of transactions)
       await query(sql`DELETE FROM matrix_transactions WHERE id=${id}`);
     for (const id of events)

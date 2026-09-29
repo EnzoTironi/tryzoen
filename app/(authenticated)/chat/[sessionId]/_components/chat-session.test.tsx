@@ -29,6 +29,17 @@ const mocks = vi.hoisted<Mocks>(() => ({
   sessionId: undefined,
 }));
 
+vi.mock("@web/auth/client", () => ({
+  authClient: {
+    useSession: () => ({
+      data: { user: { id: "viewer" }, session: { id: "login" } },
+    }),
+  },
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@zoen/companion-ui/session", () => ({
   useSessionAgent: (sessionId: string) => {
     mocks.sessionId = sessionId;

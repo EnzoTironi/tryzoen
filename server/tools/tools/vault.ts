@@ -5,7 +5,7 @@ import { applicationOrigin } from "@shared/environment/origin";
 import {
   createVaultSetupUrl,
   vaultSetupRequestSchema,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 
 const requestVaultImport = defineTool({
   description:

@@ -9,6 +9,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { z } from "zod";
 import type { MemoryCorpus } from "@db/services/memory-corpora";
 import { privateMemoryDirectory } from "../session-files";
+import { nativeMemoryBackup } from "./backup";
+
+type CorpusDirectory = MemoryCorpus | "creator-knowledge";
 
 const configuration = 'embedding_provider = "none"\n[dream]\nenabled = false\n';
 
@@ -83,7 +86,7 @@ async function verifyMemoryIndex(data: string, requireExisting: boolean) {
 async function prepareSessionMemory(
   root: string,
   namespaceId: string,
-  corpus: MemoryCorpus,
+  corpus: CorpusDirectory,
   requireExisting: boolean
 ) {
   const namespace = z.uuid().parse(namespaceId);
@@ -289,7 +292,7 @@ export async function openMemoryEngine(
   binary: string,
   root: string,
   namespaceId: string,
-  corpus: MemoryCorpus,
+  corpus: CorpusDirectory,
   options: { requireExisting: boolean }
 ) {
   const data = await prepareSessionMemory(
@@ -312,6 +315,7 @@ export async function openMemoryEngine(
       data,
       client,
       checkpoint: () => checkpointMemory(runtime.address, headers),
+      backup: () => nativeMemoryBackup(runtime.address, headers),
       deliver: (items: Parameters<typeof deliverSessionBatch>[2]) =>
         deliverSessionBatch(runtime.address, headers, items),
       async [Symbol.asyncDispose]() {

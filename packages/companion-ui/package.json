@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./input-response": {
+      "types": "./dist/conversation/response.d.ts",
+      "default": "./dist/conversation/response.js"
+    },
+    "./sheet": {
+      "types": "./dist/sheet.d.ts",
+      "default": "./dist/sheet.js"
+    },
     "./rooms": {
       "types": "./dist/rooms/schema.d.ts",
       "default": "./dist/rooms/schema.js"
@@ -63,6 +71,26 @@
     "./composer": {
       "types": "./dist/composer/document.d.ts",
       "default": "./dist/composer/document.js"
+    },
+    "./recording": {
+      "types": "./dist/recording/schema.d.ts",
+      "default": "./dist/recording/schema.js"
+    },
+    "./inbox": {
+      "types": "./dist/chats/inbox-schema.d.ts",
+      "default": "./dist/chats/inbox-schema.js"
+    },
+    "./activity": {
+      "types": "./dist/activity/schema.d.ts",
+      "default": "./dist/activity/schema.js"
+    },
+    "./vault": {
+      "types": "./dist/vault/schema.d.ts",
+      "default": "./dist/vault/schema.js"
+    },
+    "./local-messages": {
+      "types": "./dist/conversation/local-messages.d.ts",
+      "default": "./dist/conversation/local-messages.js"
     }
   },
   "dependencies": {
@@ -76,7 +104,8 @@
     "react-native-marked": "8.3.2",
     "react-native-svg": "15.15.4",
     "unicode-emoji-json": "0.9.0",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "credit-card-type": "^10.3.0"
   },
   "peerDependencies": {
     "ai": "^7.0.107",

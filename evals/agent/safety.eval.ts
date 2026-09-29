@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
-import { vaultSetupRequestSchema } from "@shared/vault/schema";
+import { vaultSetupRequestSchema } from "@zoen/companion-ui/vault";
 import {
   agentEvalTags,
   assertPlainTextDelivery,

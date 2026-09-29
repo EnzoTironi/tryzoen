@@ -9,11 +9,8 @@ import {
   searchDirectPeople,
 } from "../../server/matrix/direct";
 import { MatrixError, matrixRequest } from "../../server/matrix/client";
-import {
-  readMatrixMessages,
-  sendMatrixMessage,
-  closeMatrixRoom,
-} from "../../server/matrix/rooms";
+import { readMatrixMessages, closeMatrixRoom } from "../../server/matrix/rooms";
+import { sendMatrixMessage } from "../../server/matrix/send";
 import { readMatrixMedia } from "../../server/matrix/media/read";
 import {
   readMatrixReactions,

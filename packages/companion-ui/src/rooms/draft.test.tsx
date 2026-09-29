@@ -14,12 +14,41 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  pins: vi.fn<RoomData["pins"]>(),
+  pin: vi.fn<RoomData["pin"]>(),
+  reactors: vi.fn<RoomData["reactors"]>(),
+  readReceiptPreference: vi.fn<RoomData["readReceiptPreference"]>(),
+  setReadReceiptPreference: vi.fn<RoomData["setReadReceiptPreference"]>(),
+  presencePreference: vi.fn<RoomData["presencePreference"]>(),
+  setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
+  notifications: vi.fn<RoomData["notifications"]>(),
+  rename: vi.fn<RoomData["rename"]>(),
+  setAvatar: vi.fn<RoomData["setAvatar"]>(),
+  changeMembership: vi.fn<RoomData["changeMembership"]>(),
+  setNotifications: vi.fn<RoomData["setNotifications"]>(),
+  setTyping: vi.fn<RoomData["setTyping"]>(),
+  readSync: vi.fn<RoomData["readSync"]>(),
+  search: vi.fn<RoomData["search"]>(),
+  setUnread: vi.fn<RoomData["setUnread"]>(),
+  markRead: vi.fn<RoomData["markRead"]>(),
+  savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
+  clearUnavailableSavedMessages:
+    vi.fn<RoomData["clearUnavailableSavedMessages"]>(),
+  savedMessageState: vi.fn<RoomData["savedMessageState"]>(),
+  savedMessages: vi.fn<RoomData["savedMessages"]>(),
+  saveMessage: vi.fn<RoomData["saveMessage"]>(),
+  context: vi.fn<RoomData["context"]>(),
+  editMessage: vi.fn<RoomData["editMessage"]>(),
+  reportMessage: vi.fn<RoomData["reportMessage"]>(),
+  deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
+  forwardDestinations: vi.fn<RoomData["forwardDestinations"]>(),
+  forwardMessage: vi.fn<RoomData["forwardMessage"]>(),
   people: vi.fn<RoomData["people"]>(),
   openDirect: vi.fn<RoomData["openDirect"]>(),
   directs: vi.fn<RoomData["directs"]>(),
   media: vi.fn<RoomData["media"]>(),
   operationId: () => crypto.randomUUID(),
-  send: vi.fn<RoomData["send"]>().mockResolvedValue(undefined),
+  send: vi.fn<RoomData["send"]>().mockResolvedValue({ event_id: "$sent" }),
   list: vi.fn<RoomData["list"]>(),
   create: vi.fn<RoomData["create"]>(),
   messages: vi.fn<RoomData["messages"]>(),
@@ -63,7 +92,7 @@ function open(scope = "viewer:workspace", room = "room", root?: string) {
 
 afterEach(() => {
   client.clear();
-  vi.mocked(data.send).mockReset().mockResolvedValue(undefined);
+  vi.mocked(data.send).mockReset().mockResolvedValue({ event_id: "$sent" });
 });
 
 it("restores text and quote after navigation, with separate account, room and thread drafts", () => {
@@ -78,105 +107,66 @@ it("restores text and quote after navigation, with separate account, room and th
   expect(open("viewer:workspace", "room", "$another-thread").text).toBe("");
 });
 
-it("keeps failed drafts and retries the same native transaction after reopening", async () => {
+it("clears immediately and retries a failed echo without replacing the next draft", async () => {
   vi.mocked(data.send).mockRejectedValueOnce(new Error("Lost response"));
   open().change("Reply");
   open().replyTo(quote);
-  await expect(open().send({ text: "Reply", files: [] })).rejects.toThrow(
-    "Lost response"
-  );
-  expect(open()).toMatchObject({
-    text: "Reply",
-    reply: quote,
-    status: "failed",
-  });
   await open().send({ text: "Reply", files: [] });
-  expect(data.send).toHaveBeenNthCalledWith(
-    2,
-    vi.mocked(data.send).mock.calls[0]?.[0]
+  expect(open().text).toBe("");
+  open().change("Next draft");
+  await vi.waitFor(() => {
+    expect(open().outgoing[0]?.status).toBe("failed");
+  });
+  open().retry(open().outgoing[0]?.id ?? "missing");
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(2);
+  });
+  expect(vi.mocked(data.send).mock.calls[1]).toEqual(
+    vi.mocked(data.send).mock.calls[0]
   );
-  expect(open()).toMatchObject({ text: "", status: "idle" });
+  expect(open().text).toBe("Next draft");
   expect(open().reply).toBeUndefined();
 });
 
-it("uses a new transaction when editing a failed message or changing its quote", async () => {
-  vi.mocked(data.send).mockRejectedValue(new Error("Offline"));
-  open().change("First");
-  await expect(open().send({ text: "First" })).rejects.toThrow("Offline");
-  open().change("Revised");
-  await expect(open().send({ text: "Revised" })).rejects.toThrow("Offline");
-  open().replyTo(quote);
-  await expect(open().send({ text: "Revised" })).rejects.toThrow("Offline");
+it("keeps multiple sends through navigation in transport order with distinct identities", async () => {
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  await open().send({ text: "Same text" });
+  await open().send({ text: "Same text" });
+  expect(open().outgoing).toHaveLength(2);
+  expect(open().text).toBe("");
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(1);
+  });
+  expect(open().outgoing.map((entry) => !!entry.queued)).toEqual([false, true]);
+  pending.resolve();
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(2);
+  });
   const ids = vi
     .mocked(data.send)
     .mock.calls.map(([input]) => input.operationId);
-  expect(new Set(ids).size).toBe(3);
-});
-
-it("keeps pending state through navigation and prevents duplicate concurrent submissions", async () => {
-  const pending = pendingSend();
-  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
-  open().change("Sending");
-  const sent = open().send({ text: "Sending" });
-  expect(open().status).toBe("sending");
-  open().change("Must not replace in-flight text");
-  open().replyTo(quote);
-  await expect(open().send({ text: "Sending" })).rejects.toThrow(
-    "already being sent"
-  );
-  expect(data.send).toHaveBeenCalledTimes(1);
-  expect(open().text).toBe("Sending");
-  pending.settle();
-  await sent;
-  expect(open().text).toBe("");
+  expect(new Set(ids).size).toBe(2);
 });
 
 it.each([false, true])(
-  "does not recreate cleared account data when an in-flight send settles (failure=%s)",
+  "does not recreate cleared account data after delivery (failure=%s)",
   async (fails) => {
     const pending = pendingSend();
     vi.mocked(data.send).mockReturnValueOnce(pending.promise);
-    open().change("Private draft");
-    const sent = open().send({ text: "Private draft" });
+    await open().send({ text: "Private draft" });
+    await vi.waitFor(() => {
+      expect(data.send).toHaveBeenCalledTimes(1);
+    });
     client.clear();
-    if (fails) pending.settle(new Error("Unavailable"));
-    else pending.settle();
-    await sent.catch(() => undefined);
+    if (fails) pending.reject(new Error("Unavailable"));
+    else pending.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   }
 );
 
-it("sends a thread draft to its own root and clears only that draft", async () => {
-  open().change("Main draft");
-  const thread = () => open("viewer:workspace", "room", "$root");
-  thread().change("Thread reply");
-  thread().replyTo(quote);
-  await thread().send({ text: "Thread reply" });
-  expect(data.send).toHaveBeenCalledWith(
-    expect.objectContaining({
-      id: "room",
-      rootId: "$root",
-      replyTo: "$quote",
-      text: "Thread reply",
-    })
-  );
-  expect(thread().text).toBe("");
-  expect(open().text).toBe("Main draft");
-});
-
-function pendingSend() {
-  let settle: ((error?: Error) => void) | undefined;
-  const promise = new Promise<void>((resolve, reject) => {
-    settle = (error?: Error) => {
-      if (error) reject(error);
-      else resolve();
-    };
-  });
-  if (!settle) throw new Error("Send not initialized");
-  return { promise, settle };
-}
-
-it("retains attachments through failure and navigation, then clears only the successful room draft", async () => {
+it("sends thread replies and attachments without touching the main or next draft", async () => {
   const files = [
     {
       type: "file" as const,
@@ -185,14 +175,109 @@ it("retains attachments through failure and navigation, then clears only the suc
       url: "data:audio/wav;base64,AAAA",
     },
   ];
-  open().changeFiles(files);
-  vi.mocked(data.send).mockRejectedValueOnce(new Error("Offline"));
-  await expect(open().send({ text: "", files })).rejects.toThrow("Offline");
-  expect(open().files).toEqual(files);
-  expect(open("viewer:other").files).toBeUndefined();
-  await open().send({ text: "", files });
-  expect(vi.mocked(data.send).mock.calls[0]?.[0]).toEqual(
-    vi.mocked(data.send).mock.calls[1]?.[0]
+  const thread = () => open("viewer:workspace", "room", "$root");
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  open().change("Main draft");
+  thread().replyTo(quote);
+  thread().changeFiles(files);
+  await thread().send({ text: "Thread reply", files });
+  thread().change("Next reply");
+  thread().changeFiles(files);
+  pending.reject(new Error("Offline"));
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("failed");
+  });
+  expect(data.send).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: "room",
+      rootId: "$root",
+      replyTo: "$quote",
+      text: "Thread reply",
+      files,
+    })
   );
-  expect(open().files).toBeUndefined();
+  expect(thread()).toMatchObject({ text: "Next reply", files });
+  expect(thread().outgoing[0]?.input.files).toEqual(files);
+  expect(open().text).toBe("Main draft");
+  expect(open("other:workspace").outgoing).toHaveLength(0);
 });
+
+it("keeps a delivered reply accepted when automatic alerts are uncertain", async () => {
+  const key = [
+    "matrix-thread-subscription",
+    "viewer:workspace",
+    "room",
+    "$root",
+  ];
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
+  });
+  vi.mocked(data.send).mockResolvedValueOnce({
+    event_id: "$reply",
+    subscription: { status: "unconfirmed" },
+  });
+  const thread = () => open("viewer:workspace", "room", "$root");
+  await thread().send({ text: "Delivered once" });
+  thread().change("Next reply");
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("accepted");
+  });
+  expect(client.getQueryData(key)).toEqual({ status: "unconfirmed" });
+  expect(thread().text).toBe("Next reply");
+  expect(data.send).toHaveBeenCalledTimes(1);
+});
+
+it("does not replace a newer manual alert decision with a late send warning", async () => {
+  const key = [
+    "matrix-thread-subscription",
+    "viewer:workspace",
+    "room",
+    "$root",
+  ];
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
+  });
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  const thread = () => open("viewer:workspace", "room", "$root");
+  await thread().send({ text: "Reply" });
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(1);
+  });
+  // Even an unchanged value is a newer explicit decision.
+  client.setQueryData(key, {
+    status: "ready",
+    following: false,
+    automatic: false,
+  });
+  pending.resolve({
+    event_id: "$sent",
+    subscription: { status: "unconfirmed" },
+  });
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("accepted");
+  });
+  expect(client.getQueryData(key)).toMatchObject({
+    status: "ready",
+    following: false,
+  });
+});
+
+function pendingSend() {
+  let resolve!: (receipt?: Awaited<ReturnType<RoomData["send"]>>) => void;
+  let reject!: (cause: Error) => void;
+  const promise = new Promise<Awaited<ReturnType<RoomData["send"]>>>(
+    (accept, fail) => {
+      resolve = (receipt = { event_id: "$sent" }) => {
+        accept(receipt);
+      };
+      reject = fail;
+    }
+  );
+  return { promise, resolve, reject };
+}

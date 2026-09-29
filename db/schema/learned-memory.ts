@@ -1,6 +1,9 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -18,8 +21,24 @@ export const workspaceMemoryErasures = pgTable(
     requestedAt: timestamp("requested_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    erasureFailures: integer("erasure_failures").notNull().default(0),
+    lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
   },
-  (table) => [index("workspace_memory_erasure_owner_idx").on(table.ownerUserId)]
+  (table) => [
+    index("workspace_memory_erasure_owner_idx").on(table.ownerUserId),
+    index("workspace_memory_erasure_pending_idx").on(
+      table.availableAt,
+      table.requestedAt,
+      table.namespaceId
+    ),
+    check(
+      "workspace_memory_erasure_failures",
+      sql`${table.erasureFailures} >= 0 AND (${table.erasureFailures} = 0) = (${table.lastFailedAt} IS NULL)`
+    ),
+  ]
 );
 
 export const workspaceMemoryNamespaces = pgTable(

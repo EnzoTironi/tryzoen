@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-29",
+  "wave": 27,
+  "scope": "Compact message actions, gestures, opt-in native Matrix presence and paused-send state",
+  "pullRequest": 152,
+  "evidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5891392313",
+  "environment": "Local production build; isolated synthetic account and PostgreSQL/Synapse runtime databases",
+  "viewports": [
+    [1440, 900],
+    [390, 844]
+  ],
+  "verified": [
+    "Desktop contextual menus in private agent chat, Matrix group and thread",
+    "Mobile long press remains open after touch release",
+    "Right swipe opens reply, focuses composer and preserves draft",
+    "Emoji picker and confirmed native Matrix reaction",
+    "Opt-in/off presence semantics, isolation and membership revocation in real runtime tests"
+  ],
+  "checks": {
+    "check": {
+      "files": 274,
+      "tests": 1712,
+      "passed": true
+    },
+    "build": "passed",
+    "runtime": {
+      "suites": 3,
+      "tests": 4,
+      "passed": true
+    },
+    "exports": "Expo web/iOS/Android passed before final web click-suppression adjustment; final check/build include it",
+    "structuralReview": {
+      "observations": 34,
+      "gates": 15,
+      "acknowledgements": 0
+    }
+  },
+  "video": "9-second screenshot sequence, not continuous recording",
+  "limitations": [
+    "No physical-device gesture/accessibility qualification",
+    "No double-tap or haptics or draggable-sheet dismissal yet",
+    "Media controls retain their own interaction; menu available by ellipsis",
+    "Presence tested through real Matrix, not a multi-device native UI scenario",
+    "No million-user capacity claim; full parity remains open"
+  ]
+}

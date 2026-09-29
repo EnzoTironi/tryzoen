@@ -1,30 +1,20 @@
-import {
-  useMemo,
-  useCallback,
-  useSyncExternalStore,
-  type ComponentProps,
-} from "react";
+import { useMemo, useCallback, useSyncExternalStore } from "react";
 import {
   QueryObserver,
   useQueryClient,
   skipToken,
 } from "@tanstack/react-query";
 import type { z } from "zod";
-import type { Composer } from "../composer";
+import { useMessageOutbox } from "../conversation/outbox";
 import type { RoomData, roomMessageSchema } from "./schema";
 
 interface RoomDraft {
   text: string;
   files?: NonNullable<Parameters<RoomData["send"]>[0]["files"]>;
   reply?: z.infer<typeof roomMessageSchema>;
-  attempt?: Pick<
-    Parameters<RoomData["send"]>[0],
-    "operationId" | "text" | "replyTo" | "files"
-  >;
-  status: NonNullable<ComponentProps<typeof Composer>["sendStatus"]>;
 }
 
-/** Navigation-only drafts: private to this query client and account/workspace scope. */
+/** Local drafts: private to this authenticated account and workspace. */
 export function useRoomDraft(
   data: RoomData,
   cacheScope: string,
@@ -41,9 +31,9 @@ export function useRoomDraft(
         queryKey: ["matrix-draft", cacheScope, roomId, rootId ?? null],
         enabled: false,
         queryFn: skipToken,
-        initialData: { text: "", status: "idle" },
+        initialData: { text: "" },
         staleTime: Infinity,
-        gcTime: 30 * 60_000,
+        gcTime: Infinity,
       }),
     [client, cacheScope, roomId, rootId]
   );
@@ -53,27 +43,74 @@ export function useRoomDraft(
   );
   const snapshot = useCallback(() => observer.getCurrentResult(), [observer]);
   const result = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const outbox = useMessageOutbox<
+    Parameters<RoomData["send"]>[0] & { quote?: RoomDraft["reply"] },
+    void
+  >(
+    ["matrix-outbox", cacheScope, roomId],
+    async ({ quote: _quote, ...input }) => {
+      const subscriptionKey = [
+        "matrix-thread-subscription",
+        cacheScope,
+        roomId,
+        input.rootId,
+      ];
+      const subscriptionRevision =
+        client.getQueryState(subscriptionKey)?.dataUpdateCount;
+      const receipt = await data.send(input);
+      void client.invalidateQueries({
+        queryKey: ["conversation-inbox", cacheScope],
+      });
+      void client.invalidateQueries({
+        queryKey: ["matrix-messages", cacheScope, roomId],
+      });
+      if (input.rootId) {
+        void client.invalidateQueries({
+          queryKey: ["matrix-thread", cacheScope, roomId, input.rootId],
+        });
+        if (
+          receipt.subscription?.status === "unconfirmed" &&
+          !client.isMutating({ mutationKey: subscriptionKey })
+        ) {
+          await client.cancelQueries({ queryKey: subscriptionKey });
+          client.setQueryData(
+            subscriptionKey,
+            (previous: typeof receipt.subscription) =>
+              previous &&
+              !client.isMutating({ mutationKey: subscriptionKey }) &&
+              client.getQueryState(subscriptionKey)?.dataUpdateCount ===
+                subscriptionRevision
+                ? receipt.subscription
+                : previous
+          );
+        } else {
+          // Read current native state: a manual unfollow may be newer than this receipt.
+          void client.invalidateQueries({ queryKey: subscriptionKey });
+        }
+      }
+    }
+  );
   return {
     ...result.data,
+    outgoing: outbox.entries.filter((entry) => entry.input.rootId === rootId),
+    retry: outbox.retry,
+    settle: outbox.remove,
     changeFiles: (files: NonNullable<RoomDraft["files"]>) => {
-      client.setQueryData<RoomDraft>(key, (current) =>
-        current && current.status !== "sending"
-          ? { ...current, files, status: "idle" }
-          : current
+      client.setQueryData<RoomDraft>(
+        key,
+        (current) => current && { ...current, files }
       );
     },
     change: (text: string) => {
-      client.setQueryData<RoomDraft>(key, (current) =>
-        current && current.status !== "sending"
-          ? { ...current, text, status: "idle" }
-          : current
+      client.setQueryData<RoomDraft>(
+        key,
+        (current) => current && { ...current, text }
       );
     },
-    replyTo: (reply?: z.infer<typeof roomMessageSchema>) => {
-      client.setQueryData<RoomDraft>(key, (current) =>
-        current && current.status !== "sending"
-          ? { ...current, reply, status: "idle" }
-          : current
+    replyTo: (reply?: RoomDraft["reply"]) => {
+      client.setQueryData<RoomDraft>(
+        key,
+        (current) => current && { ...current, reply }
       );
     },
     send: async ({
@@ -84,53 +121,17 @@ export function useRoomDraft(
       files?: RoomDraft["files"];
     }) => {
       const current = client.getQueryData<RoomDraft>(key);
-      if (!current || current.status === "sending")
-        throw new Error("A message is already being sent.");
-      const replyTo = current.reply?.id;
-      const attempt =
-        current.attempt?.text === text &&
-        current.attempt.replyTo === replyTo &&
-        JSON.stringify(current.attempt.files ?? []) ===
-          JSON.stringify(files ?? [])
-          ? current.attempt
-          : {
-              text,
-              replyTo,
-              ...(files?.length ? { files } : {}),
-              operationId: data.operationId(),
-            };
-      client.setQueryData<RoomDraft>(key, {
-        ...current,
-        attempt,
-        status: "sending",
+      const operationId = data.operationId();
+      outbox.enqueue(operationId, {
+        id: roomId,
+        rootId,
+        operationId,
+        text,
+        files,
+        replyTo: current?.reply?.id,
+        quote: current?.reply,
       });
-      try {
-        await data.send({ id: roomId, rootId, ...attempt });
-        if (
-          client.getQueryData<RoomDraft>(key)?.attempt?.operationId !==
-          attempt.operationId
-        )
-          return;
-        client.setQueryData<RoomDraft>(key, { text: "", status: "idle" });
-        void client.invalidateQueries({
-          queryKey: ["matrix-messages", cacheScope, roomId],
-        });
-        if (rootId)
-          void client.invalidateQueries({
-            queryKey: ["matrix-thread", cacheScope, roomId, rootId],
-          });
-      } catch (error) {
-        if (
-          client.getQueryData<RoomDraft>(key)?.attempt?.operationId ===
-          attempt.operationId
-        )
-          client.setQueryData<RoomDraft>(key, {
-            ...current,
-            attempt,
-            status: "failed",
-          });
-        throw error;
-      }
+      client.setQueryData<RoomDraft>(key, { text: "" });
     },
   };
 }

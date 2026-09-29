@@ -6,3 +6,5 @@ export {
 } from "./history";
 export { conversationStreamEvents, isTerminalSession } from "./events";
 export type { ChatAgent } from "./types";
+export { captureMessageAnchor } from "../conversation/scroll-anchor";
+export { listenHistoryIntent } from "./scroll-intent";

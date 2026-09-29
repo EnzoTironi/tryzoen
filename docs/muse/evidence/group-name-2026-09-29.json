@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887918856",
+  "environment": "Local production build, synthetic administrator/member accounts, Chrome desktop and 390x844 mobile viewport",
+  "verifiedFlows": {
+    "administratorRename": true,
+    "memberCannotSeeEditAction": true,
+    "remoteConversationAndInboxUpdateWithoutReload": true,
+    "unsentDraftPreserved": true,
+    "desktopModal": true,
+    "mobileSheet": true,
+    "concurrentEditConflictPreservesProposal": true,
+    "explicitLoadCurrentName": true,
+    "originalSyntheticNameRestored": true,
+    "temporaryUnsentDraftCleared": true
+  },
+  "authority": "Native Matrix m.room.name with the existing SQL binding label projection; product changes serialize under the membership lock",
+  "reference": "https://spec.matrix.org/latest/client-server-api/#mroomname",
+  "validation": {
+    "check": "passed",
+    "checkFiles": 272,
+    "checkTests": 1701,
+    "build": "passed",
+    "expoExports": "not repeated in this increment",
+    "focusedRealSynapseTests": 2,
+    "focusedRealSynapse": "passed",
+    "runtimeCoverage": [
+      "Verified native state and unchanged room identity, epoch and messages",
+      "Remote participant sync and name search",
+      "Repeated desired name, stale expected name and concurrent edits",
+      "Native write failure leaves the SQL name unchanged and retry succeeds",
+      "Member, wrong workspace and absent session writes denied"
+    ],
+    "precedingCheckpointAllSixChecksPassed": "a7137cef",
+    "structuralReview": {
+      "observations": 13,
+      "gating": 3,
+      "suppressed": false
+    }
+  },
+  "media": {
+    "screenshots": 5,
+    "screenshotSequenceSeconds": 15,
+    "continuousRecording": false
+  },
+  "limits": [
+    "Matrix and SQL do not share a distributed transaction; uncertain outcomes can require retry",
+    "No compare-and-set guarantee against external Matrix clients",
+    "Remote name changes use existing authorized history recovery",
+    "No physical-device or production-capacity qualification",
+    "Additional creator work deferred at the user's request"
+  ]
+}

@@ -1,6 +1,8 @@
 server_name: zoen-eve.test
 signing_key_path: /data/signing.key
 report_stats: false
+experimental_features:
+  msc4306_enabled: true
 listeners:
   - port: 8008
     type: http
@@ -19,6 +21,9 @@ database:
     cp_min: 1
     cp_max: 5
 app_service_config_files: [/config/registration.yaml]
+modules:
+  - module: registration.ReservedIdentities
+    config: {}
 trusted_key_servers: []
 suppress_key_server_warning: true
 federation_domain_whitelist: []

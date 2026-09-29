@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
 import {
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { CompanionOverlay } from "./overlay";
 import { IconButton } from "./icon-button";
+import { useSheetDrag, SheetGrabber } from "./sheet-drag";
 import { colors } from "./theme";
 
 /** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
@@ -21,35 +23,38 @@ export function SheetSurface({
   children,
   panelStyle,
   maxWidth = 740,
-  dismissLabel,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly panelStyle?: StyleProp<ViewStyle>;
   readonly maxWidth?: number;
-  readonly dismissLabel?: string;
 }) {
   const compact = useWindowDimensions().width < 720;
+  const drag = useSheetDrag(compact, onClose);
   return (
     <CompanionOverlay title={title} onClose={onClose}>
       <View style={[styles.backdrop, !compact && styles.desktopBackdrop]}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={dismissLabel ?? `Dismiss ${title.toLowerCase()}`}
+          accessible={false}
+          tabIndex={-1}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           onPress={onClose}
           style={StyleSheet.absoluteFill}
         />
-        <View
+        <Animated.View
           style={[
             styles.sheet,
+            { transform: [{ translateY: drag.offset }] },
             panelStyle,
             !compact && [styles.desktopPanel, { maxWidth }],
           ]}
         >
-          {compact && <View style={styles.handle} />}
+          {compact && <SheetGrabber handlers={drag.handlers} />}
           {children}
-        </View>
+        </Animated.View>
       </View>
     </CompanionOverlay>
   );
@@ -59,13 +64,17 @@ export function CompanionSheet({
   title,
   onClose,
   children,
+  scrollable = true,
+  maxWidth,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
+  readonly scrollable?: boolean;
+  readonly maxWidth?: number;
 }) {
   return (
-    <SheetSurface title={title} onClose={onClose}>
+    <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>
           {title}
@@ -76,12 +85,16 @@ export function CompanionSheet({
           onPress={onClose}
         />
       </View>
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-      >
-        {children}
-      </ScrollView>
+      {scrollable ? (
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[styles.content, styles.listContent]}>{children}</View>
+      )}
     </SheetSurface>
   );
 }
@@ -109,14 +122,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     boxShadow: "0 8px 48px rgba(0,0,0,0.12)",
   },
-  handle: {
-    width: 48,
-    height: 4,
-    borderRadius: 3,
-    backgroundColor: colors.line,
-    alignSelf: "center",
-    marginBottom: 12,
-  },
   header: {
     paddingHorizontal: 24,
     paddingBottom: 16,
@@ -127,4 +132,5 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, fontSize: 23, fontWeight: "600", color: colors.ink },
   content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },
+  listContent: { minHeight: 0, flexShrink: 1 },
 });

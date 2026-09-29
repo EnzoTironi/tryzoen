@@ -2,8 +2,10 @@
 
 The application uses the official MIT-licensed Akita ai-memory 2.4.1 executable.
 The root Dockerfile verifies the release archive checksum for Linux amd64 and
-arm64 and includes the upstream license. Markdown and Git are authoritative;
-SQLite search indexes are derived. Each authorized personal namespace has separate
+arm64 and includes the upstream license. Markdown and Git preserve authored content; SQLite also preserves native history
+and operational receipts that cannot be reconstructed from Markdown alone.
+Backups must preserve the complete corpus.
+Each authorized personal namespace has separate
 source-session and learned-note engines. This is not a shared global memory server.
 
 Set `ZOEN_AI_MEMORY_BINARY` to the executable and `ZOEN_SESSION_ARCHIVE_DIR` to

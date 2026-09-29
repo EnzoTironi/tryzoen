@@ -1,0 +1,5 @@
+ALTER TABLE "workspace_memory_erasure" ADD COLUMN "available_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_memory_erasure" ADD COLUMN "erasure_failures" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_memory_erasure" ADD COLUMN "last_failed_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "workspace_memory_erasure_pending_idx" ON "workspace_memory_erasure" USING btree ("available_at","requested_at","namespace_id");--> statement-breakpoint
+ALTER TABLE "workspace_memory_erasure" ADD CONSTRAINT "workspace_memory_erasure_failures" CHECK ("workspace_memory_erasure"."erasure_failures" >= 0 AND ("workspace_memory_erasure"."erasure_failures" = 0) = ("workspace_memory_erasure"."last_failed_at" IS NULL));

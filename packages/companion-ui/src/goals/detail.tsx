@@ -45,7 +45,6 @@ export function GoalDetail({
       title={goal.title}
       onClose={onClose}
       panelStyle={compact && styles.compactSheet}
-      dismissLabel="Close goal"
     >
       <View style={[styles.header, compact && styles.compactHeader]}>
         <Text

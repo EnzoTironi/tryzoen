@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 
 import { listVaultItems, saveVaultItem } from "../../db/services/vault";
-import { serializeLoginVaultPayload } from "../../shared/vault/schema";
+import { serializeLoginVaultPayload } from "@zoen/companion-ui/vault";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import {
@@ -99,6 +99,8 @@ test("the agent unwraps only the delegated item and does not read the user ciphe
     expect.objectContaining({ id: grant.id, itemId: delegated.id }),
   ]);
   expect((await inspectVaultDelegations(guest)).mayManage).toBe(false);
+  expect(JSON.stringify(controls)).not.toContain(delegatedPassword);
+  expect(JSON.stringify(controls)).not.toContain(privatePassword);
   const listed = await listDelegatedVaultItems(scope);
   expect(listed.map((item) => item.handle)).toEqual([delegated.id]);
   expect(JSON.stringify(listed)).not.toContain(delegatedPassword);
@@ -131,6 +133,7 @@ test("the agent unwraps only the delegated item and does not read the user ciphe
   expect(guestFill.reveal()).toContain(delegatedPassword);
   await revokeVaultDelegation(actor, grant.id);
   await revokeVaultDelegation(actor, grant.id);
+  expect((await inspectVaultDelegations(actor)).items).toEqual([]);
   denied(
     await Promise.try(async () =>
       releaseDelegatedSecret(scope, delegated.id)
@@ -219,4 +222,71 @@ test("company delegations stay off the personal workspace and expiry plus remova
     )
   );
   return true;
+});
+
+test("removed members cannot inspect or revoke credential grants", async () => {
+  await using workspace = await workspaceFixture();
+  await removeWorkspaceMember(workspace.actor, workspace.guest.userId);
+  await expect(inspectVaultDelegations(workspace.guest)).rejects.toBeInstanceOf(
+    WorkspaceAccessDenied
+  );
+  await expect(
+    revokeVaultDelegation(workspace.guest, randomUUID())
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("organization removal fences delegated reads despite a residual workspace membership", async () => {
+  await using workspace = await workspaceFixture();
+  const { actor, guest } = workspace;
+  await saveVaultItem(
+    actor,
+    login("Organization-boundary", "synthetic-secret")
+  );
+  const [item] = await listVaultItems(actor);
+  if (!item) throw new Error("Missing synthetic credential");
+  await delegateVaultItem(actor, { itemId: item.id, days: 7 });
+  expect(
+    (await listDelegatedVaultItems(guest)).map((row) => row.handle)
+  ).toEqual([item.id]);
+  await releaseDelegatedSecret(guest, item.id);
+
+  await query(
+    sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
+  );
+  expect(
+    await query(sql`SELECT user_id FROM workspace_memberships
+    WHERE workspace_id = ${guest.workspaceId} AND user_id = ${guest.userId}`)
+  ).toHaveLength(1);
+  await expect
+    .soft(listDelegatedVaultItems(guest))
+    .rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect
+    .soft(releaseDelegatedSecret(guest, item.id).then(() => "released"))
+    .rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(
+    (await listDelegatedVaultItems(actor)).map((row) => row.handle)
+  ).toEqual([item.id]);
+  await releaseDelegatedSecret(actor, item.id);
+});
+
+test("residual personal workspace membership does not grant access to another owner's delegated credentials", async () => {
+  await using workspace = await workspaceFixture();
+  const { personal, guest } = workspace;
+  await saveVaultItem(personal, login("Personal-boundary", "synthetic-secret"));
+  const [item] = await listVaultItems(personal);
+  if (!item) throw new Error("Missing synthetic credential");
+  await delegateVaultItem(personal, { itemId: item.id, days: 7 });
+  await query(sql`INSERT INTO workspace_memberships (workspace_id, user_id, role)
+    VALUES (${personal.workspaceId}, ${guest.userId}, 'member')`);
+  const foreign = { userId: guest.userId, workspaceId: personal.workspaceId };
+  await expect
+    .soft(listDelegatedVaultItems(foreign))
+    .rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect
+    .soft(releaseDelegatedSecret(foreign, item.id).then(() => "released"))
+    .rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(
+    (await listDelegatedVaultItems(personal)).map((row) => row.handle)
+  ).toEqual([item.id]);
+  await releaseDelegatedSecret(personal, item.id);
 });

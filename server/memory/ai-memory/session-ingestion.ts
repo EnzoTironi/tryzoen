@@ -17,8 +17,16 @@ export async function ingestSessionSource(
   source: z.infer<typeof sessionSourceSchema>
 ) {
   if (source.role === "assistant") return;
+  // Eve's resumed workflow events can omit the turn ID while retaining their
+  // sequence. An empty ID must not collapse different continuations into one
+  // already-ended native session: upstream correctly ignores a repeated end.
   const sessionId = uuidv5(
-    JSON.stringify([source.sessionId, source.turnId]),
+    JSON.stringify([
+      source.sessionId,
+      source.turnId === null || source.turnId === ""
+        ? ["continuation", source.sequence ?? source.eventId]
+        : source.turnId,
+    ]),
     z.uuid().parse(namespaceId)
   );
   const marker = `zoenevent${digest(JSON.stringify(source))}`;

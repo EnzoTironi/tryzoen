@@ -27,7 +27,9 @@ export * from "./feed";
 export * from "./workspace-agents";
 export * from "./personal-trust";
 export * from "./matrix";
+export * from "./matrix-reports";
 export * from "./matrix-direct";
+export * from "./matrix-activity";
 export * from "./model-connections";
 export * from "./tool-connections";
 export * from "./matrix-conversations";
@@ -37,3 +39,8 @@ export * from "./creator-drafts";
 export * from "./creator-releases";
 export * from "./creator-previews";
 export * from "./creator-pilots";
+export * from "./creator-sources";
+export * from "./creator-corpora";
+
+export * from "./creator-qualifications";
+export * from "./creator-source-intakes";

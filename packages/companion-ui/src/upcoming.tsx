@@ -106,7 +106,7 @@ function UpcomingRow({
     <View style={styles.item}>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
+        aria-expanded={expanded}
         accessibilityLabel={item.title}
         onPress={() => {
           setExpanded(!expanded);

@@ -1,5 +1,10 @@
-import { MessageCircle, Puzzle, ShieldCheck } from "lucide-react-native";
+import { MessageInteraction } from "./conversation/interaction";
+import { MessageDelivery } from "./conversation/delivery";
+import { ConnectionStatus } from "./conversation/connection";
+import { useConversationScroll } from "./conversation/scroll";
+import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
+import { InputRequestCard } from "./conversation/input-request";
 import { LinkCard, MessageLinks } from "./cards/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -7,16 +12,10 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type ViewToken,
 } from "react-native";
-import type {
-  EveMessage,
-  EveMessageInputRequest,
-  EveMessagePart,
-  UseEveAgentStatus,
-} from "eve/react";
+import type { EveMessage, EveMessagePart, UseEveAgentStatus } from "eve/react";
 import type { InputResponse } from "eve/client";
 import { AssistantMarkdown } from "./markdown";
 import { ActionButton } from "./button";
@@ -35,29 +34,39 @@ import {
 
 export function Conversation({
   messages,
+  delivery,
   status,
   error,
   onSend,
+  onRetrySend,
+  onRemoveSend,
   onRespond,
   onCancel,
   onLoadOlder,
   loadingOlder = false,
+  olderError,
   onCopyText,
   initialDraft,
+  onDraftChange,
   reactions,
   onReact,
   onVisibleMessagesChange,
 }: {
   readonly messages: readonly EveMessage[];
+  readonly delivery?: ChatAgent["delivery"];
   readonly status: UseEveAgentStatus;
   readonly error?: string;
   readonly onSend: ChatAgent["send"];
+  readonly onRemoveSend?: (id: string) => void;
+  readonly onRetrySend?: (id: string) => void;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
   readonly onCancel: () => void;
-  readonly onLoadOlder?: () => void;
+  readonly onLoadOlder?: () => Promise<void>;
   readonly loadingOlder?: boolean;
+  readonly olderError?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: ConversationDraft;
+  readonly onDraftChange?: (draft: ConversationDraft) => void;
   readonly reactions?: ReadonlyMap<string, string | null>;
   readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange?: (ids: string[]) => void;
@@ -68,9 +77,19 @@ export function Conversation({
       ? { id: staged.id, role: staged.role, text: staged.quote }
       : undefined
   );
-  const scroll = useRef<FlatList<EveMessage>>(null);
-  const nearBottom = useRef(true);
-  const positioned = useRef(false);
+  const {
+    ref: listRef,
+    retry: retryHistory,
+    onLayout: layoutHistory,
+    onScrollBeginDrag: dragHistory,
+    onScroll: scrollHistory,
+    onContentSizeChange: resizeHistory,
+  } = useConversationScroll({
+    messages,
+    loadingOlder,
+    olderError,
+    onLoadOlder,
+  });
   const busy = status === "streaming" || status === "submitted";
   const canRespond = status === "ready" || status === "error";
   const reportVisible = useRef(onVisibleMessagesChange);
@@ -81,24 +100,18 @@ export function Conversation({
   const [onViewableItemsChanged] = useState(
     () =>
       ({ viewableItems }: { viewableItems: ViewToken<EveMessage>[] }) => {
-        reportVisible.current?.(viewableItems.map(({ item }) => item.id));
+        reportVisible.current?.(
+          viewableItems
+            .filter(({ item }) => !item.metadata?.optimistic)
+            .map(({ item }) => item.id)
+        );
       }
   );
-  useEffect(() => {
-    if (messages.length === 0 || positioned.current) return undefined;
-    const frame = requestAnimationFrame(() => {
-      scroll.current?.scrollToEnd({ animated: false });
-      positioned.current = true;
-      nearBottom.current = true;
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [messages.length]);
   return (
     <View style={styles.root}>
+      <ConnectionStatus />
       <FlatList
-        ref={scroll}
+        ref={listRef}
         data={messages}
         keyExtractor={(message) => message.id}
         contentContainerStyle={[styles.messages, styles.column]}
@@ -108,67 +121,38 @@ export function Conversation({
         onViewableItemsChanged={onViewableItemsChanged}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         scrollEventThrottle={100}
-        onLayout={() => {
-          if (nearBottom.current && messages.length > 0)
-            scroll.current?.scrollToEnd({ animated: false });
-        }}
-        onScrollBeginDrag={() => {
-          positioned.current = true;
-        }}
-        onScroll={({ nativeEvent }) => {
-          const atBottom =
-            nativeEvent.contentSize.height -
-              nativeEvent.contentOffset.y -
-              nativeEvent.layoutMeasurement.height <
-            100;
-          // Initial list measurements can report the top before history is positioned.
-          if (atBottom && nativeEvent.contentOffset.y > 0)
-            positioned.current = true;
-          if (positioned.current) nearBottom.current = atBottom;
-        }}
-        onContentSizeChange={() => {
-          if (nearBottom.current)
-            scroll.current?.scrollToEnd({ animated: false });
-        }}
+        onLayout={layoutHistory}
+        onScrollBeginDrag={dragHistory}
+        onScroll={scrollHistory}
+        onContentSizeChange={resizeHistory}
         ListHeaderComponent={
-          onLoadOlder ? (
-            <ActionButton
-              quiet
-              disabled={loadingOlder}
-              onPress={() => {
-                nearBottom.current = false;
-                onLoadOlder();
-              }}
-            >
-              {loadingOlder ? "Loading…" : "Earlier messages"}
-            </ActionButton>
+          loadingOlder ? (
+            <ActivityIndicator accessibilityLabel="Loading earlier messages" />
+          ) : olderError ? (
+            <View>
+              <Text accessibilityRole="alert">
+                Earlier messages couldn’t be loaded.
+              </Text>
+              <ActionButton quiet onPress={retryHistory}>
+                Try again
+              </ActionButton>
+            </View>
           ) : null
         }
         renderItem={({ item: message }) => (
           <View
+            testID="agent-message"
             style={
               message.role === "user" ? styles.userGroup : styles.assistantGroup
             }
           >
-            <View style={{ gap: 6, maxWidth: "100%" }}>
-              {message.parts.map((part, index) => (
-                <MessagePart
-                  // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
-                  key={`${message.id}:${index}`}
-                  part={part}
-                  isUser={message.role === "user"}
-                  canRespond={canRespond}
-                  onRespond={onRespond}
-                />
-              ))}
-              {message.metadata?.status === "failed" && (
-                <Text style={styles.error}>Message not delivered.</Text>
-              )}
-            </View>
-            <MessageActions
-              text={messageText(message)}
+            <MessageInteraction
               outgoing={message.role === "user"}
-              onCopy={onCopyText}
+              reaction={reactions?.get(message.id)}
+              onQuickReact={
+                onReact ? (emoji) => onReact(message.id, emoji) : undefined
+              }
+              disabled={!!message.metadata?.optimistic}
               onReply={() => {
                 setReply({
                   id: message.id,
@@ -176,11 +160,73 @@ export function Conversation({
                   text: messageText(message),
                 });
               }}
-              reaction={reactions?.get(message.id)}
-              onReact={
-                onReact ? (emoji) => onReact(message.id, emoji) : undefined
+              footer={
+                message.metadata?.optimistic ? (
+                  <MessageDelivery
+                    onRemove={
+                      onRemoveSend
+                        ? () => {
+                            onRemoveSend(message.id);
+                          }
+                        : undefined
+                    }
+                    status={
+                      delivery?.get(message.id)?.status ??
+                      (message.metadata.status === "failed"
+                        ? "failed"
+                        : "sending")
+                    }
+                    queued={delivery?.get(message.id)?.queued}
+                    failureText="Envio não confirmado. Verifique a conversa antes de reenviar."
+                    onRetry={
+                      onRetrySend
+                        ? () => {
+                            onRetrySend(message.id);
+                          }
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <MessageActions
+                    text={messageText(message)}
+                    outgoing={message.role === "user"}
+                    onCopy={onCopyText}
+                    onReply={() => {
+                      setReply({
+                        id: message.id,
+                        role: message.role,
+                        text: messageText(message),
+                      });
+                    }}
+                    reaction={reactions?.get(message.id)}
+                    onReact={
+                      onReact
+                        ? (emoji) => onReact(message.id, emoji)
+                        : undefined
+                    }
+                  />
+                )
               }
-            />
+            >
+              <View style={{ gap: 6, maxWidth: "100%" }}>
+                {message.parts.map((part, index) => (
+                  <MessagePart
+                    // oxlint-disable-next-line react/no-array-index-key -- Eve parts are append-only; their text changes while streaming.
+                    key={`${message.id}:${index}`}
+                    part={part}
+                    isUser={message.role === "user"}
+                    canRespond={canRespond}
+                    onRespond={onRespond}
+                  />
+                ))}
+                {message.metadata?.status === "failed" &&
+                  !message.metadata.optimistic && (
+                    <Text style={styles.error}>
+                      A resposta não pôde ser concluída.
+                    </Text>
+                  )}
+              </View>
+            </MessageInteraction>
           </View>
         )}
         ListFooterComponent={
@@ -216,6 +262,16 @@ export function Conversation({
               text: staged?.text ?? initialDraft?.text ?? "",
               files: initialDraft?.files ?? [],
             }}
+            onDraftChange={
+              onDraftChange
+                ? (draft) => {
+                    onDraftChange({
+                      ...draft,
+                      text: replyMessage(draft.text, reply),
+                    });
+                  }
+                : undefined
+            }
             onSend={async (message) => {
               await onSend(
                 messageContent({
@@ -243,7 +299,7 @@ export function Conversation({
 
 function UserMessage({ text }: { readonly text: string }) {
   const quoted = readReplyMessage(text);
-  if (!quoted) return <AssistantMarkdown text={text} />;
+  if (!quoted) return <AssistantMarkdown text={text} compact />;
   return (
     <View style={styles.quotedMessage}>
       <View style={styles.quote}>
@@ -258,7 +314,7 @@ function UserMessage({ text }: { readonly text: string }) {
           {quoted.quote}
         </Text>
       </View>
-      <AssistantMarkdown text={quoted.text} />
+      <AssistantMarkdown text={quoted.text} compact />
     </View>
   );
 }
@@ -281,7 +337,7 @@ export function MessagePart({
           {isUser ? (
             <UserMessage text={part.text} />
           ) : (
-            <AssistantMarkdown text={part.text} />
+            <AssistantMarkdown text={part.text} compact />
           )}
         </View>
         <MessageLinks text={readReplyMessage(part.text)?.text ?? part.text} />
@@ -290,40 +346,14 @@ export function MessagePart({
   }
   if (part.type === "dynamic-tool") {
     const request = part.toolMetadata?.eve?.inputRequest;
-    const response = part.toolMetadata?.eve?.inputResponse;
-    if (request && !response)
+    if (request)
       return (
-        <InputRequest
+        <InputRequestCard
           key={request.requestId}
-          request={request}
+          part={part}
           enabled={canRespond}
           onRespond={onRespond}
         />
-      );
-    if (request && response)
-      return (
-        <ResourceCard
-          title={
-            request.kind === "tool-approval" ? "Your decision" : "Your answer"
-          }
-          icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
-          tint="#4c9984"
-        >
-          <Text selectable style={styles.text}>
-            {request.prompt}
-          </Text>
-          <Text selectable style={styles.caption}>
-            {request.options?.find((option) => option.id === response.optionId)
-              ?.label ??
-              response.text ??
-              response.optionId}
-          </Text>
-          {part.state === "output-error" && (
-            <Text style={styles.error}>
-              The action failed after your response.
-            </Text>
-          )}
-        </ResourceCard>
       );
     return (
       <ResourceCard
@@ -381,90 +411,6 @@ export function MessagePart({
   return null;
 }
 
-function InputRequest({
-  request,
-  enabled,
-  onRespond,
-}: {
-  readonly request: EveMessageInputRequest;
-  readonly enabled: boolean;
-  readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
-}) {
-  const [text, setText] = useState("");
-  const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const inFlight = useRef(false);
-  async function respond(response: InputResponse) {
-    if (!enabled || inFlight.current) return;
-    inFlight.current = true;
-    setPending(true);
-    setFailed(false);
-    try {
-      await onRespond([response]);
-    } catch {
-      setFailed(true);
-    } finally {
-      setPending(false);
-      inFlight.current = false;
-    }
-  }
-  return (
-    <ResourceCard
-      title={
-        request.kind === "tool-approval"
-          ? "Your permission is needed"
-          : "A quick question"
-      }
-      icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
-      tint="#4c9984"
-    >
-      <Text style={styles.text}>{request.prompt}</Text>
-      <View style={styles.options}>
-        {request.options?.map((option) => (
-          <ActionButton
-            key={option.id}
-            quiet={option.style !== "danger"}
-            disabled={!enabled || pending}
-            onPress={() => {
-              void respond({
-                requestId: request.requestId,
-                optionId: option.id,
-              });
-            }}
-          >
-            {option.label}
-          </ActionButton>
-        ))}
-      </View>
-      {((request.allowFreeform ?? false) || !request.options?.length) && (
-        <View style={styles.request}>
-          <TextInput
-            accessibilityLabel="Your answer"
-            placeholder="Your answer"
-            value={text}
-            onChangeText={setText}
-            editable={enabled && !pending}
-            style={styles.answer}
-          />
-          <ActionButton
-            disabled={!enabled || pending || !text.trim()}
-            onPress={() => {
-              void respond({ requestId: request.requestId, text: text.trim() });
-            }}
-          >
-            Send answer
-          </ActionButton>
-        </View>
-      )}
-      {failed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          Your answer wasn’t accepted. Please try again.
-        </Text>
-      )}
-    </ResourceCard>
-  );
-}
-
 const styles = StyleSheet.create({
   quotedMessage: { gap: 12 },
   quote: {
@@ -512,16 +458,6 @@ const styles = StyleSheet.create({
   author: { fontSize: 13, fontWeight: "600", color: colors.ink },
   text: { fontSize: 16, lineHeight: 25, color: colors.ink },
   caption: { fontSize: 13, lineHeight: 21, color: colors.muted },
-  request: { gap: 12, paddingVertical: 8 },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  answer: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
-    padding: 12,
-    color: colors.ink,
-  },
   progress: {
     flexDirection: "row",
     gap: 10,

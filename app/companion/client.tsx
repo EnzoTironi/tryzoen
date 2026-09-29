@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { TRPCProvider } from "@web/trpc/client";
 
 const ConnectedCompanion = dynamic(
   () => import("./connected").then((module) => module.ConnectedCompanion),
@@ -16,9 +15,5 @@ export function CompanionClient(props: {
   readonly title?: string;
   readonly draftScope: string;
 }) {
-  return (
-    <TRPCProvider>
-      <ConnectedCompanion {...props} />
-    </TRPCProvider>
-  );
+  return <ConnectedCompanion {...props} />;
 }

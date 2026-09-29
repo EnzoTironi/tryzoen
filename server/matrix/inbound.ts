@@ -1,3 +1,5 @@
+import { readNativeGroupMembership } from "./membership";
+import { projectMatrixActivity } from "./activity";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { operationSignal, withTimeout } from "../operations/async";
@@ -67,7 +69,9 @@ export const acceptMatrixTransaction = async function (
   // Homeserver retries refresh transport-only metadata such as unsigned.age.
   // Fence the validated semantic events, not the raw JSON serialization.
   const hash = createHash("sha256")
-    .update(JSON.stringify(transaction))
+    .update(
+      JSON.stringify({ events: transaction.events.map(transactionFingerprint) })
+    )
     .digest("hex");
   const config = await matrixConfiguration();
   return await withDatabaseTransaction(async () => {
@@ -82,14 +86,21 @@ export const acceptMatrixTransaction = async function (
         throw new MatrixError({
           reason: "conflict",
         });
+      for (const event of transaction.events)
+        await projectMatrixActivity(config.serverName, event);
       return [];
     }
     const accepted: string[] = [];
     for (const event of transaction.events) {
+      await projectMatrixActivity(config.serverName, event);
       const received = await query(
         sql`INSERT INTO matrix_received_events(id) VALUES (${event.event_id}) ON CONFLICT DO NOTHING RETURNING id`
       );
       if (!received.length || !event.room_id) continue;
+      // Replacements update existing history; they must not start another agent turn.
+      if (event.content["m.relates_to"]?.rel_type === "m.replace") continue;
+      // A copied mention is shared content, not a fresh request to the agent.
+      if (event.content["org.zoen.forwarded"]) continue;
       const bindings = await query<{
         id: string;
         epoch: string;
@@ -106,16 +117,7 @@ export const acceptMatrixTransaction = async function (
         continue;
       }
       if (event.type === "m.room.member") {
-        // Invite notifications can arrive after the synchronous join has already
-        // persisted membership. Only joins and actual departures change audience.
-        if (!["join", "leave", "ban"].includes(event.content.membership ?? ""))
-          continue;
-        await query(
-          sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${binding.id}`
-        );
-        if (event.content.membership !== "join")
-          await query(sql`DELETE FROM matrix_room_members WHERE binding_id = ${binding.id}
-          AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key ?? ""})`);
+        await projectGroupMembership(binding.id, event);
         continue;
       }
       if (
@@ -133,7 +135,7 @@ export const acceptMatrixTransaction = async function (
         JOIN workspace_memberships w ON w.workspace_id = b.workspace_id AND w.user_id = m.user_id
         JOIN workspaces s ON s.id = w.workspace_id
         JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = m.user_id
-        WHERE m.binding_id = ${binding.id} AND i.matrix_id = ${event.sender}`);
+        WHERE m.binding_id = ${binding.id} AND m.state = 'joined' AND i.matrix_id = ${event.sender}`);
       if (!users[0]) continue;
       // In groups only an explicit Zoen mention activates the agent.
       if (!/(^|\s)@?zoen\b/i.test(event.content.body)) continue;
@@ -148,3 +150,67 @@ export const acceptMatrixTransaction = async function (
     return accepted;
   });
 };
+
+async function projectGroupMembership(
+  bindingId: string,
+  event: z.infer<typeof MatrixEventSchema>
+) {
+  if (!event.state_key || !event.room_id) return;
+  const current = await readNativeGroupMembership(
+    event.room_id,
+    event.state_key
+  );
+  // Read current native state: delayed leave callbacks must not undo a later re-add.
+  if (current === "join") {
+    const known =
+      await query(sql`SELECT 1 FROM matrix_room_members m JOIN matrix_identities i ON i.user_id = m.user_id
+      WHERE m.binding_id = ${bindingId} AND i.matrix_id = ${event.state_key} AND m.state = 'joined'`);
+    if (known.length) return;
+    await query(
+      sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+    );
+    await query(sql`UPDATE matrix_room_members SET native_pending = true, native_retry_at = now()
+      WHERE binding_id = ${bindingId} AND state <> 'joined'
+        AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key})`);
+    return;
+  }
+  if (current !== "leave" && current !== "ban") return;
+  const changed = await query(sql`UPDATE matrix_room_members SET state = CASE
+      WHEN state = 'removed' OR ${current} = 'ban' THEN 'removed' ELSE 'left' END,
+      native_pending = false
+    WHERE binding_id = ${bindingId} AND (state = 'joined' OR native_pending)
+      AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key}) RETURNING binding_id`);
+  if (changed.length)
+    await query(
+      sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+    );
+}
+
+/** Keep accepted transaction fingerprints stable as display-only aggregation schemas evolve. */
+function transactionFingerprint(event: z.infer<typeof MatrixEventSchema>) {
+  return {
+    ...event,
+    content: {
+      ...event.content,
+      "m.new_content": undefined,
+      "org.zoen.edit_operation": undefined,
+      "org.zoen.forwarded":
+        event.content["org.zoen.forwarded"] === true ? true : undefined,
+    },
+    ...(event.unsigned
+      ? {
+          unsigned: {
+            ...event.unsigned,
+            ...(event.unsigned["m.relations"]
+              ? {
+                  "m.relations": {
+                    ...event.unsigned["m.relations"],
+                    "m.replace": undefined,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}

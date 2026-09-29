@@ -1,0 +1,49 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build, synthetic review account and Matrix room",
+  "observation": "Chrome CDP request counts after initial loading, with no conversation changes",
+  "baseline": {
+    "revision": "61c34b32",
+    "durationMs": 48483,
+    "historyRequests": 5,
+    "typingRequests": 5,
+    "truncated": false
+  },
+  "treatment": {
+    "revision": "61c34b32 with wave 15 shared room sync",
+    "durationMs": 49576,
+    "historyRequests": 0,
+    "roomSyncRequests": 4,
+    "legacyTypingRequests": 0,
+    "truncated": false
+  },
+  "implementation": [
+    "One bounded native room sync observes typing and message, redaction and membership changes",
+    "Event fields are restricted to identifiers, type and the typing user set; returned data is validated",
+    "Room and thread history no longer have a periodic refetch timer",
+    "Changes and limited/reset signals revalidate loaded active history through TanStack sequential cursor recovery",
+    "A change received during pagination is replayed without acknowledging its cursor until history can be reconciled",
+    "Background, offline and disposal cancel the observer; authorization errors also revalidate cached history"
+  ],
+  "limitations": [
+    "A single local idle observation, not a throughput benchmark or million-user qualification",
+    "Changed history still refetches loaded pages; incremental content patches and large-burst anchor retention remain open",
+    "Browser viewport testing does not qualify physical iOS or Android devices"
+  ],
+  "references": [
+    "https://spec.matrix.org/latest/client-server-api/#syncing",
+    "https://spec.matrix.org/latest/client-server-api/#filtering",
+    "https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries"
+  ],
+  "functionalVerification": [
+    "A synthetic message sent through a second browser tab appeared in the receiving desktop tab without reload",
+    "A synthetic reply sent through the second tab appeared in an already open receiving mobile thread without reload",
+    "The mobile bottom navigation remained visible during thread reading"
+  ],
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884262828",
+  "video": {
+    "kind": "screenshot sequence, not continuous recording",
+    "durationSeconds": 15.967,
+    "screenshots": 3
+  }
+}

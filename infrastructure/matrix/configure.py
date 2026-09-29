@@ -18,7 +18,10 @@ registration = {
     "as_token": os.environ["ZOEN_MATRIX_AS_TOKEN"], "hs_token": os.environ["ZOEN_MATRIX_HS_TOKEN"],
     "sender_localpart": "_zoen_bot", "rate_limited": True,
     "namespaces": {
-        "users": [{"exclusive": True, "regex": "^@_zoen_.*:" + re.escape(name) + "$"}],
+        "users": [
+            {"exclusive": True, "regex": "^@_zoen_(bot|agent_[a-f0-9]{32}):" + re.escape(name) + "$"},
+            {"exclusive": False, "regex": "^@_zoen_[a-f0-9]{32}:" + re.escape(name) + "$"},
+        ],
         "aliases": [{"exclusive": True, "regex": "^#_zoen_room_.*:" + re.escape(name) + "$"}],
         "rooms": [],
     },
@@ -48,6 +51,7 @@ if whatsapp_as and whatsapp_hs and whatsapp_url:
 config = {
     "server_name": name, "pid_file": str(config_dir / "homeserver.pid"),
     "signing_key_path": str(key), "report_stats": False,
+    "experimental_features": {"msc4306_enabled": True},
     "listeners": [{"port": 8008, "tls": False, "type": "http", "bind_addresses": ["::"],
                    "resources": [{"names": ["client", "health"], "compress": False}]}],
     "database": {"name": "psycopg2", "args": {
@@ -60,6 +64,7 @@ config = {
     "url_preview_enabled": False, "trusted_key_servers": [],
     "federation_domain_whitelist": [], "suppress_key_server_warning": True,
     "app_service_config_files": app_service_files,
+    "modules": [{"module": "registration.ReservedIdentities", "config": {}}],
     "caches": {"global_factor": 0.25}, "presence": {"enabled": False},
     "rc_message": {"per_second": 1, "burst_count": 10},
     "rc_invites": {"per_room": {"per_second": 5, "burst_count": 50}, "per_user": {"per_second": 5, "burst_count": 50}},

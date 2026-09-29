@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   channelProviderSchema,
+  linkedChannelIdentitySchema,
   type channelChallengeStatusSchema,
 } from "../../shared/identity/channel-auth.ts";
 import { accessScopeForUser } from "../../shared/identity/access-scope.ts";
@@ -19,7 +20,7 @@ const Secret = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const VerifiedSender = z.object({
   channel: channelProviderSchema,
   installationId: Identifier,
-  senderId: Identifier,
+  senderId: linkedChannelIdentitySchema.shape.senderId,
 });
 const IssueChallenge = z.union([
   z.object({
@@ -59,7 +60,7 @@ const RevokeIdentity = z.object({
   userId: Identifier,
 });
 export const IdentitySchema = z.object({
-  id: Uuid,
+  id: linkedChannelIdentitySchema.shape.id,
   userId: Identifier,
   ...VerifiedSender.shape,
 });
@@ -507,3 +508,6 @@ export const ChannelAccounts = {
   getChallengeStatus,
   revokeIdentity,
 };
+
+// Compound account controls must acquire this lock before session/member row locks.
+export { transaction as withChannelAccountTransaction };
