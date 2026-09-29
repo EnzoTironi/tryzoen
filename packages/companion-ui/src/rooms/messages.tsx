@@ -1,3 +1,5 @@
+import { MessageReaders } from "./readers";
+import type { roomReadReceiptSchema } from "./schema";
 import { MessageInteraction } from "../conversation/interaction";
 import { MessageDelivery } from "../conversation/delivery";
 import { AttachmentCard } from "../attachments/card";
@@ -59,6 +61,7 @@ export function RoomMessages({
   onProfile,
   members,
   reactions,
+  receipts,
   onReact,
   onVisibleMessagesChange,
 }: {
@@ -70,6 +73,7 @@ export function RoomMessages({
   readonly onReply: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly members: z.infer<typeof roomMemberSchema>[];
+  readonly receipts: z.infer<typeof roomReadReceiptSchema>[];
   readonly reactions: z.infer<typeof roomReactionSummarySchema>[];
   readonly onReact: (id: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange: (ids: string[]) => void;
@@ -244,6 +248,11 @@ export function RoomMessages({
                 onProfile={onProfile}
                 members={members}
                 onReact={onReact}
+                receipts={receipts.filter(
+                  (receipt) =>
+                    receipt.messageId === item.id &&
+                    receipt.userId !== item.senderId
+                )}
                 reaction={reactions.find(
                   (reaction) => reaction.messageId === item.id
                 )}
@@ -311,6 +320,7 @@ function RoomMessage({
   onProfile,
   members,
   reaction,
+  receipts,
   onReact,
   onRetrySend,
   onRemoveSend,
@@ -329,6 +339,7 @@ function RoomMessage({
   | "onProfile"
   | "members"
   | "onReact"
+  | "receipts"
 > & {
   readonly onRemoveSend?: (id: string) => void;
   readonly item: RoomMessageView;
@@ -463,6 +474,13 @@ function RoomMessage({
           </View>
           {!item.redacted && !item.media && <MessageLinks text={item.text} />}
         </MessageInteraction>
+        {!outgoing && !item.redacted && (
+          <MessageReaders
+            receipts={receipts}
+            members={members}
+            onProfile={onProfile}
+          />
+        )}
       </View>
     </>
   );

@@ -19,6 +19,7 @@ vi.mock("./sync", () => ({
   useRoomSync: vi.fn<typeof useRoomSync>(() => ({
     userIds: [],
     presence: [],
+    receipts: [],
     reconnecting: false,
     accessDenied: false,
     change: vi.fn<(value: boolean) => void>(),
@@ -84,6 +85,8 @@ const data: RoomData = {
   pins: vi.fn<RoomData["pins"]>(),
   pin: vi.fn<RoomData["pin"]>(),
   reactors: vi.fn<RoomData["reactors"]>(),
+  readReceiptPreference: vi.fn<RoomData["readReceiptPreference"]>(),
+  setReadReceiptPreference: vi.fn<RoomData["setReadReceiptPreference"]>(),
   presencePreference: vi.fn<RoomData["presencePreference"]>(),
   setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
@@ -252,6 +255,7 @@ it("explains revoked access without showing history or a reconnect loop", () => 
   vi.mocked(useRoomSync).mockReturnValueOnce({
     userIds: [],
     presence: [],
+    receipts: [],
     reconnecting: false,
     accessDenied: true,
     change: vi.fn<(value: boolean) => void>(),

@@ -50,10 +50,28 @@ const nativeSyncSchema = z.object({
                           user_ids: z.array(z.string().max(255)).max(100),
                         }),
                       }),
-                      z.object({ type: z.literal("m.receipt") }),
+                      z.object({
+                        type: z.literal("m.receipt"),
+                        content: z
+                          .record(
+                            z.string().max(255),
+                            z.object({
+                              "m.read": z
+                                .record(
+                                  z.string().max(255),
+                                  z.object({
+                                    ts: z.number().int().nonnegative(),
+                                    thread_id: z.string().max(255).optional(),
+                                  })
+                                )
+                                .optional(),
+                            })
+                          )
+                          .optional(),
+                      }),
                     ])
                   )
-                  .max(1),
+                  .max(2),
               })
               .optional(),
             timeline: z
@@ -128,7 +146,7 @@ export async function pollNativeSync(
       include_leave: true,
       state: { types: [] },
       account_data: { types: [] },
-      ephemeral: { types: ["m.typing"] },
+      ephemeral: { types: ["m.typing", "m.receipt"] },
       timeline: {
         limit: 20,
         types: [
@@ -181,7 +199,7 @@ function parseNativeSync(
           (event) => event.room_id !== undefined && event.room_id !== roomId
         ) ||
         room.ephemeral?.events.some(
-          (event) => event.type !== (mode === "room" ? "m.typing" : "m.receipt")
+          (event) => mode === "inbox" && event.type !== "m.receipt"
         )
     )
   )

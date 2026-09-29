@@ -46,8 +46,10 @@ export async function readMatrixRoomSync(
       "room",
       presenceSenders
     );
-    const typingEvent =
-      native.rooms?.join?.[room.roomId]?.ephemeral?.events.at(-1);
+    const ephemeral = native.rooms?.join?.[room.roomId]?.ephemeral?.events;
+    const typingEvent = ephemeral?.findLast(
+      (event) => event.type === "m.typing"
+    );
     const timeline = native.rooms?.join?.[room.roomId]?.timeline;
     const reset =
       !previous ||
@@ -115,6 +117,11 @@ export async function readMatrixRoomSync(
       changes,
       userIds: previous && expiresAt > Date.now() ? userIds : [],
       presence: expiresAt > Date.now() ? presence : [],
+      receipts: projectPublicReceipts(
+        native,
+        room.roomId,
+        new Set(presenceSenders.filter((id) => authorized.has(id)))
+      ),
       expiresAt,
     });
   } catch (error) {
@@ -137,7 +144,32 @@ export async function readMatrixRoomSync(
       changes: null,
       userIds: [],
       presence: [],
+      receipts: [],
       expiresAt: 0,
     });
   }
+}
+
+/** Strip private/self/bot receipts and bound the retained per-thread read positions. */
+function projectPublicReceipts(
+  native: Awaited<ReturnType<typeof pollNativeSync>>,
+  roomId: string,
+  authorized: Set<string>
+) {
+  const event = native.rooms?.join?.[roomId]?.ephemeral?.events.findLast(
+    (entry) => entry.type === "m.receipt"
+  );
+  return Object.entries(event?.content ?? {})
+    .flatMap(([messageId, content]) =>
+      Object.entries(content["m.read"] ?? {})
+        .filter(([userId]) => authorized.has(userId))
+        .map(([userId, receipt]) => ({
+          userId,
+          messageId,
+          threadId: receipt.thread_id ?? null,
+          timestamp: receipt.ts,
+        }))
+    )
+    .toSorted((a, b) => a.timestamp - b.timestamp)
+    .slice(-1000);
 }

@@ -23,6 +23,8 @@ const data: RoomData = {
   pins: vi.fn<RoomData["pins"]>(),
   pin: vi.fn<RoomData["pin"]>(),
   reactors: vi.fn<RoomData["reactors"]>(),
+  readReceiptPreference: vi.fn<RoomData["readReceiptPreference"]>(),
+  setReadReceiptPreference: vi.fn<RoomData["setReadReceiptPreference"]>(),
   presencePreference: vi.fn<RoomData["presencePreference"]>(),
   setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),

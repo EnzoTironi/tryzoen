@@ -146,6 +146,7 @@ test("replayed response cannot extend its expiry and disposal clears state", asy
     cursor: "opaque",
     userIds: ["ana"],
     presence: [],
+    receipts: [],
     expiresAt: 105000,
     timelineChanged: false,
     reactionsChanged: false,
@@ -177,6 +178,7 @@ const healthy = {
   cursor: "next",
   userIds: [],
   presence: [],
+  receipts: [],
   expiresAt: 0,
   timelineChanged: false,
   reactionsChanged: false,
@@ -254,6 +256,7 @@ test("idle and typing-only sync never refetch loaded history", async () => {
     ...healthy,
     userIds: ["ana"],
     presence: [],
+    receipts: [],
     expiresAt: 130000,
   });
   mount();
@@ -680,6 +683,7 @@ test("revoked access stops polling and refreshes the authorized inbox", async ()
     cursor: null,
     userIds: [],
     presence: [],
+    receipts: [],
     expiresAt: 0,
     timelineChanged: false,
     reactionsChanged: false,
@@ -694,4 +698,43 @@ test("revoked access stops polling and refreshes the authorized inbox", async ()
   expect(state.snapshots).toContain(
     JSON.stringify(["account:workspace", "room", true])
   );
+});
+
+test("read receipts merge by reader and thread, survive presence expiry and clear on reset", async () => {
+  const receipt = {
+    userId: "ana",
+    messageId: "$first",
+    threadId: "main",
+    timestamp: 100,
+  };
+  data.readSync
+    .mockResolvedValueOnce({ ...healthy, receipts: [receipt] })
+    .mockResolvedValueOnce({
+      ...healthy,
+      receipts: [
+        { ...receipt, messageId: "$second", timestamp: 200 },
+        { ...receipt, messageId: "$reply", threadId: "$root", timestamp: 201 },
+      ],
+    })
+    .mockResolvedValue({ ...healthy, expiresAt: 130000 });
+  mount();
+  await vi.advanceTimersByTimeAsync(35000);
+  const receipts = state.snapshots.filter(
+    (value) => value && typeof value === "object" && "items" in value
+  );
+  expect(receipts.at(-1)).toMatchObject({
+    items: [
+      { ...receipt, messageId: "$second", timestamp: 200 },
+      { ...receipt, messageId: "$reply", threadId: "$root", timestamp: 201 },
+    ],
+  });
+  expect(receipts).toHaveLength(2);
+  data.readSync.mockResolvedValue({ ...healthy, reset: true });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(state.snapshots).toContainEqual(
+    expect.objectContaining({ items: [] })
+  );
+  state.online = false;
+  for (const listener of state.network) listener(false);
+  expect(state.snapshots.at(-1)).toBeUndefined();
 });

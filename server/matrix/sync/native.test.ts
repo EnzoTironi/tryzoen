@@ -10,6 +10,46 @@ vi.mock("../client", async (original) => ({
 beforeEach(() => {
   mocks.request.mockReset().mockResolvedValue({ next_batch: "native-token" });
 });
+it("accepts typing beside public receipts and strips private receipts before projection", async () => {
+  mocks.request.mockResolvedValue({
+    next_batch: "next",
+    rooms: {
+      join: {
+        "!room:test": {
+          ephemeral: {
+            events: [
+              { type: "m.typing", content: { user_ids: ["@ana:test"] } },
+              {
+                type: "m.receipt",
+                content: {
+                  $message: {
+                    "m.read": { "@ana:test": { ts: 123, thread_id: "main" } },
+                    "m.read.private": { "@viewer:test": { ts: 456 } },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+  const result = await pollNativeSync(
+    "@viewer:test",
+    ["!room:test"],
+    "previous",
+    "room"
+  );
+  expect(result.rooms?.join?.["!room:test"]?.ephemeral?.events).toEqual([
+    { type: "m.typing", content: { user_ids: ["@ana:test"] } },
+    {
+      type: "m.receipt",
+      content: {
+        $message: { "m.read": { "@ana:test": { ts: 123, thread_id: "main" } } },
+      },
+    },
+  ]);
+});
 it("filters presence to authorized participants and strips last-seen and private status text", async () => {
   mocks.request.mockResolvedValue({
     next_batch: "next",
@@ -301,7 +341,7 @@ it("focused room shares change signals and typing in a finite native long-poll",
           "m.room.pinned_events",
         ],
       },
-      ephemeral: { types: ["m.typing"] },
+      ephemeral: { types: ["m.typing", "m.receipt"] },
     },
   });
   await expect(

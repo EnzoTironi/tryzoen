@@ -2,6 +2,7 @@ import {
   roomPinsSchema,
   roomPinResultSchema,
   threadSubscriptionSchema,
+  readReceiptPreferenceSchema,
 } from "@zoen/companion-ui/rooms";
 import { roomReactorsPageSchema } from "@zoen/companion-ui/rooms";
 import { roomMembershipResultSchema } from "@zoen/companion-ui/rooms";
@@ -40,6 +41,18 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async readReceiptPreference(input, signal) {
+      return readReceiptPreferenceSchema.parse(
+        await rpc.query("workspaces.rooms.readReceiptPreference", input, {
+          signal,
+        })
+      );
+    },
+    async setReadReceiptPreference(input) {
+      return readReceiptPreferenceSchema.parse(
+        await rpc.mutation("workspaces.rooms.setReadReceiptPreference", input)
+      );
+    },
     async threadSubscription(input, signal) {
       return threadSubscriptionSchema.parse(
         await rpc.query("workspaces.rooms.threadSubscription", input, {

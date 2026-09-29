@@ -5,7 +5,7 @@ import { AppState } from "react-native";
 import type { RoomData, roomMessageSchema } from "./schema";
 import type { z } from "zod";
 
-/** Advance private receipts only after an actually visible event dwells onscreen. */
+/** Advance receipts only after an actually visible event dwells onscreen. */
 export function useRoomReadPosition(
   data: Pick<RoomData, "markRead">,
   cacheScope: string,

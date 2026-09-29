@@ -1,5 +1,6 @@
+import { RoomPrivacySettings } from "./privacy";
 import { RoomNotificationSettings } from "./notifications";
-import { PresenceIndicator, PresenceSettings } from "./presence";
+import { PresenceIndicator } from "./presence";
 import type { roomPresenceSchema } from "./schema";
 import { MessageCircle, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -131,7 +132,7 @@ export function ParticipantProfile({
           />
         )}
         {roomId && (direct || person.mine) && (
-          <PresenceSettings
+          <RoomPrivacySettings
             data={data}
             cacheScope={cacheScope}
             roomId={roomId}

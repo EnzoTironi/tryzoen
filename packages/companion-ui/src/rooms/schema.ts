@@ -167,6 +167,16 @@ export const roomPresenceSchema = z.object({
   id: z.string().max(255),
   state: z.enum(["online", "unavailable", "offline"]),
 });
+export const readReceiptPreferenceSchema = z.object({ enabled: z.boolean() });
+export const readReceiptPreferenceWriteSchema = roomReadSchema
+  .pick({ id: true })
+  .extend(readReceiptPreferenceSchema.shape);
+export const roomReadReceiptSchema = z.object({
+  userId: z.string().max(255),
+  messageId: z.string().max(255),
+  threadId: z.string().max(255).nullable(),
+  timestamp: z.number().int().nonnegative(),
+});
 export const roomSyncPageSchema = z.object({
   status: z.enum(["ready", "unavailable", "denied"]),
   cursor: z.string().max(16384).nullable(),
@@ -182,6 +192,7 @@ export const roomSyncPageSchema = z.object({
     .nullable(),
   userIds: z.array(z.string().max(255)).max(100),
   presence: z.array(roomPresenceSchema).max(100),
+  receipts: z.array(roomReadReceiptSchema).max(1000),
   expiresAt: z.number().int().nonnegative(),
 });
 export const roomEditResultSchema = z.object({
@@ -292,6 +303,13 @@ export const roomSearchPageSchema = z.object({
 export const roomUnreadSchema = z.object({ id: z.uuid(), unread: z.boolean() });
 
 export interface RoomData {
+  readReceiptPreference: (
+    input: { id: string },
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof readReceiptPreferenceSchema>>;
+  setReadReceiptPreference: (
+    input: z.infer<typeof readReceiptPreferenceWriteSchema>
+  ) => Promise<z.infer<typeof readReceiptPreferenceSchema>>;
   threadSubscription: (
     input: z.infer<typeof threadSubscriptionReadSchema>,
     signal?: AbortSignal

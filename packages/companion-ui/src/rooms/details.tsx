@@ -1,6 +1,7 @@
+import { RoomPrivacySettings } from "./privacy";
 import { GroupMembership } from "./membership";
 import { RoomNotificationSettings } from "./notifications";
-import { PresenceIndicator, PresenceSettings } from "./presence";
+import { PresenceIndicator } from "./presence";
 import type { roomPresenceSchema } from "./schema";
 import { RenameRoom } from "./rename";
 import { useQuery } from "@tanstack/react-query";
@@ -228,7 +229,7 @@ export function RoomDetails({
           cacheScope={cacheScope}
           roomId={page.room.id}
         />
-        <PresenceSettings
+        <RoomPrivacySettings
           data={data}
           cacheScope={cacheScope}
           roomId={page.room.id}

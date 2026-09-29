@@ -9,6 +9,8 @@ import {
 } from "@zoen/companion-ui/rooms";
 import {
   roomUnreadSchema,
+  readReceiptPreferenceSchema,
+  readReceiptPreferenceWriteSchema,
   roomPinsReadSchema,
   roomPinsSchema,
   roomPinWriteSchema,
@@ -86,6 +88,8 @@ import { roomEditSchema, roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 import {
   markMatrixRoomRead,
+  readReadReceiptPreference,
+  setReadReceiptPreference,
   setMatrixRoomUnread,
 } from "../../server/matrix/read-position";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
@@ -134,6 +138,20 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  readReceiptPreference: workspaceProcedure
+    .input(roomReadSchema.pick({ id: true }))
+    .output(readReceiptPreferenceSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readReadReceiptPreference(ctx.actor, input.id))
+    ),
+  setReadReceiptPreference: workspaceProcedure
+    .input(readReceiptPreferenceWriteSchema)
+    .output(readReceiptPreferenceSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () =>
+        setReadReceiptPreference(ctx.actor, input.id, input.enabled)
+      )
+    ),
   pins: workspaceProcedure
     .input(roomPinsReadSchema)
     .output(roomPinsSchema)

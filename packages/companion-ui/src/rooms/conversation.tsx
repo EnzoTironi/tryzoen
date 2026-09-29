@@ -176,6 +176,10 @@ export function RoomConversation({
             </Text>
           )}
           <RoomMessages
+            receipts={typing.receipts.filter(
+              (receipt) =>
+                receipt.threadId === null || receipt.threadId === "main"
+            )}
             onUnread={
               unread.isPending
                 ? undefined
@@ -530,6 +534,9 @@ function RoomThread({
         active={active && visible && !result.isError}
       />
       <RoomMessages
+        receipts={typing.receipts.filter(
+          (receipt) => receipt.threadId === null || receipt.threadId === root.id
+        )}
         onUnread={onUnread}
         data={data}
         roomId={roomId}

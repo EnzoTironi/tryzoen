@@ -1218,3 +1218,35 @@ Revisão estrutural registrou 13 observações / cinco gates, sem supressões: o
 wrappers existentes de corpus e o churn dos adapters permanecem; o componente
 de backup está conectado por JSX, embora o scanner o marque como código morto.
 O CI da rodada 33 concluiu todos os jobs com sucesso.
+
+### Rodada 35 — confirmações de leitura por pessoa e thread — 29/09/2026
+
+COMM-03 agora permite compartilhar confirmações de leitura, desativadas por
+padrão. A escolha fica no account data nativo do Matrix, vale para todos os
+dispositivos e é consultada no servidor a cada avanço de leitura. Um lock por
+pessoa ordena publicação e desativação; o cliente continua exigindo 750 ms de
+visibilidade efetiva. Desativar interrompe novas publicações, sem prometer apagar
+confirmações públicas anteriores.
+
+O sync existente recebe `m.read` junto de digitação e mudanças da conversa.
+`m.read.private` é descartado antes da projeção. Apenas participantes humanos
+atuais aparecem; autorização é refeita depois do long-poll. A projeção retém
+até mil posições por conversa, separadas por pessoa/thread. Deltas preservam
+posições durante sync ocioso; falha, background, troca de escopo ou acesso negado
+as retiram da tela. A expiração da presença não apaga uma confirmação histórica.
+
+Um indicador compacto fica no evento exato confirmado. Tocá-lo abre os nomes e
+horários em modal desktop ou sheet mobile, com acesso ao perfil. O controle de
+privacidade reutiliza a apresentação da presença em grupos e DMs. Não há inferência
+de leitura por horário de envio, nem alegação de entrega por aparelho, E2EE ou push.
+O fluxo foi qualificado contra o sync incremental: requisições de bootstrap
+idênticas podem receber temporariamente o snapshot inicial em cache do Synapse.
+
+O teste isolado com PostgreSQL/Synapse cobre padrão privado, opt-in, isolamento de
+conta e thread, opt-out, revogação e impedimento de atores sem sessão humana.
+O check passou com 280 arquivos / 1.740 testes e nove tarefas; build passou.
+A revisão estrutural separou a aplicação limitada de deltas do loop de sync.
+Os demais apontamentos incluem wrappers de contrato, churn e componentes JSX;
+nenhuma supressão foi adicionada.
+
+Evidência visual desktop/mobile: [indicador, participantes e preferências](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5894839282), com imagens e vídeo composto anexados por `gh --attach`.

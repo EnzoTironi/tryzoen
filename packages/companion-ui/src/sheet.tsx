@@ -65,14 +65,16 @@ export function CompanionSheet({
   onClose,
   children,
   scrollable = true,
+  maxWidth,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly scrollable?: boolean;
+  readonly maxWidth?: number;
 }) {
   return (
-    <SheetSurface title={title} onClose={onClose}>
+    <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>
           {title}

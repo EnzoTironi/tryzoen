@@ -1,3 +1,4 @@
+import { mergeReadReceipts } from "./read-receipts";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import {
@@ -8,7 +9,11 @@ import {
 } from "@tanstack/react-query";
 import { useTypingPublisher } from "./typing-publisher";
 import { reconcileRoomHistory } from "./history";
-import type { RoomData, roomPresenceSchema } from "./schema";
+import type {
+  RoomData,
+  roomPresenceSchema,
+  roomReadReceiptSchema,
+} from "./schema";
 import type { z } from "zod";
 
 /** One native sync for room/thread changes, reactions and typing. Never sends draft text. */
@@ -27,6 +32,10 @@ export function useRoomSync(
     userIds: string[];
     presence: z.infer<typeof roomPresenceSchema>[];
   }>();
+  const [receiptSnapshot, setReceiptSnapshot] = useState<{
+    scope: string;
+    items: z.infer<typeof roomReadReceiptSchema>[];
+  }>();
   const change = useTypingPublisher(data, cacheScope, roomId, enabled);
   useEffect(() => {
     let active = AppState.currentState === "active";
@@ -37,6 +46,7 @@ export function useRoomSync(
     let expiry: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
     let accessDenied = false;
+    let receipts: z.infer<typeof roomReadReceiptSchema>[] = [];
     const presence = new Map<string, z.infer<typeof roomPresenceSchema>>();
     const allowed = () =>
       enabled &&
@@ -50,10 +60,15 @@ export function useRoomSync(
     const reactions = { queryKey: ["matrix-reactions", cacheScope, roomId] };
     const reactors = { queryKey: ["matrix-reactors", cacheScope, roomId] };
     const pins = { queryKey: ["matrix-pins", cacheScope, roomId] };
-    const clear = () => {
+    const clearPresence = () => {
       clearTimeout(expiry);
       presence.clear();
       setSnapshot(undefined);
+    };
+    const clear = () => {
+      clearPresence();
+      receipts = [];
+      setReceiptSnapshot(undefined);
     };
     const stop = () => {
       clearTimeout(pollTimer);
@@ -107,6 +122,10 @@ export function useRoomSync(
           stopped
         );
         if (!applied) return;
+        if (result.reset || result.receipts.length) {
+          receipts = mergeReadReceipts(receipts, result.receipts, result.reset);
+          setReceiptSnapshot({ scope, items: receipts });
+        }
         cursor = result.cursor ?? undefined;
         setFailure(undefined);
         clearTimeout(expiry);
@@ -122,8 +141,8 @@ export function useRoomSync(
             userIds: result.userIds,
             presence: [...presence.values()],
           });
-          expiry = setTimeout(clear, remaining);
-        } else clear();
+          expiry = setTimeout(clearPresence, remaining);
+        } else clearPresence();
         failures = 0;
       } catch {
         if (controller.signal.aborted || disposed) return;
@@ -168,6 +187,7 @@ export function useRoomSync(
   return {
     userIds: snapshot?.scope === scope ? snapshot.userIds : [],
     presence: snapshot?.scope === scope ? snapshot.presence : [],
+    receipts: receiptSnapshot?.scope === scope ? receiptSnapshot.items : [],
     reconnecting: failure === scope,
     accessDenied: denied === scope,
     change,
