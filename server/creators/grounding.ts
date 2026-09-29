@@ -1,3 +1,5 @@
+import { requireActiveCreatorPilot } from "./pilots";
+import type { corpusAccessSchema } from "./corpus/schema";
 import { authorizedCreatorCorpus } from "./corpus/access";
 import { openCreatorCorpus, readCreatorCorpusPage } from "./corpus/engine";
 import { verifyCorpusManifest } from "./corpus/files";
@@ -21,19 +23,44 @@ export async function retrieveCreatorGrounding(
       throw new Error("Only grounded evaluations accept a release.");
     return null;
   }
-  if (!input.releaseId || !input.caseRef || input.pilotId)
-    throw new Error(
-      "Grounded evaluations require an owned release and a saved case; pilots are not eligible."
-    );
-  const release = await readCreatorRelease(actor, input.releaseId);
-  if (release.draftId !== input.draftId || release.revision !== input.revision)
-    throw new Error("Evaluate the exact approved draft revision.");
+  let access: z.infer<typeof corpusAccessSchema>;
+  let releaseId: string;
+  let expectedDigest: string | null = null;
+  if (input.pilotId) {
+    const pilot = await requireActiveCreatorPilot(actor, input.pilotId);
+    if (
+      pilot.answerMode !== "grounded" ||
+      !pilot.qualificationId ||
+      !pilot.manifestDigest ||
+      input.releaseId ||
+      input.caseRef
+    )
+      throw new Error("This pilot is not qualified for grounded answers.");
+    access = { kind: "pilot", pilotId: pilot.id };
+    releaseId = pilot.releaseId;
+    expectedDigest = pilot.manifestDigest;
+  } else {
+    if (!input.releaseId || !input.caseRef)
+      throw new Error(
+        "Grounded evaluations require an owned release and a saved case."
+      );
+    const release = await readCreatorRelease(actor, input.releaseId);
+    if (
+      release.draftId !== input.draftId ||
+      release.revision !== input.revision
+    )
+      throw new Error("Evaluate the exact approved draft revision.");
+    access = { kind: "creator", releaseId: release.id };
+    releaseId = release.id;
+  }
   const result = await searchCreatorCorpus(actor, {
-    access: { kind: "creator", releaseId: release.id },
+    access,
     query: input.question,
   });
+  if (expectedDigest !== null && result.manifestDigest !== expectedDigest)
+    throw new Error("The qualified corpus changed.");
   return creatorGroundingSchema.parse({
-    releaseId: release.id,
+    releaseId,
     manifestDigest: result.manifestDigest,
     retrieval: result.retrieval,
     citations: result.hits
@@ -86,12 +113,25 @@ export function validateGroundedAnswer(
 /** Recheck native availability and exact approved evidence before execution or acceptance. */
 export async function verifyCreatorGrounding(
   actor: z.infer<typeof WorkspaceActorSchema>,
-  evidence: z.infer<typeof creatorGroundingSchema>
+  evidence: z.infer<typeof creatorGroundingSchema>,
+  pilotId?: string
 ) {
-  const corpus = await authorizedCreatorCorpus(actor, {
-    kind: "creator",
-    releaseId: evidence.releaseId,
-  });
+  if (pilotId) {
+    const pilot = await requireActiveCreatorPilot(actor, pilotId);
+    if (
+      pilot.answerMode !== "grounded" ||
+      !pilot.qualificationId ||
+      pilot.releaseId !== evidence.releaseId ||
+      pilot.manifestDigest !== evidence.manifestDigest
+    )
+      throw new Error("This grounded pilot is no longer authorized.");
+  }
+  const corpus = await authorizedCreatorCorpus(
+    actor,
+    pilotId
+      ? { kind: "pilot", pilotId }
+      : { kind: "creator", releaseId: evidence.releaseId }
+  );
   if (!corpus.initialized || corpus.digest !== evidence.manifestDigest)
     throw new Error("Grounded corpus is no longer available.");
   await using engine = await openCreatorCorpus(corpus.namespace, true);

@@ -1,3 +1,4 @@
+import { creatorQualifications } from "./creator-qualifications";
 import {
   check,
   foreignKey,
@@ -18,6 +19,10 @@ export const creatorPilots = pgTable(
     releaseId: uuid("release_id")
       .notNull()
       .references(() => creatorReleases.id, { onDelete: "cascade" }),
+    qualificationId: uuid("qualification_id").references(
+      () => creatorQualifications.id,
+      { onDelete: "cascade" }
+    ),
     workspaceId: text("workspace_id").notNull(),
     creatorUserId: text("creator_user_id").notNull(),
     recipientUserId: text("recipient_user_id").notNull(),

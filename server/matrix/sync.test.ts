@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import { syncConversationInbox } from "./sync";
@@ -9,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   head: vi.fn<typeof readInboxSyncHead>(),
   native: vi.fn<typeof pollNativeSync>(),
   access: vi.fn<() => Promise<void>>(),
+}));
+vi.mock("@shared/environment", () => ({
+  env: { ZOEN_MATRIX_NATIVE_NOTIFICATIONS: true },
 }));
 vi.mock("@db/services/inbox", () => ({ readInboxSyncHead: mocks.head }));
 vi.mock("@db/services/auth", () => ({
@@ -82,4 +86,133 @@ it("still rejects session revocation while handling a provider failure", async (
   await expect(syncConversationInbox(actor, {})).rejects.toThrow(
     WorkspaceAccessDenied
   );
+});
+it("reconciles initial snapshots before exposing native counts and preserves omitted deltas", async () => {
+  mocks.native.mockResolvedValueOnce({
+    next_batch: "initial",
+    rooms: {
+      join: {
+        [room.roomId]: {
+          unread_notifications: { notification_count: 2, highlight_count: 1 },
+        },
+      },
+    },
+  });
+  const seed = await syncConversationInbox(actor, {});
+  expect(seed.notifications).toBeNull();
+  mocks.native.mockResolvedValue({ next_batch: "incremental", rooms: {} });
+  const current = await syncConversationInbox(actor, {
+    cursor: z.string().parse(seed.cursor),
+  });
+  expect(current.notifications).toEqual([
+    { id: room.id, notificationCount: 2, highlightCount: 1 },
+  ]);
+  expect(mocks.native).toHaveBeenLastCalledWith(
+    "@viewer:test",
+    [room.roomId],
+    "initial",
+    "inbox"
+  );
+  mocks.native.mockResolvedValue({
+    next_batch: "read",
+    rooms: {
+      join: {
+        [room.roomId]: {
+          unread_notifications: { notification_count: 0, highlight_count: 0 },
+        },
+      },
+    },
+  });
+  const read = await syncConversationInbox(actor, {
+    cursor: z.string().parse(current.cursor),
+  });
+  expect(read.notifications).toEqual([
+    { id: room.id, notificationCount: 0, highlightCount: 0 },
+  ]);
+  await expect(
+    syncConversationInbox(
+      { ...actor, userId: "other" },
+      { cursor: z.string().parse(read.cursor) }
+    )
+  ).rejects.toThrow(WorkspaceAccessDenied);
+});
+it("drops revoked snapshots and reboots native scope when membership epoch changes", async () => {
+  mocks.native.mockResolvedValue({
+    next_batch: "initial",
+    rooms: {
+      join: {
+        [room.roomId]: {
+          unread_notifications: { notification_count: 4, highlight_count: 0 },
+        },
+      },
+    },
+  });
+  const seed = await syncConversationInbox(actor, {});
+  mocks.head.mockResolvedValue({
+    rows: [],
+    scope: [{ ...room, epoch: "new" }],
+  });
+  const reset = await syncConversationInbox(actor, {
+    cursor: z.string().parse(seed.cursor),
+  });
+  expect(reset.notifications).toBeNull();
+  expect(mocks.native).toHaveBeenLastCalledWith(
+    "@viewer:test",
+    [room.roomId],
+    null,
+    "inbox"
+  );
+  mocks.head
+    .mockResolvedValueOnce({ rows: [], scope: [{ ...room, epoch: "new" }] })
+    .mockResolvedValueOnce({ rows: [], scope: [] });
+  const revoked = await syncConversationInbox(actor, {
+    cursor: z.string().parse(reset.cursor),
+  });
+  expect(revoked.notifications).toEqual([]);
+});
+it("bootstraps a room entering the head during I/O even when it has no later event", async () => {
+  const other = {
+    id: randomUUID(),
+    roomId: "!already-unread:test",
+    epoch: "one",
+  };
+  mocks.native.mockResolvedValue({ next_batch: "initial-a", rooms: {} });
+  const seed = await syncConversationInbox(actor, {});
+  mocks.head
+    .mockResolvedValueOnce({ rows: [], scope: [room] })
+    .mockResolvedValueOnce({ rows: [], scope: [room, other] });
+  mocks.native.mockResolvedValue({ next_batch: "polled-a", rooms: {} });
+  const raced = await syncConversationInbox(actor, {
+    cursor: z.string().parse(seed.cursor),
+  });
+  mocks.head.mockResolvedValue({ rows: [], scope: [room, other] });
+  mocks.native.mockResolvedValue({
+    next_batch: "initial-ab",
+    rooms: {
+      join: {
+        [other.roomId]: {
+          unread_notifications: { notification_count: 7, highlight_count: 1 },
+        },
+      },
+    },
+  });
+  const bootstrap = await syncConversationInbox(actor, {
+    cursor: z.string().parse(raced.cursor),
+  });
+  expect(mocks.native).toHaveBeenLastCalledWith(
+    "@viewer:test",
+    [room.roomId, other.roomId],
+    null,
+    "inbox"
+  );
+  expect(bootstrap.notifications).toBeNull();
+  mocks.native.mockResolvedValue({ next_batch: "unchanged-ab", rooms: {} });
+  const reconciled = await syncConversationInbox(actor, {
+    cursor: z.string().parse(bootstrap.cursor),
+  });
+  expect(reconciled.notifications).toContainEqual({
+    id: other.id,
+    notificationCount: 7,
+    highlightCount: 1,
+  });
 });

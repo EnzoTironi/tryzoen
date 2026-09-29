@@ -36,6 +36,47 @@ it("uses the exact previous native cursor without device churn", async () => {
   expect(mocks.request).toHaveBeenCalledTimes(1);
   expect(mocks.request.mock.calls[0]?.[1]).toContain("since=s123%26unsafe%3Dx");
 });
+it("accepts bounded native counters and consumes receipt signals without exposing participants", async () => {
+  mocks.request.mockResolvedValue({
+    next_batch: "receipt",
+    rooms: {
+      join: {
+        "!room:test": {
+          unread_notifications: { notification_count: 0, highlight_count: 0 },
+          ephemeral: {
+            events: [
+              {
+                type: "m.receipt",
+                content: {
+                  $private: {
+                    "m.read.private": { "@viewer:test": { ts: 123 } },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+  const result = await pollNativeSync(
+    "@viewer:test",
+    ["!room:test"],
+    "previous",
+    "inbox"
+  );
+  expect(result.rooms?.join?.["!room:test"]?.unread_notifications).toEqual({
+    notification_count: 0,
+    highlight_count: 0,
+  });
+  expect(JSON.stringify(result)).not.toContain("$private");
+  expect(mocks.request.mock.calls.at(-1)?.[1]).toContain(
+    encodeURIComponent('"m.receipt"')
+  );
+  await expect(
+    pollNativeSync("@viewer:test", ["!room:test"], "previous", "typing")
+  ).rejects.toThrow(MatrixError);
+});
 it.each([
   { next_batch: "x".repeat(4097) },
   {

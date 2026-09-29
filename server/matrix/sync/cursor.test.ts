@@ -23,6 +23,7 @@ const envelope = {
   selection: "query",
   head: "head",
   nextBatch: "native-secret-position",
+  notifications: null,
   scope: [{ id: randomUUID(), roomId: "!private:test", epoch: "epoch" }],
   expiresAt: Date.now() + 60000,
 };

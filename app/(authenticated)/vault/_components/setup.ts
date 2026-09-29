@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { parseVaultSetupSearchParams } from "@shared/vault/schema";
+import { parseVaultSetupSearchParams } from "@zoen/companion-ui/vault";
 
 export function useVaultSetup() {
   const searchParams = useSearchParams();

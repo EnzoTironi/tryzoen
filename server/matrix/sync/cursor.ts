@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { getAuth } from "@db/services/auth";
 import { z } from "zod";
+import { inboxNotificationsSchema } from "@zoen/companion-ui/inbox";
 import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
@@ -16,6 +17,7 @@ export const syncCursorSchema = z.object({
   selection: z.string(),
   head: z.string(),
   nextBatch: z.string().max(4096).nullable(),
+  notifications: inboxNotificationsSchema.nullable(),
   scope: z
     .array(z.object({ id: z.uuid(), roomId: z.string(), epoch: z.string() }))
     .max(31),

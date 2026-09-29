@@ -45,7 +45,12 @@ beforeAll(async () => {
     );
     await writeFile(
       join(directory, `agent/tools/${name}.ts`),
-      source.replaceAll('"../../server/', '"../../../../../server/')
+      source
+        .replaceAll('"../../server/', '"../../../../../server/')
+        .replaceAll(
+          '"../lib/workspace-operation"',
+          '"../../../../../agent/lib/workspace-operation"'
+        )
     );
   }
   await cp(

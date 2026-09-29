@@ -2,6 +2,7 @@ import type { EveMessage } from "eve/react";
 import { renderToEnglishMarkup as renderToStaticMarkup } from "@tests/helpers/i18n";
 import { describe, expect, it } from "vitest";
 import { AgentMessage } from ".";
+import { InputRequestActions } from "./input-request";
 
 describe("agent messages", () => {
   it("renders ordinary assistant text without a delivery tool result", () => {
@@ -157,6 +158,59 @@ describe("agent messages", () => {
       expect(markup).toContain("Exact recipient");
     }
   );
+  it.each(["question", "tool-approval"] as const)(
+    "closes completed %s controls without requiring response metadata",
+    (kind) => {
+      const message = {
+        id: "completed-request",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            state: "output-available",
+            toolCallId: "review-call",
+            toolName: "creator-review",
+            input: {},
+            output: { status: "completed" },
+            toolMetadata: {
+              eve: {
+                kind: "tool-call",
+                name: "creator-review",
+                inputRequest: {
+                  kind,
+                  requestId: "review-request",
+                  prompt: "Review this request",
+                  options: [{ id: "approve", label: "Approve" }],
+                },
+              },
+            },
+          },
+        ],
+      } satisfies EveMessage;
+      const [requestPart] = message.parts;
+      if (!requestPart) throw new Error("The fixture requires a request.");
+      const markup = renderToStaticMarkup(
+        kind === "tool-approval" ? (
+          <InputRequestActions
+            canRespond
+            part={requestPart}
+            onInputResponses={() => undefined}
+          />
+        ) : (
+          <AgentMessage
+            canRespond
+            isStreaming={false}
+            message={message}
+            onInputResponses={() => undefined}
+          />
+        )
+      );
+      expect(markup).toContain("Request closed");
+      expect(markup).not.toContain('type="submit"');
+      expect(markup).not.toContain("Approve</button>");
+    }
+  );
+
   it("shows authorization in the default view and removes the completed challenge", () => {
     const challenge = {
       type: "authorization",

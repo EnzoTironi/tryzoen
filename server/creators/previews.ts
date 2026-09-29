@@ -133,7 +133,9 @@ async function readPreviewSources(
   }
   const pilot = await requireActiveCreatorPilot(actor, input.pilotId);
   if (
-    input.kind !== "answer" ||
+    input.kind !==
+      (pilot.answerMode === "grounded" ? "grounded-answer" : "answer") ||
+    input.releaseId ||
     input.caseRef ||
     input.draftId !== pilot.draftId ||
     input.revision !== pilot.revision
@@ -190,7 +192,7 @@ export function claimCreatorPreview(
     const [claimed] =
       await query(sql`UPDATE creator_previews SET status = 'running', invocation = ${invocation}, started_at = clock_timestamp(), source_session_id = ${origin.sessionId}, source_turn_id = ${origin.turnId}
       WHERE id = ${id} AND status = 'pending' AND expires_at > now()
-      RETURNING snapshot, question, kind, grounding`);
+      RETURNING snapshot, question, kind, grounding, pilot_id AS "pilotId"`);
     if (!claimed)
       throw new Error(
         "This preview has already started or expired. Open its saved result in Creator studio."
@@ -200,17 +202,29 @@ export function claimCreatorPreview(
         snapshot: creatorDraftContentSchema,
         question: creatorPreviewRequestSchema.shape.question,
         kind: creatorPreviewRequestSchema.shape.kind,
+        pilotId: z.uuid().nullable(),
         grounding: creatorGroundingSchema.nullable(),
       })
       .parse(claimed);
     if (claimedSnapshot.grounding)
-      await verifyCreatorGrounding(actor, claimedSnapshot.grounding);
+      await verifyCreatorGrounding(
+        actor,
+        claimedSnapshot.grounding,
+        claimedSnapshot.pilotId ?? undefined
+      );
+    const modelInput = {
+      snapshot: claimedSnapshot.snapshot,
+      question: claimedSnapshot.question,
+      kind: claimedSnapshot.kind,
+    };
+    // Pilot identifiers authorize execution here; they are not model context.
     return claimedSnapshot.kind === "grounded-answer"
       ? {
-          ...claimedSnapshot,
-          snapshot: { ...claimedSnapshot.snapshot, examples: [] },
+          ...modelInput,
+          snapshot: { ...modelInput.snapshot, examples: [] },
+          grounding: claimedSnapshot.grounding,
         }
-      : claimedSnapshot;
+      : modelInput;
   });
 }
 
@@ -223,15 +237,21 @@ export function finishCreatorPreview(
   return transaction(async () => {
     await requirePreview(actor, id);
     const [record] = await query(
-      sql`SELECT kind, grounding FROM creator_previews WHERE id=${id}`
+      sql`SELECT kind, grounding, pilot_id AS "pilotId" FROM creator_previews WHERE id=${id}`
     );
     const source = z
       .object({
         kind: creatorPreviewRequestSchema.shape.kind,
+        pilotId: z.uuid().nullable(),
         grounding: creatorGroundingSchema.nullable(),
       })
       .parse(record);
-    if (source.grounding) await verifyCreatorGrounding(actor, source.grounding);
+    if (source.grounding)
+      await verifyCreatorGrounding(
+        actor,
+        source.grounding,
+        source.pilotId ?? undefined
+      );
     let grounded: z.infer<typeof creatorGroundedAnswerSchema> | null = null;
     if (source.kind === "grounded-answer" && response !== null) {
       try {

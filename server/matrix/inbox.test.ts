@@ -86,7 +86,7 @@ it("keeps provider unavailability scoped while propagating unexpected failures",
   mocks.request.mockRejectedValue(new MatrixError({ reason: "unavailable" }));
   expect(
     (await readMatrixInboxSummaries(actor, [firstRoom.id])).get(firstRoom.id)
-  ).toEqual({ preview: null, unread: null, summaryState: "unavailable" });
+  ).toEqual({ preview: null, summaryState: "unavailable" });
   mocks.request.mockRejectedValue(new Error("Unexpected"));
   await expect(readMatrixInboxSummaries(actor, [firstRoom.id])).rejects.toThrow(
     "Unexpected"

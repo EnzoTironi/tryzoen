@@ -9,6 +9,7 @@ import type {
   InboxData,
   inboxPageSchema,
   inboxQuerySchema,
+  inboxNotificationsSchema,
 } from "./inbox-schema";
 import type { z } from "zod";
 
@@ -27,6 +28,10 @@ export function useInboxSync(
   const [reconnecting, setReconnecting] = useState<string | undefined>(
     undefined
   );
+  const [notifications, setNotifications] = useState<{
+    scope: string;
+    entries: z.infer<typeof inboxNotificationsSchema>;
+  } | null>(null);
   const position = useRef(nearHead);
   const apply = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
@@ -87,13 +92,20 @@ export function useInboxSync(
     };
     apply.current = applyPending;
     const stop = () => {
+      setNotifications(null);
       clearTimeout(timer);
       request?.abort();
       request = undefined;
       void client.cancelQueries({ queryKey: key, exact: true });
     };
     const poll = async () => {
-      if (lifecycle.disposed || !lifecycle.active || request) return;
+      if (
+        lifecycle.disposed ||
+        !lifecycle.active ||
+        !onlineManager.isOnline() ||
+        request
+      )
+        return;
       const controller = new AbortController();
       request = controller;
       const stopped = () => lifecycle.disposed || controller.signal.aborted;
@@ -117,6 +129,9 @@ export function useInboxSync(
         if (stopped()) return;
         if (result.status === "unavailable")
           throw new Error("Sync unavailable");
+        setNotifications(
+          result.notifications ? { scope, entries: result.notifications } : null
+        );
         if (
           result.inboxChanged ||
           result.reset ||
@@ -138,6 +153,7 @@ export function useInboxSync(
         setReconnecting(undefined);
       } catch {
         if (stopped()) return;
+        setNotifications(null);
         failures += 1;
         setReconnecting(scope);
       } finally {
@@ -161,7 +177,7 @@ export function useInboxSync(
       if (online) {
         clearTimeout(timer);
         void poll();
-      }
+      } else stop();
     });
     void poll();
     return () => {
@@ -186,5 +202,6 @@ export function useInboxSync(
     pending: pending === scope,
     reconnecting: reconnecting === scope,
     apply: () => apply.current?.(),
+    notifications: notifications?.scope === scope ? notifications.entries : [],
   };
 }

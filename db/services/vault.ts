@@ -4,19 +4,20 @@ import {
   randomBytes,
   randomUUID,
 } from "node:crypto";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
-import type { vaultPageInputSchema } from "@shared/vault/schema";
+import type { vaultPageInputSchema } from "@zoen/companion-ui/vault";
+
+import { vaultItemKindSchema } from "@zoen/companion-ui/vault";
 import {
   loginAccountHint,
   parsePaymentCardSecret,
   parseLoginVaultPayload,
   paymentCardBrand,
-  vaultItemKindSchema,
   type VaultCreateItem,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 import type { AccessScope } from "@shared/identity/access-scope";
-import { db, vaultItems } from "@db";
+import { query, transaction } from "@db/queries";
 import {
   deleteEncryptedSecret,
   readEncryptedSecret,
@@ -36,36 +37,22 @@ const vaultRecordSchema = z.object({
 
 type VaultRecord = z.infer<typeof vaultRecordSchema>;
 
-const selection = {
-  account: vaultItems.account,
-  createdAt: vaultItems.createdAt,
-  id: vaultItems.id,
-  kind: vaultItems.kind,
-  label: vaultItems.label,
-  updatedAt: vaultItems.updatedAt,
-};
+const selection = sql`account, created_at AS "createdAt", id, kind, label, updated_at AS "updatedAt"`;
+const vaultRows = vaultRecordSchema
+  .extend({ createdAt: z.coerce.date(), updatedAt: z.coerce.date() })
+  .transform(serializeVaultRecord)
+  .array();
 
 async function createVaultRecord(scope: AccessScope, record: VaultRecord) {
-  await db.insert(vaultItems).values({
-    ...record,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-    workspaceId: scope.workspaceId,
-  });
+  await query(sql`INSERT INTO vault_items(id,workspace_id,kind,label,account,created_at,updated_at)
+    VALUES (${record.id},${scope.workspaceId},${record.kind},${record.label},${record.account},${record.createdAt}::timestamptz,${record.updatedAt}::timestamptz)`);
 }
-
 export async function listVaultItems(scope: AccessScope) {
-  return vaultRecordSchema
-    .array()
-    .parse(
-      (
-        await db
-          .select(selection)
-          .from(vaultItems)
-          .where(eq(vaultItems.workspaceId, scope.workspaceId))
-          .orderBy(desc(vaultItems.updatedAt))
-      ).map(serializeVaultRecord)
-    );
+  return vaultRows.parse(
+    await query(
+      sql`SELECT ${selection} FROM vault_items WHERE workspace_id=${scope.workspaceId} ORDER BY updated_at DESC,id DESC`
+    )
+  );
 }
 
 export async function readVaultItems(scope: AccessScope) {
@@ -73,43 +60,26 @@ export async function readVaultItems(scope: AccessScope) {
   const records = await listVaultItems(scope);
   return Promise.all(
     records.map(async (record) =>
-      Object.assign({}, record, {
+      Object.assign(record, {
         hasSecret: await hasVaultSecret(scope, record.id),
       })
     )
   );
 }
-
 export async function readVaultPage(
   scope: AccessScope,
   input: z.infer<typeof vaultPageInputSchema>
 ) {
-  const records = await db
-    .select(selection)
-    .from(vaultItems)
-    .where(
-      and(
-        eq(vaultItems.workspaceId, scope.workspaceId),
-        input.kind ? eq(vaultItems.kind, input.kind) : undefined,
-        input.cursor
-          ? or(
-              lt(vaultItems.updatedAt, new Date(input.cursor.updatedAt)),
-              and(
-                eq(vaultItems.updatedAt, new Date(input.cursor.updatedAt)),
-                lt(vaultItems.id, input.cursor.id)
-              )
-            )
-          : undefined
-      )
-    )
-    .orderBy(desc(vaultItems.updatedAt), desc(vaultItems.id))
-    .limit(21);
-  const items = await Promise.all(
-    records.slice(0, 20).map(async (record) =>
-      Object.assign(serializeVaultRecord(record), {
-        hasSecret: await hasVaultSecret(scope, record.id),
-      })
-    )
+  const rows =
+    await query(sql`SELECT ${selection}, EXISTS(SELECT 1 FROM encrypted_secrets s WHERE s.workspace_id=vault_items.workspace_id AND s.id=vault_items.id AND s.namespace='vault') AS "hasSecret" FROM vault_items WHERE workspace_id=${scope.workspaceId}
+    ${input.kind ? sql`AND kind=${input.kind}` : sql``}
+    ${input.cursor ? sql`AND (updated_at,id)<(${input.cursor.updatedAt}::timestamptz,${input.cursor.id})` : sql``}
+    ORDER BY updated_at DESC,id DESC LIMIT 21`);
+  const records = vaultRows.parse(rows);
+  const items = records.slice(0, 20).map((record, index) =>
+    Object.assign(record, {
+      hasSecret: z.boolean().parse(rows[index]?.hasSecret),
+    })
   );
   const last = items.at(-1);
   return {
@@ -122,30 +92,22 @@ export async function readVaultPage(
 }
 
 export async function readVaultItem(scope: AccessScope, id: string) {
-  const rows = await db
-    .select(selection)
-    .from(vaultItems)
-    .where(
-      and(eq(vaultItems.workspaceId, scope.workspaceId), eq(vaultItems.id, id))
+  return vaultRows.parse(
+    await query(
+      sql`SELECT ${selection} FROM vault_items WHERE workspace_id=${scope.workspaceId} AND id=${id} LIMIT 1`
     )
-    .limit(1);
-  return vaultRecordSchema
-    .optional()
-    .parse(rows[0] ? serializeVaultRecord(rows[0]) : undefined);
+  )[0];
 }
-
 export async function deleteVaultItem(scope: AccessScope, id: string) {
-  const rows = await db
-    .delete(vaultItems)
-    .where(
-      and(eq(vaultItems.workspaceId, scope.workspaceId), eq(vaultItems.id, id))
-    )
-    .returning({ id: vaultItems.id });
-  if (rows.length === 0) return false;
-  await deleteEncryptedSecret(scope, id);
-  return true;
+  return transaction(async () => {
+    const rows = await query(
+      sql`DELETE FROM vault_items WHERE workspace_id=${scope.workspaceId} AND id=${id} RETURNING id`
+    );
+    if (!rows.length) return false;
+    await deleteEncryptedSecret(scope, id);
+    return true;
+  });
 }
-
 export async function saveVaultItem(
   scope: AccessScope,
   input: VaultCreateItem
@@ -153,9 +115,8 @@ export async function saveVaultItem(
   await ensureScope(scope);
   const id = randomUUID();
   const now = new Date().toISOString();
-  await writeVaultSecret(scope, id, input.secret);
-
-  try {
+  await transaction(async () => {
+    await writeVaultSecret(scope, id, input.secret);
     await createVaultRecord(scope, {
       account: vaultAccountHint(input),
       createdAt: now,
@@ -164,10 +125,7 @@ export async function saveVaultItem(
       label: input.label,
       updatedAt: now,
     });
-  } catch (error) {
-    await deleteEncryptedSecret(scope, id);
-    throw error;
-  }
+  });
 }
 
 export async function readVaultSecret(scope: AccessScope, id: string) {

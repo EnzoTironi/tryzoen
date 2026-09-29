@@ -54,3 +54,6 @@ export {
   type ComposerEditorProps,
   type ComposerEditorHandle,
 } from "./composer/editor";
+export { VaultCollection } from "./vault/collection";
+export { VaultCreationForm } from "./vault/form";
+export type { VaultData } from "./vault/data";

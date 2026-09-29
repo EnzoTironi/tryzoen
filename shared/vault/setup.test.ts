@@ -6,7 +6,7 @@ import {
   vaultCreateItemSchema,
   vaultImportItemsSchema,
   vaultSetupRequestSchema,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 
 describe("vault setup", () => {
   it("creates and validates a secret-free setup link", () => {

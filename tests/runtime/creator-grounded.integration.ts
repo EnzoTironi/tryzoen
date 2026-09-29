@@ -1,3 +1,16 @@
+import {
+  readCreatorQualificationCandidate,
+  listCreatorQualifications,
+  approveCreatorQualification,
+} from "../../server/creators/qualifications";
+import { saveDirectoryProfile } from "../../server/accounts/directory";
+import {
+  listCreatorPilots,
+  readCreatorPilot,
+  actOnCreatorPilot,
+  inviteCreatorPilot,
+} from "../../server/creators/pilots";
+import { readCreatorDraft } from "../../server/creators/drafts";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -50,14 +63,25 @@ beforeAll(async () => {
     await cp(join(fixtures, "eve-runtime", name), join(directory, name), {
       recursive: true,
     });
-  for (const name of ["creator-preview", "creator-library", "creator-review"]) {
+  for (const name of [
+    "creator-preview",
+    "creator-library",
+    "creator-review",
+    "creator-qualification",
+    "creator-pilot",
+  ]) {
     const text = await readFile(
       new URL(`../../agent/tools/${name}.ts`, import.meta.url),
       "utf8"
     );
     await writeFile(
       join(directory, `agent/tools/${name}.ts`),
-      text.replaceAll('"../../server/', '"../../../../../server/')
+      text
+        .replaceAll('"../../server/', '"../../../../../server/')
+        .replaceAll(
+          '"../lib/workspace-operation"',
+          '"../../../../../agent/lib/workspace-operation"'
+        )
     );
   }
   await cp(
@@ -346,3 +370,267 @@ test("invented citations from the actual specialist workflow finish failed witho
   ).toMatchObject({ status: "failed", response: null, groundedAnswer: null });
   await server.stop();
 }, 90000);
+
+test("human-qualified grounded pilots use only frozen sources, preserve snapshot mode and reject revoked late answers", async () => {
+  await using workspace = await workspaceFixture();
+  const { request, release } = await approved(workspace.actor);
+  const draft = await readCreatorDraft(workspace.actor, request.draftId);
+  const saved = await saveCreatorEvaluation(workspace.actor, {
+    draftId: draft.id,
+    expectedRevision: draft.evaluation?.revision ?? null,
+    cases: [
+      {
+        id: randomUUID(),
+        title: "Supported",
+        question: "When is the Cerulean harvest?",
+        criteria: "Cite the interval.",
+        expectedGrounding: "supported",
+      },
+      {
+        id: randomUUID(),
+        title: "Missing evidence",
+        question: "Zyxnonexistentcanary?",
+        criteria: "Abstain.",
+        expectedGrounding: "insufficient-evidence",
+      },
+    ],
+  });
+  if (!saved.evaluation) throw new Error("Missing evaluation");
+  let server = await runtime(await freePort(), "127.0.0.1", directory);
+  const auth = workspaceExecutionFor(workspace.actor).session.auth.current;
+  async function start(message: string, principal = auth) {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        message,
+        auth: principal,
+      })
+    );
+    return { sessionId, events: await server.settled(sessionId) };
+  }
+  async function respond(
+    sessionId: string,
+    events: Awaited<ReturnType<typeof server.settled>>,
+    response: { optionId?: string; text?: string },
+    turn: number,
+    principal = auth
+  ) {
+    const pending = z
+      .object({ requests: z.array(inputRequestSchema) })
+      .parse(events.findLast((event) => event.type === "input.requested")?.data)
+      .requests[0];
+    if (!pending) throw new Error("Expected native human question");
+    await server.request(`/probe/input/${sessionId}`, {
+      auth: principal,
+      responses: [{ requestId: pending.requestId, ...response }],
+    });
+    return server.settled(sessionId, turn);
+  }
+  try {
+    const initial = await readCreatorQualificationCandidate(
+      workspace.actor,
+      release.id
+    );
+    expect(initial.issues).toHaveLength(2);
+    for (const item of saved.evaluation.cases) {
+      const preview = await createCreatorPreview(workspace.actor, {
+        ...request,
+        id: randomUUID(),
+        question: item.question,
+        caseRef: { id: item.id, revision: saved.evaluation.revision },
+      });
+      await start(`preview ${preview.id}`);
+      const completed = await exportCreatorPreview(workspace.actor, preview.id);
+      expect(completed.groundedAnswer?.status).toBe(item.expectedGrounding);
+      const review = await start(`creator-review ${preview.id}`);
+      const notes = await respond(
+        review.sessionId,
+        review.events,
+        { optionId: "useful" },
+        2
+      );
+      await respond(
+        review.sessionId,
+        notes,
+        { text: "Human checked the declared source expectation." },
+        3
+      );
+    }
+    const candidate = await readCreatorQualificationCandidate(
+      workspace.actor,
+      release.id
+    );
+    expect(candidate.issues).toEqual([]);
+    await expect(
+      approveCreatorQualification(workspace.guest, {
+        id: randomUUID(),
+        releaseId: release.id,
+        manifestDigest: candidate.manifestDigest,
+        evaluationRevision: saved.evaluation.revision,
+        evidence: candidate.evidence.map((item) => ({
+          id: item.id,
+          reviewRevision: item.review.revision,
+        })),
+        notes: "Foreign",
+      })
+    ).rejects.toThrow("WorkspaceAccessDenied");
+    await expect(
+      approveCreatorQualification(workspace.actor, {
+        id: randomUUID(),
+        releaseId: release.id,
+        manifestDigest: candidate.manifestDigest,
+        evaluationRevision: saved.evaluation.revision,
+        evidence: candidate.evidence.map((item) => ({
+          id: item.id,
+          reviewRevision: randomUUID(),
+        })),
+        notes: "Stale human review references",
+      })
+    ).rejects.toThrow("Qualification evidence changed");
+    const approval = await start(
+      `creator-qualification ${JSON.stringify({ action: "approve", releaseId: release.id })}`
+    );
+    expect(
+      await listCreatorQualifications(workspace.actor, release.id)
+    ).toEqual([]);
+    await server.stop();
+    server = await runtime(await freePort(), "127.0.0.1", directory);
+    const approvalNotes = await respond(
+      approval.sessionId,
+      approval.events,
+      { optionId: "approve" },
+      2
+    );
+    await respond(
+      approval.sessionId,
+      approvalNotes,
+      { text: "Private synthetic pilot only; reviewed both outcomes." },
+      3
+    );
+    const [qualified] = await listCreatorQualifications(
+      workspace.actor,
+      release.id
+    );
+    if (!qualified) throw new Error("Missing qualified version");
+    expect(qualified.cases).toBe(2);
+    const username = `pilot_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    await saveDirectoryProfile(workspace.guest, {
+      username,
+      discoverable: false,
+    });
+    const old = await inviteCreatorPilot(workspace.actor, {
+      id: randomUUID(),
+      releaseId: release.id,
+      username,
+      shareTeaching: true,
+    });
+    expect(old.answerMode).toBe("snapshot");
+    const invite = await start(
+      `creator-pilot ${JSON.stringify({ action: "invite", qualificationId: qualified.id, username })}`
+    );
+    await respond(invite.sessionId, invite.events, { optionId: "confirm" }, 2);
+    const pilot = (await listCreatorPilots(workspace.guest)).find(
+      (item) => item.qualificationId === qualified.id
+    );
+    if (!pilot) throw new Error("Missing grounded invitation");
+    expect(pilot.status).toBe("pending");
+    await expect(readCreatorPilot(workspace.guest, pilot.id)).rejects.toThrow(
+      "WorkspaceAccessDenied"
+    );
+    const guestAuth = workspaceExecutionFor(workspace.guest).session.auth
+      .current;
+    const accept = await start(
+      `creator-pilot ${JSON.stringify({ action: "accept", id: pilot.id })}`,
+      guestAuth
+    );
+    await respond(
+      accept.sessionId,
+      accept.events,
+      { optionId: "confirm" },
+      2,
+      guestAuth
+    );
+    const active = await readCreatorPilot(workspace.guest, pilot.id);
+    expect(active.answerMode).toBe("grounded");
+    expect((await readCreatorPilot(workspace.actor, old.id)).answerMode).toBe(
+      "snapshot"
+    );
+    const participant = await createCreatorPreview(workspace.guest, {
+      id: randomUUID(),
+      draftId: draft.id,
+      revision: draft.revision,
+      kind: "grounded-answer",
+      pilotId: pilot.id,
+      question: "When is the Cerulean harvest?",
+    });
+    await start(`preview ${participant.id}`, guestAuth);
+    expect(
+      (await exportCreatorPreview(workspace.guest, participant.id))
+        .groundedAnswer
+    ).toMatchObject({ status: "supported", citations: ["S1"] });
+    await expect(
+      exportCreatorPreview(workspace.actor, participant.id)
+    ).rejects.toThrow("WorkspaceAccessDenied");
+    const late = await createCreatorPreview(workspace.guest, {
+      id: randomUUID(),
+      draftId: draft.id,
+      revision: draft.revision,
+      kind: "grounded-answer",
+      pilotId: pilot.id,
+      question: "When is the Cerulean harvest?",
+    });
+    await claimCreatorPreview(workspace.guest, late.id, "late", {
+      sessionId: randomUUID(),
+      turnId: "late",
+    });
+    await actOnCreatorPilot(workspace.actor, {
+      id: pilot.id,
+      action: "withdraw",
+    });
+    await expect(
+      finishCreatorPreview(workspace.guest, late.id, "late", {
+        status: "supported",
+        answer: "Forty days",
+        citations: ["S1"],
+      })
+    ).rejects.toThrow("WorkspaceAccessDenied");
+    const [lateState] = await query<{ status: string }>(
+      sql`SELECT status FROM creator_previews WHERE id=${late.id}`
+    );
+    expect(lateState?.status).toBe("running");
+    await saveCreatorEvaluation(workspace.actor, {
+      draftId: draft.id,
+      expectedRevision: saved.evaluation.revision,
+      cases: saved.evaluation.cases.map((item) => ({
+        ...item,
+        expectedGrounding: "insufficient-evidence" as const,
+      })),
+    });
+    const changed = await readCreatorQualificationCandidate(
+      workspace.actor,
+      release.id
+    );
+    expect(changed.issues).toContain(
+      "Declare at least one supported case and one insufficient-evidence case before running both."
+    );
+    await expect(
+      approveCreatorQualification(workspace.actor, {
+        id: randomUUID(),
+        releaseId: release.id,
+        manifestDigest: candidate.manifestDigest,
+        evaluationRevision: saved.evaluation.revision,
+        evidence: candidate.evidence.map((item) => ({
+          id: item.id,
+          reviewRevision: item.review.revision,
+        })),
+        notes: "Old declaration",
+      })
+    ).rejects.toThrow("Declare at least one supported case");
+    expect(
+      await listCreatorQualifications(workspace.actor, release.id)
+    ).toHaveLength(1);
+  } finally {
+    await server.stop();
+  }
+}, 180000);

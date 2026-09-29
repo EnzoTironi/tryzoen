@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@web/i18n/context";
+import { useInputResponse } from "@zoen/companion-ui/input-response";
 import { approvalMessageSchema } from "@agent/lib/approval-message";
 import type { EveDynamicToolPart, EveMessageInputRequest } from "eve/react";
 import {
@@ -22,15 +23,22 @@ import type { RespondToAgentInput } from "./types";
 export function QuestionRequest({
   canRespond,
   inputRequest,
-  inputResponse,
+  inputResponse: savedResponse,
+  waiting,
   onInputResponses,
 }: {
   readonly canRespond: boolean;
   readonly inputRequest: EveMessageInputRequest;
+  readonly waiting: boolean;
   readonly inputResponse?: InputResponse;
   readonly onInputResponses: RespondToAgentInput;
 }) {
   const { t } = useI18n();
+  const submission = useInputResponse(
+    canRespond && waiting && !savedResponse,
+    onInputResponses
+  );
+  const inputResponse = savedResponse ?? submission.response;
   const selectedOption = inputRequest.options?.find(
     (option) => option.id === inputResponse?.optionId
   );
@@ -38,21 +46,25 @@ export function QuestionRequest({
   const acceptsFreeform = inputRequest.allowFreeform === true || !hasOptions;
 
   const submitResponse = ({ selectedValues, text }: QuestionResponse) =>
-    onInputResponses([
-      {
-        optionId: selectedValues[0],
-        requestId: inputRequest.requestId,
-        text,
-      },
-    ]);
+    submission.submit({
+      optionId: selectedValues[0],
+      requestId: inputRequest.requestId,
+      text,
+    });
 
   return (
     <Question
+      key={inputRequest.requestId}
       defaultValue={{
         selectedValues: inputResponse?.optionId ? [inputResponse.optionId] : [],
         text: inputResponse?.text ?? "",
       }}
-      disabled={!canRespond || inputResponse !== undefined}
+      disabled={
+        !canRespond ||
+        !waiting ||
+        submission.pending ||
+        inputResponse !== undefined
+      }
       onSubmit={submitResponse}
     >
       <QuestionPrompt>{inputRequest.prompt}</QuestionPrompt>
@@ -92,10 +104,17 @@ export function QuestionRequest({
             inputResponse.text ??
             inputResponse.optionId}
         </QuestionDescription>
+      ) : !waiting ? (
+        <QuestionDescription>{t("Request closed")}</QuestionDescription>
       ) : (
         <QuestionActions>
           <QuestionSubmit>{t("Answer")}</QuestionSubmit>
         </QuestionActions>
+      )}
+      {submission.failed && (
+        <QuestionDescription role="alert">
+          {t("Your answer wasn’t accepted. Please try again.")}
+        </QuestionDescription>
       )}
     </Question>
   );
@@ -112,9 +131,16 @@ export function InputRequestActions({
 }) {
   const { t } = useI18n();
   const inputRequest = part.toolMetadata?.eve?.inputRequest;
+  const submission = useInputResponse(
+    canRespond &&
+      part.state === "approval-requested" &&
+      !part.toolMetadata?.eve?.inputResponse,
+    onInputResponses
+  );
   if (!inputRequest) return null;
 
-  const inputResponse = part.toolMetadata.eve.inputResponse;
+  const inputResponse =
+    part.toolMetadata.eve.inputResponse ?? submission.response;
   const selectedOption = inputRequest.options?.find(
     (option) => option.id === inputResponse?.optionId
   );
@@ -140,19 +166,19 @@ export function InputRequestActions({
               inputResponse.text ??
               inputResponse.optionId}
           </p>
+        ) : part.state !== "approval-requested" ? (
+          <p>{t("Request closed")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {inputRequest.options?.map((option) => (
               <Button
-                disabled={!canRespond}
+                disabled={!canRespond || submission.pending}
                 key={option.id}
                 onClick={() => {
-                  void onInputResponses([
-                    {
-                      optionId: option.id,
-                      requestId: inputRequest.requestId,
-                    },
-                  ]);
+                  void submission.submit({
+                    optionId: option.id,
+                    requestId: inputRequest.requestId,
+                  });
                 }}
                 size="sm"
                 type="button"
@@ -162,6 +188,11 @@ export function InputRequestActions({
               </Button>
             ))}
           </div>
+        )}
+        {submission.failed && (
+          <p role="alert">
+            {t("Your answer wasn’t accepted. Please try again.")}
+          </p>
         )}
       </AlertDescription>
     </Alert>

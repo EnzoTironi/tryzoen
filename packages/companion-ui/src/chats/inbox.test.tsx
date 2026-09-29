@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import type { ChatData } from "./schema";
-import type { InboxData } from "./inbox-schema";
+import type { InboxData, inboxNotificationsSchema } from "./inbox-schema";
+import type { z } from "zod";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   QueryClient,
@@ -9,6 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConversationInbox } from "./inbox";
+import type { useInboxSync } from "./sync";
 import type { RoomData } from "../rooms/schema";
 
 vi.mock("react-native", () => import("react-native-web"));
@@ -16,7 +18,16 @@ vi.mock("lucide-react-native", () => import("lucide-react"));
 const state = vi.hoisted(() => ({
   failed: false,
   scope: "account-a",
+  notifications: [] as z.infer<typeof inboxNotificationsSchema>,
   options: undefined as Parameters<typeof useInfiniteQuery>[0] | undefined,
+}));
+vi.mock("./sync", () => ({
+  useInboxSync: () => ({
+    pending: false,
+    reconnecting: false,
+    apply: vi.fn<ReturnType<typeof useInboxSync>["apply"]>(),
+    notifications: state.notifications,
+  }),
 }));
 vi.mock("@tanstack/react-query", async (original) => ({
   ...(await original<typeof import("@tanstack/react-query")>()),
@@ -59,7 +70,6 @@ vi.mock("@tanstack/react-query", async (original) => ({
                   epoch: "one",
                 },
                 preview: "Private preview",
-                unread: null,
                 summaryState: "ready",
               },
               {
@@ -142,6 +152,19 @@ function render() {
 beforeEach(() => {
   state.failed = false;
   state.scope = "account-a";
+  state.notifications = [];
+});
+it("labels native counts as unread notifications with accessible highlights", () => {
+  state.notifications = [
+    { id: "direct", notificationCount: 105, highlightCount: 2 },
+  ];
+  const html = render();
+  expect(html).toContain("105 notificações não lidas, 2 destaques");
+  expect(html).toContain("99+");
+  state.notifications = [
+    { id: "other-room", notificationCount: 5, highlightCount: 0 },
+  ];
+  expect(render()).not.toContain("notificações não lidas");
 });
 it("preserves global server order across kinds and does not invent unread badges", () => {
   const html = render();

@@ -1,5 +1,6 @@
-import { MessageCircle, Puzzle, ShieldCheck } from "lucide-react-native";
+import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
+import { InputRequestCard } from "./conversation/input-request";
 import { LinkCard, MessageLinks } from "./cards/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -7,16 +8,10 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type ViewToken,
 } from "react-native";
-import type {
-  EveMessage,
-  EveMessageInputRequest,
-  EveMessagePart,
-  UseEveAgentStatus,
-} from "eve/react";
+import type { EveMessage, EveMessagePart, UseEveAgentStatus } from "eve/react";
 import type { InputResponse } from "eve/client";
 import { AssistantMarkdown } from "./markdown";
 import { ActionButton } from "./button";
@@ -290,40 +285,14 @@ export function MessagePart({
   }
   if (part.type === "dynamic-tool") {
     const request = part.toolMetadata?.eve?.inputRequest;
-    const response = part.toolMetadata?.eve?.inputResponse;
-    if (request && !response)
+    if (request)
       return (
-        <InputRequest
+        <InputRequestCard
           key={request.requestId}
-          request={request}
+          part={part}
           enabled={canRespond}
           onRespond={onRespond}
         />
-      );
-    if (request && response)
-      return (
-        <ResourceCard
-          title={
-            request.kind === "tool-approval" ? "Your decision" : "Your answer"
-          }
-          icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
-          tint="#4c9984"
-        >
-          <Text selectable style={styles.text}>
-            {request.prompt}
-          </Text>
-          <Text selectable style={styles.caption}>
-            {request.options?.find((option) => option.id === response.optionId)
-              ?.label ??
-              response.text ??
-              response.optionId}
-          </Text>
-          {part.state === "output-error" && (
-            <Text style={styles.error}>
-              The action failed after your response.
-            </Text>
-          )}
-        </ResourceCard>
       );
     return (
       <ResourceCard
@@ -381,90 +350,6 @@ export function MessagePart({
   return null;
 }
 
-function InputRequest({
-  request,
-  enabled,
-  onRespond,
-}: {
-  readonly request: EveMessageInputRequest;
-  readonly enabled: boolean;
-  readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
-}) {
-  const [text, setText] = useState("");
-  const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const inFlight = useRef(false);
-  async function respond(response: InputResponse) {
-    if (!enabled || inFlight.current) return;
-    inFlight.current = true;
-    setPending(true);
-    setFailed(false);
-    try {
-      await onRespond([response]);
-    } catch {
-      setFailed(true);
-    } finally {
-      setPending(false);
-      inFlight.current = false;
-    }
-  }
-  return (
-    <ResourceCard
-      title={
-        request.kind === "tool-approval"
-          ? "Your permission is needed"
-          : "A quick question"
-      }
-      icon={request.kind === "tool-approval" ? ShieldCheck : MessageCircle}
-      tint="#4c9984"
-    >
-      <Text style={styles.text}>{request.prompt}</Text>
-      <View style={styles.options}>
-        {request.options?.map((option) => (
-          <ActionButton
-            key={option.id}
-            quiet={option.style !== "danger"}
-            disabled={!enabled || pending}
-            onPress={() => {
-              void respond({
-                requestId: request.requestId,
-                optionId: option.id,
-              });
-            }}
-          >
-            {option.label}
-          </ActionButton>
-        ))}
-      </View>
-      {((request.allowFreeform ?? false) || !request.options?.length) && (
-        <View style={styles.request}>
-          <TextInput
-            accessibilityLabel="Your answer"
-            placeholder="Your answer"
-            value={text}
-            onChangeText={setText}
-            editable={enabled && !pending}
-            style={styles.answer}
-          />
-          <ActionButton
-            disabled={!enabled || pending || !text.trim()}
-            onPress={() => {
-              void respond({ requestId: request.requestId, text: text.trim() });
-            }}
-          >
-            Send answer
-          </ActionButton>
-        </View>
-      )}
-      {failed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          Your answer wasn’t accepted. Please try again.
-        </Text>
-      )}
-    </ResourceCard>
-  );
-}
-
 const styles = StyleSheet.create({
   quotedMessage: { gap: 12 },
   quote: {
@@ -512,16 +397,6 @@ const styles = StyleSheet.create({
   author: { fontSize: 13, fontWeight: "600", color: colors.ink },
   text: { fontSize: 16, lineHeight: 25, color: colors.ink },
   caption: { fontSize: 13, lineHeight: 21, color: colors.muted },
-  request: { gap: 12, paddingVertical: 8 },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  answer: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
-    padding: 12,
-    color: colors.ink,
-  },
   progress: {
     flexDirection: "row",
     gap: 10,

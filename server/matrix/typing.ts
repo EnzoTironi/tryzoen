@@ -57,7 +57,9 @@ export async function readMatrixTyping(
     // A healthy incremental sync retains the native set until a replacement (including []).
     // Bind the deadline to the request cursor, so identical request replay cannot renew it.
     const expiresAt = previous ? previous.issuedAt + 30000 : Date.now() + 30000;
-    const userIds = (event?.content.user_ids ?? previous?.userIds ?? []).filter(
+    const snapshot =
+      event?.type === "m.typing" ? event.content.user_ids : undefined;
+    const userIds = (snapshot ?? previous?.userIds ?? []).filter(
       (id) => id !== room.matrixId
     );
     const cursor = await sealTypingCursor({

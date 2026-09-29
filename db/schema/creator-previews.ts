@@ -82,12 +82,12 @@ export const creatorPreviews = pgTable(
     ),
     check(
       "creator_previews_pilot_check",
-      sql`${table.pilotId} IS NULL OR (${table.kind} = 'answer' AND ${table.evaluation} IS NULL)`
+      sql`${table.pilotId} IS NULL OR (${table.kind} IN ('answer', 'grounded-answer') AND ${table.evaluation} IS NULL)`
     ),
     check(
       "creator_previews_grounding_check",
       sql`(${table.kind} = 'grounded-answer') = (${table.grounding} IS NOT NULL)
-      AND (${table.grounding} IS NULL OR (jsonb_typeof(${table.grounding}) = 'object' AND octet_length(${table.grounding}::text) <= 131072 AND ${table.evaluation} IS NOT NULL))
+      AND (${table.grounding} IS NULL OR (jsonb_typeof(${table.grounding}) = 'object' AND octet_length(${table.grounding}::text) <= 131072 AND (${table.evaluation} IS NOT NULL OR ${table.pilotId} IS NOT NULL)))
       AND (${table.groundedAnswer} IS NULL OR (${table.kind} = 'grounded-answer' AND ${table.status} = 'completed' AND octet_length(${table.groundedAnswer}::text) <= 65536))`
     ),
     uniqueIndex("creator_previews_source_idx").on(

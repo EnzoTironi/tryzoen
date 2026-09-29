@@ -1,3 +1,4 @@
+import { workspaceOperationId } from "../lib/workspace-operation";
 import { defineWorkflowTool, type WorkflowStepToolContext } from "eve/tools";
 import { z } from "zod";
 import { workspaceActorFromPrincipal } from "../../server/workspaces/access";
@@ -20,7 +21,9 @@ import {
 const inputSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("list"), draftId: z.uuid() }),
   z.strictObject({ action: z.literal("read"), id: z.uuid() }),
-  creatorSourceAcquireSchema.extend({ action: z.literal("acquire") }),
+  creatorSourceAcquireSchema
+    .omit({ id: true })
+    .extend({ action: z.literal("acquire") }),
   creatorSourceChangeSchema.extend({ action: z.enum(["review", "withdraw"]) }),
 ]);
 export default defineWorkflowTool({
@@ -83,7 +86,18 @@ async function inspect(
   if (input.action === "list") return listCreatorSources(actor, input.draftId);
   if (input.action === "read") return readCreatorSource(actor, input.id);
   const { action: _action, ...source } = input;
-  return acquireCreatorSource(actor, source);
+  return acquireCreatorSource(actor, {
+    ...source,
+    id: workspaceOperationId(
+      context.session.id,
+      JSON.stringify([
+        context.session.turn.id,
+        context.toolName,
+        context.callId,
+        "source",
+      ])
+    ),
+  });
 }
 async function prepare(
   input: z.infer<typeof creatorSourceChangeSchema>,

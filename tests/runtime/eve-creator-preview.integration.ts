@@ -1,5 +1,8 @@
 import { reviewedCreatorVersion } from "../helpers/creator-release";
-import { approveCreatorRelease } from "../../server/creators/releases";
+import {
+  approveCreatorRelease,
+  listCreatorReleases,
+} from "../../server/creators/releases";
 import { saveDirectoryProfile } from "../../server/accounts/directory";
 import {
   actOnCreatorPilot,
@@ -42,14 +45,24 @@ beforeAll(async () => {
       recursive: true,
     });
   // Workflow tools must be compiled as authored modules, not re-exported definitions.
-  for (const name of ["creator-preview", "creator-library", "creator-review"]) {
+  for (const name of [
+    "creator-preview",
+    "creator-library",
+    "creator-review",
+    "creator-release",
+  ]) {
     const tool = await readFile(
       new URL(`../../agent/tools/${name}.ts`, import.meta.url),
       "utf8"
     );
     await writeFile(
       join(directory, `agent/tools/${name}.ts`),
-      tool.replaceAll('"../../server/', '"../../../../../server/')
+      tool
+        .replaceAll('"../../server/', '"../../../../../server/')
+        .replaceAll(
+          '"../lib/workspace-operation"',
+          '"../../../../../agent/lib/workspace-operation"'
+        )
     );
   }
   await cp(
@@ -509,7 +522,6 @@ test("the native conversational authoring tool persists private drafts and denie
     const evaluated = await readCreatorDraft(workspace.actor, draft.id);
     expect(evaluated.evaluation?.cases).toEqual([evaluationCase]);
     const previewInput = {
-      id: randomUUID(),
       draftId: draft.id,
       revision: saved.revision,
       kind: "answer",
@@ -525,7 +537,7 @@ test("the native conversational authoring tool persists private drafts and denie
     });
     await server.settled(sessionId, 3);
     expect(
-      (await exportCreatorPreview(workspace.actor, previewInput.id)).evaluation
+      (await listCreatorPreviews(workspace.actor, draft.id))[0]?.evaluation
         ?.case
     ).toEqual(evaluationCase);
     await server.request(`/probe/message/${sessionId}`, {
@@ -540,3 +552,168 @@ test("the native conversational authoring tool persists private drafts and denie
     await server.stop();
   }
 }, 90000);
+
+test("private release chat approval survives restart, cancels safely and rejects evidence changed during human review", async () => {
+  await using workspace = await workspaceFixture();
+  const authored = await saveCreatorDraft(workspace.personal, {
+    id: randomUUID(),
+    expectedRevision: null,
+    content: {
+      title: "Conversational approval fixture",
+      description: "A private fictional method.",
+      playbook: "Ask for a genuine quotation and preserve attribution.",
+      examples: [
+        {
+          id: randomUUID(),
+          title: "A source example",
+          content:
+            "Question: Is this a genuine quote?\nAnswer: Verify the source.",
+          source: "Original fictional lesson — page 3",
+          rights: "original",
+        },
+      ],
+    },
+  });
+  const source = await reviewedCreatorVersion(workspace.personal, authored);
+  let server = await runtime(await freePort(), "127.0.0.1", directory);
+  const auth = workspaceExecutionFor(workspace.personal).session.auth.current;
+  async function begin() {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(
+      await server.request("/probe/send", {
+        address: randomUUID(),
+        id: randomUUID(),
+        auth,
+        message: `creator-release ${JSON.stringify({ action: "approve", draftId: source.draft.id })}`,
+      })
+    );
+    return { sessionId, events: await server.settled(sessionId) };
+  }
+  async function respond(
+    sessionId: string,
+    events: Awaited<ReturnType<typeof server.settled>>,
+    response: { optionId?: string; text?: string },
+    turn: number
+  ) {
+    await server.request(`/probe/input/${sessionId}`, {
+      auth,
+      responses: [
+        { requestId: releaseQuestion(events).requestId, ...response },
+      ],
+    });
+    return server.settled(sessionId, turn);
+  }
+  try {
+    const cancelled = await begin();
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      source.draft.content.playbook
+    );
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      source.review.content.notes
+    );
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      "A source example"
+    );
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      "Question: Is this a genuine quote?\nAnswer: Verify the source."
+    );
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      "Original fictional lesson — page 3"
+    );
+    expect(releaseQuestion(cancelled.events).prompt).toContain(
+      "Rights: Created by the author"
+    );
+    expect(releaseQuestion(cancelled.events).prompt).not.toContain(
+      '"playbook":'
+    );
+    await respond(
+      cancelled.sessionId,
+      cancelled.events,
+      { optionId: "cancel" },
+      2
+    );
+    expect(
+      await listCreatorReleases(workspace.personal, source.draft.id)
+    ).toEqual([]);
+    const cancelNotes = await begin();
+    const notes = await respond(
+      cancelNotes.sessionId,
+      cancelNotes.events,
+      { optionId: "approve" },
+      2
+    );
+    await respond(cancelNotes.sessionId, notes, { optionId: "cancel" }, 3);
+    expect(
+      await listCreatorReleases(workspace.personal, source.draft.id)
+    ).toEqual([]);
+    const stale = await begin();
+    const staleNotes = await respond(
+      stale.sessionId,
+      stale.events,
+      { optionId: "approve" },
+      2
+    );
+    await saveCreatorPreviewReview(workspace.personal, {
+      id: source.preview.id,
+      expectedRevision: source.review.revision,
+      content: {
+        ...source.review.content,
+        notes: "Revised human notes after the approval prompt.",
+      },
+    });
+    const failed = await respond(
+      stale.sessionId,
+      staleNotes,
+      { text: "Approve what I saw before." },
+      3
+    );
+    expect(JSON.stringify(failed)).toContain(
+      "The draft or its evaluations changed"
+    );
+    expect(
+      await listCreatorReleases(workspace.personal, source.draft.id)
+    ).toEqual([]);
+    const current = await begin();
+    expect(releaseQuestion(current.events).prompt).toContain(
+      "Revised human notes"
+    );
+    await server.stop();
+    server = await runtime(await freePort(), "127.0.0.1", directory);
+    const finalNotes = await respond(
+      current.sessionId,
+      current.events,
+      { optionId: "approve" },
+      2
+    );
+    expect(
+      await listCreatorReleases(workspace.personal, source.draft.id)
+    ).toEqual([]);
+    await respond(
+      current.sessionId,
+      finalNotes,
+      { text: "Human approved this exact private snapshot after restart." },
+      3
+    );
+    const releases = await listCreatorReleases(
+      workspace.personal,
+      source.draft.id
+    );
+    expect(releases).toHaveLength(1);
+    expect(releases[0]).toMatchObject({
+      revision: source.draft.revision,
+      notes: "Human approved this exact private snapshot after restart.",
+    });
+  } finally {
+    await server.stop();
+  }
+}, 90000);
+
+function releaseQuestion(
+  events: Awaited<ReturnType<Awaited<ReturnType<typeof runtime>>["settled"]>>
+) {
+  const item = z
+    .object({ requests: z.array(inputRequestSchema) })
+    .parse(events.findLast((event) => event.type === "input.requested")?.data)
+    .requests[0];
+  if (!item) throw new Error("Expected human release review");
+  return item;
+}

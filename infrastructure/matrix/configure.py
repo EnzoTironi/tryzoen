@@ -18,7 +18,10 @@ registration = {
     "as_token": os.environ["ZOEN_MATRIX_AS_TOKEN"], "hs_token": os.environ["ZOEN_MATRIX_HS_TOKEN"],
     "sender_localpart": "_zoen_bot", "rate_limited": True,
     "namespaces": {
-        "users": [{"exclusive": True, "regex": "^@_zoen_.*:" + re.escape(name) + "$"}],
+        "users": [
+            {"exclusive": True, "regex": "^@_zoen_(bot|agent_[a-f0-9]{32}):" + re.escape(name) + "$"},
+            {"exclusive": False, "regex": "^@_zoen_[a-f0-9]{32}:" + re.escape(name) + "$"},
+        ],
         "aliases": [{"exclusive": True, "regex": "^#_zoen_room_.*:" + re.escape(name) + "$"}],
         "rooms": [],
     },
@@ -60,6 +63,7 @@ config = {
     "url_preview_enabled": False, "trusted_key_servers": [],
     "federation_domain_whitelist": [], "suppress_key_server_warning": True,
     "app_service_config_files": app_service_files,
+    "modules": [{"module": "registration.ReservedIdentities", "config": {}}],
     "caches": {"global_factor": 0.25}, "presence": {"enabled": False},
     "rc_message": {"per_second": 1, "burst_count": 10},
     "rc_invites": {"per_room": {"per_second": 5, "burst_count": 50}, "per_user": {"per_second": 5, "burst_count": 50}},

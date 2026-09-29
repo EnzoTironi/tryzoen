@@ -12,7 +12,7 @@ import {
   serializeAddressVaultPayload,
   serializeContactVaultPayload,
   serializeLoginVaultPayload,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 
 describe("versioned vault payloads", () => {
   it("stores password and passwordless login methods", () => {

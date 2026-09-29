@@ -24,7 +24,6 @@ export const inboxItemSchema = z.discriminatedUnion("kind", [
     activityAt: z.number().int().nonnegative(),
     room: roomSchema,
     preview: z.string().nullable(),
-    unread: z.number().int().nonnegative().nullable(),
     summaryState: z.enum(["ready", "pending", "unavailable"]),
   }),
 ]);
@@ -42,6 +41,15 @@ export const inboxSyncQuerySchema = inboxQuerySchema
     cursor: z.string().min(1).max(16_384).optional(),
     focusedRoomId: z.uuid().optional(),
   });
+export const inboxNotificationsSchema = z
+  .array(
+    z.object({
+      id: z.uuid(),
+      notificationCount: z.number().int().nonnegative(),
+      highlightCount: z.number().int().nonnegative(),
+    })
+  )
+  .max(31);
 export const inboxSyncPageSchema = z.object({
   status: z.enum(["ready", "unavailable"]),
   cursor: z.string().max(16_384).nullable(),
@@ -49,6 +57,7 @@ export const inboxSyncPageSchema = z.object({
   changedRoomIds: z.array(z.uuid()).max(31),
   gapRoomIds: z.array(z.uuid()).max(31),
   reset: z.boolean(),
+  notifications: inboxNotificationsSchema.nullable(),
 });
 export interface InboxData {
   list: (

@@ -25,6 +25,8 @@ services:
   matrix:
     image: matrixdotorg/synapse:v1.160.0@sha256:78de1d10bef02e375f861d1cc99f8bedd9381d4f9083ea8b2c22a053477b205f
     user: "0:0"
+    environment:
+      PYTHONPATH: /zoen
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,6 +45,7 @@ services:
     volumes:
       - matrix:/data
       - ./matrix:/config:ro
+      - ../../infrastructure/matrix/registration.py:/zoen/registration.py:ro
     healthcheck:
       test:
         [

@@ -92,11 +92,7 @@ test(
     expect(ids).toHaveLength(36);
     expect(new Set(ids).size).toBe(36);
     expect(ids).not.toContain(guestSession);
-    expect(
-      first.items
-        .filter((item) => item.kind === "room")
-        .map((item) => item.unread)
-    ).toEqual([null, null]);
+    expect(first.items.filter((item) => item.kind === "room")).toHaveLength(2);
 
     const people = await listConversationInbox(actor, {
       filter: "people",

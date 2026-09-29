@@ -2,7 +2,7 @@ import {
   loginIdentifierSchema,
   serializeLoginVaultPayload,
   type VaultImportItems,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 
 export function parseChromePasswordsCsv(csv: string) {
   const rows = parseCsv(csv);

@@ -85,7 +85,6 @@ export async function listConversationInbox(
               },
               summaries?.get(row.id) ?? {
                 preview: null,
-                unread: null,
                 summaryState: "unavailable",
               }
             )

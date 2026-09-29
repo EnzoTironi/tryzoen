@@ -17,7 +17,7 @@ import { Label } from "@web/components/ui/label";
 import {
   parseLoginVaultPayload,
   type VaultImportItems,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 import { api } from "@web/trpc/client";
 import { parseChromePasswordsCsv } from "./chrome";
 export function VaultImportPanel({ onDone }: { readonly onDone: () => void }) {

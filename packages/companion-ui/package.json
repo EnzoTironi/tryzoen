@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./input-response": {
+      "types": "./dist/conversation/response.d.ts",
+      "default": "./dist/conversation/response.js"
+    },
     "./sheet": {
       "types": "./dist/sheet.d.ts",
       "default": "./dist/sheet.js"
@@ -79,6 +83,10 @@
     "./activity": {
       "types": "./dist/activity/schema.d.ts",
       "default": "./dist/activity/schema.js"
+    },
+    "./vault": {
+      "types": "./dist/vault/schema.d.ts",
+      "default": "./dist/vault/schema.js"
     }
   },
   "dependencies": {
@@ -92,7 +100,8 @@
     "react-native-marked": "8.3.2",
     "react-native-svg": "15.15.4",
     "unicode-emoji-json": "0.9.0",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "credit-card-type": "^10.3.0"
   },
   "peerDependencies": {
     "ai": "^7.0.107",

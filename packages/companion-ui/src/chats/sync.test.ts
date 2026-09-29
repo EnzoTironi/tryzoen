@@ -7,12 +7,16 @@ const lifecycle = vi.hoisted(() => ({
   effects: [] as (() => void | (() => void))[],
   listeners: new Set<(value: string) => void>(),
   active: "active",
+  writes: [] as unknown[],
 }));
 vi.mock("react", () => ({
   useEffect: (effect: () => void | (() => void)) =>
     lifecycle.effects.push(effect),
   useRef: (current: unknown) => ({ current }),
-  useState: (value: unknown) => [value, vi.fn<(value: unknown) => void>()],
+  useState: (value: unknown) => [
+    value,
+    (next: unknown) => lifecycle.writes.push(next),
+  ],
 }));
 const client = new QueryClient();
 vi.mock("@tanstack/react-query", async (original) => ({
@@ -32,6 +36,7 @@ vi.mock("react-native", () => ({
 }));
 const reply = {
   status: "ready" as const,
+  notifications: null,
   cursor: "next",
   inboxChanged: true,
   changedRoomIds: [],
@@ -70,8 +75,36 @@ afterEach(() => {
   unmount();
   client.clear();
   lifecycle.active = "active";
+  lifecycle.writes = [];
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+test("keeps notification snapshots scoped and clears them on background and provider failure", async () => {
+  const notifications = [
+    { id: "room", notificationCount: 2, highlightCount: 1 },
+  ];
+  const sync = vi
+    .fn<InboxData["sync"]>()
+    .mockResolvedValue({ ...reply, inboxChanged: false, notifications });
+  SyncHarness(sync);
+  await vi.waitFor(() => {
+    expect(lifecycle.writes).toContainEqual(
+      expect.objectContaining({ entries: notifications })
+    );
+  });
+  lifecycle.writes = [];
+  state("background");
+  expect(lifecycle.writes).toContain(null);
+  lifecycle.writes = [];
+  sync.mockResolvedValue({
+    ...reply,
+    status: "unavailable",
+    notifications: null,
+  });
+  state("active");
+  await vi.waitFor(() => {
+    expect(lifecycle.writes).toContain(null);
+  });
 });
 
 test("marks sibling queries stale but resets only the current head; scroll defers reset", async () => {

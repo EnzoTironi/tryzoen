@@ -11,8 +11,14 @@ import {
 } from "../workspaces/access";
 import { MatrixError, matrixConfiguration } from "./client";
 import { ensureMatrixIdentity } from "./identities";
-import { openSyncCursor, sealSyncCursor, syncFingerprint } from "./sync/cursor";
+import {
+  openSyncCursor,
+  sealSyncCursor,
+  syncFingerprint,
+  type syncCursorSchema,
+} from "./sync/cursor";
 import { pollNativeSync } from "./sync/native";
+import { inboxNotifications } from "./sync/notifications";
 
 /** Foreground metadata invalidation; no transaction is held during provider I/O. */
 export async function syncConversationInbox(
@@ -34,6 +40,7 @@ export async function syncConversationInbox(
       changedRoomIds: [],
       gapRoomIds: [],
       reset: false,
+      notifications: null,
     });
   }
 }
@@ -45,11 +52,10 @@ async function readChanges(
   const previous = await openSyncCursor(actor, config.serverName, input.cursor);
   const { query, filter, archived, focusedRoomId } = input;
   const selection = syncFingerprint({ query, filter, archived, focusedRoomId });
-  const since = previous?.selection === selection ? previous.nextBatch : null;
-  const { head, current, native } = await readAuthorizedChanges(
+  const { head, current, native, reconciled } = await readAuthorizedChanges(
     actor,
     input,
-    since
+    previous?.selection === selection ? previous : null
   );
   const fingerprint = syncFingerprint(head.rows);
   const reset =
@@ -68,6 +74,15 @@ async function readChanges(
   const gapRoomIds = current.scope
     .filter((room) => native?.rooms?.join?.[room.roomId]?.timeline?.limited)
     .map((room) => room.id);
+  const notifications = inboxNotifications(
+    reconciled ? previous : null,
+    current.scope.filter((room) =>
+      head.scope.some(
+        (known) => known.id === room.id && known.epoch === room.epoch
+      )
+    ),
+    native
+  );
   const cursor = await sealSyncCursor({
     purpose: "matrix-inbox-sync-v1",
     userId: actor.userId,
@@ -76,8 +91,11 @@ async function readChanges(
     serverName: config.serverName,
     selection,
     head: syncFingerprint(current.rows),
-    scope: current.scope,
+    // A native cursor covers the requested scope, not a newer head discovered
+    // during I/O. Retaining that scope forces bootstrap for newly admitted rooms.
+    scope: head.scope,
     nextBatch: native?.next_batch ?? null,
+    notifications,
     expiresAt: Date.now() + 86_400_000,
   });
   return inboxSyncPageSchema.parse({
@@ -91,13 +109,16 @@ async function readChanges(
     changedRoomIds,
     gapRoomIds,
     reset,
+    // Initial /sync snapshots may be cached. Show counts only after their native
+    // next_batch has been reconciled, never label that initial cache as current.
+    notifications: reconciled ? notifications : null,
   });
 }
 
 async function readAuthorizedChanges(
   actor: z.infer<typeof WorkspaceActorSchema>,
   input: z.infer<typeof inboxSyncQuerySchema>,
-  since: string | null
+  previous: z.infer<typeof syncCursorSchema> | null
 ) {
   const options = {
     query: input.query,
@@ -105,6 +126,10 @@ async function readAuthorizedChanges(
     archived: input.archived,
   };
   const head = await readInboxSyncHead(actor, options, input.focusedRoomId);
+  const since =
+    previous && syncFingerprint(previous.scope) === syncFingerprint(head.scope)
+      ? previous.nextBatch
+      : null;
   const native = head.scope.length
     ? await pollNativeSync(
         await ensureMatrixIdentity(actor),
@@ -115,5 +140,5 @@ async function readAuthorizedChanges(
     : null;
   // The second authorization removes revoked rooms and detects head changes during I/O.
   const current = await readInboxSyncHead(actor, options, input.focusedRoomId);
-  return { head, current, native };
+  return { head, current, native, reconciled: !!since };
 }

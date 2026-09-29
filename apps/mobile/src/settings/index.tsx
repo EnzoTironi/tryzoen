@@ -1,3 +1,4 @@
+import { MobileVault } from "./vault";
 import { useState, type ComponentProps } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -130,20 +131,9 @@ function SettingsContent({
         </Text>
       );
     case "wallet":
-      return (
-        <Text style={styles.description}>
-          Payment methods and spending controls are not available in this app
-          yet.
-        </Text>
-      );
+      return <MobileVault kind="payment" />;
     case "vault":
-      return (
-        <Text style={styles.description}>
-          Creating and editing saved credentials is not available in this app
-          yet. You can review and revoke Zoen’s existing credential access under
-          Permissions.
-        </Text>
-      );
+      return <MobileVault kind="login" />;
     default:
       return null;
   }

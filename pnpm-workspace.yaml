@@ -38,6 +38,11 @@ overrides:
   # Security fixes within the existing parser majors.
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "qs@<6.16.0": 6.16.0
+  "fast-uri@>=3.0.0 <3.1.8": 3.1.8
+  "ip-address@>=10.0.0 <10.7.2": 10.7.2
+  "undici@>=6.0.0 <6.29.0": 6.29.0
+  "undici@>=7.0.0 <7.30.0": 7.30.0
+  "undici@>=8.0.0 <8.11.2": 8.11.2
   # Drizzle's legacy loader only uses transform; do not retain its vulnerable dev server.
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:

@@ -59,8 +59,10 @@ export function AgentMessagePart({
       if (inputRequest?.kind === "question") {
         return (
           <QuestionRequest
+            key={inputRequest.requestId}
             canRespond={canRespond}
             inputRequest={inputRequest}
+            waiting={part.state === "approval-requested"}
             inputResponse={part.toolMetadata?.eve?.inputResponse}
             onInputResponses={onInputResponses}
           />
@@ -74,6 +76,7 @@ export function AgentMessagePart({
               <ToolInput input={part.input} />
             ) : null}
             <InputRequestActions
+              key={inputRequest.requestId}
               canRespond={canRespond}
               part={part}
               onInputResponses={onInputResponses}
@@ -93,6 +96,7 @@ export function AgentMessagePart({
           <ToolContent>
             <ToolInput input={part.input} />
             <InputRequestActions
+              key={inputRequest?.requestId}
               canRespond={canRespond}
               part={part}
               onInputResponses={onInputResponses}

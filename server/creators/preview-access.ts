@@ -26,5 +26,6 @@ export async function requirePreview(
     .parse(owned);
   if (source.pilotId) await requireActiveCreatorPilot(actor, source.pilotId);
   else await readCreatorDraft(actor, source.draftId);
-  if (source.releaseId) await readCreatorRelease(actor, source.releaseId);
+  if (source.releaseId && !source.pilotId)
+    await readCreatorRelease(actor, source.releaseId);
 }

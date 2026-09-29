@@ -52,7 +52,6 @@ export async function authorizedInboxRooms(
 
 const summary = z.object({
   preview: z.string().nullable(),
-  unread: z.null(),
   summaryState: z.enum(["ready", "pending", "unavailable"]),
 });
 const summaryRoom = roomSchema.extend({
@@ -97,7 +96,6 @@ async function readProjectedSummary(
   if (!room.ready || !room.latestEventId)
     return summary.parse({
       preview: null,
-      unread: null,
       summaryState: "pending",
     });
   try {
@@ -113,14 +111,12 @@ async function readProjectedSummary(
       throw new WorkspaceAccessDenied();
     return summary.parse({
       preview: messagePreview(event, room.latestEdited),
-      unread: null,
       summaryState: "ready",
     });
   } catch (error) {
     if (!(error instanceof MatrixError)) throw error;
     return summary.parse({
       preview: null,
-      unread: null,
       summaryState: "unavailable",
     });
   }

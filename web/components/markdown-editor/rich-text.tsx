@@ -194,7 +194,7 @@ function VisualEditor({
     },
   });
   useEffect(() => {
-    editor?.setEditable(editable);
+    editor?.setEditable(editable, false);
   }, [editor, editable]);
   useImperativeHandle(
     ref,

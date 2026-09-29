@@ -6,7 +6,7 @@ import {
   loginIdentifierSchema,
   serializeLoginVaultPayload,
   type VaultImportItems,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 const boundedText = z.string().max(14_000_000);
 const encryptedFields = {
   encrypted: z.literal(true),

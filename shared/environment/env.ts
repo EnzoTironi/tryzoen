@@ -172,6 +172,10 @@ export const env = createEnv({
         .transform((value) => new Secret(value))
     ),
     ZOEN_MATRIX_URL: z.url().optional(),
+    ZOEN_MATRIX_NATIVE_NOTIFICATIONS: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     ZOEN_VAULTWARDEN_URL: z
       .url()
       .refine((value) => {

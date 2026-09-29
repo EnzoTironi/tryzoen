@@ -9,16 +9,25 @@ const nativeSyncSchema = z.object({
         .record(
           z.string(),
           z.object({
+            unread_notifications: z
+              .object({
+                notification_count: z.number().int().nonnegative(),
+                highlight_count: z.number().int().nonnegative(),
+              })
+              .optional(),
             ephemeral: z
               .object({
                 events: z
                   .array(
-                    z.object({
-                      type: z.literal("m.typing"),
-                      content: z.object({
-                        user_ids: z.array(z.string().max(255)).max(100),
+                    z.discriminatedUnion("type", [
+                      z.object({
+                        type: z.literal("m.typing"),
+                        content: z.object({
+                          user_ids: z.array(z.string().max(255)).max(100),
+                        }),
                       }),
-                    })
+                      z.object({ type: z.literal("m.receipt") }),
+                    ])
                   )
                   .max(1),
               })
@@ -68,7 +77,7 @@ export async function pollNativeSync(
       include_leave: true,
       state: { types: [] },
       account_data: { types: [] },
-      ephemeral: { types: typing ? ["m.typing"] : [] },
+      ephemeral: { types: typing ? ["m.typing"] : ["m.receipt"] },
       timeline: {
         limit: 1,
         types: typing
@@ -89,13 +98,30 @@ export async function pollNativeSync(
     viewer,
     { maxResponseBytes: typing ? 65536 : 1_048_576 }
   );
+  return parseNativeSync(response, roomIds, mode);
+}
+
+/** Keep native output validation together, including ephemeral data minimization. */
+function parseNativeSync(
+  response: unknown,
+  roomIds: string[],
+  mode: "inbox" | "typing"
+) {
   const result = nativeSyncSchema.safeParse(response);
   if (!result.success) throw new MatrixError({ reason: "unavailable" });
   const ids = [
     ...Object.keys(result.data.rooms?.join ?? {}),
     ...Object.keys(result.data.rooms?.leave ?? {}),
   ];
-  if (ids.length > limit || ids.some((id) => !roomIds.includes(id)))
+  if (ids.length > roomIds.length || ids.some((id) => !roomIds.includes(id)))
+    throw new MatrixError({ reason: "unavailable" });
+  if (
+    Object.values(result.data.rooms?.join ?? {}).some((room) =>
+      room.ephemeral?.events.some(
+        (event) => event.type !== (mode === "typing" ? "m.typing" : "m.receipt")
+      )
+    )
+  )
     throw new MatrixError({ reason: "unavailable" });
   return result.data;
 }

@@ -27,6 +27,7 @@ import { ConversationAvatar } from "./avatar";
 import type {
   InboxData,
   inboxItemSchema,
+  inboxNotificationsSchema,
   inboxPageSchema,
   inboxQuerySchema,
 } from "./inbox-schema";
@@ -310,6 +311,9 @@ export function ConversationInbox({
           item.kind === "room" ? (
             <RoomRow
               item={item}
+              notifications={sync.notifications.find(
+                (entry) => entry.id === item.room.id
+              )}
               selected={selectedRoom === item.room.id}
               onOpen={onOpenRoom}
             />
@@ -412,10 +416,12 @@ export function ConversationInbox({
 }
 function RoomRow({
   item,
+  notifications,
   selected,
   onOpen,
 }: {
   readonly item: Extract<z.infer<typeof inboxItemSchema>, { kind: "room" }>;
+  readonly notifications?: z.infer<typeof inboxNotificationsSchema>[number];
   readonly selected: boolean;
   readonly onOpen: (id: string) => void;
 }) {
@@ -458,12 +464,14 @@ function RoomRow({
             })}
           </Text>
         )}
-        {item.unread !== null && item.unread > 0 && (
+        {notifications && notifications.notificationCount > 0 && (
           <Text
-            accessibilityLabel={`${item.unread} não lidas`}
+            accessibilityLabel={`${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`}
             style={styles.unread}
           >
-            {item.unread > 99 ? "99+" : item.unread}
+            {notifications.notificationCount > 99
+              ? "99+"
+              : notifications.notificationCount}
           </Text>
         )}
       </View>

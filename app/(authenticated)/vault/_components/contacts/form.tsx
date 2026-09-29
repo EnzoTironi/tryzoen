@@ -10,7 +10,7 @@ import { z } from "zod";
 import { Button } from "@web/components/ui/button";
 import { DialogFooter } from "@web/components/ui/dialog";
 import { FieldGroup } from "@web/components/ui/field";
-import { serializeContactVaultPayload } from "@shared/vault/schema";
+import { serializeContactVaultPayload } from "@zoen/companion-ui/vault";
 import { api } from "@web/trpc/client";
 import { FormField } from "../field";
 

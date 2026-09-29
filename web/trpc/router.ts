@@ -7,10 +7,11 @@ import { saveChat } from "@db/services/chats";
 import { replacePersonalProfile } from "../../server/personal-memory/profile";
 import { selectGatewayModel } from "@db/services/settings";
 import {
-  deleteVaultItem,
-  saveVaultItem,
-  readVaultPage,
-} from "@db/services/vault";
+  listAccountVaultItems,
+  createAccountVaultItem,
+  importAccountVaultItems,
+  removeAccountVaultItem,
+} from "../../server/workspaces/vault/items";
 import { saveChatSchema } from "@shared/chat/schema";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
 import { disconnectGoogleWorkspace } from "../../server/google-workspace";
@@ -26,11 +27,13 @@ import {
 } from "../../server/accounts/controls";
 import { userProfileSchema } from "@shared/user-profile/schema";
 import {
+  vaultPageInputSchema,
+  vaultPageSchema,
+} from "@zoen/companion-ui/vault";
+import {
   vaultCreateItemSchema,
   vaultImportItemsSchema,
-  vaultPageInputSchema,
-  vaultItemSchema,
-} from "@shared/vault/schema";
+} from "@zoen/companion-ui/vault";
 import { createTRPCRouter, protectedProcedure } from "./init";
 import { workspacesRouter } from "./workspaces";
 import { modelsRouter } from "./models";
@@ -157,28 +160,29 @@ export const appRouter = createTRPCRouter({
   vault: {
     list: protectedProcedure
       .input(vaultPageInputSchema)
-      .output(
-        z.object({
-          items: z.array(vaultItemSchema),
-          nextCursor: vaultPageInputSchema.shape.cursor,
-        })
-      )
-      .query(({ ctx, input }) => readVaultPage(ctx.scope, input)),
+      .output(vaultPageSchema)
+      .query(({ ctx, input }) =>
+        listAccountVaultItems(ctx.requestHeaders, input)
+      ),
     create: protectedProcedure
       .input(vaultCreateItemSchema)
-      .mutation(({ ctx, input }) => saveVaultItem(ctx.scope, input)),
+      .mutation(({ ctx, input }) =>
+        createAccountVaultItem(ctx.requestHeaders, input)
+      ),
     import: protectedProcedure
       .input(vaultImportItemsSchema)
-      .mutation(async ({ ctx, input }) => {
-        for (const item of input) await saveVaultItem(ctx.scope, item);
-      }),
+      .mutation(({ ctx, input }) =>
+        importAccountVaultItems(ctx.requestHeaders, input)
+      ),
     remove: protectedProcedure
       .input(
         z.object({
           id: z.string().min(1),
         })
       )
-      .mutation(({ ctx, input }) => deleteVaultItem(ctx.scope, input.id)),
+      .mutation(({ ctx, input }) =>
+        removeAccountVaultItem(ctx.requestHeaders, input.id)
+      ),
   },
   models: {
     list: protectedProcedure.query(readModelCatalog),

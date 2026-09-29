@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 
 import { listVaultItems, saveVaultItem } from "../../db/services/vault";
-import { serializeLoginVaultPayload } from "../../shared/vault/schema";
+import { serializeLoginVaultPayload } from "@zoen/companion-ui/vault";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import {

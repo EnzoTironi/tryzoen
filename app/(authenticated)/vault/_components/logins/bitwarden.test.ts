@@ -1,7 +1,7 @@
 import { Secret } from "@shared/environment/secret";
 
 import { expect, test } from "vitest";
-import { parseLoginVaultPayload } from "@shared/vault/schema";
+import { parseLoginVaultPayload } from "@zoen/companion-ui/vault";
 import pbkdf2 from "./fixtures/bitwarden-pbkdf2.json";
 import argon2 from "./fixtures/bitwarden-argon2.json";
 import { openBitwardenExport, VaultImportFailed } from "./bitwarden";

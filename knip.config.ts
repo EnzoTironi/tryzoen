@@ -42,6 +42,8 @@ export default {
         "react-native-svg",
         // Eve evaluates shared reaction schemas from root-authored module bundles.
         "unicode-emoji-json",
+        // Eve also resolves the shared vault schema's parser from its root bundle.
+        "credit-card-type",
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
         // Imported through the owning Tailwind stylesheet rather than TypeScript.

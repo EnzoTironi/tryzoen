@@ -1,3 +1,4 @@
+import { readCreatorQualification } from "./qualifications/records";
 import { randomUUID } from "node:crypto";
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -19,7 +20,7 @@ import {
 } from "../workspaces/access";
 
 function pilotProjection(actor: z.infer<typeof WorkspaceActorSchema>) {
-  return sql`(SELECT username FROM user_directory WHERE creator_draft_id = r.draft_id) AS username, p.id, p.release_id AS "releaseId", r.draft_id AS "draftId", r.revision,
+  return sql`(SELECT username FROM user_directory WHERE creator_draft_id = r.draft_id) AS username, p.qualification_id AS "qualificationId", CASE WHEN p.qualification_id IS NULL THEN 'snapshot' ELSE 'grounded' END AS "answerMode", (SELECT manifest_digest FROM creator_qualifications WHERE id=p.qualification_id AND release_id=p.release_id) AS "manifestDigest", p.id, p.release_id AS "releaseId", r.draft_id AS "draftId", r.revision,
     r.content->>'title' AS title, r.content->>'description' AS description,
     author.name AS "creatorName", recipient.name AS "recipientName",
     p.creator_user_id = ${actor.userId} AS "isCreator", p.status,
@@ -27,7 +28,7 @@ function pilotProjection(actor: z.infer<typeof WorkspaceActorSchema>) {
 }
 
 const pilotJoins = sql`FROM creator_pilots p
-  JOIN creator_releases r ON r.id = p.release_id AND r.workspace_id = p.workspace_id AND r.user_id = p.creator_user_id
+  JOIN creator_releases r ON r.id = p.release_id AND r.workspace_id = p.workspace_id AND r.user_id = p.creator_user_id AND (p.qualification_id IS NULL OR EXISTS (SELECT 1 FROM creator_qualifications q WHERE q.id=p.qualification_id AND q.release_id=p.release_id))
   JOIN workspaces w ON w.id = p.workspace_id
   JOIN organization_memberships creator_org ON creator_org.organization_id = w.organization_id AND creator_org.user_id = p.creator_user_id
   JOIN organization_memberships recipient_org ON recipient_org.organization_id = w.organization_id AND recipient_org.user_id = p.recipient_user_id
@@ -83,6 +84,14 @@ export function inviteCreatorPilot(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["creator-pilots", actor.workspaceId])}, 0))`
     );
     const release = await readCreatorRelease(actor, input.releaseId);
+    if (input.qualificationId) {
+      const qualification = await readCreatorQualification(
+        actor,
+        input.qualificationId
+      );
+      if (qualification.releaseId !== release.id)
+        throw new WorkspaceAccessDenied();
+    }
     const [target] = await query<{
       userId: string;
     }>(sql`SELECT m.user_id AS "userId" FROM user_directory d
@@ -98,12 +107,14 @@ export function inviteCreatorPilot(
       );
     const [existing] = await query<{
       releaseId: string;
+      qualificationId: string | null;
       recipientUserId: string;
-    }>(sql`SELECT release_id AS "releaseId", recipient_user_id AS "recipientUserId"
+    }>(sql`SELECT release_id AS "releaseId", qualification_id AS "qualificationId", recipient_user_id AS "recipientUserId"
       FROM creator_pilots WHERE id = ${input.id} AND workspace_id = ${actor.workspaceId} AND creator_user_id = ${actor.userId}`);
     if (existing) {
       if (
         existing.releaseId !== release.id ||
+        existing.qualificationId !== (input.qualificationId ?? null) ||
         existing.recipientUserId !== target.userId
       )
         throw new Error(
@@ -131,15 +142,15 @@ export function inviteCreatorPilot(
         "Pilot capacity reached: up to 20 invitations per approved version and 100 per person in this workspace, including closed pilots."
       );
     const [duplicate] = await query(
-      sql`SELECT id FROM creator_pilots WHERE release_id = ${release.id} AND recipient_user_id = ${target.userId} AND status IN ('pending', 'active')`
+      sql`SELECT id FROM creator_pilots WHERE release_id = ${release.id} AND recipient_user_id = ${target.userId} AND qualification_id IS NOT DISTINCT FROM ${input.qualificationId ?? null}::uuid AND status IN ('pending', 'active')`
     );
     if (duplicate)
       throw new Error(
         "This person already has a pending or active pilot for this version."
       );
     const [inserted] =
-      await query(sql`INSERT INTO creator_pilots (id, release_id, workspace_id, creator_user_id, recipient_user_id)
-      VALUES (${input.id}, ${release.id}, ${actor.workspaceId}, ${actor.userId}, ${target.userId}) ON CONFLICT (id) DO NOTHING RETURNING id`);
+      await query(sql`INSERT INTO creator_pilots (id, release_id, workspace_id, creator_user_id, recipient_user_id, qualification_id)
+      VALUES (${input.id}, ${release.id}, ${actor.workspaceId}, ${actor.userId}, ${target.userId}, ${input.qualificationId ?? null}) ON CONFLICT (id) DO NOTHING RETURNING id`);
     if (!inserted) throw new WorkspaceAccessDenied();
     return readCreatorPilot(actor, input.id);
   });

@@ -91,7 +91,7 @@ function PilotQuestions({
         pilotId: pilot.id,
         draftId: pilot.draftId,
         revision: pilot.revision,
-        kind: "answer",
+        kind: pilot.answerMode === "grounded" ? "grounded-answer" : "answer",
         question,
       });
     },
@@ -114,7 +114,9 @@ function PilotQuestions({
       </Text>
       <CreatorReleaseEvidence content={pilot.content} />
       <Text style={pageStyles.copy}>
-        Only this approved teaching and your question reach your selected model.
+        {pilot.answerMode === "grounded"
+          ? "Grounded version: only retrieved excerpts from these approved sources and your question reach your selected model."
+          : "Snapshot version: this approved teaching and your question reach your selected model."}
         Personal memory, conversation history and tools are excluded. The
         creator cannot read your questions, answers or private reviews. Share
         only information you have permission to send to your model.

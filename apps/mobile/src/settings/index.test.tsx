@@ -65,6 +65,9 @@ vi.mock("@zoen/companion-ui", () => ({
   },
   CreatorStudio: () => <button>Creator studio</button>,
 }));
+vi.mock("./vault", () => ({
+  MobileVault: ({ kind }: { kind: string }) => <p>Saved vault {kind}</p>,
+}));
 vi.mock("./channels", () => ({
   LinkedChannels: () => <p>Real linked channel controls</p>,
 }));
@@ -183,8 +186,13 @@ it("preserves sign-out pending and failure behavior", async () => {
   expect(onSignOut).toHaveBeenCalledOnce();
 });
 it("does not present unimplemented providers or payments as functional", () => {
-  for (const page of ["connectors", "wallet", "vault"]) {
+  for (const page of ["connectors"]) {
     expect(render(page)).toContain("not available in this app yet");
     expect(state.buttons.size).toBe(0);
   }
+});
+
+it("routes saved login and card management without claiming a payment provider", () => {
+  expect(render("vault")).toContain("Saved vault login");
+  expect(render("wallet")).toContain("Saved vault payment");
 });

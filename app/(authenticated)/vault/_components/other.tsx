@@ -2,7 +2,8 @@
 
 import { useI18n } from "@web/i18n/context";
 
-import type { VaultItem } from "@shared/vault/schema";
+import type { VaultItem } from "@zoen/companion-ui/vault";
+
 import { VaultItemList } from "./section";
 
 export function VaultOtherItems({

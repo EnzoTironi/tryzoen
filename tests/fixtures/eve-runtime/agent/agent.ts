@@ -19,6 +19,24 @@ export default defineAgent({
           } = request;
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
+          for (const name of [
+            "creator-qualification",
+            "creator-pilot",
+            "creator-release",
+          ]) {
+            if (
+              lastUserMessage?.startsWith(`${name} `) &&
+              !toolResults.some((result) => result.name === name)
+            )
+              return {
+                toolCalls: [
+                  {
+                    name,
+                    input: JSON.parse(lastUserMessage.slice(name.length + 1)),
+                  },
+                ],
+              };
+          }
           if (
             lastUserMessage?.startsWith("creator-sources ") &&
             !toolResults.some((result) => result.name === "creator-sources")

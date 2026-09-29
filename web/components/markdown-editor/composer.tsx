@@ -80,7 +80,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
     },
   });
   useEffect(() => {
-    editor?.setEditable(!props.disabled);
+    editor?.setEditable(!props.disabled, false);
   }, [editor, props.disabled]);
   useEffect(() => {
     if (editor && props.value !== last.current) {

@@ -1179,3 +1179,46 @@ includes five Matrix and nineteen creator tests. Structural findings remain
 recorded, without suppression. See [the parity roadmap](parity-roadmap.md) for
 current acceptance criteria, evidence and the three parallel implementation lanes.
 No production database was reset and no full-parity or capacity claim is made.
+
+### Integrated parity checkpoint — 2026-09-28, wave 7
+
+The subsequent slice qualifies native Synapse notification counts on the isolated
+homeserver. Human appservice identities are nonexclusive for native push rules;
+a Synapse module blocks reserved-identity registration and interactive/SSO login.
+Bot identities remain exclusive. The application feature is off by default and
+requires a qualified deployment. Encrypted bounded cursors retain native counts,
+re-bootstrap on scope changes and hide unknown counts during failures. Browser QA
+verified incoming preview/count changes and receipt-driven clearing after the
+message was actually visible. This is not OS push, global unread-message counting,
+gap reconciliation, offline storage or E2EE.
+
+Creator qualification now records exact approved release, corpus digest,
+evaluation revision and human-reviewed grounded cases. At least one declared
+supported case and one declared insufficient-evidence case must pass; changes to
+evidence invalidate qualification. Explicitly qualified new pilots use grounded
+responses, while existing snapshot pilots keep their behavior. Revocation and
+membership are checked around execution; participant conversations remain private.
+Base private-release review/approval is also available through native chat
+questions with readable teaching, examples, provenance and review notes. Runtime
+tests cover qualified pilots; browser evidence covers synthetic base approval,
+not a real creator endorsement or marketplace publication.
+
+The web and Expo vault share bounded listing, masked details, creation and
+confirmed removal. Authorization is transactional, secret drafts never enter the
+mutation cache and cancellation/background clears sensitive drafts. Local
+validation preserves editable values; uncertain transport failures clear secrets.
+Editing, revealing and payment-provider setup remain separate work. The completed
+question-card lifecycle and rich composer clearing also work in the running UI.
+
+Wave 7 passed `pnpm check` (251 files / 1,558 tests), `pnpm build`, migration
+validation, Expo web/iOS/Android exports and the focused isolated runtime suites.
+Same-major security patch overrides leave `pnpm audit` without known advisories.
+Migration 0089 is local/test only. Nine verified screenshots and their clearly
+labelled screenshot-sequence video accompany PR 152; physical devices remain
+unqualified. Structural findings are recorded without suppression in the roadmap.
+
+Next complete slices are native Matrix search inside one authorized conversation,
+authorized uploaded text/Markdown as reviewed creator sources, and automatic
+pagination of agent chat history. The Matrix timelines already paginate
+automatically. These continue the same ownership boundaries rather than adding a
+second messaging index, memory engine or generic collaboration framework.

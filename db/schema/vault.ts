@@ -10,7 +10,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { vaultItemKinds } from "@shared/vault/schema";
+import { vaultItemKinds } from "@zoen/companion-ui/vault";
+
 import { workspaces } from "./workspaces";
 
 export const vaultItems = pgTable(
