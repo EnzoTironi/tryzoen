@@ -1481,3 +1481,26 @@ four observations, zero gating; the reported unused separator is a library callb
 [Five screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885161314)
 were attached with `gh --attach`. [Local measurements](evidence/message-density-2026-09-29.json)
 do not qualify physical devices, enlarged text or the smaller profile-name links.
+
+### Native reaction invalidation — wave 19
+
+Room sync now includes native reaction events and returns a scoped invalidation
+signal. Reaction-only batches do not reload history. The independent 30-second
+reaction timer is removed. A pending older reaction read holds the cursor until
+fresh counts are applied; inactive query variants become stale, reset recovers
+the views, and authorization failures invalidate both history and counts.
+Cross-room native events are rejected. Removal still follows conservative
+redaction history recovery.
+
+The production-build browser comparison found five idle reaction reads / 169 s
+before versus zero / 424 s after. A second-tab addition caused one count read and
+zero history reads; removal caused one of each. Observed 448/321 ms timings
+include automation, not an SLO. [Measurements](evidence/reaction-sync-2026-09-29.json).
+Check passed 270 files / 1,669 tests; build and Expo exports passed. Three focused
+real Synapse tests cover separate-account counts/removal, access loss and prior
+message/edit/thread/gap behavior. Eight structural observations remain, including
+six churn gates; no suppressions. No database change.
+
+[Four screenshots and a 16-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822)
+were attached with `gh --attach`. Physical devices, full parity and production
+capacity remain unqualified.

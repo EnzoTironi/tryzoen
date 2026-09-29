@@ -106,6 +106,7 @@ test("bootstrap requires reconciliation, but an idle incremental read does not r
   expect(await readMatrixRoomSync(actor, { id: room.id })).toMatchObject({
     reset: true,
     timelineChanged: false,
+    reactionsChanged: true,
   });
   mocks.open.mockResolvedValue({
     roomId: room.roomId,
@@ -116,7 +117,41 @@ test("bootstrap requires reconciliation, but an idle incremental read does not r
   });
   expect(
     await readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
-  ).toMatchObject({ reset: false, timelineChanged: false });
+  ).toMatchObject({
+    reset: false,
+    timelineChanged: false,
+    reactionsChanged: false,
+  });
+});
+
+test("native reactions signal a refresh without projecting or reloading message history", async () => {
+  mocks.open.mockResolvedValue({
+    roomId: room.roomId,
+    epoch: room.epoch,
+    nextBatch: "s1",
+    issuedAt: 100000,
+    userIds: [],
+  });
+  mocks.native.mockResolvedValue({
+    next_batch: "s2",
+    rooms: {
+      join: {
+        [room.roomId]: {
+          timeline: { events: [{ event_id: "$reaction", type: "m.reaction" }] },
+        },
+      },
+    },
+  });
+  expect(
+    await readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
+  ).toMatchObject({
+    reset: false,
+    timelineChanged: false,
+    reactionsChanged: true,
+    changes: null,
+  });
+  expect(mocks.changes).not.toHaveBeenCalled();
+  expect(mocks.access).toHaveBeenCalled();
 });
 
 test.each(["m.room.message", "m.room.redaction", "m.room.member"])(
@@ -151,7 +186,11 @@ test.each(["m.room.message", "m.room.redaction", "m.room.member"])(
       id: room.id,
       cursor: "previous",
     });
-    expect(result).toMatchObject({ reset: false, timelineChanged: true });
+    expect(result).toMatchObject({
+      reset: false,
+      timelineChanged: true,
+      reactionsChanged: type !== "m.room.message",
+    });
     expect(JSON.stringify(result)).not.toContain("Private content");
   }
 );

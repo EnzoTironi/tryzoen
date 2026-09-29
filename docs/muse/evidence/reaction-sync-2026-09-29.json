@@ -1,0 +1,60 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build; Chrome; synthetic account and Matrix room",
+  "idle": {
+    "before": {
+      "durationMs": 169007,
+      "paths": {
+        "/api/trpc/companion.inboxSync": 17,
+        "/api/trpc/workspaces.rooms.readSync": 13,
+        "/api/trpc/workspaces.rooms.reactions": 5
+      },
+      "truncated": false,
+      "hasMore": false
+    },
+    "after": {
+      "durationMs": 423884,
+      "paths": {
+        "/api/trpc/companion.inboxSync,workspaces.rooms.readSync": 1,
+        "/api/trpc/workspaces.rooms.readSync": 33,
+        "/api/trpc/companion.inboxSync": 37,
+        "/api/trpc/workspaces.rooms.readSync,companion.inboxSync": 1
+      },
+      "truncated": false,
+      "hasMore": false
+    }
+  },
+  "addition": {
+    "durationMs": 493,
+    "paths": {
+      "/api/trpc/workspaces.rooms.reactions": 1
+    },
+    "truncated": false,
+    "hasMore": false,
+    "observedWithinMs": 448
+  },
+  "removal": {
+    "durationMs": 352,
+    "paths": {
+      "/api/trpc/workspaces.rooms.messages": 1,
+      "/api/trpc/workspaces.rooms.reactions": 1
+    },
+    "truncated": false,
+    "hasMore": false,
+    "observedWithinMs": 321
+  },
+  "verified": [
+    "Reaction received between two tabs without reloading",
+    "No idle reaction polling after initial load",
+    "Reaction addition reads counts only, not history",
+    "Reaction removal received on mobile viewport"
+  ],
+  "limits": [
+    "Browser timing includes automation and is not an SLO",
+    "Two tabs use the same synthetic account; separate-account authority is covered by real Synapse runtime tests",
+    "Removal still uses the conservative history recovery path for redactions",
+    "Viewport emulation, not a physical device",
+    "No million-user capacity qualification"
+  ],
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822"
+}

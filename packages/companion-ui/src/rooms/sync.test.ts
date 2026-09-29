@@ -2,7 +2,11 @@ import { beforeEach, afterEach, expect, test, vi } from "vitest";
 import { useRoomSync } from "./sync";
 import type { RoomData } from "./schema";
 import type { applyRoomChanges } from "./history";
-import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
+import {
+  InfiniteQueryObserver,
+  QueryClient,
+  QueryObserver,
+} from "@tanstack/react-query";
 const state = vi.hoisted(() => ({
   effects: [] as (() => void | (() => void))[],
   active: "active",
@@ -143,6 +147,7 @@ test("replayed response cannot extend its expiry and disposal clears state", asy
     userIds: ["ana"],
     expiresAt: 105000,
     timelineChanged: false,
+    reactionsChanged: false,
     changes: null,
     reset: false,
   };
@@ -171,6 +176,7 @@ const healthy = {
   userIds: [],
   expiresAt: 0,
   timelineChanged: false,
+  reactionsChanged: false,
   changes: null,
   reset: false,
 };
@@ -225,6 +231,7 @@ test.each(["timelineChanged", "reset"] as const)(
   async (flag) => {
     const room = observeHistory("matrix-messages");
     const thread = observeHistory("matrix-thread");
+    const reactions = observeReactions();
     data.readSync
       .mockResolvedValueOnce({ ...healthy, [flag]: true })
       .mockResolvedValue(healthy);
@@ -239,6 +246,7 @@ test.each(["timelineChanged", "reset"] as const)(
     expect(
       room.observer.getCurrentResult().data?.pages.map((p) => p.text)
     ).toEqual(["page-0", "page-1"]);
+    expect(reactions.read).toHaveBeenCalledTimes(flag === "reset" ? 1 : 0);
     await vi.advanceTimersByTimeAsync(2000);
     expect(data.readSync.mock.calls[1]?.[0].cursor).toBe("next");
   }
@@ -274,6 +282,7 @@ test("a change arriving during pagination is replayed without cancelling the pre
 
 test("a late change after background does not refetch or advance history", async () => {
   const room = observeHistory("matrix-messages");
+  const reactions = observeReactions();
   let complete:
     | ((page: Awaited<ReturnType<RoomData["readSync"]>>) => void)
     | undefined;
@@ -286,22 +295,93 @@ test("a late change after background does not refetch or advance history", async
   mount();
   state.active = "background";
   for (const listener of state.listeners) listener("background");
-  complete?.({ ...healthy, timelineChanged: true });
+  complete?.({ ...healthy, timelineChanged: true, reactionsChanged: true });
   await vi.advanceTimersByTimeAsync(0);
   expect(room.read).not.toHaveBeenCalled();
+  expect(reactions.read).not.toHaveBeenCalled();
   expect(data.readSync.mock.calls[0]?.[1].aborted).toBe(true);
 });
 
 test("sync authorization failure revalidates history and does not leave stale content presented as current", async () => {
   const room = observeHistory("matrix-messages");
   const thread = observeHistory("matrix-thread");
+  const reactions = observeReactions();
   room.read.mockRejectedValue(new Error("Revoked room"));
   thread.read.mockRejectedValue(new Error("Revoked thread"));
+  reactions.read.mockRejectedValue(new Error("Revoked reactions"));
   data.readSync.mockRejectedValue(new Error("Revoked membership"));
   mount();
   await vi.advanceTimersByTimeAsync(0);
   expect(room.observer.getCurrentResult().isError).toBe(true);
   expect(thread.observer.getCurrentResult().isError).toBe(true);
+  expect(reactions.observer.getCurrentResult().isError).toBe(true);
+});
+
+function observeReactions(scope = "account:workspace") {
+  const read = vi.fn<() => Promise<number>>(async () => 1);
+  const observer = new QueryObserver(client, {
+    queryKey: ["matrix-reactions", scope, "room", ["$message"]],
+    queryFn: read,
+    initialData: 0,
+    staleTime: Infinity,
+  });
+  unsubscribe.push(
+    observer.subscribe(() => {
+      // Keep the real query active without mounting a second sync observer.
+    })
+  );
+  return { read, observer };
+}
+
+test("reaction signals refresh active reactions without history reads or cross-account work", async () => {
+  const room = observeHistory("matrix-messages");
+  const thread = observeHistory("matrix-thread");
+  const reactions = observeReactions();
+  const otherAccount = observeReactions("other:workspace");
+  const inactive = ["matrix-reactions", "account:workspace", "room", ["$old"]];
+  client.setQueryData(inactive, 0);
+  data.readSync.mockResolvedValue(healthy);
+  mount();
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(reactions.read).not.toHaveBeenCalled();
+  data.readSync.mockResolvedValueOnce({ ...healthy, reactionsChanged: true });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(reactions.read).toHaveBeenCalledTimes(1);
+  expect(reactions.observer.getCurrentResult().data).toBe(1);
+  expect(client.getQueryState(inactive)?.isInvalidated).toBe(true);
+  expect(otherAccount.read).not.toHaveBeenCalled();
+  expect(room.read).not.toHaveBeenCalled();
+  expect(thread.read).not.toHaveBeenCalled();
+});
+
+test("an in-flight reaction read cannot consume a newer native change", async () => {
+  const reactions = observeReactions();
+  data.readSync.mockResolvedValueOnce(healthy).mockResolvedValue({
+    ...healthy,
+    reactionsChanged: true,
+    cursor: "changed",
+  });
+  mount();
+  await vi.advanceTimersByTimeAsync(0);
+  let complete: ((value: number) => void) | undefined;
+  reactions.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      })
+  );
+  const pending = reactions.observer.refetch();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(reactions.read).toHaveBeenCalledTimes(1);
+  complete?.(41);
+  await pending;
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(data.readSync.mock.calls[2]?.[0].cursor).toBe("next");
+  expect(reactions.read).toHaveBeenCalledTimes(2);
+  expect(reactions.observer.getCurrentResult().data).toBe(1);
+  data.readSync.mockResolvedValue(healthy);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(data.readSync.mock.calls[3]?.[0].cursor).toBe("changed");
 });
 
 function message(id: string, text = id, rootId: string | null = null) {

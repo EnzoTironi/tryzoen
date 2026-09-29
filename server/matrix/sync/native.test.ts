@@ -132,7 +132,12 @@ it("focused room shares change signals and typing in a finite native long-poll",
       rooms: ["!room:test"],
       timeline: {
         limit: 20,
-        types: ["m.room.message", "m.room.redaction", "m.room.member"],
+        types: [
+          "m.room.message",
+          "m.room.redaction",
+          "m.reaction",
+          "m.room.member",
+        ],
       },
       ephemeral: { types: ["m.typing"] },
     },
@@ -141,3 +146,30 @@ it("focused room shares change signals and typing in a finite native long-poll",
     pollNativeSync("@viewer:test", ["!room:test", "!other:test"], null, "room")
   ).rejects.toThrow(MatrixError);
 });
+
+it.each(["inbox", "room"] as const)(
+  "rejects a reaction event from another room in %s sync",
+  async (mode) => {
+    mocks.request.mockResolvedValue({
+      next_batch: "next",
+      rooms: {
+        join: {
+          "!room:test": {
+            timeline: {
+              events: [
+                {
+                  event_id: "$reaction",
+                  type: "m.reaction",
+                  room_id: "!other:test",
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    await expect(
+      pollNativeSync("@viewer:test", ["!room:test"], "previous", mode)
+    ).rejects.toThrow(MatrixError);
+  }
+);

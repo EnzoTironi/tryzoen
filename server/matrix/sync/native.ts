@@ -36,7 +36,11 @@ const nativeSyncSchema = z.object({
               .object({
                 events: z
                   .array(
-                    z.looseObject({ event_id: z.string(), type: z.string() })
+                    z.looseObject({
+                      event_id: z.string(),
+                      type: z.string(),
+                      room_id: z.string().optional(),
+                    })
                   )
                   .max(20),
                 limited: z.boolean().optional(),
@@ -91,14 +95,12 @@ export async function pollNativeSync(
       ephemeral: { types: focused ? ["m.typing"] : ["m.receipt"] },
       timeline: {
         limit: focused ? 20 : 1,
-        types: focused
-          ? ["m.room.message", "m.room.redaction", "m.room.member"]
-          : [
-              "m.room.message",
-              "m.room.redaction",
-              "m.reaction",
-              "m.room.member",
-            ],
+        types: [
+          "m.room.message",
+          "m.room.redaction",
+          "m.reaction",
+          "m.room.member",
+        ],
       },
     },
   };
@@ -127,9 +129,12 @@ function parseNativeSync(
   if (ids.length > roomIds.length || ids.some((id) => !roomIds.includes(id)))
     throw new MatrixError({ reason: "unavailable" });
   if (
-    Object.values(result.data.rooms?.join ?? {}).some(
-      (room) =>
+    Object.entries(result.data.rooms?.join ?? {}).some(
+      ([roomId, room]) =>
         (room.timeline?.events.length ?? 0) > (mode === "room" ? 20 : 1) ||
+        !!room.timeline?.events.some(
+          (event) => event.room_id !== undefined && event.room_id !== roomId
+        ) ||
         room.ephemeral?.events.some(
           (event) => event.type !== (mode === "room" ? "m.typing" : "m.receipt")
         )

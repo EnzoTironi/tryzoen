@@ -35,10 +35,10 @@ export function useRoomReactions(
     queryFn: ({ signal }) =>
       data.reactions({ id: roomId, messageIds: ids }, signal),
     enabled: enabled && ids.length > 0,
-    staleTime: 15_000,
+    staleTime: Infinity,
     gcTime: 60_000,
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
   });
   const showMessages = useCallback((visible: string[]) => {

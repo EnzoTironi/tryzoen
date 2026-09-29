@@ -34,15 +34,23 @@ export async function readMatrixRoomSync(
       previous?.nextBatch ?? null,
       "room"
     );
-    const event = native.rooms?.join?.[room.roomId]?.ephemeral?.events.at(-1);
+    const typingEvent =
+      native.rooms?.join?.[room.roomId]?.ephemeral?.events.at(-1);
     const timeline = native.rooms?.join?.[room.roomId]?.timeline;
     const reset =
       !previous ||
       !!timeline?.limited ||
       room.roomId in (native.rooms?.leave ?? {});
+    const historyEvents =
+      timeline?.events.filter((event) => event.type !== "m.reaction") ?? [];
+    const reactionsChanged =
+      reset ||
+      !!timeline?.events.some((event) =>
+        ["m.reaction", "m.room.redaction", "m.room.member"].includes(event.type)
+      );
     const changes =
-      !reset && timeline?.events.length
-        ? await readRoomChanges(actor, room, timeline.events)
+      !reset && historyEvents.length
+        ? await readRoomChanges(actor, room, historyEvents)
         : null;
     const current = await requireMatrixRoom(actor, input.id);
     if (current.roomId !== room.roomId || current.epoch !== room.epoch)
@@ -51,7 +59,9 @@ export async function readMatrixRoomSync(
     // Bind the deadline to the request cursor, so identical request replay cannot renew it.
     const expiresAt = previous ? previous.issuedAt + 30000 : Date.now() + 30000;
     const snapshot =
-      event?.type === "m.typing" ? event.content.user_ids : undefined;
+      typingEvent?.type === "m.typing"
+        ? typingEvent.content.user_ids
+        : undefined;
     const userIds = (snapshot ?? previous?.userIds ?? []).filter(
       (id) => id !== room.matrixId
     );
@@ -70,7 +80,8 @@ export async function readMatrixRoomSync(
     return roomSyncPageSchema.parse({
       status: "ready",
       cursor,
-      timelineChanged: (timeline?.events.length ?? 0) > 0,
+      timelineChanged: historyEvents.length > 0,
+      reactionsChanged,
       reset,
       changes,
       userIds: previous && expiresAt > Date.now() ? userIds : [],
@@ -83,6 +94,7 @@ export async function readMatrixRoomSync(
       status: "unavailable",
       cursor: null,
       timelineChanged: false,
+      reactionsChanged: false,
       reset: false,
       changes: null,
       userIds: [],

@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { onlineManager, useQueryClient } from "@tanstack/react-query";
+import {
+  onlineManager,
+  useQueryClient,
+  type QueryClient,
+  type QueryFilters,
+} from "@tanstack/react-query";
 import { useTypingPublisher } from "./typing-publisher";
 import { reconcileRoomHistory } from "./history";
 import type { RoomData } from "./schema";
 
-/** One native sync for room/thread changes and typing. Never sends draft text. */
+/** One native sync for room/thread changes, reactions and typing. Never sends draft text. */
 export function useRoomSync(
   data: Pick<RoomData, "setTyping" | "readSync">,
   cacheScope: string,
@@ -33,23 +38,7 @@ export function useRoomSync(
     const history = ["matrix-messages", "matrix-thread"].map((kind) => ({
       queryKey: [kind, cacheScope, roomId],
     }));
-    const refresh = async (throwOnError = true) => {
-      if (!allowed()) return;
-      await Promise.all(
-        history.map((filter) =>
-          client.invalidateQueries({ ...filter, refetchType: "none" })
-        )
-      );
-      if (!allowed()) return;
-      await Promise.all(
-        history.map((filter) =>
-          client.refetchQueries(
-            { ...filter, type: "active" },
-            { cancelRefetch: false, throwOnError }
-          )
-        )
-      );
-    };
+    const reactions = { queryKey: ["matrix-reactions", cacheScope, roomId] };
     const clear = () => {
       clearTimeout(expiry);
       setSnapshot(undefined);
@@ -82,17 +71,14 @@ export function useRoomSync(
         );
         if (stopped()) return;
         if (result.status !== "ready") throw new Error("Room sync unavailable");
-        if (result.reset || result.timelineChanged) {
-          const reconciled = reconcileRoomHistory(
-            client,
-            history.flatMap((filter) => client.getQueryCache().findAll(filter)),
-            before,
-            result.reset ? null : result.changes
-          );
-          if (reconciled === "retry") return;
-          if (reconciled === "recover") await refresh();
-          if (stopped()) return;
-        }
+        const applied = await reconcileRoomViews(
+          client,
+          { history, reactions },
+          before,
+          result,
+          stopped
+        );
+        if (!applied) return;
         cursor = result.cursor ?? undefined;
         setFailure(undefined);
         clear();
@@ -109,8 +95,13 @@ export function useRoomSync(
         clear();
         change(false);
         setFailure(scope);
-        // An authorization failure must also reach the history queries, which hide stale data.
-        await refresh(false);
+        // Authorization failures reach every view, which hides stale private content.
+        await revalidateRoomViews(
+          client,
+          [...history, reactions],
+          stopped,
+          false
+        );
       } finally {
         if (read === controller) read = undefined;
         if (!controller.signal.aborted && allowed())
@@ -142,4 +133,63 @@ export function useRoomSync(
     reconnecting: failure === scope,
     change,
   };
+}
+
+/** Reconcile all affected views before acknowledging the shared native cursor. */
+async function reconcileRoomViews(
+  client: QueryClient,
+  filters: { history: QueryFilters[]; reactions: QueryFilters },
+  before: Parameters<typeof reconcileRoomHistory>[2],
+  result: Awaited<ReturnType<RoomData["readSync"]>>,
+  stopped: () => boolean
+) {
+  const refreshReactions = result.reset || result.reactionsChanged;
+  if (
+    refreshReactions &&
+    client
+      .getQueryCache()
+      .findAll(filters.reactions)
+      .some((query) => query.state.fetchStatus === "fetching")
+  )
+    return false;
+  if (result.reset || result.timelineChanged) {
+    const reconciled = reconcileRoomHistory(
+      client,
+      filters.history.flatMap((filter) =>
+        client.getQueryCache().findAll(filter)
+      ),
+      before,
+      result.reset ? null : result.changes
+    );
+    if (reconciled === "retry") return false;
+    if (reconciled === "recover")
+      await revalidateRoomViews(client, filters.history, stopped);
+    if (stopped()) return false;
+  }
+  if (refreshReactions)
+    await revalidateRoomViews(client, [filters.reactions], stopped);
+  return !stopped();
+}
+
+async function revalidateRoomViews(
+  client: QueryClient,
+  filters: QueryFilters[],
+  stopped: () => boolean,
+  throwOnError = true
+) {
+  if (stopped()) return;
+  await Promise.all(
+    filters.map((filter) =>
+      client.invalidateQueries({ ...filter, refetchType: "none" })
+    )
+  );
+  if (stopped()) return;
+  await Promise.all(
+    filters.map((filter) =>
+      client.refetchQueries(
+        { ...filter, type: "active" },
+        { cancelRefetch: false, throwOnError }
+      )
+    )
+  );
 }

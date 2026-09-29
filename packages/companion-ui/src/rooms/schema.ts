@@ -113,6 +113,7 @@ export const roomSyncPageSchema = z.object({
   status: z.enum(["ready", "unavailable"]),
   cursor: z.string().max(16384).nullable(),
   timelineChanged: z.boolean(),
+  reactionsChanged: z.boolean(),
   reset: z.boolean(),
   changes: z
     .object({

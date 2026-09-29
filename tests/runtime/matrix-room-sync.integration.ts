@@ -11,6 +11,10 @@ import {
   sendMatrixMessage,
 } from "../../server/matrix/rooms";
 import { readMatrixRoomSync } from "../../server/matrix/sync/room";
+import {
+  readMatrixReactions,
+  setMatrixReaction,
+} from "../../server/matrix/reactions";
 import { editMatrixMessage } from "../../server/matrix/edits";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
@@ -79,6 +83,38 @@ test(
         text: "Synthetic original message",
       }),
     ]);
+    const reaction = await setMatrixReaction(fixture.actor, {
+      id: room.id,
+      messageId: sent.event_id,
+      operationId: randomUUID(),
+      emoji: "❤️",
+    });
+    expect(await sync()).toMatchObject({
+      reset: false,
+      timelineChanged: false,
+      reactionsChanged: true,
+      changes: null,
+    });
+    expect(
+      await readMatrixReactions(fixture.guest, {
+        id: room.id,
+        messageIds: [sent.event_id],
+      })
+    ).toMatchObject([{ reactions: [{ emoji: "❤️", count: 1 }] }]);
+    await setMatrixReaction(fixture.actor, {
+      id: room.id,
+      messageId: sent.event_id,
+      operationId: randomUUID(),
+      previousEventId: reaction.mineEventId ?? undefined,
+      emoji: null,
+    });
+    expect(await sync()).toMatchObject({ reactionsChanged: true });
+    expect(
+      await readMatrixReactions(fixture.guest, {
+        id: room.id,
+        messageIds: [sent.event_id],
+      })
+    ).toMatchObject([{ reactions: [] }]);
     await editMatrixMessage(fixture.actor, {
       id: room.id,
       messageId: sent.event_id,

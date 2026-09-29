@@ -676,3 +676,28 @@ zero gating e nenhuma supressão.
 foram anexadas via `gh --attach`. O vídeo é composto de capturas. Texto ampliado,
 aparelhos físicos e os alvos menores dos links de nome/perfil ainda precisam de
 qualificação; esta rodada não conclui acessibilidade, paridade ou capacidade.
+
+### Décima nona rodada — reações pelo sync nativo — 29/09/2026
+
+O mesmo cursor Matrix da conversa sinaliza mudanças de reações. O cliente
+invalida apenas as contagens da conta/workspace/conversa afetados; remove o
+polling independente de 30 segundos. Uma leitura anterior em voo impede o
+avanço do cursor até a contagem atual ser aplicada. Caches inativos ficam stale,
+falhas de autorização chegam a todas as views e eventos de outra sala são
+rejeitados. Eventos de reação não reabrem o histórico; remoções continuam na
+recuperação conservadora de redactions.
+
+No build local, duas abas receberam adição e remoção sem reload. A adição
+consultou reações uma vez e histórico zero; a remoção consultou cada um uma vez.
+Em repouso, cinco leituras de reações em 169 s antes passaram a zero em 424 s.
+Os tempos observados de até 448/321 ms incluem automação e não representam SLO.
+[Medições](evidence/reaction-sync-2026-09-29.json).
+
+`pnpm check` passou com 270 arquivos / 1.669 testes; build e exports Expo web/iOS/
+Android passaram. Três testes focados com Synapse real cobrem também outra conta,
+remoção, perda de acesso, mensagens, edições, threads e lacunas. A revisão de
+qualidade registra oito observações / seis gating de churn, sem supressões;
+a extração local da reconciliação removeu regressões de tamanho/complexidade do
+polling. Não houve alteração de banco. Quatro capturas e uma sequência de
+16 segundos foram [anexadas via gh --attach](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822).
+Paridade, retenção total limitada e capacidade de produção permanecem abertas.
