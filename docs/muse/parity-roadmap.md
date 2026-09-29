@@ -1104,3 +1104,25 @@ Revisão estrutural: 26 observações, 10 gates, nove menores e sete símbolos n
 sem acknowledgements. Crescimento de MessageInteraction permanece dívida.
 O CI remoto expôs uma regressão nos contadores após a adoção do Sliding Sync;
 correção em andamento na próxima rodada. Não há implantação em produção.
+
+### Trigésima primeira rodada — contadores nativos corretos — 29/09/2026
+
+O runtime completo remoto identificou uma expectativa antiga sem `markedUnread`.
+Ao atualizá-la, o teste real detectou que o Sliding Sync do Synapse 1.160.0 devolve
+zero constante para contadores. Esses campos não são mais usados como evidência.
+A inbox combina duas consultas nativas paralelas, limitadas às mesmas 31 salas:
+Sliding Sync para mudanças/marcadores e v3 sync para contadores de push rules e
+recibos. Cada fluxo retém seu cursor dentro do envelope autenticado existente;
+respostas fora do escopo são recusadas e saídas de salas removem seus contadores.
+Não há contador próprio, consulta por sala ou varredura de toda a conta.
+
+Fonte: [implementação oficial do Synapse](https://github.com/element-hq/synapse/blob/v1.160.0/synapse/handlers/sliding_sync/__init__.py).
+O teste isolado com PostgreSQL e Synapse passou em dois arquivos / dois testes:
+notificações de grupo, menções, leitura de threads, DMs, mute, marcadores manuais,
+fixações e autorização. A checagem completa passou com 277 arquivos / 1.729 testes
+(nove tarefas). O primeiro check/build esgotou o disco; foram removidos apenas
+caches regeneráveis de Next/Homebrew, preservando dados e arquivos do usuário.
+Revisão estrutural: três observações / dois gates de churn em testes e um aumento
+menor no dono de sync; sem acknowledgements. Nenhuma alteração em produção.
+Build final passou após a limpeza de cache. A correção não muda a interface;
+a evidência visual da rodada 30 continua cobrindo os mesmos componentes.

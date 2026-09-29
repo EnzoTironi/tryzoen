@@ -1874,3 +1874,22 @@ The remote full runtime suite caught an unread-count regression: this Synapse's
 Sliding Sync returns dummy zero counters. The follow-up must source counters from
 bounded v3 sync while keeping native account-data markers. Do not suppress the
 notification integration test or treat a zero from Sliding Sync as authoritative.
+
+### Authoritative native notification counters — wave 31
+
+The wave-28 Sliding Sync migration regressed counters: Synapse 1.160.0's handler
+hardcodes zero. `sync/counters.ts` reads bounded v3 sync for authoritative push-rule
+and receipt counts. `sync/sliding.ts` joins that stream with metadata/account-data
+in parallel. Both positions travel in the same existing encrypted scope-bound
+cursor. Dummy sliding fields are discarded; each response is independently size-
+and scope-checked, and leave events win over stale joins. No local counter, room-
+by-room fan-out or account-wide sync was introduced.
+
+The full remote suite first caught an outdated equality missing markedUnread;
+fixing the expectation exposed the real zero-counter regression locally. Isolated
+notification and organization suites now pass (two files / two tests). Check:
+277 files / 1,729 tests and nine tasks passed. The initial check/build hit ENOSPC;
+only regenerable Next/Homebrew caches were removed, with user data preserved.
+Source: https://github.com/element-hq/synapse/blob/v1.160.0/synapse/handlers/sliding_sync/__init__.py
+Final production build passed after cache cleanup. This correction does not
+change the rendered UI; wave 30 visual evidence still covers those components.

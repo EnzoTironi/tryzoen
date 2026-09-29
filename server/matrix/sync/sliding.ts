@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { MatrixError, matrixRequest } from "../client";
+import { pollInboxCounters } from "./counters";
 
 const positionSchema = z.object({
   connection: z.uuid(),
-  position: z.string().max(3500),
+  position: z.string().max(3000),
+  notifications: z.string().max(900),
 });
 const eventSchema = z.object({
   event_id: z.string(),
@@ -17,8 +19,6 @@ const responseSchema = z.object({
     .record(
       z.string(),
       z.object({
-        notification_count: z.number().int().nonnegative().optional(),
-        highlight_count: z.number().int().nonnegative().optional(),
         required_state: z
           .array(
             z.object({
@@ -52,7 +52,7 @@ const responseSchema = z.object({
     .optional(),
 });
 
-/** One bounded native subscription for the visible inbox. No per-room marker requests. */
+/** Bounded native metadata and counter streams. Neither scans the account or reads per room. */
 export async function pollSlidingInbox(
   viewer: string,
   roomIds: string[],
@@ -89,37 +89,53 @@ export async function pollSlidingInbox(
         maxResponseBytes: 1_048_576,
       }
     );
-  let response: unknown;
-  try {
-    response = await request();
-  } catch (error) {
-    if (
-      !previous ||
-      !(error instanceof MatrixError) ||
-      error.reason !== "expired-position"
-    )
-      throw error;
-    previous = null;
-    connection = randomUUID();
-    response = await request();
-  }
+  const readMetadata = async () => {
+    try {
+      return await request();
+    } catch (error) {
+      if (
+        !previous ||
+        !(error instanceof MatrixError) ||
+        error.reason !== "expired-position"
+      )
+        throw error;
+      previous = null;
+      connection = randomUUID();
+      return request();
+    }
+  };
+  const [response, counters] = await Promise.all([
+    readMetadata(),
+    pollInboxCounters(viewer, roomIds, previous?.notifications),
+  ]);
   const parsed = responseSchema.safeParse(response);
   if (!parsed.success) throw new MatrixError({ reason: "unavailable" });
   const native = parsed.data;
   const accountData = native.extensions?.account_data?.rooms ?? {};
   const ids = [
-    ...new Set([...Object.keys(native.rooms), ...Object.keys(accountData)]),
+    ...new Set([
+      ...Object.keys(native.rooms),
+      ...Object.keys(accountData),
+      ...Object.keys(counters.rooms.join),
+      ...Object.keys(counters.rooms.leave),
+    ]),
   ];
   if (ids.some((id) => !roomIds.includes(id)))
     throw new MatrixError({ reason: "unavailable" });
-  const left = ids.filter((id) =>
-    native.rooms[id]?.required_state?.some(
-      (event) =>
-        event.state_key === viewer && event.content.membership !== "join"
-    )
+  const left = ids.filter(
+    (id) =>
+      id in counters.rooms.leave ||
+      native.rooms[id]?.required_state?.some(
+        (event) =>
+          event.state_key === viewer && event.content.membership !== "join"
+      )
   );
   return {
-    next_batch: JSON.stringify({ connection, position: native.pos }),
+    next_batch: JSON.stringify({
+      connection,
+      position: native.pos,
+      notifications: counters.next_batch,
+    }),
     rooms: {
       leave: Object.fromEntries(left.map((id) => [id, {}])),
       join: Object.fromEntries(
@@ -133,15 +149,8 @@ export async function pollSlidingInbox(
             return [
               id,
               {
-                ...(room?.notification_count !== undefined &&
-                room.highlight_count !== undefined
-                  ? {
-                      unread_notifications: {
-                        notification_count: room.notification_count,
-                        highlight_count: room.highlight_count,
-                      },
-                    }
-                  : {}),
+                unread_notifications:
+                  counters.rooms.join[id]?.unread_notifications,
                 account_data: {
                   events: marker
                     ? [marker]

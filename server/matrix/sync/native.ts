@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MatrixError, matrixRequest } from "../client";
 import { pollSlidingInbox } from "./sliding";
+import { unreadCountsSchema } from "./counters";
 
 const nativeSyncSchema = z.object({
   next_batch: z.string().max(4096),
@@ -37,12 +38,7 @@ const nativeSyncSchema = z.object({
                   .max(1),
               })
               .optional(),
-            unread_notifications: z
-              .object({
-                notification_count: z.number().int().nonnegative(),
-                highlight_count: z.number().int().nonnegative(),
-              })
-              .optional(),
+            unread_notifications: unreadCountsSchema.optional(),
             ephemeral: z
               .object({
                 events: z

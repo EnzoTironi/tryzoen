@@ -56,7 +56,12 @@ test(
           const page = await poll();
           expect(
             page.notifications?.find((item) => item.id === focusedRoomId)
-          ).toEqual({ id: focusedRoomId, notificationCount, highlightCount });
+          ).toEqual({
+            id: focusedRoomId,
+            notificationCount,
+            highlightCount,
+            markedUnread: false,
+          });
         },
         { timeout: 10000, interval: 200 }
       );
