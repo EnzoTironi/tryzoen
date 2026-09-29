@@ -39,6 +39,11 @@ export const roomReadSchema = z.object({
   id: z.uuid(),
   from: z.string().min(1).max(2048).optional(),
 });
+export const roomNotificationsReadSchema = roomReadSchema.pick({ id: true });
+export const roomNotificationsSchema = z.object({ muted: z.boolean() });
+export const roomNotificationsWriteSchema = roomNotificationsReadSchema.extend({
+  muted: z.boolean(),
+});
 export const roomTypingWriteSchema = z.object({
   id: z.uuid(),
   typing: z.boolean(),
@@ -205,6 +210,13 @@ export const roomSearchPageSchema = z.object({
 });
 
 export interface RoomData {
+  notifications: (
+    input: z.infer<typeof roomNotificationsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomNotificationsSchema>>;
+  setNotifications: (
+    input: z.infer<typeof roomNotificationsWriteSchema>
+  ) => Promise<z.infer<typeof roomNotificationsSchema>>;
   search: (
     input: z.infer<typeof roomSearchQuerySchema>,
     signal: AbortSignal

@@ -1,9 +1,14 @@
 # Social/Matrix implementation handoff
 
-The current cross-product backlog and parallel execution order live in
+The current cross-product backlog and execution order live in
 [the parity roadmap](parity-roadmap.md). This document retains the decisions and
 historical verification checkpoints behind that plan; later evidence supersedes
 older gap descriptions.
+
+On 2026-09-29 the user deferred further creator work and prioritized other product
+features. Existing interviews and pilots remain, but new acquisition, publication
+and monetization work is paused. Continue communication and personal-memory work
+with one agent and proportionate validation.
 
 Updated 2026-09-28 from the user-provided `tryzoen-social-matrix-handoff.md` and the HUMA and Tutor CoPilot PDFs. This reconciles that handoff with the running code; it does not replace Muse parity work or claim a completed social client.
 
@@ -1555,3 +1560,34 @@ without suppressions; the local classifier has complexity 24. Six actual capture
 and a labelled 24-second screenshot sequence were [attached via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5886337421).
 Bounded total history, large bursts, physical devices, full parity and production
 capacity remain open.
+
+### Per-person native conversation mute — wave 22
+
+Group details and direct-conversation profiles now expose the same notification
+control in desktop modals and mobile sheets. It mutes new alerts, including
+explicit mentions, until reactivated. Messages remain available. Loading and
+save failures are visible; an uncertain save requires a fresh read before editing.
+
+`server/matrix/notifications.ts` owns an exact-room, per-person native override
+rule with empty actions. The native Matrix rule is the authority; no duplicate
+preference table was introduced. A person/room advisory transaction lock serializes
+writes, a desired boolean makes repetition safe, and access and saved state are
+verified again. The shared schema/RPC adapter serves web, Electron and Expo.
+
+The running build was checked for group mute, close/reopen persistence, reactivation
+and direct mute at desktop and 390 × 844 mobile sizes. Both synthetic preferences
+were restored. [Five screenshots and a 15-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887210251)
+were attached with `gh --attach`; this is not a continuous recording.
+[Evidence record](evidence/conversation-notifications-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests, production build and all Expo exports passed.
+One focused real PostgreSQL/Synapse test covers notification counts, explicit
+mentions, repeated writes, reactivation, person/room isolation and rejected
+unauthorized reads/writes. All six CI checks on `f45e300d` passed. No dependency
+or migration was added. Structural review: 16 observations / five gates, without
+suppression; direct RPC adapter patterns and existing size/churn remain visible.
+
+Further creator work is deferred. The bounded-history experiment is excluded
+because gap traversal and reading-position preservation need separate qualification;
+existing infinite pagination remains. This does not supply native OS push,
+offline delivery, physical-device or million-user capacity qualification.

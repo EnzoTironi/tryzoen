@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887210251",
+  "environment": "Local production build, synthetic review workspace, Chrome desktop and 390x844 mobile viewport",
+  "verifiedFlows": {
+    "groupMute": true,
+    "groupCloseAndReopenPersistence": true,
+    "groupReactivate": true,
+    "directMuteAndReactivate": true,
+    "desktopModal": true,
+    "mobileSheet": true,
+    "syntheticPreferencesRestored": true
+  },
+  "authority": "Native per-person Matrix push override with an exact room condition and empty actions",
+  "reference": "https://spec.matrix.org/latest/client-server-api/#push-rules",
+  "validation": {
+    "check": "passed",
+    "checkFiles": 272,
+    "checkTests": 1701,
+    "build": "passed",
+    "expo": ["web", "ios", "android"],
+    "focusedRealSynapseTests": 1,
+    "focusedRealSynapse": "passed",
+    "runtimeCoverage": [
+      "Native notification counts and explicit mentions",
+      "Mute, repeat desired state and reactivate",
+      "Independent preferences between people and rooms",
+      "Wrong workspace and absent authentication session denied"
+    ],
+    "precedingCheckpointAllSixChecksPassed": "f45e300d",
+    "structuralReview": {
+      "observations": 16,
+      "gating": 5,
+      "suppressed": false
+    }
+  },
+  "media": {
+    "screenshots": 5,
+    "screenshotSequenceSeconds": 15,
+    "continuousRecording": false
+  },
+  "limits": [
+    "Not native OS push or offline delivery",
+    "No physical-device or production-capacity qualification",
+    "Additional creator work deferred at the user's request",
+    "Bounded-history experiment excluded; existing infinite pagination retained"
+  ]
+}

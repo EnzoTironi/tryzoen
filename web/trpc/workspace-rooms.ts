@@ -1,3 +1,12 @@
+import {
+  readRoomNotifications,
+  setRoomNotifications,
+} from "../../server/matrix/notifications";
+import {
+  roomNotificationsReadSchema,
+  roomNotificationsWriteSchema,
+  roomNotificationsSchema,
+} from "@zoen/companion-ui/rooms";
 import { searchMatrixMessages } from "../../server/matrix/search";
 import {
   forwardMatrixMessage,
@@ -84,6 +93,18 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  notifications: workspaceProcedure
+    .input(roomNotificationsReadSchema)
+    .output(roomNotificationsSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => readRoomNotifications(ctx.actor, input))
+    ),
+  setNotifications: workspaceProcedure
+    .input(roomNotificationsWriteSchema)
+    .output(roomNotificationsSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => setRoomNotifications(ctx.actor, input))
+    ),
   forwardDestinations: workspaceProcedure
     .input(roomForwardDestinationsSchema)
     .output(directListSchema)

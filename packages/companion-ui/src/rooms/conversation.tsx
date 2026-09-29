@@ -224,6 +224,8 @@ export function RoomConversation({
       )}
       {details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
+          data={data}
+          cacheScope={cacheScope}
           page={current.pages[0]}
           onProfile={(person) => {
             setDetails(false);
@@ -264,6 +266,7 @@ export function RoomConversation({
           cacheScope={cacheScope}
           onOpenRoom={onOpenRoom}
           direct={room.kind === "direct"}
+          roomId={room.id}
           conversationAvatarUri={room.avatarUri ?? undefined}
           groupName={room.label}
           avatarUri={avatarUri}

@@ -1,3 +1,4 @@
+import { RoomNotificationSettings } from "./notifications";
 import { useState } from "react";
 import {
   ChevronDown,
@@ -12,15 +13,19 @@ import { ConversationAvatar } from "../chats/avatar";
 import { IconButton } from "../icon-button";
 import { SheetSurface } from "../sheet";
 import { colors } from "../theme";
-import type { roomPageSchema } from "./schema";
+import type { RoomData, roomPageSchema } from "./schema";
 
 export function RoomDetails({
+  data,
+  cacheScope,
   page,
   avatarUri,
   onClose,
   onConversation,
   onProfile,
 }: {
+  readonly data: RoomData;
+  readonly cacheScope: string;
   readonly page: z.infer<typeof roomPageSchema>;
   readonly avatarUri?: string;
   readonly onClose: () => void;
@@ -139,6 +144,11 @@ export function RoomDetails({
             </Text>
           )}
         </View>
+        <RoomNotificationSettings
+          data={data}
+          cacheScope={cacheScope}
+          roomId={page.room.id}
+        />
         <View style={styles.section}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Sobre esta conversa

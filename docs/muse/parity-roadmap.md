@@ -112,6 +112,12 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 
 ## Organização da execução
 
+Em 29/09/2026, o usuário adiou novas funcionalidades de criadores para priorizar
+outras partes do produto. Entrevistas e pilotos já implementados permanecem;
+novas importações, publicação e monetização não fazem parte da frente ativa.
+Memória pessoal e comunicação continuam no escopo. Evitar repetir validações
+amplas sem mudança ou falha que justifique a repetição.
+
 Desde a orientação mais recente do usuário, a implementação e integração seguem
 com um único agente. A tabela abaixo preserva os donos de código definidos na
 primeira rodada; não representa subagentes ativos.
@@ -757,3 +763,37 @@ e mensagem principal, além de lacunas e revogação. Os seis checks do checkpoi
 sete observações / um gate de churn, sem supressões; o classificador local tem
 complexidade 24. Retenção total, grandes rajadas, aparelhos físicos, paridade e
 capacidade de produção permanecem abertos.
+
+### Vigésima segunda rodada — silenciar conversas — 29/09/2026
+
+O perfil de uma conversa individual e as informações de um grupo agora permitem
+silenciar e reativar seus alertas, inclusive menções. A preferência pertence à
+pessoa e à conversa; mensagens continuam disponíveis. O mesmo controle aparece
+no modal desktop e na sheet mobile. Carregamento, salvamento e falha têm estados
+explícitos; uma falha pede nova consulta antes de permitir outra alteração.
+
+A autoridade é uma regra override nativa do Matrix, com ações vazias e condição
+exata de sala. Não há banco paralelo de preferências. Escritas são serializadas
+por pessoa/conversa, repetição do estado desejado é segura e o servidor verifica
+o valor salvo e a autorização novamente. Isso não implementa push do sistema
+operacional nem uma caixa de saída offline.
+
+No build real, foram conferidos silenciar, fechar/reabrir e reativar um grupo,
+além do controle da conversa individual, em desktop e viewport de 390 × 844.
+As preferências sintéticas foram restauradas após a conferência. Cinco capturas
+e uma sequência de 15 segundos foram [anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887210251).
+O vídeo é composto das capturas, não uma gravação contínua. [Registro](evidence/conversation-notifications-2026-09-29.json).
+
+`pnpm check`: 272 arquivos / 1.701 testes; build e exports Expo web/iOS/Android
+passaram. Um teste focado com PostgreSQL/Synapse reais verifica contagens, menções
+explícitas, repetição, reativação, independência entre pessoas/salas e rejeição de
+acesso indevido. Os seis checks de `f45e300d` passaram. Sem dependência ou migração
+nova. A revisão estrutural mantém 16 observações / cinco gates, principalmente
+padrões diretos de adapters RPC e tamanho/churn dos donos existentes, sem
+supressões; o componente apontado como não usado é consumido por dois lugares.
+
+Novas funcionalidades de criadores estão adiadas por orientação do usuário.
+O experimento de retenção limitada do histórico foi retirado desta entrega:
+lacunas e preservação da leitura ainda precisam de qualificação própria. A
+paginação infinita existente permanece. Push nativo, operação offline, aparelhos
+físicos, paridade completa e capacidade de produção continuam abertos.

@@ -1,3 +1,4 @@
+import { RoomNotificationSettings } from "./notifications";
 import { MessageCircle, Users, X } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { z } from "zod";
@@ -15,6 +16,7 @@ export function ParticipantProfile({
   cacheScope,
   direct = false,
   conversationAvatarUri,
+  roomId,
   onOpenRoom,
   groupName,
   avatarUri,
@@ -24,6 +26,7 @@ export function ParticipantProfile({
   readonly data: RoomData;
   readonly cacheScope: string;
   readonly direct?: boolean;
+  readonly roomId?: string;
   readonly conversationAvatarUri?: string;
   readonly onOpenRoom?: (id: string) => void;
   readonly person: z.infer<typeof roomMemberSchema>;
@@ -113,6 +116,13 @@ export function ParticipantProfile({
             <MessageCircle size={22} color={colors.accent} />
           </Pressable>
         </View>
+        {direct && roomId && (
+          <RoomNotificationSettings
+            data={data}
+            cacheScope={cacheScope}
+            roomId={roomId}
+          />
+        )}
         <View style={styles.about}>
           <Users size={21} color={colors.muted} />
           <Text style={styles.description}>

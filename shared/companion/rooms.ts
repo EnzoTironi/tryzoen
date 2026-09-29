@@ -1,4 +1,5 @@
 import {
+  roomNotificationsSchema,
   savedCleanupStateSchema,
   savedMessageStateSchema,
   savedMessagesPageSchema,
@@ -30,6 +31,16 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async notifications(input, signal) {
+      return roomNotificationsSchema.parse(
+        await rpc.query("workspaces.rooms.notifications", input, { signal })
+      );
+    },
+    async setNotifications(input) {
+      return roomNotificationsSchema.parse(
+        await rpc.mutation("workspaces.rooms.setNotifications", input)
+      );
+    },
     async setTyping(input) {
       await rpc.mutation("workspaces.rooms.setTyping", input);
     },

@@ -8,6 +8,10 @@ import {
   joinMatrixRoom,
   sendMatrixMessage,
 } from "../../server/matrix/rooms";
+import {
+  readRoomNotifications,
+  setRoomNotifications,
+} from "../../server/matrix/notifications";
 import { matrixRequest } from "../../server/matrix/client";
 import { syncConversationInbox } from "../../server/matrix/sync";
 import { markMatrixRoomRead } from "../../server/matrix/read-position";
@@ -126,17 +130,81 @@ test(
     await count(1);
     await markMatrixRoomRead(guest, { id: direct.id, messageId: dm.event_id });
     await count(0);
-    await matrixRequest(
-      "PUT",
-      `pushrules/global/room/${encodeURIComponent(direct.roomId)}`,
-      { actions: ["dont_notify"] },
-      viewer.matrixId
-    );
+    expect(await readRoomNotifications(guest, { id: direct.id })).toEqual({
+      muted: false,
+    });
+    expect(
+      await setRoomNotifications(guest, { id: direct.id, muted: true })
+    ).toEqual({ muted: true });
+    // Repeating the desired state is safe, and the sender's preference is independent.
+    expect(
+      await setRoomNotifications(guest, { id: direct.id, muted: true })
+    ).toEqual({ muted: true });
+    expect(await readRoomNotifications(actor, { id: direct.id })).toEqual({
+      muted: false,
+    });
     await sendMatrixMessage(actor, {
       id: direct.id,
       operationId: randomUUID(),
       text: "Muted message is not an unread notification",
     });
     await count(0);
+    await matrixRequest(
+      "PUT",
+      `rooms/${encodeURIComponent(direct.roomId)}/send/m.room.message/${randomUUID()}`,
+      {
+        msgtype: "m.text",
+        body: "Muted explicit mention",
+        "m.mentions": { user_ids: [viewer.matrixId] },
+      },
+      author.matrixId
+    );
+    await count(0);
+    expect(
+      await setRoomNotifications(guest, { id: direct.id, muted: false })
+    ).toEqual({ muted: false });
+    expect(await readRoomNotifications(guest, { id: direct.id })).toEqual({
+      muted: false,
+    });
+    await sendMatrixMessage(actor, {
+      id: direct.id,
+      operationId: randomUUID(),
+      text: "Notifications restored",
+    });
+    await count(1);
+    expect(
+      await setRoomNotifications(guest, { id: room.id, muted: true })
+    ).toEqual({ muted: true });
+    expect(await readRoomNotifications(guest, { id: direct.id })).toEqual({
+      muted: false,
+    });
+    focusedRoomId = room.id;
+    cursor = undefined;
+    await poll();
+    await matrixRequest(
+      "PUT",
+      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${randomUUID()}`,
+      {
+        msgtype: "m.text",
+        body: "Muted group mention",
+        "m.mentions": { user_ids: [viewer.matrixId] },
+      },
+      author.matrixId
+    );
+    await count(0);
+    for (const denied of [
+      fixture.guestPersonal,
+      { ...guest, authSessionId: undefined },
+    ]) {
+      await expect(
+        readRoomNotifications(denied, { id: room.id })
+      ).rejects.toThrow(WorkspaceAccessDenied);
+      await expect(
+        setRoomNotifications(denied, { id: room.id, muted: false })
+      ).rejects.toThrow(WorkspaceAccessDenied);
+    }
+    expect(await readRoomNotifications(guest, { id: room.id })).toEqual({
+      muted: true,
+    });
   }
 );
