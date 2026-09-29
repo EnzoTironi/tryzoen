@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MatrixError, matrixRequest } from "../client";
+import { pollSlidingInbox } from "./sliding";
 
 const nativeSyncSchema = z.object({
   next_batch: z.string().max(4096),
@@ -24,6 +25,18 @@ const nativeSyncSchema = z.object({
         .record(
           z.string(),
           z.object({
+            account_data: z
+              .object({
+                events: z
+                  .array(
+                    z.object({
+                      type: z.literal("m.marked_unread"),
+                      content: z.object({ unread: z.boolean() }),
+                    })
+                  )
+                  .max(1),
+              })
+              .optional(),
             unread_notifications: z
               .object({
                 notification_count: z.number().int().nonnegative(),
@@ -91,20 +104,25 @@ export async function pollNativeSync(
       },
       viewer
     );
+  if (!focused)
+    return parseNativeSync(
+      await pollSlidingInbox(viewer, roomIds, since),
+      roomIds,
+      mode,
+      []
+    );
   const filter = {
-    event_fields: focused
-      ? [
-          "event_id",
-          "type",
-          "sender",
-          "origin_server_ts",
-          "content",
-          "unsigned",
-          "room_id",
-          "state_key",
-          "redacts",
-        ]
-      : ["event_id", "type"],
+    event_fields: [
+      "event_id",
+      "type",
+      "sender",
+      "origin_server_ts",
+      "content",
+      "unsigned",
+      "room_id",
+      "state_key",
+      "redacts",
+    ],
     presence: presenceSenders.length
       ? { types: ["m.presence"], senders: presenceSenders, limit: 100 }
       : { types: [] },
@@ -114,25 +132,26 @@ export async function pollNativeSync(
       include_leave: true,
       state: { types: [] },
       account_data: { types: [] },
-      ephemeral: { types: focused ? ["m.typing"] : ["m.receipt"] },
+      ephemeral: { types: ["m.typing"] },
       timeline: {
-        limit: focused ? 20 : 1,
+        limit: 20,
         types: [
           "m.room.message",
           "m.room.redaction",
           "m.reaction",
           "m.room.member",
           "m.room.name",
+          "m.room.pinned_events",
         ],
       },
     },
   };
   const response = await matrixRequest(
     "GET",
-    `sync?device_id=${device}&timeout=${focused && since ? 10000 : 0}&set_presence=offline&filter=${encodeURIComponent(JSON.stringify(filter))}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
+    `sync?device_id=${device}&timeout=${since ? 10000 : 0}&set_presence=offline&filter=${encodeURIComponent(JSON.stringify(filter))}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
     undefined,
     viewer,
-    { maxResponseBytes: focused ? 2_097_152 : 1_048_576 }
+    { maxResponseBytes: 2_097_152 }
   );
   return parseNativeSync(response, roomIds, mode, presenceSenders);
 }

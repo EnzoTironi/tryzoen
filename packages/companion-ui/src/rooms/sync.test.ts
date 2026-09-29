@@ -149,6 +149,7 @@ test("replayed response cannot extend its expiry and disposal clears state", asy
     expiresAt: 105000,
     timelineChanged: false,
     reactionsChanged: false,
+    pinsChanged: false,
     changes: null,
     reset: false,
   };
@@ -179,6 +180,7 @@ const healthy = {
   expiresAt: 0,
   timelineChanged: false,
   reactionsChanged: false,
+  pinsChanged: false,
   changes: null,
   reset: false,
 };
@@ -395,6 +397,7 @@ test("an in-flight reaction read cannot consume a newer native change", async ()
   data.readSync.mockResolvedValueOnce(healthy).mockResolvedValue({
     ...healthy,
     reactionsChanged: true,
+    pinsChanged: false,
     cursor: "changed",
   });
   mount();
@@ -624,6 +627,7 @@ test("a native tombstone patches loaded history and refreshes reactions without 
       ...healthy,
       timelineChanged: true,
       reactionsChanged: true,
+      pinsChanged: false,
       changes: {
         added: [],
         updated: [{ ...message("$old", "Mensagem removida"), redacted: true }],
@@ -678,6 +682,7 @@ test("revoked access stops polling and refreshes the authorized inbox", async ()
     expiresAt: 0,
     timelineChanged: false,
     reactionsChanged: false,
+    pinsChanged: false,
     changes: null,
     reset: false,
   });

@@ -124,6 +124,7 @@ test("bootstrap requires reconciliation, but an idle incremental read does not r
     reset: true,
     timelineChanged: false,
     reactionsChanged: true,
+    pinsChanged: true,
   });
   mocks.open.mockResolvedValue({
     roomId: room.roomId,
@@ -138,6 +139,7 @@ test("bootstrap requires reconciliation, but an idle incremental read does not r
     reset: false,
     timelineChanged: false,
     reactionsChanged: false,
+    pinsChanged: false,
   });
 });
 
@@ -165,6 +167,7 @@ test("native reactions signal a refresh without projecting or reloading message 
     reset: false,
     timelineChanged: false,
     reactionsChanged: true,
+    pinsChanged: false,
     changes: null,
   });
   expect(mocks.changes).not.toHaveBeenCalled();

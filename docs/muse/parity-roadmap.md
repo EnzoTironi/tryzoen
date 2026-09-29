@@ -1013,3 +1013,41 @@ físicos, haptics, duplo toque configurável e arrastar a própria folha para fe
 não foram concluídos. Controles de mídia/links preservam seu comportamento próprio;
 neles o menu continua acessível pelo botão. Isto não declara paridade completa,
 push/E2EE/chamadas concluídos nem capacidade para um milhão de pessoas.
+
+### Vigésima oitava rodada — reações, fixações e não lidas — 29/09/2026
+
+Participantes das reações agora vêm das relações nativas do Matrix, com páginas
+de 100, deduplicação por pessoa/emoji e perfil acessível. Fixar/desafixar usa
+`m.room.pinned_events`: lista compartilhada limitada a 50, comparação da revisão
+apresentada, escrita serializada entre clientes Zoen e permissões efetivas.
+O catálogo de fixações abre o contexto autorizado da mensagem. Nenhum índice
+paralelo de mensagens ou reações foi criado.
+
+“Marcar como não lida” usa `m.marked_unread`, sem retroceder `m.fully_read`.
+O indicador é otimista no cache TanStack e volta ao estado anterior se falhar.
+Uma leitura visível confirmada limpa o marcador; abrir uma thread não marca
+outras threads como lidas. Respostas atrasadas do sync preservam alterações
+locais no marcador e continuam aplicando os contadores das outras conversas.
+
+O inbox migrou seu transporte de metadados para o Sliding Sync nativo do
+Synapse 1.160.0 (`org.matrix.simplified_msc3575`, anunciado no ambiente de teste).
+O `/v3/sync` filtrado por `room.rooms` descartou account data de salas no teste
+real. Sliding Sync resolve essa leitura com uma assinatura nativa de até 31
+salas, um evento por sala e resposta limitada a 1 MiB; não há varredura de todas
+as conversas nem uma chamada extra por sala. Cada fluxo tem conexão própria;
+posições expiradas reiniciam uma vez com escopo limitado. O sync da conversa
+aberta continua no endpoint de typing/presença já existente.
+
+Compatibilidade: o endpoint implantado pelo Synapse ainda usa o namespace
+`unstable/org.matrix.simplified_msc3575`; isso é uma dependência explícita do
+homeserver, não um recurso de todos os servidores Matrix. A assinatura nativa
+de threads (MSC4306) está desativada no servidor de teste e ainda não foi
+entregue. Escritas de fixações por clientes Matrix externos não participam do
+lock de PostgreSQL: o protocolo de state events não oferece CAS global.
+
+Validação: `pnpm check` passou com 274 arquivos / 1.717 testes e nove tarefas; `pnpm build` passou. PostgreSQL + Synapse isolados: dois arquivos / cinco testes. Navegador desktop 1440×900 e mobile 390×844 confirmou reações/perfis, fixar/listar/contexto/desafixar, marcador não lido e rascunho recuperado após recarga; zero erros de console. O cabeçalho mobile mantém busca/fixadas e acesso ao perfil pelo avatar/nome.
+
+[Evidência visual com imagens e vídeo anexados via gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892281580), vídeo explicitamente identificado como sequência de screenshots. Registro: `docs/muse/evidence/message-organization-2026-09-29.json`. A revisão estrutural registra 61 observações / 31 gates, sem acknowledgements: tamanho dos donos JSX, contratos/adaptadores e crescimento do sync ainda são dívida aberta.
+Criadores permanecem adiados. Push, E2EE, chamadas, início totalmente offline,
+execução em segundo plano e qualificação para um milhão de pessoas continuam
+pendentes; esta rodada não declara toda a paridade concluída.

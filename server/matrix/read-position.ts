@@ -1,6 +1,10 @@
-import { transaction } from "@db/queries";
+import { query, transaction } from "@db/queries";
+import { sql } from "drizzle-orm";
 import type { z } from "zod";
-import { roomReadPositionSchema } from "@zoen/companion-ui/rooms";
+import {
+  roomReadPositionSchema,
+  roomUnreadSchema,
+} from "@zoen/companion-ui/rooms";
 import type { WorkspaceActorSchema } from "../workspaces/access";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 import { joinMatrixRoom, requireMatrixRoom } from "./rooms";
@@ -14,6 +18,9 @@ export async function markMatrixRoomRead(
 ) {
   const input = roomReadPositionSchema.parse(raw);
   return transaction(async () => {
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`matrix-read:${actor.userId}:${input.id}`}, 0))`
+    );
     const room = await joinMatrixRoom(actor, input.id);
     const event = await readRoomMessage(room, input.messageId, true);
     const relation = event.content["m.relates_to"];
@@ -31,12 +38,42 @@ export async function markMatrixRoomRead(
       { thread_id: input.rootId ?? "main" },
       room.matrixId
     );
-    if (!input.rootId)
+    if (!input.rootId) {
       await matrixRequest(
         "POST",
         `rooms/${encodeURIComponent(room.roomId)}/read_markers`,
         { "m.fully_read": input.messageId },
         room.matrixId
       );
+      await writeUnreadMarker(room, false);
+    }
   });
+}
+
+/** A private reminder, independent of receipts and fully-read positions. */
+export async function setMatrixRoomUnread(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  raw: z.infer<typeof roomUnreadSchema>
+) {
+  const input = roomUnreadSchema.parse(raw);
+  return transaction(async () => {
+    await query(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`matrix-read:${actor.userId}:${input.id}`}, 0))`
+    );
+    const room = await joinMatrixRoom(actor, input.id);
+    await requireMatrixRoom(actor, input.id);
+    await writeUnreadMarker(room, input.unread);
+  });
+}
+
+async function writeUnreadMarker(
+  room: Awaited<ReturnType<typeof joinMatrixRoom>>,
+  unread: boolean
+) {
+  await matrixRequest(
+    "PUT",
+    `user/${encodeURIComponent(room.matrixId)}/rooms/${encodeURIComponent(room.roomId)}/account_data/m.marked_unread`,
+    { unread },
+    room.matrixId
+  );
 }

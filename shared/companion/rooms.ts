@@ -1,3 +1,5 @@
+import { roomPinsSchema, roomPinResultSchema } from "@zoen/companion-ui/rooms";
+import { roomReactorsPageSchema } from "@zoen/companion-ui/rooms";
 import { roomMembershipResultSchema } from "@zoen/companion-ui/rooms";
 import { roomPresencePreferenceSchema } from "@zoen/companion-ui/rooms";
 import {
@@ -34,6 +36,21 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async pins(input, signal) {
+      return roomPinsSchema.parse(
+        await rpc.query("workspaces.rooms.pins", input, { signal })
+      );
+    },
+    async pin(input) {
+      return roomPinResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.pin", input)
+      );
+    },
+    async reactors(input, signal) {
+      return roomReactorsPageSchema.parse(
+        await rpc.query("workspaces.rooms.reactors", input, { signal })
+      );
+    },
     async presencePreference(input, signal) {
       return roomPresencePreferenceSchema.parse(
         await rpc.query("workspaces.rooms.presencePreference", input, {
@@ -111,6 +128,9 @@ export function companionRoomData(
       return roomContextSchema.parse(
         await rpc.query("workspaces.rooms.context", input, { signal })
       );
+    },
+    async setUnread(input) {
+      await rpc.mutation("workspaces.rooms.setUnread", input);
     },
     async markRead(input) {
       await rpc.mutation("workspaces.rooms.markRead", input);

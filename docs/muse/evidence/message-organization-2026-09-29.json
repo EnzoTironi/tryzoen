@@ -1,0 +1,52 @@
+{
+  "date": "2026-09-29",
+  "wave": 28,
+  "scope": [
+    "native reaction participants and existing profiles",
+    "shared Matrix pins with revision checks",
+    "native mark unread and bounded sliding inbox sync"
+  ],
+  "checks": {
+    "check": {
+      "tasks": 9,
+      "files": 274,
+      "tests": 1717,
+      "result": "passed"
+    },
+    "build": "passed",
+    "isolatedPostgresSynapse": {
+      "files": 2,
+      "tests": 5,
+      "result": "passed"
+    },
+    "browser": {
+      "desktop": "1440x900",
+      "mobile": "390x844",
+      "consoleErrors": 0,
+      "cases": [
+        "reaction participants and correct existing profile",
+        "pin, list and authorized original context",
+        "unpin restores empty list",
+        "optimistic unread badge remains after leaving and clears on opening",
+        "authored draft restored after final build reload",
+        "mobile header and bottom bar preserved"
+      ]
+    }
+  },
+  "structuralReview": {
+    "observations": 61,
+    "gates": 31,
+    "minor": 20,
+    "newSymbols": 10,
+    "acknowledgements": 0,
+    "remaining": "JSX owner size, schema/adaptor shape duplication and sync growth remain visible structural debt."
+  },
+  "evidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5892281580",
+  "video": "verified screenshot sequence, not continuous recording",
+  "limits": [
+    "MSC4306 disabled on the tested Synapse server",
+    "external Matrix clients do not participate in application pin revision locking",
+    "physical mobile devices, full parity and million-user capacity are not qualified"
+  ],
+  "productionDeployed": false
+}

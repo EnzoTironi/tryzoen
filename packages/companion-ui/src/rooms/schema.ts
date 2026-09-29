@@ -157,6 +157,7 @@ export const roomSyncPageSchema = z.object({
   cursor: z.string().max(16384).nullable(),
   timelineChanged: z.boolean(),
   reactionsChanged: z.boolean(),
+  pinsChanged: z.boolean(),
   reset: z.boolean(),
   changes: z
     .object({
@@ -228,6 +229,40 @@ export const roomMediaReadSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
 });
 
+export const roomPinsReadSchema = roomReadSchema.pick({ id: true }).extend({
+  includeMessages: z.boolean().optional(),
+});
+export const roomPinsSchema = z.object({
+  messageIds: z.array(roomThreadSchema.shape.rootId).max(50),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+  mayManage: z.boolean(),
+  messages: z.array(roomMessageSchema).max(50),
+});
+export const roomPinWriteSchema = roomMediaReadSchema.extend({
+  pinned: z.boolean(),
+  expectedRevision: roomPinsSchema.shape.revision,
+});
+export const roomPinResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  pins: roomPinsSchema,
+});
+
+export const roomReactorsReadSchema = roomMediaReadSchema.extend({
+  cursor: z.string().min(1).max(4096).optional(),
+});
+export const roomReactorsPageSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        eventId: roomThreadSchema.shape.rootId,
+        emoji: z.string().min(1).max(32),
+        person: roomMemberSchema,
+      })
+    )
+    .max(100),
+  nextCursor: z.string().max(4096).nullable(),
+});
+
 export const roomSearchQuerySchema = z.object({
   id: z.uuid(),
   query: z.string().trim().min(1).max(200),
@@ -239,7 +274,21 @@ export const roomSearchPageSchema = z.object({
   nextCursor: z.string().max(16384).nullable(),
 });
 
+export const roomUnreadSchema = z.object({ id: z.uuid(), unread: z.boolean() });
+
 export interface RoomData {
+  setUnread: (input: z.infer<typeof roomUnreadSchema>) => Promise<void>;
+  pins: (
+    input: z.infer<typeof roomPinsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomPinsSchema>>;
+  pin: (
+    input: z.infer<typeof roomPinWriteSchema>
+  ) => Promise<z.infer<typeof roomPinResultSchema>>;
+  reactors: (
+    input: z.infer<typeof roomReactorsReadSchema>,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomReactorsPageSchema>>;
   presencePreference: (
     input: { id: string },
     signal?: AbortSignal

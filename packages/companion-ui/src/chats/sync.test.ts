@@ -25,6 +25,9 @@ const client = new QueryClient();
 vi.mock("@tanstack/react-query", async (original) => ({
   ...(await original<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => client,
+  useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => ({
+    data: client.getQueryData(queryKey),
+  }),
 }));
 vi.mock("react-native", () => ({
   AppState: {
@@ -83,23 +86,34 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-test("keeps notification snapshots scoped and clears them on background and provider failure", async () => {
+test("keeps notification snapshots scoped and retains the cache while backgrounded", async () => {
   const notifications = [
-    { id: "room", notificationCount: 2, highlightCount: 1 },
+    {
+      id: "room",
+      notificationCount: 2,
+      highlightCount: 1,
+      markedUnread: false,
+    },
   ];
+  const key = ["matrix-inbox-notifications", "owner", "", "all", false];
   const sync = vi
     .fn<InboxData["sync"]>()
     .mockResolvedValue({ ...reply, inboxChanged: false, notifications });
   SyncHarness(sync);
   await vi.waitFor(() => {
-    expect(lifecycle.writes).toContainEqual(
-      expect.objectContaining({ entries: notifications })
-    );
+    expect(client.getQueryData(key)).toEqual(notifications);
   });
-  lifecycle.writes = [];
   state("background");
-  expect(lifecycle.writes).toContain(null);
-  lifecycle.writes = [];
+  expect(client.getQueryData(key)).toEqual(notifications);
+  expect(
+    client.getQueryData([
+      "matrix-inbox-notifications",
+      "other",
+      "",
+      "all",
+      false,
+    ])
+  ).toBeUndefined();
   sync.mockResolvedValue({
     ...reply,
     status: "unavailable",
@@ -107,7 +121,69 @@ test("keeps notification snapshots scoped and clears them on background and prov
   });
   state("active");
   await vi.waitFor(() => {
-    expect(lifecycle.writes).toContain(null);
+    expect(
+      lifecycle.writes.some(
+        (value) => typeof value === "string" && value.includes("owner")
+      )
+    ).toBe(true);
+  });
+  expect(client.getQueryData(key)).toEqual(notifications);
+});
+
+test("a late poll preserves a locally marked unread room while applying other counters", async () => {
+  const key = ["matrix-inbox-notifications", "owner", "", "all", false];
+  client.setQueryData(key, [
+    {
+      id: "room",
+      notificationCount: 0,
+      highlightCount: 0,
+      markedUnread: false,
+    },
+  ]);
+  let resolve!: (value: Awaited<ReturnType<InboxData["sync"]>>) => void;
+  const sync = vi.fn<InboxData["sync"]>().mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      })
+  );
+  SyncHarness(sync);
+  client.setQueryData(key, [
+    { id: "room", notificationCount: 0, highlightCount: 0, markedUnread: true },
+  ]);
+  resolve({
+    ...reply,
+    inboxChanged: false,
+    notifications: [
+      {
+        id: "room",
+        notificationCount: 3,
+        highlightCount: 1,
+        markedUnread: false,
+      },
+      {
+        id: "other",
+        notificationCount: 4,
+        highlightCount: 0,
+        markedUnread: false,
+      },
+    ],
+  });
+  await vi.waitFor(() => {
+    expect(client.getQueryData(key)).toEqual([
+      {
+        id: "room",
+        notificationCount: 3,
+        highlightCount: 1,
+        markedUnread: true,
+      },
+      {
+        id: "other",
+        notificationCount: 4,
+        highlightCount: 0,
+        markedUnread: false,
+      },
+    ]);
   });
 });
 

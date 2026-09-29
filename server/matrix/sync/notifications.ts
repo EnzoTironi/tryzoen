@@ -9,22 +9,29 @@ export function inboxNotifications(
   scope: z.infer<typeof syncCursorSchema>["scope"],
   native: Awaited<ReturnType<typeof pollNativeSync>> | null
 ) {
-  if (!env.ZOEN_MATRIX_NATIVE_NOTIFICATIONS) return null;
   const retained = new Map(
     previous?.notifications?.map((entry) => [entry.id, entry])
   );
-  return scope.flatMap((room) => {
+  const entries = scope.flatMap((room) => {
     if (room.roomId in (native?.rooms?.leave ?? {})) return [];
-    const value = native?.rooms?.join?.[room.roomId]?.unread_notifications;
-    if (value)
-      return [
-        {
-          id: room.id,
-          notificationCount: value.notification_count,
-          highlightCount: value.highlight_count,
-        },
-      ];
+    const current = native?.rooms?.join?.[room.roomId];
+    const value = env.ZOEN_MATRIX_NATIVE_NOTIFICATIONS
+      ? current?.unread_notifications
+      : undefined;
+    const marker = current?.account_data?.events[0];
     const old = retained.get(room.id);
-    return old ? [old] : [];
+    if (!value && !marker && !old) return [];
+    return [
+      {
+        id: room.id,
+        notificationCount:
+          value?.notification_count ?? old?.notificationCount ?? 0,
+        highlightCount: value?.highlight_count ?? old?.highlightCount ?? 0,
+        markedUnread: marker?.content.unread ?? old?.markedUnread ?? false,
+      },
+    ];
   });
+  return entries.length || env.ZOEN_MATRIX_NATIVE_NOTIFICATIONS
+    ? entries
+    : null;
 }

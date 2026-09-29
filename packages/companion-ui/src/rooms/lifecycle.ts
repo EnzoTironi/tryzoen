@@ -19,6 +19,8 @@ export function useRoomLifecycle(
         "matrix-messages",
         "matrix-thread",
         "matrix-reactions",
+        "matrix-reactors",
+        "matrix-pins",
       ]) {
         const queryKey = [prefix, cacheScope, roomId];
         void client.cancelQueries({ queryKey });

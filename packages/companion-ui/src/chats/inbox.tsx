@@ -471,16 +471,22 @@ function RoomRow({
             {time.label}
           </Text>
         )}
-        {notifications && notifications.notificationCount > 0 && (
-          <Text
-            accessibilityLabel={`${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`}
-            style={styles.unread}
-          >
-            {notifications.notificationCount > 99
-              ? "99+"
-              : notifications.notificationCount}
-          </Text>
-        )}
+        {notifications &&
+          (notifications.notificationCount > 0 ||
+            notifications.markedUnread) && (
+            <Text
+              accessibilityLabel={
+                notifications.notificationCount
+                  ? `${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`
+                  : "Marcada como não lida"
+              }
+              style={styles.unread}
+            >
+              {notifications.notificationCount > 99
+                ? "99+"
+                : notifications.notificationCount || "•"}
+            </Text>
+          )}
       </View>
     </Pressable>
   );

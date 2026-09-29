@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   Copy,
@@ -9,6 +9,9 @@ import {
   Pencil,
   Trash2,
   MessageCircle,
+  Smile,
+  Pin,
+  Mail,
   type LucideIcon,
 } from "lucide-react-native";
 import { colors } from "./theme";
@@ -29,12 +32,18 @@ export function MessageActions({
   onSave,
   onForward,
   onThread,
+  onViewReactions,
+  onPin,
+  onUnread,
 }: {
   readonly onForward?: () => void;
   readonly onSave?: () => void;
   readonly onEdit?: () => void;
   readonly onDelete?: () => void;
   readonly onThread?: () => void;
+  readonly onViewReactions?: () => void;
+  readonly onUnread?: () => void;
+  readonly onPin?: () => void;
   readonly text: string;
   readonly outgoing: boolean;
   readonly onCopy?: (text: string) => Promise<void>;
@@ -85,8 +94,8 @@ export function MessageActions({
       {reaction && onReact && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. Change or remove reaction`}
-          onPress={open}
+          accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. ${onViewReactions ? "View reactions" : "Change or remove reaction"}`}
+          onPress={onViewReactions ?? open}
           style={styles.reaction}
         >
           <Text style={styles.emoji}>{reaction}</Text>
@@ -104,35 +113,25 @@ export function MessageActions({
             onSelect={onReact}
             onClose={close}
           >
+            <MessageMenuGroup
+              onClose={close}
+              items={[
+                { icon: Smile, label: "Ver reações", onPress: onViewReactions },
+              ]}
+            />
             <View style={styles.group}>
-              <MessageMenuItem
-                icon={Reply}
-                label="Responder"
-                onPress={() => {
-                  close();
-                  onReply();
-                }}
+              <MessageMenuGroup
+                onClose={close}
+                items={[
+                  { icon: Reply, label: "Responder", onPress: onReply },
+                  {
+                    icon: MessageCircle,
+                    label: "Responder na thread",
+                    onPress: onThread,
+                  },
+                  { icon: Forward, label: "Encaminhar", onPress: onForward },
+                ]}
               />
-              {onThread && (
-                <MessageMenuItem
-                  icon={MessageCircle}
-                  label="Responder na thread"
-                  onPress={() => {
-                    close();
-                    onThread();
-                  }}
-                />
-              )}
-              {onForward && (
-                <MessageMenuItem
-                  icon={Forward}
-                  label="Encaminhar"
-                  onPress={() => {
-                    close();
-                    onForward();
-                  }}
-                />
-              )}
             </View>
             <View style={styles.group}>
               {copy && (
@@ -144,37 +143,32 @@ export function MessageActions({
                   }}
                 />
               )}
-              {onSave && (
-                <MessageMenuItem
-                  icon={Bookmark}
-                  label="Salvar mensagem"
-                  onPress={() => {
-                    close();
-                    onSave();
-                  }}
-                />
-              )}
-              {onEdit && (
-                <MessageMenuItem
-                  icon={Pencil}
-                  label="Editar mensagem"
-                  onPress={() => {
-                    close();
-                    onEdit();
-                  }}
-                />
-              )}
+              <MessageMenuGroup
+                onClose={close}
+                items={[
+                  {
+                    icon: Mail,
+                    label: "Marcar como não lida",
+                    onPress: onUnread,
+                  },
+                  { icon: Pin, label: "Fixar / desafixar", onPress: onPin },
+                  { icon: Bookmark, label: "Salvar mensagem", onPress: onSave },
+                  { icon: Pencil, label: "Editar mensagem", onPress: onEdit },
+                ]}
+              />
             </View>
             {onDelete && (
               <View style={styles.divider}>
-                <MessageMenuItem
-                  icon={Trash2}
-                  label="Excluir mensagem"
-                  destructive
-                  onPress={() => {
-                    close();
-                    onDelete();
-                  }}
+                <MessageMenuGroup
+                  onClose={close}
+                  items={[
+                    {
+                      icon: Trash2,
+                      label: "Excluir mensagem",
+                      onPress: onDelete,
+                      destructive: true,
+                    },
+                  ]}
                 />
               </View>
             )}
@@ -187,6 +181,30 @@ export function MessageActions({
         </Suspense>
       )}
     </View>
+  );
+}
+
+function MessageMenuGroup({
+  items,
+  onClose,
+}: {
+  readonly items: readonly (Omit<
+    ComponentProps<typeof MessageMenuItem>,
+    "onPress"
+  > & { readonly onPress?: () => void })[];
+  readonly onClose: () => void;
+}) {
+  return items.map(({ onPress, ...item }) =>
+    onPress ? (
+      <MessageMenuItem
+        key={item.label}
+        {...item}
+        onPress={() => {
+          onClose();
+          onPress();
+        }}
+      />
+    ) : null
   );
 }
 

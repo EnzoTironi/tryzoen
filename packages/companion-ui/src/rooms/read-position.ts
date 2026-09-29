@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { updateRoomUnread } from "../chats/notifications";
 import { AppState } from "react-native";
 import type { RoomData, roomMessageSchema } from "./schema";
 import type { z } from "zod";
@@ -12,6 +14,7 @@ export function useRoomReadPosition(
   enabled: boolean,
   rootId?: string
 ) {
+  const client = useQueryClient();
   const timeline = useRef(messages);
   const visibility = useRef<{ scope: string; ids: string[] } | undefined>(
     undefined
@@ -48,7 +51,15 @@ export function useRoomReadPosition(
           .markRead({ id: roomId, messageId, ...(rootId ? { rootId } : {}) })
           .then(
             () => {
-              if (mounted) delivered = `${cacheScope}:${messageId}`;
+              if (!mounted) return;
+              delivered = `${cacheScope}:${messageId}`;
+              if (
+                !rootId &&
+                !client.isMutating({
+                  mutationKey: ["matrix-unread", cacheScope, roomId],
+                })
+              )
+                updateRoomUnread(client, cacheScope, roomId, false);
             },
             () => {
               /* A failed receipt is not acknowledged; a later visibility event can retry. */
@@ -82,7 +93,7 @@ export function useRoomReadPosition(
       viewable.current = undefined;
       subscription.remove();
     };
-  }, [data, cacheScope, roomId, rootId, enabled]);
+  }, [data, cacheScope, roomId, rootId, enabled, client]);
   return useCallback((ids: string[]) => {
     viewable.current?.(ids);
   }, []);

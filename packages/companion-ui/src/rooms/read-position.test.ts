@@ -1,7 +1,14 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useRoomReadPosition } from "./read-position";
 import type { RoomData, roomMessageSchema } from "./schema";
 import type { z } from "zod";
+
+const cache = vi.hoisted(() => ({
+  setQueriesData: vi.fn<QueryClient["setQueriesData"]>(),
+  isMutating: () => 0,
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => cache }));
 
 const lifecycle = vi.hoisted(() => ({
   active: "active",

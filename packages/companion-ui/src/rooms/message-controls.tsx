@@ -1,3 +1,5 @@
+import { PinRoomMessage } from "./pins";
+import { RoomReactors } from "./reactors";
 import { SaveRoomMessage } from "./save-message";
 import { useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -21,6 +23,8 @@ export function RoomMessageControls({
   onReply,
   onCopy,
   onThread,
+  onUnread,
+  onProfile,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
   | "data"
@@ -30,19 +34,37 @@ export function RoomMessageControls({
   | "onReply"
   | "onCopy"
   | "onThread"
+  | "onUnread"
+  | "onProfile"
 > & {
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
   const [action, setAction] = useState<
-    "save" | "edit" | "delete" | "forward"
+    "save" | "edit" | "delete" | "forward" | "reactors" | "pin"
   >();
   return (
     <>
-      <RoomReactionSummary reaction={item.redacted ? undefined : reaction} />
+      <RoomReactionSummary
+        reaction={item.redacted ? undefined : reaction}
+        onOpen={() => {
+          setAction("reactors");
+        }}
+      />
       <View style={[styles.actions, item.mine && styles.outgoing]}>
         {!item.redacted && (
           <MessageActions
+            onUnread={onUnread}
+            onPin={() => {
+              setAction("pin");
+            }}
+            onViewReactions={
+              reaction?.reactions.length
+                ? () => {
+                    setAction("reactors");
+                  }
+                : undefined
+            }
             onThread={
               onThread
                 ? () => {
@@ -93,6 +115,7 @@ export function RoomMessageControls({
           cacheScope={cacheScope}
           roomId={roomId}
           item={item}
+          onProfile={onProfile}
           onClose={() => {
             setAction(undefined);
           }}
@@ -131,7 +154,10 @@ function RoomThreadAction({
 
 function RoomReactionSummary({
   reaction,
-}: Pick<ComponentProps<typeof RoomMessageControls>, "reaction">) {
+  onOpen,
+}: Pick<ComponentProps<typeof RoomMessageControls>, "reaction"> & {
+  readonly onOpen: () => void;
+}) {
   const otherReactions = reaction?.reactions.filter(
     (entry) => entry.emoji !== reaction.mine
   );
@@ -139,7 +165,13 @@ function RoomReactionSummary({
   return (
     <View style={styles.reactions}>
       {otherReactions.map((entry) => (
-        <View key={entry.emoji} style={styles.reaction}>
+        <Pressable
+          key={entry.emoji}
+          style={styles.reaction}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver quem reagiu com ${entry.emoji}`}
+          onPress={onOpen}
+        >
           <Text
             accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
             style={styles.reactionText}
@@ -147,7 +179,7 @@ function RoomReactionSummary({
             {entry.emoji} {entry.count}
             {reaction.complete ? "" : "+"}
           </Text>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
@@ -190,13 +222,35 @@ function RoomMessageDialog({
   roomId,
   item,
   onClose,
+  onProfile,
 }: Pick<
   ComponentProps<typeof RoomMessageControls>,
-  "data" | "cacheScope" | "roomId" | "item"
+  "data" | "cacheScope" | "roomId" | "item" | "onProfile"
 > & {
-  readonly action: "save" | "edit" | "delete" | "forward";
+  readonly action: "save" | "edit" | "delete" | "forward" | "reactors" | "pin";
   readonly onClose: () => void;
 }) {
+  if (action === "pin")
+    return (
+      <PinRoomMessage
+        data={data}
+        cacheScope={cacheScope}
+        roomId={roomId}
+        item={item}
+        onClose={onClose}
+      />
+    );
+  if (action === "reactors")
+    return (
+      <RoomReactors
+        data={data}
+        cacheScope={cacheScope}
+        roomId={roomId}
+        messageId={item.id}
+        onProfile={onProfile}
+        onClose={onClose}
+      />
+    );
   if (action === "edit" || action === "forward") {
     const Dialog = action === "edit" ? EditRoomMessage : ForwardRoomMessage;
     return (

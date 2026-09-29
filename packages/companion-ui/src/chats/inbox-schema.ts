@@ -45,6 +45,7 @@ export const inboxNotificationsSchema = z
   .array(
     z.object({
       id: z.uuid(),
+      markedUnread: z.boolean().default(false),
       notificationCount: z.number().int().nonnegative(),
       highlightCount: z.number().int().nonnegative(),
     })

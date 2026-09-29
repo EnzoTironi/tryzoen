@@ -14,6 +14,9 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  pins: vi.fn<RoomData["pins"]>(),
+  pin: vi.fn<RoomData["pin"]>(),
+  reactors: vi.fn<RoomData["reactors"]>(),
   presencePreference: vi.fn<RoomData["presencePreference"]>(),
   setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
@@ -23,6 +26,7 @@ const data: RoomData = {
   setTyping: vi.fn<RoomData["setTyping"]>(),
   readSync: vi.fn<RoomData["readSync"]>(),
   search: vi.fn<RoomData["search"]>(),
+  setUnread: vi.fn<RoomData["setUnread"]>(),
   markRead: vi.fn<RoomData["markRead"]>(),
   savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
   clearUnavailableSavedMessages:

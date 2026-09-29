@@ -1,8 +1,10 @@
+import { reconcileInboxNotifications } from "./notifications";
 import { useContext, useEffect, useRef, useState } from "react";
 import { CompanionVisibility } from "../visibility";
 import { AppState } from "react-native";
 import {
   useQueryClient,
+  useQuery,
   onlineManager,
   type InfiniteData,
 } from "@tanstack/react-query";
@@ -36,10 +38,19 @@ export function useInboxSync(
   const [reconnecting, setReconnecting] = useState<string | undefined>(
     undefined
   );
-  const [notifications, setNotifications] = useState<{
-    scope: string;
-    entries: z.infer<typeof inboxNotificationsSchema>;
-  } | null>(null);
+  const observedNotifications = [
+    "matrix-inbox-notifications",
+    cacheScope,
+    input.query,
+    input.filter,
+    input.archived,
+  ];
+  const notifications = useQuery<z.infer<typeof inboxNotificationsSchema>>({
+    queryKey: observedNotifications,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: 60_000,
+  });
   const position = useRef(nearHead);
   const apply = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
@@ -52,6 +63,13 @@ export function useInboxSync(
       disposed: false,
       active: visible && AppState.currentState === "active",
     };
+    const notificationKey = [
+      "matrix-inbox-notifications",
+      cacheScope,
+      query,
+      filter,
+      archived,
+    ];
     let cursor: string | undefined;
     let generation = 0;
     let refreshed = 0;
@@ -100,7 +118,6 @@ export function useInboxSync(
     };
     apply.current = applyPending;
     const stop = () => {
-      setNotifications(null);
       clearTimeout(timer);
       request?.abort();
       request = undefined;
@@ -130,6 +147,10 @@ export function useInboxSync(
           }
           return;
         }
+        const notificationSnapshot =
+          client.getQueryData<z.infer<typeof inboxNotificationsSchema>>(
+            notificationKey
+          );
         const result = await data.sync(
           { query, filter, archived, cursor, focusedRoomId },
           controller.signal
@@ -137,8 +158,12 @@ export function useInboxSync(
         if (stopped()) return;
         if (result.status === "unavailable")
           throw new Error("Sync unavailable");
-        setNotifications(
-          result.notifications ? { scope, entries: result.notifications } : null
+        reconcileInboxNotifications(
+          client,
+          notificationKey,
+          notificationSnapshot,
+          result.notifications,
+          cacheScope
         );
         if (
           result.inboxChanged ||
@@ -161,7 +186,7 @@ export function useInboxSync(
         setReconnecting(undefined);
       } catch {
         if (stopped()) return;
-        setNotifications(null);
+
         failures += 1;
         setReconnecting(scope);
       } finally {
@@ -211,6 +236,6 @@ export function useInboxSync(
     pending: pending === scope,
     reconnecting: reconnecting === scope,
     apply: () => apply.current?.(),
-    notifications: notifications?.scope === scope ? notifications.entries : [],
+    notifications: reconnecting === scope ? [] : (notifications.data ?? []),
   };
 }

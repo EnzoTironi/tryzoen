@@ -9,10 +9,9 @@ export class MatrixError extends Error {
     | "unavailable"
     | "forbidden"
     | "conflict"
+    | "expired-position"
     | "not-found";
-  constructor(input: {
-    readonly reason: "unavailable" | "forbidden" | "conflict" | "not-found";
-  }) {
+  constructor(input: { readonly reason: MatrixError["reason"] }) {
     super("MatrixError");
     this.name = "MatrixError";
     Object.assign(this, input);
@@ -43,7 +42,10 @@ export const matrixRequest = async function (
   path: string,
   body?: z.core.util.JSONType,
   userId?: string,
-  requestOptions: { version?: "v1" | "v3"; maxResponseBytes?: number } = {}
+  requestOptions: {
+    version?: "v1" | "v3" | "unstable/org.matrix.simplified_msc3575";
+    maxResponseBytes?: number;
+  } = {}
 ) {
   const config = await matrixConfiguration();
   const url = new URL(
@@ -99,6 +101,7 @@ function matrixFailureReason(
   code: string | undefined,
   status: number
 ): MatrixError["reason"] {
+  if (code === "M_UNKNOWN_POS") return "expired-position";
   if (code === "M_USER_IN_USE" || code === "M_ROOM_IN_USE") return "conflict";
   if (status === 403) return "forbidden";
   if (status === 404) return "not-found";

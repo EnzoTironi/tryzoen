@@ -1796,3 +1796,36 @@ unread/pinning/report actions and full reactor details. Controls inside media/li
 cards keep their native interactions and expose actions through the ellipsis.
 Native push, E2EE, calls, cold offline boot, background draining and production
 capacity are still release gates. Creator expansion remains deferred.
+
+### Native message organization and Sliding Sync — wave 28
+
+- `server/matrix/reactions.ts` reads bounded annotation pages and resolves only
+  authorized member profiles; room authority is checked again before returning.
+- `server/matrix/pins.ts` owns native pins, authorization, a 50-entry limit and
+  reviewed-revision conflicts. Group writes require workspace management rights;
+  DMs honor Matrix power levels, including v12 creator authority. The advisory
+  lock serializes Zoen writes, not third-party Matrix clients.
+- `server/matrix/read-position.ts` serializes private reminders with receipts.
+  Marking unread never rewinds fully-read position; visible main-timeline reads
+  clear the marker, while threaded reads retain their own receipt scope.
+- Shared `rooms/reactors.tsx`, `rooms/pins.tsx` and the existing compact menu own
+  the UI. Mobile sheets and desktop modals reuse the shared primitives.
+- Inbox metadata now uses `sync/sliding.ts`, bounded to the authorized visible
+  head (31 rooms, one event each, 1 MiB response). Unique connection IDs avoid
+  cross-tab connection collisions. Opaque positions travel inside the existing
+  account/session-bound encrypted cursor. M_UNKNOWN_POS gets one fresh bootstrap.
+  Account data and room state are stripped to the fields needed by the UI.
+- `chats/notifications.ts` reconciles TanStack notification snapshots while
+  preserving concurrent optimistic reminders. Unread rollback changes only the
+  reminder and preserves newer native notification counters.
+
+The installed Synapse v1.160.0 advertises simplified Sliding Sync. Its filtered
+v3 sync discarded room account data, confirmed against the running server and
+its FilterCollection implementation. The new inbox endpoint requires
+`org.matrix.simplified_msc3575`; do not silently fall back to a full-account sync.
+Reference: https://github.com/matrix-org/matrix-spec-proposals/blob/main/proposals/4186-simplified-sliding-sync.md
+
+MSC4306 thread subscriptions are present but disabled in the running homeserver.
+Follow-thread notification parity remains open; do not call a bookmark a native
+subscription or present its controls as active without a tested server rollout.
+No database migration, new dependency, or production deployment in this wave.

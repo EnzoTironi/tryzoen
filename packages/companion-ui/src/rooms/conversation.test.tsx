@@ -81,6 +81,9 @@ vi.mock("@tanstack/react-query", async (original) => ({
   }),
 }));
 const data: RoomData = {
+  pins: vi.fn<RoomData["pins"]>(),
+  pin: vi.fn<RoomData["pin"]>(),
+  reactors: vi.fn<RoomData["reactors"]>(),
   presencePreference: vi.fn<RoomData["presencePreference"]>(),
   setPresencePreference: vi.fn<RoomData["setPresencePreference"]>(),
   notifications: vi.fn<RoomData["notifications"]>(),
@@ -90,6 +93,7 @@ const data: RoomData = {
   setTyping: vi.fn<RoomData["setTyping"]>(),
   readSync: vi.fn<RoomData["readSync"]>(),
   search: vi.fn<RoomData["search"]>(),
+  setUnread: vi.fn<RoomData["setUnread"]>(),
   markRead: vi.fn<RoomData["markRead"]>(),
   savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),
   clearUnavailableSavedMessages:
@@ -152,7 +156,8 @@ it("renders direct conversation identity without group or agent participation co
   mocks.direct = true;
   const html = render();
   expect(html).toContain("@ana · conversa direta");
-  expect(html).toContain("Perfil da pessoa");
+  expect(html).toContain('aria-label="Detalhes de Ana"');
+  expect(html).toContain('aria-label="Ver perfil da conversa"');
   expect(html).toContain("Mensagem direta");
   expect(html).not.toContain("Pessoas e Zoen");
   expect(html).not.toContain("Detalhes do grupo");

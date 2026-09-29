@@ -54,7 +54,9 @@ export async function readMatrixRoomSync(
       !!timeline?.limited ||
       room.roomId in (native.rooms?.leave ?? {});
     const historyEvents =
-      timeline?.events.filter((event) => event.type !== "m.reaction") ?? [];
+      timeline?.events.filter(
+        (event) => !["m.reaction", "m.room.pinned_events"].includes(event.type)
+      ) ?? [];
     const reactionsChanged =
       reset ||
       !!timeline?.events.some((event) =>
@@ -104,6 +106,11 @@ export async function readMatrixRoomSync(
       cursor,
       timelineChanged: historyEvents.length > 0,
       reactionsChanged,
+      pinsChanged:
+        reset ||
+        !!timeline?.events.some((event) =>
+          ["m.room.pinned_events", "m.room.redaction"].includes(event.type)
+        ),
       reset,
       changes,
       userIds: previous && expiresAt > Date.now() ? userIds : [],
@@ -125,6 +132,7 @@ export async function readMatrixRoomSync(
       cursor: null,
       timelineChanged: false,
       reactionsChanged: false,
+      pinsChanged: false,
       reset: false,
       changes: null,
       userIds: [],

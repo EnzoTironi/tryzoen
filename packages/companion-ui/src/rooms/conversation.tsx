@@ -1,3 +1,5 @@
+import { useMarkRoomUnread } from "./unread";
+import { RoomPins } from "./pins";
 import { RoomSearch } from "./search";
 import { ConnectionStatus } from "../conversation/connection";
 import { PresenceIndicator } from "./presence";
@@ -14,7 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { ArrowLeft, Info, Search, X } from "lucide-react-native";
+import { ArrowLeft, Info, Search, Pin, X } from "lucide-react-native";
 import type { z } from "zod";
 import { RoomComposer } from "./composer";
 import { useRoomDraft } from "./draft";
@@ -51,13 +53,15 @@ export function RoomConversation({
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
+  const unread = useMarkRoomUnread(data, cacheScope, roomId, onBack);
   const [root, setRoot] = useState<z.infer<typeof roomMessageSchema>>();
   const [details, setDetails] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [pins, setPins] = useState(false);
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const exposed = useContext(CompanionVisibility);
-  const visible = exposed && !details && !profile && !searching;
+  const visible = exposed && !details && !profile && !searching && !pins;
   const active = useRoomLifecycle(cacheScope, roomId, exposed);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
@@ -112,7 +116,7 @@ export function RoomConversation({
     cacheScope,
     roomId,
     timeline,
-    !messages.isError && timelineVisible
+    !messages.isError && timelineVisible && !unread.isPending
   );
   if (typing.accessDenied)
     return (
@@ -133,6 +137,9 @@ export function RoomConversation({
       {(!root || wide || messages.isError) && (
         <View style={styles.main}>
           <RoomHeader
+            onPins={() => {
+              setPins(true);
+            }}
             room={room}
             presence={
               room?.kind === "direct" ? typing.presence[0]?.state : undefined
@@ -144,7 +151,19 @@ export function RoomConversation({
               setSearching(true);
             }}
           />
+          {unread.isError && (
+            <Text accessibilityRole="alert" style={styles.caption}>
+              Não foi possível marcar como não lida. Tente novamente.
+            </Text>
+          )}
           <RoomMessages
+            onUnread={
+              unread.isPending
+                ? undefined
+                : () => {
+                    unread.mutate();
+                  }
+            }
             data={data}
             roomId={roomId}
             cacheScope={cacheScope}
@@ -231,6 +250,13 @@ export function RoomConversation({
             cacheScope={cacheScope}
             roomId={roomId}
             root={root}
+            onUnread={
+              unread.isPending
+                ? undefined
+                : () => {
+                    unread.mutate();
+                  }
+            }
             avatarUri={avatarUri}
             onCopyText={onCopyText}
             onProfile={setProfile}
@@ -259,6 +285,20 @@ export function RoomConversation({
           onConversation={() => {
             setDetails(false);
             setRoot(undefined);
+          }}
+        />
+      )}
+      {pins && room && (
+        <RoomPins
+          data={data}
+          cacheScope={cacheScope}
+          roomId={roomId}
+          onClose={() => {
+            setPins(false);
+          }}
+          onOpenRoom={(id) => {
+            setPins(false);
+            onOpenRoom?.(id);
           }}
         />
       )}
@@ -314,6 +354,7 @@ function RoomHeader({
   onBack,
   onProfile,
   onSearch,
+  onPins,
 }: {
   readonly room?: z.infer<typeof roomSchema>;
   readonly presence?: Parameters<typeof PresenceIndicator>[0]["state"];
@@ -321,9 +362,10 @@ function RoomHeader({
   readonly onBack: () => void;
   readonly onProfile: () => void;
   readonly onSearch: () => void;
+  readonly onPins: () => void;
 }) {
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, compact && styles.compactHeader]}>
       {compact && (
         <IconButton
           icon={ArrowLeft}
@@ -355,7 +397,7 @@ function RoomHeader({
         {presence && presence !== "offline" ? (
           <PresenceIndicator state={presence} />
         ) : (
-          <Text style={styles.caption}>
+          <Text numberOfLines={1} style={styles.caption}>
             {room?.kind === "direct"
               ? room.username
                 ? `@${room.username} · conversa direta`
@@ -364,14 +406,17 @@ function RoomHeader({
           </Text>
         )}
       </Pressable>
+      <IconButton icon={Pin} label="Mensagens fixadas" onPress={onPins} />
       <IconButton icon={Search} label="Buscar na conversa" onPress={onSearch} />
-      <IconButton
-        icon={Info}
-        label={
-          room?.kind === "direct" ? "Perfil da pessoa" : "Detalhes do grupo"
-        }
-        onPress={onProfile}
-      />
+      {!compact && (
+        <IconButton
+          icon={Info}
+          label={
+            room?.kind === "direct" ? "Perfil da pessoa" : "Detalhes do grupo"
+          }
+          onPress={onProfile}
+        />
+      )}
     </View>
   );
 }
@@ -387,10 +432,12 @@ function RoomThread({
   visible,
   active,
   typing,
+  onUnread,
 }: Pick<
   Parameters<typeof RoomConversation>[0],
   "data" | "cacheScope" | "roomId" | "avatarUri" | "onCopyText"
 > & {
+  readonly onUnread?: () => void;
   readonly root: z.infer<typeof roomMessageSchema>;
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
@@ -440,6 +487,7 @@ function RoomThread({
   return (
     <>
       <RoomMessages
+        onUnread={onUnread}
         data={data}
         roomId={roomId}
         cacheScope={cacheScope}
@@ -518,6 +566,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#efeff1",
   },
   headerCopy: { flex: 1, minWidth: 0, gap: 4 },
+  compactHeader: { paddingHorizontal: 12, gap: 8 },
   title: { fontSize: 17, fontWeight: "600", color: colors.ink },
   caption: { fontSize: 12, color: colors.muted, lineHeight: 18 },
   thread: { width: 320, borderLeftWidth: 1, borderLeftColor: "#ededf0" },

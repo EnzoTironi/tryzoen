@@ -4,9 +4,13 @@ import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
 import {
   roomReactionsReadSchema,
+  roomReactorsReadSchema,
+  roomReactorsPageSchema,
   roomReactionWriteSchema,
 } from "@zoen/companion-ui/rooms";
 import type { WorkspaceActorSchema } from "../workspaces/access";
+import { readRoomMembers } from "./members";
+import { matrixConfiguration } from "./client";
 import { readRoomMessage } from "./messages";
 import { joinMatrixRoom, requireMatrixRoom } from "./rooms";
 import { matrixRequest, MatrixEventSchema, MatrixError } from "./client";
@@ -163,5 +167,62 @@ export async function setMatrixReaction(
       room.matrixId,
       await reactionEvents(room, input.messageId)
     );
+  });
+}
+
+/** Resolve one authorized native relation page on demand, not for every timeline row. */
+export async function readMatrixReactors(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  raw: z.infer<typeof roomReactorsReadSchema>
+) {
+  const input = roomReactorsReadSchema.parse(raw);
+  return transaction(async () => {
+    const room = await joinMatrixRoom(actor, input.id);
+    await readRoomMessage(room, input.messageId);
+    const page = relationPage.parse(
+      await matrixRequest(
+        "GET",
+        `rooms/${encodeURIComponent(room.roomId)}/relations/${encodeURIComponent(input.messageId)}/m.annotation/m.reaction?limit=100${input.cursor ? `&from=${encodeURIComponent(input.cursor)}` : ""}`,
+        undefined,
+        room.matrixId,
+        { version: "v1" }
+      )
+    );
+    const people = await readRoomMembers(actor, input.id, room.kind);
+    const { botId } = await matrixConfiguration();
+    const entries = new Map<
+      string,
+      z.infer<typeof roomReactorsPageSchema>["items"][number]
+    >();
+    for (const event of page.chunk) {
+      const relation = event.content["m.relates_to"];
+      if (
+        event.type !== "m.reaction" ||
+        event.unsigned?.redacted_because ||
+        relation?.rel_type !== "m.annotation" ||
+        relation.event_id !== input.messageId ||
+        !relation.key ||
+        relation.key.length > 32
+      )
+        continue;
+      const person = people.find(
+        (candidate) => candidate.id === event.sender
+      ) ?? {
+        id: event.sender,
+        name: event.sender === botId ? "Zoen" : "Participante",
+        bot: event.sender === botId,
+        mine: event.sender === room.matrixId,
+      };
+      entries.set(JSON.stringify([relation.key, person.id]), {
+        eventId: event.event_id,
+        emoji: relation.key,
+        person,
+      });
+    }
+    await requireMatrixRoom(actor, input.id);
+    return roomReactorsPageSchema.parse({
+      items: [...entries.values()],
+      nextCursor: page.next_batch ?? null,
+    });
   });
 }

@@ -44,6 +44,7 @@ export function RoomMessages({
   onRetrySend,
   onSettleSend,
   onThread,
+  onUnread,
   loading,
   error,
   onRetry,
@@ -75,6 +76,7 @@ export function RoomMessages({
   readonly outgoing?: ReturnType<typeof useRoomDraft>["outgoing"];
   readonly onRetrySend?: (id: string) => void;
   readonly onSettleSend?: (ids: string[]) => void;
+  readonly onUnread?: () => void;
   readonly onThread?: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly loading: boolean;
   readonly error: boolean;
@@ -224,6 +226,7 @@ export function RoomMessages({
                 cacheScope={cacheScope}
                 item={item}
                 onThread={onThread}
+                onUnread={onUnread}
                 onRetrySend={onRetrySend}
                 onRemoveSend={
                   onSettleSend
@@ -297,6 +300,7 @@ function RoomMessage({
   cacheScope,
   item,
   onThread,
+  onUnread,
   avatarUri,
   onCopy,
   onReply,
@@ -312,6 +316,7 @@ function RoomMessage({
   | "roomId"
   | "cacheScope"
   | "onThread"
+  | "onUnread"
   | "onRetrySend"
   | "avatarUri"
   | "onCopy"
@@ -405,6 +410,7 @@ function RoomMessage({
               />
             ) : (
               <RoomMessageControls
+                onProfile={onProfile}
                 data={data}
                 roomId={roomId}
                 cacheScope={cacheScope}
@@ -414,6 +420,7 @@ function RoomMessage({
                 onReply={onReply}
                 onCopy={onCopy}
                 onThread={onThread}
+                onUnread={onUnread}
               />
             )
           }

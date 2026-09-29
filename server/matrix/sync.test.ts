@@ -105,7 +105,12 @@ it("reconciles initial snapshots before exposing native counts and preserves omi
     cursor: z.string().parse(seed.cursor),
   });
   expect(current.notifications).toEqual([
-    { id: room.id, notificationCount: 2, highlightCount: 1 },
+    {
+      id: room.id,
+      notificationCount: 2,
+      highlightCount: 1,
+      markedUnread: false,
+    },
   ]);
   expect(mocks.native).toHaveBeenLastCalledWith(
     "@viewer:test",
@@ -127,7 +132,12 @@ it("reconciles initial snapshots before exposing native counts and preserves omi
     cursor: z.string().parse(current.cursor),
   });
   expect(read.notifications).toEqual([
-    { id: room.id, notificationCount: 0, highlightCount: 0 },
+    {
+      id: room.id,
+      notificationCount: 0,
+      highlightCount: 0,
+      markedUnread: false,
+    },
   ]);
   await expect(
     syncConversationInbox(
@@ -212,6 +222,7 @@ it("bootstraps a room entering the head during I/O even when it has no later eve
   });
   expect(reconciled.notifications).toContainEqual({
     id: other.id,
+    markedUnread: false,
     notificationCount: 7,
     highlightCount: 1,
   });

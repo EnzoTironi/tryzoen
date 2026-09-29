@@ -48,6 +48,8 @@ export function useRoomSync(
       queryKey: [kind, cacheScope, roomId],
     }));
     const reactions = { queryKey: ["matrix-reactions", cacheScope, roomId] };
+    const reactors = { queryKey: ["matrix-reactors", cacheScope, roomId] };
+    const pins = { queryKey: ["matrix-pins", cacheScope, roomId] };
     const clear = () => {
       clearTimeout(expiry);
       presence.clear();
@@ -99,7 +101,7 @@ export function useRoomSync(
         if (result.status !== "ready") throw new Error("Room sync unavailable");
         const applied = await reconcileRoomViews(
           client,
-          { history, reactions },
+          { history, reactions, reactors, pins },
           before,
           result,
           stopped
@@ -175,18 +177,28 @@ export function useRoomSync(
 /** Reconcile all affected views before acknowledging the shared native cursor. */
 async function reconcileRoomViews(
   client: QueryClient,
-  filters: { history: QueryFilters[]; reactions: QueryFilters },
+  filters: {
+    history: QueryFilters[];
+    reactions: QueryFilters;
+    reactors: QueryFilters;
+    pins: QueryFilters;
+  },
   before: Parameters<typeof reconcileRoomHistory>[2],
   result: Awaited<ReturnType<RoomData["readSync"]>>,
   stopped: () => boolean
 ) {
   const refreshReactions = result.reset || result.reactionsChanged;
+  const affected = [
+    ...(refreshReactions ? [filters.reactions, filters.reactors] : []),
+    ...(result.reset || result.pinsChanged ? [filters.pins] : []),
+  ];
   if (
-    refreshReactions &&
-    client
-      .getQueryCache()
-      .findAll(filters.reactions)
-      .some((query) => query.state.fetchStatus === "fetching")
+    affected.some((filter) =>
+      client
+        .getQueryCache()
+        .findAll(filter)
+        .some((query) => query.state.fetchStatus === "fetching")
+    )
   )
     return false;
   if (result.reset || result.timelineChanged) {
@@ -203,8 +215,7 @@ async function reconcileRoomViews(
       await revalidateRoomViews(client, filters.history, stopped);
     if (stopped()) return false;
   }
-  if (refreshReactions)
-    await revalidateRoomViews(client, [filters.reactions], stopped);
+  await revalidateRoomViews(client, affected, stopped);
   return !stopped();
 }
 
