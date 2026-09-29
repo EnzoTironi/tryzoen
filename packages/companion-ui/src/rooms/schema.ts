@@ -80,6 +80,15 @@ export const roomEditSchema = roomDeleteSchema.extend({
   text: z.string().trim().min(1).max(8000),
   expectedRevision: roomThreadSchema.shape.rootId,
 });
+export const roomForwardSchema = roomDeleteSchema.extend({
+  destinationId: roomReadSchema.shape.id,
+  expectedRevision: roomThreadSchema.shape.rootId,
+});
+export const roomForwardDestinationsSchema = z.object({
+  id: roomReadSchema.shape.id,
+  query: z.string().trim().max(80),
+  before: z.uuid().optional(),
+});
 export const roomReadPositionSchema = z.object({
   id: roomReadSchema.shape.id,
   messageId: roomThreadSchema.shape.rootId,
@@ -87,6 +96,7 @@ export const roomReadPositionSchema = z.object({
 });
 export const roomMessageSchema = z.object({
   redacted: z.boolean().optional(),
+  forwarded: z.boolean().optional(),
   editId: z.string().optional(),
   editedAt: z.number().optional(),
   id: z.string(),
@@ -128,6 +138,13 @@ export const roomEditResultSchema = z.object({
   status: z.enum(["saved", "conflict"]),
   message: roomMessageSchema,
 });
+export const roomForwardResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("sent"),
+    messageId: roomThreadSchema.shape.rootId,
+  }),
+  z.object({ status: z.literal("changed"), message: roomMessageSchema }),
+]);
 export const roomMemberSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -219,6 +236,13 @@ export interface RoomData {
   ) => Promise<z.infer<typeof roomEditResultSchema>>;
   markRead: (input: z.infer<typeof roomReadPositionSchema>) => Promise<void>;
   deleteMessage: (input: z.infer<typeof roomDeleteSchema>) => Promise<void>;
+  forwardDestinations: (
+    input: z.infer<typeof roomForwardDestinationsSchema>,
+    signal: AbortSignal
+  ) => Promise<z.infer<typeof directListSchema>>;
+  forwardMessage: (
+    input: z.infer<typeof roomForwardSchema>
+  ) => Promise<z.infer<typeof roomForwardResultSchema>>;
   people: (
     input: z.infer<typeof directPeopleSearchSchema>
   ) => Promise<z.infer<typeof directPeopleSchema>>;

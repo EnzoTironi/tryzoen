@@ -1,5 +1,12 @@
 import { searchMatrixMessages } from "../../server/matrix/search";
 import {
+  forwardMatrixMessage,
+  listForwardDestinations,
+} from "../../server/matrix/forward";
+import {
+  roomForwardSchema,
+  roomForwardResultSchema,
+  roomForwardDestinationsSchema,
   roomSearchQuerySchema,
   roomSearchPageSchema,
 } from "@zoen/companion-ui/rooms";
@@ -77,6 +84,18 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  forwardDestinations: workspaceProcedure
+    .input(roomForwardDestinationsSchema)
+    .output(directListSchema)
+    .query(({ ctx, input, signal }) =>
+      withSignal(signal, () => listForwardDestinations(ctx.actor, input))
+    ),
+  forwardMessage: workspaceProcedure
+    .input(roomForwardSchema)
+    .output(roomForwardResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => forwardMatrixMessage(ctx.actor, input))
+    ),
   setTyping: workspaceProcedure
     .input(roomTypingWriteSchema)
     .mutation(({ ctx, input, signal }) =>

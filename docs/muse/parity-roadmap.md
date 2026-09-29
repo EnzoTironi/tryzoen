@@ -36,7 +36,7 @@ As colunas descrevem a base do PR 148. Entregas posteriores são registradas aba
 | ID      | Capacidade                    | Base            | Critério de conclusão                                                                                                                          |
 | ------- | ----------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | COMM-01 | Caixa de entrada unificada    | Parcial         | Ordenação global por atividade, prévia e horário reais, não lidas/menções, paginação estável, filtros e fixadas sem esconder conversas         |
-| COMM-02 | Sincronização e recuperação   | Pendente        | Matrix incremental, preenchimento de lacunas, retomada após queda/reinício e conta trocada, envio idempotente, cache autorizado e limitado     |
+| COMM-02 | Sincronização e recuperação   | Parcial         | Matrix incremental, preenchimento de lacunas, retomada após queda/reinício e conta trocada, envio idempotente, cache autorizado e limitado     |
 | COMM-03 | Leitura, digitação e presença | Pendente        | Marcadores por pessoa/thread, privacidade e visibilidade corretas, expiração de digitação, ausência de estados simulados                       |
 | COMM-04 | DMs, contatos e solicitações  | Parcial         | DMs existentes no mesmo espaço preservados; descoberta por username, convites externos, aceitar/recusar e impedir abuso com política explícita |
 | COMM-05 | Grupos e comunidades          | Parcial         | Criar, convidar, entrar/sair, papéis, remoção, dados do grupo, permissões do bot e política de histórico testados                              |
@@ -701,3 +701,30 @@ a extração local da reconciliação removeu regressões de tamanho/complexidad
 polling. Não houve alteração de banco. Quatro capturas e uma sequência de
 16 segundos foram [anexadas via gh --attach](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822).
 Paridade, retenção total limitada e capacidade de produção permanecem abertas.
+
+### Vigésima rodada — encaminhamento com revisão — 29/09/2026
+
+Mensagens e arquivos podem ser encaminhados a DMs e grupos existentes no mesmo
+workspace. O seletor consulta 20 destinos autorizados por página, com cursor
+estável e busca por nome/username. A revisão mostra o destino e o conteúdo antes
+do envio. O servidor revalida ambos os acessos, exige a revisão do original e
+produz uma cópia Matrix independente, marcada como encaminhada, sem autor,
+citação, thread ou permissões da origem. Menções copiadas não acionam o agente.
+
+O build real confirmou busca por `@username`, preservação do rascunho, texto
+recebido e arquivo baixado idêntico ao original. Editar o original em outra aba
+bloqueou o envio até a nova revisão; a versão confirmada chegou ao grupo. A sheet
+mobile e o modal desktop preservam a barra inferior. [Registro](evidence/message-forwarding-2026-09-29.json).
+Sete capturas e uma sequência de 21 segundos foram [anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885992122).
+
+`pnpm check`: 272 arquivos / 1.687 testes; build e exports Expo web/iOS/Android
+passaram. Dois testes reais de Synapse cobrem outro participante, DM privada,
+revogação, retry, 25 destinos paginados e acesso ao arquivo encaminhado após a
+exclusão do original. Os seis checks do checkpoint anterior `f59d7c9a` passaram.
+Sem migração ou dependência nova. A revisão estrutural registra 28 observações,
+nove gating, incluindo wrappers RPC e churn, sem supressões.
+
+Não há encaminhamento em massa ou entre workspaces. Se a confirmação se perder
+e o original mudar antes do retry, o usuário deve conferir o destino e revisar
+a nova versão; não há garantia global de exatamente uma entrega. Retenção total
+do histórico, operação nativa e capacidade de produção continuam abertas.

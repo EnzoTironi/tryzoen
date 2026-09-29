@@ -67,6 +67,9 @@ export function projectMatrixMessage(
   const reply = redacted ? null : originalReply;
   return {
     ...(redacted ? { redacted: true } : {}),
+    ...(!redacted && event.content["org.zoen.forwarded"]
+      ? { forwarded: true }
+      : {}),
     ...(replacement
       ? { editId: replacement.event_id, editedAt: replacement.origin_server_ts }
       : {}),

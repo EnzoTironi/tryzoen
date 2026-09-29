@@ -7,6 +7,7 @@ import { MessageActions } from "../message-actions";
 import { colors } from "../theme";
 import { EditRoomMessage } from "./edit-message";
 import { DeleteRoomMessage } from "./delete-message";
+import { ForwardRoomMessage } from "./forward-message";
 import type { RoomMessages } from "./messages";
 import type { roomMessageSchema, roomReactionSummarySchema } from "./schema";
 
@@ -33,13 +34,18 @@ export function RoomMessageControls({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
-  const [action, setAction] = useState<"save" | "edit" | "delete">();
+  const [action, setAction] = useState<
+    "save" | "edit" | "delete" | "forward"
+  >();
   return (
     <>
       <RoomReactionSummary reaction={item.redacted ? undefined : reaction} />
       <View style={[styles.actions, item.mine && styles.outgoing]}>
         {!item.redacted && (
           <MessageActions
+            onForward={() => {
+              setAction("forward");
+            }}
             onSave={() => {
               setAction("save");
             }}
@@ -180,12 +186,13 @@ function RoomMessageDialog({
   ComponentProps<typeof RoomMessageControls>,
   "data" | "cacheScope" | "roomId" | "item"
 > & {
-  readonly action: "save" | "edit" | "delete";
+  readonly action: "save" | "edit" | "delete" | "forward";
   readonly onClose: () => void;
 }) {
-  if (action === "edit")
+  if (action === "edit" || action === "forward") {
+    const Dialog = action === "edit" ? EditRoomMessage : ForwardRoomMessage;
     return (
-      <EditRoomMessage
+      <Dialog
         data={data}
         cacheScope={cacheScope}
         roomId={roomId}
@@ -193,6 +200,7 @@ function RoomMessageDialog({
         onClose={onClose}
       />
     );
+  }
   const Dialog = action === "save" ? SaveRoomMessage : DeleteRoomMessage;
   return (
     <Dialog

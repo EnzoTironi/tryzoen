@@ -98,6 +98,8 @@ export const acceptMatrixTransaction = async function (
       if (!received.length || !event.room_id) continue;
       // Replacements update existing history; they must not start another agent turn.
       if (event.content["m.relates_to"]?.rel_type === "m.replace") continue;
+      // A copied mention is shared content, not a fresh request to the agent.
+      if (event.content["org.zoen.forwarded"]) continue;
       const bindings = await query<{
         id: string;
         epoch: string;
@@ -180,6 +182,8 @@ function transactionFingerprint(event: z.infer<typeof MatrixEventSchema>) {
       ...event.content,
       "m.new_content": undefined,
       "org.zoen.edit_operation": undefined,
+      "org.zoen.forwarded":
+        event.content["org.zoen.forwarded"] === true ? true : undefined,
     },
     ...(event.unsigned
       ? {

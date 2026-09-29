@@ -179,6 +179,7 @@ const matrixEvent = z.object({
   content: matrixContent.extend({
     "m.new_content": matrixContent.optional(),
     "org.zoen.edit_operation": z.string().optional(),
+    "org.zoen.forwarded": z.boolean().optional(),
   }),
 });
 const redaction = z.object({ redacted_because: z.json().optional() });

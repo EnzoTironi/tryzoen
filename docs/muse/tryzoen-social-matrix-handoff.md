@@ -1504,3 +1504,28 @@ six churn gates; no suppressions. No database change.
 [Four screenshots and a 16-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885515822)
 were attached with `gh --attach`. Physical devices, full parity and production
 capacity remain unqualified.
+
+### Reviewed native message forwarding — wave 20
+
+Existing same-workspace DMs/groups are discoverable with authorized SQL, stable
+20-item cursor pages and literal name/username search. The shared UI requires
+selection, content review and explicit confirmation. The server rechecks both
+memberships and the reviewed revision, copies only allowed content to a native
+Matrix transaction, verifies its receipt and marks it forwarded. It strips source
+attribution, quote/thread relations and mention instructions. Forwarded content
+does not invoke the agent; file bytes remain on the existing native media owner.
+
+Production-build browser verification covered username search, draft preservation,
+text delivery, identical downloaded file and an original changed in another tab.
+The old preview blocked sending until explicit review; the updated copy arrived.
+[Measurements](evidence/message-forwarding-2026-09-29.json) and [seven screenshots plus a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885992122).
+Check passed 272 files / 1,687 tests, production build and all Expo exports passed.
+Two isolated real Synapse tests cover another member, DM isolation, revocation,
+retry, paginated destinations and file access after source redaction. All six CI
+checks on the preceding `f59d7c9a` passed. No dependency or migration was added.
+Structural review: 28 observations, nine gating; no suppressions.
+
+This is one reviewed copy at a time within a workspace. Lost acknowledgement plus
+subsequent source editing requires inspecting the destination and reviewing a new
+version; no global exactly-once claim. Physical devices, bounded total history
+retention and production-capacity qualification remain open.

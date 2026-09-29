@@ -24,7 +24,9 @@ export function MessageActions({
   onDelete,
   onEdit,
   onSave,
+  onForward,
 }: {
+  readonly onForward?: () => void;
   readonly onSave?: () => void;
   readonly onEdit?: () => void;
   readonly onDelete?: () => void;
@@ -89,6 +91,7 @@ export function MessageActions({
               onDone={close}
             />
             <MessageMutationActions
+              onForward={onForward}
               onSave={onSave}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -197,50 +200,39 @@ const styles = StyleSheet.create({
 });
 
 function MessageMutationActions({
+  onForward,
   onSave,
   onEdit,
   onDelete,
   onDone,
 }: Pick<
   ComponentProps<typeof MessageActions>,
-  "onEdit" | "onDelete" | "onSave"
+  "onEdit" | "onDelete" | "onSave" | "onForward"
 > & {
   readonly onDone: () => void;
 }) {
+  const actions = [
+    { label: "Encaminhar", onPress: onForward },
+    { label: "Salvar mensagem", onPress: onSave },
+    { label: "Editar mensagem", onPress: onEdit },
+    { label: "Excluir mensagem", onPress: onDelete },
+  ];
   return (
     <>
-      {onSave && (
-        <ActionButton
-          quiet
-          onPress={() => {
-            onDone();
-            onSave();
-          }}
-        >
-          Salvar mensagem
-        </ActionButton>
-      )}
-      {onEdit && (
-        <ActionButton
-          quiet
-          onPress={() => {
-            onDone();
-            onEdit();
-          }}
-        >
-          Editar mensagem
-        </ActionButton>
-      )}
-      {onDelete && (
-        <ActionButton
-          quiet
-          onPress={() => {
-            onDone();
-            onDelete();
-          }}
-        >
-          Excluir mensagem
-        </ActionButton>
+      {actions.map(
+        ({ label, onPress }) =>
+          onPress && (
+            <ActionButton
+              key={label}
+              quiet
+              onPress={() => {
+                onDone();
+                onPress();
+              }}
+            >
+              {label}
+            </ActionButton>
+          )
       )}
     </>
   );

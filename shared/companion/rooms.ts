@@ -5,6 +5,7 @@ import {
   saveMessageResultSchema,
   roomContextSchema,
   roomSearchPageSchema,
+  roomForwardResultSchema,
 } from "@zoen/companion-ui/rooms";
 import { roomEditResultSchema } from "@zoen/companion-ui/rooms";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
@@ -85,6 +86,18 @@ export function companionRoomData(
     },
     async deleteMessage(input) {
       await rpc.mutation("workspaces.rooms.deleteMessage", input);
+    },
+    async forwardDestinations(input, signal) {
+      return directListSchema.parse(
+        await rpc.query("workspaces.rooms.forwardDestinations", input, {
+          signal,
+        })
+      );
+    },
+    async forwardMessage(input) {
+      return roomForwardResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.forwardMessage", input)
+      );
     },
     async people(input) {
       return directPeopleSchema.parse(

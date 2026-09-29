@@ -323,6 +323,9 @@ function RoomMessage({
             </Text>
           </Pressable>
           {item.bot && <Text style={styles.badge}>IA</Text>}
+          {item.forwarded && !item.redacted && (
+            <Text style={styles.time}>Encaminhada</Text>
+          )}
           {item.editId && !item.redacted && (
             <Text style={styles.time}>Editada</Text>
           )}

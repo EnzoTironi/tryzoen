@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build; persistent synthetic review workspace; Chromium 1512x806 and 390x844",
+  "scope": "Existing human DMs and groups within one workspace; explicit destination review; independent native Matrix copies",
+  "observed": {
+    "destinationSearchByUsername": true,
+    "sourceRoomExcluded": true,
+    "explicitConfirmation": true,
+    "originalComposerDraftPreserved": true,
+    "forwardedTextDelivered": true,
+    "forwardedFileDownloaded": true,
+    "downloadSha256": "c831ffc417d5ec786e7beaab49f698a41b043231383270084410641c9070e3df",
+    "downloadMatchesOriginal": true,
+    "sourceEditedInSecondTab": "Old preview remained visible; send returned changed and disabled confirmation; explicit review showed current text; revised copy then delivered to the selected group",
+    "mobileBottomNavigationPreserved": true
+  },
+  "automated": {
+    "check": {
+      "files": 272,
+      "tests": 1687,
+      "passed": true
+    },
+    "productionBuild": "passed",
+    "expo": ["web", "ios", "android"],
+    "focusedRealSynapse": {
+      "tests": 2,
+      "passed": true,
+      "coverage": [
+        "idempotent transaction retry",
+        "copied mention does not invoke bot",
+        "source revision review",
+        "file read by recipient after source redaction",
+        "private DM isolation",
+        "membership revocation",
+        "20+5 stable destination pagination",
+        "literal search escaping"
+      ]
+    },
+    "structuralReview": {
+      "observations": 28,
+      "gating": 9,
+      "suppressed": false
+    }
+  },
+  "limitations": [
+    "No cross-workspace, bulk or public destination forwarding",
+    "UI verification uses two tabs of the same account; isolated Synapse tests cover another member",
+    "Lost acknowledgement followed by source edit requires inspecting destination and reviewing the new version; no global exactly-once guarantee",
+    "File download waiter timed out but the normal browser download completed and filesystem checksums match",
+    "No physical-device or production-capacity qualification"
+  ],
+  "screenshots": [
+    "01-destination-desktop.png",
+    "02-review-desktop.png",
+    "04-received-desktop.png",
+    "06-review-file-mobile.png",
+    "07-received-file-mobile.png",
+    "08-source-changed-desktop.png",
+    "09-revised-copy-received-desktop.png"
+  ],
+  "video": "21-second screenshot sequence, not a continuous recording",
+  "pullRequestEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5885992122"
+}

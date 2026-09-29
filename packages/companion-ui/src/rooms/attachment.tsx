@@ -15,7 +15,7 @@ export function RoomAttachment({
   cacheScope,
 }: {
   item: z.infer<typeof roomMessageSchema>;
-  data: RoomData;
+  data: Pick<RoomData, "media">;
   roomId: string;
   cacheScope: string;
 }) {

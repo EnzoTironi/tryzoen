@@ -33,6 +33,8 @@ const data: RoomData = {
   context: vi.fn<RoomData["context"]>(),
   editMessage: vi.fn<RoomData["editMessage"]>(),
   deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
+  forwardDestinations: vi.fn<RoomData["forwardDestinations"]>(),
+  forwardMessage: vi.fn<RoomData["forwardMessage"]>(),
   operationId: () => "operation",
   people: vi.fn<RoomData["people"]>(),
   openDirect: vi.fn<RoomData["openDirect"]>(),
