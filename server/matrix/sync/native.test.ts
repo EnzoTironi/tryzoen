@@ -74,7 +74,7 @@ it("accepts bounded native counters and consumes receipt signals without exposin
     encodeURIComponent('"m.receipt"')
   );
   await expect(
-    pollNativeSync("@viewer:test", ["!room:test"], "previous", "typing")
+    pollNativeSync("@viewer:test", ["!room:test"], "previous", "room")
   ).rejects.toThrow(MatrixError);
 });
 it.each([
@@ -104,16 +104,11 @@ it.each([
     pollNativeSync("@viewer:test", ["!room:test"], "previous", "inbox")
   ).rejects.toThrow(MatrixError);
 });
-it("typing uses one-room ephemeral sync and finite native long-poll", async () => {
-  await pollNativeSync(
-    "@viewer:test",
-    ["!room:test"],
-    "native-cursor",
-    "typing"
-  );
+it("focused room shares change signals and typing in a finite native long-poll", async () => {
+  await pollNativeSync("@viewer:test", ["!room:test"], "native-cursor", "room");
   expect(mocks.request).toHaveBeenLastCalledWith(
     "GET",
-    expect.stringContaining("device_id=ZOEN_TYPING_BRIDGE_V1&timeout=10000"),
+    expect.stringContaining("device_id=ZOEN_ROOM_BRIDGE_V1&timeout=10000"),
     undefined,
     "@viewer:test",
     { maxResponseBytes: 65536 }
@@ -124,18 +119,16 @@ it("typing uses one-room ephemeral sync and finite native long-poll", async () =
       "{}"
   );
   expect(filter).toMatchObject({
+    event_fields: ["event_id", "type", "content.user_ids"],
     room: {
       rooms: ["!room:test"],
-      timeline: { types: [] },
+      timeline: {
+        types: ["m.room.message", "m.room.redaction", "m.room.member"],
+      },
       ephemeral: { types: ["m.typing"] },
     },
   });
   await expect(
-    pollNativeSync(
-      "@viewer:test",
-      ["!room:test", "!other:test"],
-      null,
-      "typing"
-    )
+    pollNativeSync("@viewer:test", ["!room:test", "!other:test"], null, "room")
   ).rejects.toThrow(MatrixError);
 });

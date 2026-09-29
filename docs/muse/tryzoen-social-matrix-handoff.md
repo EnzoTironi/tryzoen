@@ -1382,3 +1382,60 @@ zero in 51.4 seconds after it, and resumed fetching on close. Global settings
 overlays and incremental message-history sync remain separate open work.
 [Four screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883888398)
 were attached with `gh --attach`. This is not a production load qualification.
+
+### Room changes and typing share native sync — wave 15
+
+The typing-only reader is replaced by `readMatrixRoomSync` and the shared
+`useRoomSync` hook. One bounded native long-poll covers typing and timeline-change
+signals. The old read contract was removed from server, adapters and web/mobile
+callers. Publication still belongs to `setMatrixTyping` and its existing publisher.
+
+Room/thread history queries no longer refetch periodically. A change or reset
+invalidates the matching history and awaits active sequential refetch before
+acknowledging the sync cursor. If pagination is already in flight, its work is
+left intact and that sync cursor is replayed. Inactive history remains stale.
+Errors show a reconnecting notice and revalidate history authorization. Background,
+offline and disposal continue cancelling the observer.
+
+[An idle browser measurement](evidence/room-sync-2026-09-29.json) changed from five
+history reads plus five typing reads in 48.5 seconds to zero history reads plus
+four combined sync reads in 49.6 seconds. Synapse checks covered new, edited and
+redacted messages, limited timelines and revoked membership. QueryClient tests
+cover pending pagination, delayed results and failure propagation. Application
+checks passed (1,644 tests), as did build and three Expo exports.
+
+Incremental content application is still open: actual changes currently refetch
+loaded pages. This is reduced idle work, not million-user capacity qualification.
+
+A second review tab delivered a new synthetic message and thread reply without
+reloading the receiving desktop/mobile views. Three screenshots and a labelled
+screenshot sequence were [attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884262828).
+
+### Global panels suspend covered observers — wave 16
+
+The shared shell exposes content visibility to inbox and Matrix room/thread
+lifecycle owners. Settings and Agent Activity pause covered sync, reactions and
+history. Closing revalidates access and resumes; online/focus events cannot
+restart a hidden observer. Delayed responses are ignored. The composer keeps
+its draft without a misleading reconnecting hint. Eve execution and the agent
+panel's own data are not stopped.
+
+[The production-build browser observation](evidence/global-visibility-2026-09-29.json)
+measured 8 room-sync, 3 reaction and 11 inbox-sync reads behind Settings in 106.7
+seconds before the fix, and zero in 62.2 seconds afterward. Agent Activity also
+kept covered queries at zero in 76.6 seconds. Closing resumed all four query
+families including history; the inspected sync response was HTTP 200 / ready.
+A synthetic draft survived both transitions.
+
+Combined waves 15/16 validation passed: application check 268 files / 1,647 tests,
+production build, all Expo exports, and the full isolated runtime suite with
+107 files / 421 tests. Initial full runs exposed two fixture races: initial
+Matrix membership projection and repeated parked events during interview restart.
+Fixtures now await confirmed projection and the next question/completed action;
+production authorization and workflows were not weakened.
+
+Four actual screenshots and a labelled 20-second screenshot sequence were
+[attached with `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884555065).
+Structural review reports 31 observations, 16 gating, without suppressions.
+Incremental content patching, native-device and production-capacity qualification
+remain open. Do not infer throughput or million-account readiness from idle UI.

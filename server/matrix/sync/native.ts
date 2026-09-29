@@ -52,24 +52,23 @@ export async function pollNativeSync(
   viewer: string,
   roomIds: string[],
   since: string | null,
-  mode: "inbox" | "typing"
+  mode: "inbox" | "room"
 ) {
-  const typing = mode === "typing";
-  const limit = typing ? 1 : 31;
+  const focused = mode === "room";
+  const limit = focused ? 1 : 31;
   if (roomIds.length > limit) throw new MatrixError({ reason: "unavailable" });
-  const device = typing ? "ZOEN_TYPING_BRIDGE_V1" : "ZOEN_INBOX_BRIDGE_V1";
+  const device = focused ? "ZOEN_ROOM_BRIDGE_V1" : "ZOEN_INBOX_BRIDGE_V1";
   if (!since)
     await matrixRequest(
       "PUT",
       `devices/${device}`,
       {
-        display_name: typing
-          ? "Zoen typing bridge"
-          : "Zoen server inbox bridge",
+        display_name: focused ? "Zoen room bridge" : "Zoen server inbox bridge",
       },
       viewer
     );
   const filter = {
+    event_fields: ["event_id", "type", "content.user_ids"],
     presence: { types: [] },
     account_data: { types: [] },
     room: {
@@ -77,11 +76,11 @@ export async function pollNativeSync(
       include_leave: true,
       state: { types: [] },
       account_data: { types: [] },
-      ephemeral: { types: typing ? ["m.typing"] : ["m.receipt"] },
+      ephemeral: { types: focused ? ["m.typing"] : ["m.receipt"] },
       timeline: {
         limit: 1,
-        types: typing
-          ? []
+        types: focused
+          ? ["m.room.message", "m.room.redaction", "m.room.member"]
           : [
               "m.room.message",
               "m.room.redaction",
@@ -93,10 +92,10 @@ export async function pollNativeSync(
   };
   const response = await matrixRequest(
     "GET",
-    `sync?device_id=${device}&timeout=${typing && since ? 10000 : 0}&set_presence=offline&filter=${encodeURIComponent(JSON.stringify(filter))}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
+    `sync?device_id=${device}&timeout=${focused && since ? 10000 : 0}&set_presence=offline&filter=${encodeURIComponent(JSON.stringify(filter))}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
     undefined,
     viewer,
-    { maxResponseBytes: typing ? 65536 : 1_048_576 }
+    { maxResponseBytes: focused ? 65536 : 1_048_576 }
   );
   return parseNativeSync(response, roomIds, mode);
 }
@@ -105,7 +104,7 @@ export async function pollNativeSync(
 function parseNativeSync(
   response: unknown,
   roomIds: string[],
-  mode: "inbox" | "typing"
+  mode: "inbox" | "room"
 ) {
   const result = nativeSyncSchema.safeParse(response);
   if (!result.success) throw new MatrixError({ reason: "unavailable" });
@@ -118,7 +117,7 @@ function parseNativeSync(
   if (
     Object.values(result.data.rooms?.join ?? {}).some((room) =>
       room.ephemeral?.events.some(
-        (event) => event.type !== (mode === "typing" ? "m.typing" : "m.receipt")
+        (event) => event.type !== (mode === "room" ? "m.typing" : "m.receipt")
       )
     )
   )

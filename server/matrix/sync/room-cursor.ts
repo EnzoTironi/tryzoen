@@ -8,7 +8,7 @@ import {
 } from "../../workspaces/access";
 
 const cursorSchema = z.object({
-  purpose: z.literal("matrix-room-typing-v1"),
+  purpose: z.literal("matrix-room-sync-v1"),
   userId: z.string(),
   sessionId: z.string(),
   workspaceId: z.string(),
@@ -19,7 +19,7 @@ const cursorSchema = z.object({
   userIds: z.array(z.string().max(255)).max(100),
   expiresAt: z.number().int().nonnegative(),
 });
-export async function sealTypingCursor(value: z.infer<typeof cursorSchema>) {
+export async function sealRoomSyncCursor(value: z.infer<typeof cursorSchema>) {
   const cursor = await symmetricEncrypt({
     key: (await (await getAuth()).$context).secretConfig,
     data: JSON.stringify(cursorSchema.parse(value)),
@@ -27,7 +27,7 @@ export async function sealTypingCursor(value: z.infer<typeof cursorSchema>) {
   if (cursor.length > 16384) throw new MatrixError({ reason: "unavailable" });
   return cursor;
 }
-export async function openTypingCursor(
+export async function openRoomSyncCursor(
   actor: z.infer<typeof WorkspaceActorSchema>,
   cursor?: string
 ) {

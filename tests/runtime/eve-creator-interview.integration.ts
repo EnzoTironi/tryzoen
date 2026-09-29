@@ -78,11 +78,26 @@ async function answer(
   state: Awaited<ReturnType<typeof start>>,
   response: { optionId?: string; text?: string }
 ) {
+  const requestId = question(state).requestId;
   await state.server.request(`/probe/input/${state.sessionId}`, {
     auth: state.auth,
-    responses: [{ requestId: question(state).requestId, ...response }],
+    responses: [{ requestId, ...response }],
   });
-  state.events = await state.server.settled(state.sessionId, ++state.count);
+  const turns = ++state.count;
+  // A restarted step can emit another waiting event before the next question.
+  // Observe advancement of the interview, not only the number of parked events.
+  await expect
+    .poll(
+      async () => {
+        state.events = await state.server.settled(state.sessionId, turns);
+        return (
+          question(state).requestId !== requestId ||
+          state.events.some((event) => event.type === "action.result")
+        );
+      },
+      { timeout: 30000 }
+    )
+    .toBe(true);
 }
 
 test("guided interview resumes after restart, permits skip and saves only the exact human-approved addition", async () => {

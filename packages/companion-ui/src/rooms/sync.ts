@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { onlineManager } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { useTypingPublisher } from "./typing-publisher";
 import type { RoomData } from "./schema";
 
-/** One room owner shared by the main and thread composers. Never sends draft text. */
-export function useRoomTyping(
-  data: Pick<RoomData, "setTyping" | "readTyping">,
+/** One native sync for room/thread changes and typing. Never sends draft text. */
+export function useRoomSync(
+  data: Pick<RoomData, "setTyping" | "readSync">,
   cacheScope: string,
   roomId: string,
   enabled: boolean
 ) {
+  const client = useQueryClient();
   const scope = JSON.stringify([cacheScope, roomId, enabled]);
+  const [failure, setFailure] = useState<string>();
   const [snapshot, setSnapshot] = useState<{
     scope: string;
     userIds: string[];
@@ -27,6 +29,26 @@ export function useRoomTyping(
     let failures = 0;
     const allowed = () =>
       enabled && active && onlineManager.isOnline() && !disposed;
+    const history = ["matrix-messages", "matrix-thread"].map((kind) => ({
+      queryKey: [kind, cacheScope, roomId],
+    }));
+    const refresh = async (throwOnError = true) => {
+      if (!allowed()) return;
+      await Promise.all(
+        history.map((filter) =>
+          client.invalidateQueries({ ...filter, refetchType: "none" })
+        )
+      );
+      if (!allowed()) return;
+      await Promise.all(
+        history.map((filter) =>
+          client.refetchQueries(
+            { ...filter, type: "active" },
+            { cancelRefetch: false, throwOnError }
+          )
+        )
+      );
+    };
     const clear = () => {
       clearTimeout(expiry);
       setSnapshot(undefined);
@@ -43,14 +65,23 @@ export function useRoomTyping(
       if (!allowed() || read) return;
       const controller = new AbortController();
       read = controller;
+      const stopped = () => controller.signal.aborted || !allowed();
       try {
-        const result = await data.readTyping(
+        const result = await data.readSync(
           { id: roomId, cursor },
           controller.signal
         );
-        if (controller.signal.aborted || !allowed()) return;
-        if (result.status !== "ready") throw new Error("Typing unavailable");
+        if (stopped()) return;
+        if (result.status !== "ready") throw new Error("Room sync unavailable");
+        if (result.reset || result.timelineChanged) {
+          // Do not cancel a prepend or acknowledge its signal before history catches up.
+          // Replay the same cursor once pagination has finished.
+          if (history.some((filter) => client.isFetching(filter) > 0)) return;
+          await refresh();
+          if (stopped()) return;
+        }
         cursor = result.cursor ?? undefined;
+        setFailure(undefined);
         clear();
         const remaining = Math.min(30000, result.expiresAt - Date.now());
         if (remaining > 0 && result.userIds.length) {
@@ -64,6 +95,9 @@ export function useRoomTyping(
         cursor = undefined;
         clear();
         change(false);
+        setFailure(scope);
+        // An authorization failure must also reach the history queries, which hide stale data.
+        await refresh(false);
       } finally {
         if (read === controller) read = undefined;
         if (!controller.signal.aborted && allowed())
@@ -89,6 +123,10 @@ export function useRoomTyping(
       subscription.remove();
       online();
     };
-  }, [data, roomId, enabled, scope, change]);
-  return { userIds: snapshot?.scope === scope ? snapshot.userIds : [], change };
+  }, [data, cacheScope, roomId, enabled, scope, change, client]);
+  return {
+    userIds: snapshot?.scope === scope ? snapshot.userIds : [],
+    reconnecting: failure === scope,
+    change,
+  };
 }

@@ -3,10 +3,14 @@ import { AppState } from "react-native";
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
 
 /** One lifecycle for a room and its threads; resume always revalidates access. */
-export function useRoomLifecycle(cacheScope: string, roomId: string) {
+export function useRoomLifecycle(
+  cacheScope: string,
+  roomId: string,
+  visible = true
+) {
   const client = useQueryClient();
   const [active, setActive] = useState(
-    AppState.currentState === "active" && onlineManager.isOnline()
+    visible && AppState.currentState === "active" && onlineManager.isOnline()
   );
   useEffect(() => {
     let foreground = AppState.currentState === "active";
@@ -22,7 +26,7 @@ export function useRoomLifecycle(cacheScope: string, roomId: string) {
       }
     };
     const update = () => {
-      const ready = foreground && onlineManager.isOnline();
+      const ready = visible && foreground && onlineManager.isOnline();
       if (!ready) pause();
       setActive(ready);
     };
@@ -37,6 +41,6 @@ export function useRoomLifecycle(cacheScope: string, roomId: string) {
       unsubscribe();
       pause();
     };
-  }, [client, cacheScope, roomId]);
-  return active;
+  }, [client, cacheScope, roomId, visible]);
+  return visible && active;
 }

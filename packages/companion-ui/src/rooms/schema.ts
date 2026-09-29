@@ -43,13 +43,15 @@ export const roomTypingWriteSchema = z.object({
   id: z.uuid(),
   typing: z.boolean(),
 });
-export const roomTypingReadSchema = z.object({
+export const roomSyncReadSchema = z.object({
   id: z.uuid(),
   cursor: z.string().min(1).max(16384).optional(),
 });
-export const roomTypingPageSchema = z.object({
+export const roomSyncPageSchema = z.object({
   status: z.enum(["ready", "unavailable"]),
   cursor: z.string().max(16384).nullable(),
+  timelineChanged: z.boolean(),
+  reset: z.boolean(),
   userIds: z.array(z.string().max(255)).max(100),
   expiresAt: z.number().int().nonnegative(),
 });
@@ -184,10 +186,10 @@ export interface RoomData {
     signal: AbortSignal
   ) => Promise<z.infer<typeof roomSearchPageSchema>>;
   setTyping: (input: z.infer<typeof roomTypingWriteSchema>) => Promise<void>;
-  readTyping: (
-    input: z.infer<typeof roomTypingReadSchema>,
+  readSync: (
+    input: z.infer<typeof roomSyncReadSchema>,
     signal: AbortSignal
-  ) => Promise<z.infer<typeof roomTypingPageSchema>>;
+  ) => Promise<z.infer<typeof roomSyncPageSchema>>;
   savedCleanupState: () => Promise<z.infer<typeof savedCleanupStateSchema>>;
   clearUnavailableSavedMessages: (
     input: z.infer<typeof savedCleanupSchema>

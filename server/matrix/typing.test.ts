@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-import { readMatrixTyping, setMatrixTyping } from "./typing";
+import { setMatrixTyping } from "./typing";
+import { readMatrixRoomSync } from "./sync/room";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 const mocks = vi.hoisted(() => ({
   join: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
@@ -14,9 +15,9 @@ vi.mock("./rooms", () => ({
   requireMatrixRoom: mocks.access,
 }));
 vi.mock("./sync/native", () => ({ pollNativeSync: mocks.native }));
-vi.mock("./typing/cursor", () => ({
-  openTypingCursor: mocks.open,
-  sealTypingCursor: mocks.seal,
+vi.mock("./sync/room-cursor", () => ({
+  openRoomSyncCursor: mocks.open,
+  sealRoomSyncCursor: mocks.seal,
 }));
 vi.mock("./client", async (original) => ({
   ...(await original<typeof import("./client")>()),
@@ -61,7 +62,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 test("initial cached snapshot seeds only and same request replay has fixed expiry", async () => {
-  expect(await readMatrixTyping(actor, { id: room.id })).toMatchObject({
+  expect(await readMatrixRoomSync(actor, { id: room.id })).toMatchObject({
     userIds: [],
     expiresAt: 0,
   });
@@ -73,26 +74,102 @@ test("initial cached snapshot seeds only and same request replay has fixed expir
     userIds: [],
     expiresAt: 0,
   });
-  const first = await readMatrixTyping(actor, { id: room.id, cursor: "same" });
+  const first = await readMatrixRoomSync(actor, {
+    id: room.id,
+    cursor: "same",
+  });
   expect(first).toMatchObject({ userIds: ["@author:test"], expiresAt: 130000 });
   vi.setSystemTime(110000);
   expect(
-    await readMatrixTyping(actor, { id: room.id, cursor: "same" })
+    await readMatrixRoomSync(actor, { id: room.id, cursor: "same" })
   ).toEqual(first);
   vi.setSystemTime(131000);
   expect(
-    await readMatrixTyping(actor, { id: room.id, cursor: "same" })
+    await readMatrixRoomSync(actor, { id: room.id, cursor: "same" })
   ).toMatchObject({ userIds: [], expiresAt: 130000 });
 });
 test("revocation during I/O fails closed and cursor cannot cross room epochs", async () => {
   mocks.access.mockRejectedValue(new WorkspaceAccessDenied());
-  await expect(readMatrixTyping(actor, { id: room.id })).rejects.toBeInstanceOf(
-    WorkspaceAccessDenied
-  );
+  await expect(
+    readMatrixRoomSync(actor, { id: room.id })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   mocks.open.mockResolvedValue({ roomId: room.roomId, epoch: "other" });
   await expect(
-    readMatrixTyping(actor, { id: room.id, cursor: "wrong" })
+    readMatrixRoomSync(actor, { id: room.id, cursor: "wrong" })
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("bootstrap requires reconciliation, but an idle incremental read does not reload history", async () => {
+  expect(await readMatrixRoomSync(actor, { id: room.id })).toMatchObject({
+    reset: true,
+    timelineChanged: false,
+  });
+  mocks.open.mockResolvedValue({
+    roomId: room.roomId,
+    epoch: room.epoch,
+    nextBatch: "s1",
+    issuedAt: 100000,
+    userIds: [],
+  });
+  expect(
+    await readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
+  ).toMatchObject({ reset: false, timelineChanged: false });
+});
+
+test.each(["m.room.message", "m.room.redaction", "m.room.member"])(
+  "%s signals authorized history without copying its body into sync",
+  async (type) => {
+    mocks.open.mockResolvedValue({
+      roomId: room.roomId,
+      epoch: room.epoch,
+      nextBatch: "s1",
+      issuedAt: 100000,
+      userIds: [],
+    });
+    mocks.native.mockResolvedValue({
+      next_batch: "s2",
+      rooms: {
+        join: {
+          [room.roomId]: {
+            timeline: {
+              events: [
+                {
+                  event_id: "$change",
+                  type,
+                  content: { body: "Private content" },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    const result = await readMatrixRoomSync(actor, {
+      id: room.id,
+      cursor: "previous",
+    });
+    expect(result).toMatchObject({ reset: false, timelineChanged: true });
+    expect(JSON.stringify(result)).not.toContain("Private content");
+  }
+);
+
+test("a limited native timeline requests recovery even if its event list is empty", async () => {
+  mocks.open.mockResolvedValue({
+    roomId: room.roomId,
+    epoch: room.epoch,
+    nextBatch: "s1",
+    issuedAt: 100000,
+    userIds: [],
+  });
+  mocks.native.mockResolvedValue({
+    next_batch: "s2",
+    rooms: {
+      join: { [room.roomId]: { timeline: { events: [], limited: true } } },
+    },
+  });
+  expect(
+    await readMatrixRoomSync(actor, { id: room.id, cursor: "previous" })
+  ).toMatchObject({ reset: true, timelineChanged: false });
 });
 test("publisher derives sender, applies finite lease and rejects delegated actors", async () => {
   await setMatrixTyping(actor, { id: room.id, typing: true });

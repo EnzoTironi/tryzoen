@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-29",
+  "environment": "Local production build, synthetic account and Matrix room, Chrome",
+  "scenario": "Global settings modal covering the inbox and room conversation",
+  "baseline": {
+    "revision": "61c34b32 with wave 15 room sync",
+    "durationMs": 106749,
+    "roomSyncRequests": 8,
+    "historyRequests": 0,
+    "reactionRequests": 3,
+    "inboxSyncRequests": 11,
+    "truncated": false
+  },
+  "treatment": {
+    "revision": "same working tree with shared shell visibility",
+    "durationMs": 62194,
+    "roomSyncRequests": 0,
+    "historyRequests": 0,
+    "reactionRequests": 0,
+    "inboxSyncRequests": 0,
+    "truncated": false
+  },
+  "resume": {
+    "observed": "Room sync, authorized history, reactions and inbox sync resumed after the settings modal closed",
+    "lastResponse": {
+      "http": 200,
+      "status": "ready",
+      "reset": false,
+      "timelineChanged": false,
+      "typingCount": 0
+    }
+  },
+  "limitations": [
+    "Single local browser observation, not a throughput or million-user qualification",
+    "Only the shared Matrix room, thread and inbox observers are governed here; Eve agent execution is not stopped",
+    "Physical mobile devices are not qualified by viewport screenshots"
+  ],
+  "agentPanel": {
+    "durationMs": 76571,
+    "roomSyncRequests": 0,
+    "historyRequests": 0,
+    "reactionRequests": 0,
+    "inboxSyncRequests": 0,
+    "truncated": false
+  },
+  "draftVerification": "A newly typed synthetic draft survived opening and closing Settings and Agent Activity. Only that test draft was then cleared with ordinary keyboard input.",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884555065"
+}

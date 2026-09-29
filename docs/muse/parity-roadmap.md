@@ -546,3 +546,75 @@ adapters estruturalmente semelhantes e tamanho do hook; há dois falsos positivo
 de uso em testes. O ciclo de vida permanece no hook existente. A pausa de overlays
 globais de configurações, o sync incremental do histórico e os gates de produção
 continuam abertos. Esta medição local não qualifica capacidade de produção.
+
+### Décima quinta rodada — histórico orientado por mudanças — 29/09/2026
+
+O leitor exclusivo de digitação foi substituído por um sync da conversa. Um
+único long-poll nativo observa digitação e sinais de mensagens, edições,
+exclusões e membership para a conversa e sua thread. O filtro pede somente
+identificadores, tipo e participantes digitando, mantendo os limites de tamanho
+e a validação da resposta. Os cursores continuam vinculados à conta, sessão,
+espaço, sala e época de acesso. O contrato antigo foi removido de todos os clientes.
+
+As queries de histórico não possuem mais timer periódico. Sinais de mudança,
+bootstrap e lacuna revalidam as páginas ativas; páginas inativas ficam stale
+para a próxima abertura. Uma mudança durante paginação não cancela o prepend
+nem avança o cursor de sync: o sinal é repetido depois. A recuperação continua
+sequencial pelo TanStack, preservando os cursores fornecidos pelo servidor.
+Falhas de sync aparecem na conversa e também revalidam o histórico, para que
+revogação não deixe mensagens antigas apresentadas como atuais.
+
+[A medição local](evidence/room-sync-2026-09-29.json), depois do carregamento
+inicial e sem novas mensagens, contou cinco consultas de histórico e cinco de
+digitação em 48,5 segundos no build anterior. No novo build, foram zero consultas
+de histórico, quatro do sync compartilhado e zero do endpoint removido em
+49,6 segundos. É uma comparação de uma conversa parada, sem extrapolação de escala.
+
+As verificações focadas usam QueryClient/InfiniteQueryObserver reais, transporte
+HTTP cancelável e Synapse isolado. Cobrem paginação concorrente, resposta tardia,
+retomada, perda de acesso, chegada/edição/exclusão e lacuna. `pnpm check` passou
+com 268 arquivos e 1.644 testes; `pnpm build` e exports Expo web/iOS/Android passaram.
+
+Ainda é necessário aplicar conteúdo incremental às páginas: quando há mudanças,
+as páginas carregadas são relidas. Também permanecem retenção de âncora em grandes
+rajadas, qualificação em aparelhos, push/E2EE e capacidade de produção.
+
+Referências do contrato: [Matrix sync e filtros](https://spec.matrix.org/latest/client-server-api/#syncing)
+e [paginação infinita do TanStack](https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries).
+
+Uma segunda aba enviou mensagem e resposta sintéticas; o desktop recebeu a
+mensagem e a thread mobile recebeu a resposta sem recarregar. Três capturas e
+uma sequência de aproximadamente 16 segundos foram
+[anexadas com `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884262828).
+O gate completo desta rodada está registrado junto à rodada 16 abaixo.
+
+### Décima sexta rodada — pausa sob painéis globais — 29/09/2026
+
+O shell compartilhado informa a visibilidade da inbox e das conversas. Abrir
+Configurações ou Atividade do agente suspende os observadores Matrix encobertos;
+fechar revalida autorização e retoma o sync. Eventos online/focus e resultados
+atrasados não reativam uma tela encoberta. O rascunho é preservado e o compositor
+encoberto não apresenta aviso de reconexão. A execução Eve e o conteúdo do painel
+do agente continuam com seu ciclo de vida próprio.
+
+[A comparação local](evidence/global-visibility-2026-09-29.json) registrou oito
+consultas de room sync, três de reações e onze de inbox em 106,7 segundos com
+Configurações abertas antes da mudança. Depois, registrou zero nas três famílias
+em 62,2 segundos. O painel do agente manteve zero em 76,6 segundos. Fechar
+Configurações retomou as quatro famílias, incluindo histórico; o sync inspecionado
+retornou HTTP 200 e `ready`. Um rascunho sintético sobreviveu aos dois painéis.
+
+O gate conjunto das rodadas 15/16 passou: `pnpm check` com 268 arquivos e 1.647
+testes, `pnpm build`, exports Expo web/iOS/Android e a suíte isolada completa com
+107 arquivos e 421 testes. As duas primeiras execuções completas revelaram
+corridas nas fixtures: a projeção inicial de membership e um evento de espera
+reemitido após reinício da entrevista. Os testes agora aguardam a projeção
+confirmada e a próxima pergunta/resultado, respectivamente. Não houve relaxamento
+da autorização nem alteração do workflow de produção.
+
+Quatro capturas do build real e um vídeo de aproximadamente 20 segundos composto
+das capturas foram [anexados via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5884555065).
+A revisão estrutural conjunta apontou 31 observações, 16 gating, sem supressões:
+churn, tamanho e repetição de adapters/decodificação de cursor. Esta medição
+local não qualifica aparelhos físicos, conteúdo incremental ou capacidade de
+produção; esses gates permanecem abertos.

@@ -56,7 +56,7 @@ vi.mock("../button", () => ({
 }));
 const data: RoomData = {
   setTyping: vi.fn<RoomData["setTyping"]>(),
-  readTyping: vi.fn<RoomData["readTyping"]>(),
+  readSync: vi.fn<RoomData["readSync"]>(),
   search: vi.fn<RoomData["search"]>(),
   markRead: vi.fn<RoomData["markRead"]>(),
   savedCleanupState: vi.fn<RoomData["savedCleanupState"]>(),

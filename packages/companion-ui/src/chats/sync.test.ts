@@ -7,9 +7,12 @@ const lifecycle = vi.hoisted(() => ({
   effects: [] as (() => void | (() => void))[],
   listeners: new Set<(value: string) => void>(),
   active: "active",
+  visible: true,
   writes: [] as unknown[],
 }));
-vi.mock("react", () => ({
+vi.mock("react", async (original) => ({
+  ...(await original<typeof import("react")>()),
+  useContext: () => lifecycle.visible,
   useEffect: (effect: () => void | (() => void)) =>
     lifecycle.effects.push(effect),
   useRef: (current: unknown) => ({ current }),
@@ -75,6 +78,7 @@ afterEach(() => {
   unmount();
   client.clear();
   lifecycle.active = "active";
+  lifecycle.visible = true;
   lifecycle.writes = [];
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -222,6 +226,67 @@ test("disabled metadata sync refreshes cached head on mount and foreground witho
   state("active");
   await vi.advanceTimersByTimeAsync(0);
   expect(refetch).toHaveBeenCalledTimes(2);
+  expect(sync).not.toHaveBeenCalled();
+});
+
+test("a global panel cancels sync and prevents focus or network events from restarting it", async () => {
+  vi.useFakeTimers();
+  let finish!: (result: Awaited<ReturnType<InboxData["sync"]>>) => void;
+  let signal: AbortSignal | undefined;
+  const sync = vi
+    .fn<InboxData["sync"]>()
+    .mockImplementationOnce((_input, incoming) => {
+      signal = incoming;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    })
+    .mockResolvedValue({ ...reply, inboxChanged: false });
+  SyncHarness(sync);
+  expect(sync).toHaveBeenCalledTimes(1);
+  unmount();
+  lifecycle.visible = false;
+  SyncHarness(sync);
+  expect(signal?.aborted).toBe(true);
+  lifecycle.writes = [];
+  finish({
+    ...reply,
+    notifications: [{ id: "covered", notificationCount: 5, highlightCount: 0 }],
+  });
+  state("background");
+  state("active");
+  onlineManager.setOnline(false);
+  onlineManager.setOnline(true);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(lifecycle.writes).not.toContainEqual(
+    expect.objectContaining({
+      entries: [{ id: "covered", notificationCount: 5, highlightCount: 0 }],
+    })
+  );
+
+  unmount();
+  lifecycle.visible = true;
+  SyncHarness(sync);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sync).toHaveBeenCalledTimes(2);
+  expect(sync.mock.calls[1]?.[0].cursor).toBeUndefined();
+});
+
+test("a covered inbox never refreshes cached metadata when native sync is disabled", async () => {
+  vi.useFakeTimers();
+  lifecycle.visible = false;
+  client.setQueryData(["conversation-inbox", "owner", false, "", "all"], {
+    pages: [1],
+    pageParams: [null],
+  });
+  const sync = vi.fn<InboxData["sync"]>();
+  const refetch = vi.spyOn(client, "refetchQueries");
+  const hook = SyncHarness(sync, true, false);
+  hook.apply();
+  state("active");
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(refetch).not.toHaveBeenCalled();
   expect(sync).not.toHaveBeenCalled();
 });
 

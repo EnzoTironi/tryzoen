@@ -1,8 +1,9 @@
 import { RoomSearch } from "./search";
 import { useRoomLifecycle } from "./lifecycle";
-import { useRoomTyping } from "./typing";
+import { useRoomSync } from "./sync";
 import { RoomTypingIndicator } from "./typing-indicator";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { CompanionVisibility } from "../visibility";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Pressable,
@@ -52,10 +53,11 @@ export function RoomConversation({
   const [searching, setSearching] = useState(false);
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
-  const active = useRoomLifecycle(cacheScope, roomId);
+  const exposed = useContext(CompanionVisibility);
+  const visible = exposed && !details && !profile && !searching;
+  const active = useRoomLifecycle(cacheScope, roomId, visible);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
-  const visible = !details && !profile && !searching;
   const timelineVisible = visible && (!root || wide);
   const reactions = useRoomReactions(
     data,
@@ -72,14 +74,15 @@ export function RoomConversation({
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
-    staleTime: 5_000,
-    enabled: active,
-    refetchInterval: 10_000,
+    staleTime: Infinity,
+    enabled: active && visible,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
   });
   const current = messages.isError ? undefined : messages.data;
   const room = current?.pages[0]?.room;
-  const typing = useRoomTyping(
+  const typing = useRoomSync(
     data,
     cacheScope,
     roomId,
@@ -120,6 +123,11 @@ export function RoomConversation({
               setSearching(true);
             }}
           />
+          {typing.reconnecting && (
+            <Text accessibilityRole="alert" style={styles.syncStatus}>
+              Reconectando… As mensagens podem estar desatualizadas.
+            </Text>
+          )}
           <RoomMessages
             data={data}
             roomId={roomId}
@@ -165,6 +173,7 @@ export function RoomConversation({
             draft={draft}
             disabled={!room || messages.isError}
             paused={!active}
+            visible={visible}
             direct={room?.kind === "direct"}
           />
         </View>
@@ -352,7 +361,7 @@ function RoomThread({
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
   readonly active: boolean;
-  readonly typing: ReturnType<typeof useRoomTyping>;
+  readonly typing: ReturnType<typeof useRoomSync>;
 }) {
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
   const reactions = useRoomReactions(
@@ -370,8 +379,10 @@ function RoomThread({
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
-    refetchInterval: 10_000,
-    enabled: active,
+    staleTime: Infinity,
+    enabled: active && visible,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
   });
   const replies = Array.from(
@@ -394,6 +405,11 @@ function RoomThread({
   );
   return (
     <>
+      {typing.reconnecting && (
+        <Text accessibilityRole="alert" style={styles.syncStatus}>
+          Reconectando… As mensagens podem estar desatualizadas.
+        </Text>
+      )}
       <RoomMessages
         data={data}
         roomId={roomId}
@@ -439,6 +455,7 @@ function RoomThread({
         thread
         disabled={!result.data || result.isError}
         paused={!active}
+        visible={visible}
       />
     </>
   );
@@ -464,6 +481,13 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, minWidth: 0, gap: 4 },
   title: { fontSize: 17, fontWeight: "600", color: colors.ink },
   caption: { fontSize: 12, color: colors.muted, lineHeight: 18 },
+  syncStatus: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
   thread: { width: 320, borderLeftWidth: 1, borderLeftColor: "#ededf0" },
   fullThread: { width: "100%", borderLeftWidth: 0 },
 });

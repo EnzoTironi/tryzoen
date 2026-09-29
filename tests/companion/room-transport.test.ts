@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { companionRoomData } from "../../shared/companion/rooms";
 
-it.each(["messages", "thread", "reactions"] as const)(
+it.each(["messages", "thread", "reactions", "readSync"] as const)(
   "cancels the actual room %s transport when its foreground owner stops",
   async (operation) => {
     const transport = vi.fn<typeof fetch>(

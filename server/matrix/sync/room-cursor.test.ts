@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { openTypingCursor, sealTypingCursor } from "./cursor";
+import { openRoomSyncCursor, sealRoomSyncCursor } from "./room-cursor";
 vi.mock("@db/services/auth", () => ({
   getAuth: async () => ({
     $context: Promise.resolve({
@@ -14,7 +14,7 @@ const actor = {
 };
 test("typing cursor is opaque, purpose-bound, rejects tampering and expires", async () => {
   const envelope = {
-    purpose: "matrix-room-typing-v1" as const,
+    purpose: "matrix-room-sync-v1" as const,
     userId: actor.userId,
     sessionId: actor.authSessionId,
     workspaceId: actor.workspaceId,
@@ -25,20 +25,20 @@ test("typing cursor is opaque, purpose-bound, rejects tampering and expires", as
     userIds: ["@private:test"],
     expiresAt: Date.now() + 30000,
   };
-  const cursor = await sealTypingCursor(envelope);
+  const cursor = await sealRoomSyncCursor(envelope);
   expect(cursor).not.toContain(envelope.nextBatch);
   expect(cursor).not.toContain(envelope.userIds[0]);
-  expect(await openTypingCursor(actor, cursor)).toEqual(envelope);
+  expect(await openRoomSyncCursor(actor, cursor)).toEqual(envelope);
   await expect(
-    openTypingCursor({ ...actor, authSessionId: "other" }, cursor)
+    openRoomSyncCursor({ ...actor, authSessionId: "other" }, cursor)
   ).rejects.toThrow("WorkspaceAccessDenied");
-  await expect(openTypingCursor(actor, `${cursor}changed`)).rejects.toThrow(
+  await expect(openRoomSyncCursor(actor, `${cursor}changed`)).rejects.toThrow(
     "WorkspaceAccessDenied"
   );
   expect(
-    await openTypingCursor(
+    await openRoomSyncCursor(
       actor,
-      await sealTypingCursor({ ...envelope, issuedAt: Date.now() - 86400001 })
+      await sealRoomSyncCursor({ ...envelope, issuedAt: Date.now() - 86400001 })
     )
   ).toBeNull();
 });

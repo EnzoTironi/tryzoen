@@ -1,5 +1,11 @@
 import { SavedRoomMessages } from "../rooms/saved";
-import { useDeferredValue, useState, type ComponentProps } from "react";
+import {
+  useContext,
+  useDeferredValue,
+  useState,
+  type ComponentProps,
+} from "react";
+import { CompanionVisibility } from "../visibility";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -45,7 +51,9 @@ function useConversationInbox(
   input: Omit<z.infer<typeof inboxQuerySchema>, "cursor">
 ) {
   const client = useQueryClient();
+  const visible = useContext(CompanionVisibility);
   const conversations = useInfiniteQuery({
+    enabled: visible,
     queryKey: [
       "conversation-inbox",
       cacheScope,

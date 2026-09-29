@@ -42,11 +42,12 @@ let client: QueryClient;
 let dispose: (() => void) | undefined;
 const key = ["matrix-messages", "account:workspace", "room"];
 
-function LifecycleHarness() {
-  return useRoomLifecycle("account:workspace", "room");
+function LifecycleHarness(visible: boolean) {
+  return useRoomLifecycle("account:workspace", "room", visible);
 }
-function mount() {
-  const enabled = LifecycleHarness();
+function mount(visible = true) {
+  state.effects = [];
+  const enabled = LifecycleHarness(visible);
   const cleanups = state.effects.map((effect) => effect());
   dispose = () => {
     for (const cleanup of cleanups) cleanup();
@@ -136,4 +137,32 @@ test("starts paused in the background and removes both subscriptions on unmount"
   state.enabled = true;
   onlineManager.setOnline(false);
   expect(state.enabled).toBe(true);
+});
+
+test("covered room reads stay paused through focus and network recovery, then revalidate on reveal", async () => {
+  client.setQueryData(key, "previous authorized page");
+  let signal: AbortSignal | undefined;
+  const pending = client
+    .query({
+      queryKey: key,
+      queryFn: ({ signal: incoming }) => {
+        signal = incoming;
+        return new Promise<never>(() => {
+          // The client owns cancellation; this transport deliberately resolves late.
+        });
+      },
+    })
+    .catch((error: unknown) => error);
+  expect(mount(false)).toBe(false);
+  await pending;
+  expect(signal?.aborted).toBe(true);
+  expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+  state.listener?.("active");
+  onlineManager.setOnline(false);
+  onlineManager.setOnline(true);
+  expect(state.enabled).toBe(false);
+  dispose?.();
+  expect(mount()).toBe(true);
+  expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+  expect(client.getQueryData(key)).toBe("previous authorized page");
 });

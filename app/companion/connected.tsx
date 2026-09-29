@@ -111,6 +111,7 @@ export function ConnectedCompanion({
             >
               <CompanionShell
                 section={section}
+                contentVisible={!settingsOpen}
                 conversationOpen={conversationOpen}
                 onShowInbox={() => {
                   navigate("/companion");

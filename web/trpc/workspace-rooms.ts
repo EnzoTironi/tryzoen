@@ -3,11 +3,12 @@ import {
   roomSearchQuerySchema,
   roomSearchPageSchema,
 } from "@zoen/companion-ui/rooms";
-import { setMatrixTyping, readMatrixTyping } from "../../server/matrix/typing";
+import { setMatrixTyping } from "../../server/matrix/typing";
+import { readMatrixRoomSync } from "../../server/matrix/sync/room";
 import {
   roomTypingWriteSchema,
-  roomTypingReadSchema,
-  roomTypingPageSchema,
+  roomSyncReadSchema,
+  roomSyncPageSchema,
 } from "@zoen/companion-ui/rooms";
 import {
   readSavedMessageState,
@@ -81,11 +82,11 @@ export const workspaceRoomsRouter = {
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, () => setMatrixTyping(ctx.actor, input))
     ),
-  readTyping: workspaceProcedure
-    .input(roomTypingReadSchema)
-    .output(roomTypingPageSchema)
+  readSync: workspaceProcedure
+    .input(roomSyncReadSchema)
+    .output(roomSyncPageSchema)
     .query(({ ctx, input, signal }) =>
-      withSignal(signal, () => readMatrixTyping(ctx.actor, input))
+      withSignal(signal, () => readMatrixRoomSync(ctx.actor, input))
     ),
   savedCleanupState: workspaceProcedure
     .output(savedCleanupStateSchema)

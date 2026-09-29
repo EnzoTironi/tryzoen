@@ -1,3 +1,4 @@
+import { readMatrixRoomSync } from "../../server/matrix/sync/room";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -28,8 +29,8 @@ test(
     const viewer = await joinMatrixRoom(fixture.guest, room.id);
     await matrixRequest(
       "PUT",
-      "devices/ZOEN_TYPING_BRIDGE_V1",
-      { display_name: "Zoen typing bridge" },
+      "devices/ZOEN_ROOM_BRIDGE_V1",
+      { display_name: "Zoen room bridge" },
       viewer.matrixId
     );
     const filter = encodeURIComponent(
@@ -73,7 +74,7 @@ test(
       schema.parse(
         await matrixRequest(
           "GET",
-          `sync?device_id=ZOEN_TYPING_BRIDGE_V1&timeout=1000&filter=${filter}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
+          `sync?device_id=ZOEN_ROOM_BRIDGE_V1&timeout=1000&filter=${filter}${since ? `&since=${encodeURIComponent(since)}` : ""}`,
           undefined,
           viewer.matrixId
         )
@@ -140,8 +141,7 @@ test(
   "private scoped typing cursors survive independent sessions and reject cross-user replay",
   { timeout: 120000 },
   async () => {
-    const { readMatrixTyping, setMatrixTyping } =
-      await import("../../server/matrix/typing");
+    const { setMatrixTyping } = await import("../../server/matrix/typing");
     const { WorkspaceAccessDenied } =
       await import("../../server/workspaces/access");
     await using fixture = await workspaceFixture();
@@ -156,8 +156,10 @@ test(
       sql`INSERT INTO public.session(id,token,"userId","expiresAt","updatedAt") SELECT ${secondSession},${randomUUID()},"userId",now()+interval '1 day',now() FROM public.session WHERE id=${fixture.guest.authSessionId}`
     );
     const secondViewer = { ...fixture.guest, authSessionId: secondSession };
-    const seeded = await readMatrixTyping(fixture.guest, { id: room.id });
-    const secondSeeded = await readMatrixTyping(secondViewer, { id: room.id });
+    const seeded = await readMatrixRoomSync(fixture.guest, { id: room.id });
+    const secondSeeded = await readMatrixRoomSync(secondViewer, {
+      id: room.id,
+    });
     expect(seeded).toMatchObject({ status: "ready", userIds: [] });
     expect(seeded.cursor).toBeTruthy();
     // A delayed native join callback acknowledges the already-persisted member;
@@ -184,42 +186,42 @@ test(
       randomUUID()
     );
     await setMatrixTyping(fixture.actor, { id: room.id, typing: true });
-    const first = await readMatrixTyping(fixture.guest, {
+    const first = await readMatrixRoomSync(fixture.guest, {
       id: room.id,
       cursor: seeded.cursor ?? undefined,
     });
     expect(first.status).toBe("ready");
     expect(first.userIds).toHaveLength(1);
-    const second = await readMatrixTyping(secondViewer, {
+    const second = await readMatrixRoomSync(secondViewer, {
       id: room.id,
       cursor: secondSeeded.cursor ?? undefined,
     });
     expect(second.userIds).toEqual(first.userIds);
     await expect(
-      readMatrixTyping(secondViewer, {
+      readMatrixRoomSync(secondViewer, {
         id: room.id,
         cursor: first.cursor ?? undefined,
       })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     await expect(
-      readMatrixTyping(fixture.guestPersonal, {
+      readMatrixRoomSync(fixture.guestPersonal, {
         id: room.id,
         cursor: first.cursor ?? undefined,
       })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
-    const replay = await readMatrixTyping(fixture.guest, {
+    const replay = await readMatrixRoomSync(fixture.guest, {
       id: room.id,
       cursor: seeded.cursor ?? undefined,
     });
     expect(replay.expiresAt).toBe(first.expiresAt);
     await expect(
-      readMatrixTyping(fixture.actor, {
+      readMatrixRoomSync(fixture.actor, {
         id: room.id,
         cursor: first.cursor ?? undefined,
       })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     // A second independently authenticated observer enters while typing is already active.
-    const entering = await readMatrixTyping(fixture.actor, { id: room.id });
+    const entering = await readMatrixRoomSync(fixture.actor, { id: room.id });
     expect(entering.userIds).toEqual([]); // own typing is never displayed
     let retained = first;
     const renew = setInterval(() => {
@@ -228,7 +230,7 @@ test(
     try {
       const until = Date.now() + 22000;
       while (Date.now() < until) {
-        retained = await readMatrixTyping(fixture.guest, {
+        retained = await readMatrixRoomSync(fixture.guest, {
           id: room.id,
           cursor: retained.cursor ?? undefined,
         });
@@ -240,7 +242,7 @@ test(
     await setMatrixTyping(fixture.actor, { id: room.id, typing: false });
     await vi.waitFor(
       async () => {
-        retained = await readMatrixTyping(fixture.guest, {
+        retained = await readMatrixRoomSync(fixture.guest, {
           id: room.id,
           cursor: retained.cursor ?? undefined,
         });
@@ -248,28 +250,28 @@ test(
       },
       { timeout: 15000, interval: 50 }
     );
-    const alreadyTypingSeed = await readMatrixTyping(fixture.guest, {
+    const alreadyTypingSeed = await readMatrixRoomSync(fixture.guest, {
       id: room.id,
     });
     await setMatrixTyping(fixture.actor, { id: room.id, typing: true });
-    const alreadyTyping = await readMatrixTyping(fixture.guest, {
+    const alreadyTyping = await readMatrixRoomSync(fixture.guest, {
       id: room.id,
     });
     expect(alreadyTyping.userIds).toEqual([]);
-    const reconciled = await readMatrixTyping(fixture.guest, {
+    const reconciled = await readMatrixRoomSync(fixture.guest, {
       id: room.id,
       cursor: alreadyTyping.cursor ?? undefined,
     });
     expect(reconciled.userIds).toEqual(first.userIds);
     expect(alreadyTypingSeed.cursor).toBeTruthy();
     await expect(
-      readMatrixTyping(fixture.guest, { id: room.id, cursor: "corrupted" })
+      readMatrixRoomSync(fixture.guest, { id: room.id, cursor: "corrupted" })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     await query(
       sql`DELETE FROM workspace_memberships WHERE workspace_id=${fixture.guest.workspaceId} AND user_id=${fixture.guest.userId}`
     );
     await expect(
-      readMatrixTyping(fixture.guest, {
+      readMatrixRoomSync(fixture.guest, {
         id: room.id,
         cursor: first.cursor ?? undefined,
       })

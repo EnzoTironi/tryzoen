@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { CompanionVisibility } from "../visibility";
 import { AppState } from "react-native";
 import {
   useQueryClient,
@@ -23,7 +24,14 @@ export function useInboxSync(
   focusedRoomId?: string
 ) {
   const client = useQueryClient();
-  const scope = JSON.stringify([cacheScope, input, focusedRoomId, enabled]);
+  const visible = useContext(CompanionVisibility);
+  const scope = JSON.stringify([
+    cacheScope,
+    input,
+    focusedRoomId,
+    enabled,
+    visible,
+  ]);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [reconnecting, setReconnecting] = useState<string | undefined>(
     undefined
@@ -42,7 +50,7 @@ export function useInboxSync(
   useEffect(() => {
     const lifecycle = {
       disposed: false,
-      active: AppState.currentState === "active",
+      active: visible && AppState.currentState === "active",
     };
     let cursor: string | undefined;
     let generation = 0;
@@ -166,7 +174,7 @@ export function useInboxSync(
       }
     };
     const subscription = AppState.addEventListener("change", (state) => {
-      lifecycle.active = state === "active";
+      lifecycle.active = visible && state === "active";
       stop();
       if (lifecycle.active) {
         if (position.current) applyPending();
@@ -195,6 +203,7 @@ export function useInboxSync(
     archived,
     focusedRoomId,
     enabled,
+    visible,
     client,
     scope,
   ]);
