@@ -1,4 +1,5 @@
 import {
+  roomRenameResultSchema,
   roomNotificationsSchema,
   savedCleanupStateSchema,
   savedMessageStateSchema,
@@ -31,6 +32,11 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async rename(input) {
+      return roomRenameResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.rename", input)
+      );
+    },
     async notifications(input, signal) {
       return roomNotificationsSchema.parse(
         await rpc.query("workspaces.rooms.notifications", input, { signal })

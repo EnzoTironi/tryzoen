@@ -1,4 +1,6 @@
 import { RoomNotificationSettings } from "./notifications";
+import { RenameRoom } from "./rename";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   ChevronDown,
@@ -35,9 +37,26 @@ export function RoomDetails({
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const permissions = useQuery({
+    queryKey: ["matrix-room-directory", cacheScope],
+    queryFn: () => data.list(),
+    retry: false,
+  });
   const people = page.members.filter((member) => !member.bot).length;
   const bots = page.members.filter((member) => member.bot).length;
   const members = expanded ? page.members : page.members.slice(0, 6);
+  if (renaming)
+    return (
+      <RenameRoom
+        data={data}
+        cacheScope={cacheScope}
+        room={page.room}
+        onClose={() => {
+          setRenaming(false);
+        }}
+      />
+    );
   return (
     <SheetSurface
       title="Informações do grupo"
@@ -62,6 +81,22 @@ export function RoomDetails({
           <Text accessibilityRole="header" style={styles.name}>
             {page.room.label}
           </Text>
+          {permissions.data?.mayManage && !permissions.isError && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Editar nome do grupo"
+              onPress={() => {
+                setRenaming(true);
+              }}
+              style={{
+                minHeight: 44,
+                justifyContent: "center",
+                paddingHorizontal: 16,
+              }}
+            >
+              <Text style={styles.actionText}>Editar nome</Text>
+            </Pressable>
+          )}
           <Text style={styles.subtitle}>
             {people}
             {page.membersTruncated ? "+" : ""}{" "}

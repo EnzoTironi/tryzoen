@@ -1591,3 +1591,37 @@ Further creator work is deferred. The bounded-history experiment is excluded
 because gap traversal and reading-position preservation need separate qualification;
 existing infinite pagination remains. This does not supply native OS push,
 offline delivery, physical-device or million-user capacity qualification.
+
+### Administrative group-name editing — wave 23
+
+Group details now offer a shared desktop modal/mobile sheet for renaming to
+administrators. Ordinary members do not see the action; the server enforces
+the existing administrative, workspace and session boundaries independently.
+Errors preserve the proposal. A stale expected name returns a conflict and
+requires explicitly loading the latest name before editing again.
+
+`server/matrix/group-name.ts` writes and verifies native `m.room.name`, then
+updates the existing SQL binding label under the membership advisory lock.
+The room ID and epoch stay unchanged. Successful repetition is safe; concurrent
+product edits are serialized. The existing native sync filter now observes
+name events and triggers authorized history recovery. Local caches patch room
+metadata while retaining messages and page cursors; no new observer or store.
+
+The running production build confirmed administrator editing, member visibility,
+remote inbox/conversation updates without reload, an unchanged unsent draft,
+and conflict recovery between two windows. The synthetic name was restored and
+the temporary draft cleared. [Five screenshots and a labelled 15-second sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887918856)
+were attached using `gh --attach`. [Evidence record](evidence/group-name-2026-09-29.json).
+
+Check passed 272 files / 1,701 tests; production build passed. Two focused real
+PostgreSQL/Synapse tests cover native state, remote sync, retries, concurrent
+edits, failed native writes and authorization. All six checks on `a7137cef`
+passed. No dependency or migration was added. Expo exports were not repeated
+in this increment; this is not physical-device qualification. Structural review
+has 13 observations / three gates, without suppression: direct RPC wrappers
+and existing component size remain visible; the new component has a JSX caller.
+
+The native write and SQL projection are not a distributed transaction. A failure
+after the native write is visible and can require retry; there is no global
+exactly-once or external Matrix-client CAS guarantee. Additional creator work,
+full parity and production capacity remain outside this completed increment.

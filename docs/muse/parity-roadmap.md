@@ -797,3 +797,39 @@ O experimento de retenção limitada do histórico foi retirado desta entrega:
 lacunas e preservação da leitura ainda precisam de qualificação própria. A
 paginação infinita existente permanece. Push nativo, operação offline, aparelhos
 físicos, paridade completa e capacidade de produção continuam abertos.
+
+### Vigésima terceira rodada — editar o nome dos grupos — 29/09/2026
+
+Administradores podem editar o nome nas informações do grupo, em modal desktop
+e sheet mobile. Membros comuns não recebem a ação; o servidor também exige a
+permissão administrativa, a sessão e o workspace corretos. O formulário mantém
+o texto em falhas e conflitos. Se outra edição vencer, mostra o nome atual e
+exige carregá-lo antes de editar novamente.
+
+A alteração grava `m.room.name` nativo e verifica a leitura antes de atualizar
+a projeção existente em `workspace_group_bindings`. O lock usado pelas mudanças
+de vínculo também serializa renomeações. Nome esperado protege contra edições
+concorrentes pelo produto; repetir o resultado salvo é seguro. Identidade da
+sala, epoch, mensagens, cursores e rascunhos permanecem. O sync existente observa
+o evento de nome e recupera o histórico autorizado; não há polling adicional.
+
+No build real, outro participante recebeu o novo nome na conversa e no inbox
+sem reload, com rascunho preservado. Duas janelas confirmaram o conflito e sua
+recuperação. O nome original foi restaurado e apenas o rascunho sintético foi
+limpo. Cinco capturas e uma sequência de 15 segundos foram
+[anexadas via `gh --attach`](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5887918856).
+O vídeo é uma sequência de capturas, não gravação contínua.
+[Registro](evidence/group-name-2026-09-29.json).
+
+`pnpm check`: 272 arquivos / 1.701 testes; `pnpm build` passou. Dois testes com
+PostgreSQL/Synapse reais cobrem estado nativo, atualização para outro membro,
+concorrência, retry, falha nativa e autorização. Os seis checks de `a7137cef`
+passaram. Sem dependência ou migração nova. Exports Expo não foram repetidos
+nesta rodada; aparelhos físicos continuam sem qualificação. A revisão
+estrutural registra 13 observações / três gates de adapters diretos e tamanho
+do componente existente, sem supressões; `RenameRoom` é consumido via JSX.
+
+Matrix e PostgreSQL não formam uma transação distribuída: falha após a escrita
+nativa continua visível e pode exigir repetição. Não há garantia global de
+exatamente uma operação ou CAS entre clientes Matrix externos. Criadores
+continuam adiados; paridade completa e capacidade de produção permanecem abertas.

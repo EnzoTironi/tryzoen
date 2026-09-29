@@ -59,6 +59,14 @@ export const roomCreateSchema = z.object({
   operationId: z.uuid(),
   name: z.string().trim().min(1).max(80),
 });
+export const roomRenameSchema = roomCreateSchema.pick({ name: true }).extend({
+  id: roomReadSchema.shape.id,
+  expectedName: roomCreateSchema.shape.name,
+});
+export const roomRenameResultSchema = z.object({
+  status: z.enum(["saved", "conflict"]),
+  room: roomSchema,
+});
 export const roomSendSchema = z
   .object({
     id: z.uuid(),
@@ -210,6 +218,9 @@ export const roomSearchPageSchema = z.object({
 });
 
 export interface RoomData {
+  rename: (
+    input: z.infer<typeof roomRenameSchema>
+  ) => Promise<z.infer<typeof roomRenameResultSchema>>;
   notifications: (
     input: z.infer<typeof roomNotificationsReadSchema>,
     signal?: AbortSignal

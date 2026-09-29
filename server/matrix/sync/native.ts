@@ -102,6 +102,7 @@ export async function pollNativeSync(
           "m.room.redaction",
           "m.reaction",
           "m.room.member",
+          "m.room.name",
         ],
       },
     },
