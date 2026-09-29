@@ -326,7 +326,7 @@ export function Composer({
             accessibilityRole="button"
             accessibilityLabel="Send message"
             hitSlop={4}
-            accessibilityState={{ disabled: !canSend }}
+            aria-disabled={!canSend}
             disabled={!canSend}
             onPress={() => {
               void submit();

@@ -38,6 +38,7 @@ const data: RoomData = {
   saveMessage: vi.fn<RoomData["saveMessage"]>(),
   context: vi.fn<RoomData["context"]>(),
   editMessage: vi.fn<RoomData["editMessage"]>(),
+  reportMessage: vi.fn<RoomData["reportMessage"]>(),
   deleteMessage: vi.fn<RoomData["deleteMessage"]>(),
   forwardDestinations: vi.fn<RoomData["forwardDestinations"]>(),
   forwardMessage: vi.fn<RoomData["forwardMessage"]>(),

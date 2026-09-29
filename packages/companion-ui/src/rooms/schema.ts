@@ -115,6 +115,15 @@ export const roomDeleteSchema = z.object({
   messageId: roomThreadSchema.shape.rootId,
   operationId: z.uuid(),
 });
+export const roomReportSchema = roomDeleteSchema
+  .omit({ operationId: true })
+  .extend({
+    expectedRevision: roomThreadSchema.shape.rootId,
+    reason: z.string().trim().min(1).max(2000),
+  });
+export const roomReportResultSchema = z.object({
+  status: z.enum(["submitted", "uncertain", "limited", "changed"]),
+});
 export const roomEditSchema = roomDeleteSchema.extend({
   text: z.string().trim().min(1).max(8000),
   expectedRevision: roomThreadSchema.shape.rootId,
@@ -380,6 +389,9 @@ export interface RoomData {
   ) => Promise<z.infer<typeof roomEditResultSchema>>;
   markRead: (input: z.infer<typeof roomReadPositionSchema>) => Promise<void>;
   deleteMessage: (input: z.infer<typeof roomDeleteSchema>) => Promise<void>;
+  reportMessage: (
+    input: z.infer<typeof roomReportSchema>
+  ) => Promise<z.infer<typeof roomReportResultSchema>>;
   forwardDestinations: (
     input: z.infer<typeof roomForwardDestinationsSchema>,
     signal: AbortSignal

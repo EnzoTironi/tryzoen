@@ -85,6 +85,11 @@ import {
 } from "@zoen/companion-ui/rooms";
 import { editMatrixMessage } from "../../server/matrix/edits";
 import { roomEditSchema, roomEditResultSchema } from "@zoen/companion-ui/rooms";
+import { reportMatrixMessage } from "../../server/matrix/reports";
+import {
+  roomReportSchema,
+  roomReportResultSchema,
+} from "@zoen/companion-ui/rooms";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
 import {
   markMatrixRoomRead,
@@ -299,6 +304,12 @@ export const workspaceRoomsRouter = {
     .output(roomEditResultSchema)
     .mutation(({ ctx, input, signal }) =>
       withSignal(signal, () => editMatrixMessage(ctx.actor, input))
+    ),
+  reportMessage: workspaceProcedure
+    .input(roomReportSchema)
+    .output(roomReportResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => reportMatrixMessage(ctx.actor, input))
     ),
   deleteMessage: workspaceProcedure
     .input(roomDeleteSchema)

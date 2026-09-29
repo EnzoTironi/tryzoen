@@ -40,7 +40,7 @@ export function FileTree({
                 ? `${open ? "Collapse" : "Expand"} folder ${row.title}`
                 : row.id
             }
-            accessibilityState={row.folder ? { expanded: open } : undefined}
+            aria-expanded={row.folder ? open : undefined}
             onPress={() => {
               if (!row.folder) {
                 onOpen(row.id);

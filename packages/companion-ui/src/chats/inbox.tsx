@@ -247,7 +247,7 @@ export function ConversationInbox({
           <Pressable
             key={label}
             accessibilityRole="tab"
-            accessibilityState={{ selected: filter === label }}
+            aria-selected={filter === label}
             onPress={() => {
               setFilter(label);
             }}

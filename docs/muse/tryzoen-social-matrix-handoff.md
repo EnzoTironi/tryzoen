@@ -1930,3 +1930,19 @@ Browser confirmed instant pending state, reload persistence and mobile unfollow.
 Structural review: 17 observations / eight gates, no acknowledgements. Followed
 thread inbox, automatic subscription on reply and background push remain open.
 CI for preceding commit 757a6057 passed all six jobs before this push.
+
+### Message reports (wave 36, 2026-09-29)
+
+DM/group/thread menus now expose an explicit selected-event report with a
+reviewed reason. The native Synapse queue owns moderation; a private PostgreSQL
+admission receipt prevents duplicate provider POSTs and caps new admissions at
+ten per rolling day. Lost acknowledgements remain uncertain without automatic
+retry. Human sessions, membership and exact message revisions are checked.
+Migration 0095 is additive and was applied only to isolated/review databases.
+See `docs/operations/matrix-moderation.md` for admin review and retention limits.
+
+Real PostgreSQL/Synapse tests passed, as did the full check (280 files / 1,740
+tests, nine tasks), build and desktop/mobile browser review. Shared radio/tab
+controls now expose actual selection in React Native Web through native-supported
+ARIA aliases. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895341092.
+Blocking, appeals, staffing and review SLA remain separate release gates.

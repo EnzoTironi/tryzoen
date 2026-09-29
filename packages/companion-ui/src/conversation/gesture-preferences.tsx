@@ -91,14 +91,11 @@ export function MessageGestureSettings() {
           <Pressable
             key={emoji ?? "off"}
             accessibilityRole="radio"
-            aria-checked={preference.data === emoji}
             accessibilityLabel={
               emoji ? `Reagir com ${emoji}` : "Desativar duplo toque"
             }
-            accessibilityState={{
-              checked: preference.data === emoji,
-              disabled: preference.isPending || save.isPending,
-            }}
+            aria-checked={preference.data === emoji}
+            aria-disabled={preference.isPending || save.isPending}
             disabled={preference.isPending || save.isPending}
             onPress={() => {
               save.mutate(emoji);

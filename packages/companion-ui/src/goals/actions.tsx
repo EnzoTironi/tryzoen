@@ -155,7 +155,7 @@ function GoalActionMenu({
           key={id}
           accessibilityRole="button"
           disabled={pending}
-          accessibilityState={{ disabled: pending }}
+          aria-disabled={pending}
           onPress={() => {
             onAction(id);
           }}

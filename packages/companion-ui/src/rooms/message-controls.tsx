@@ -1,3 +1,4 @@
+import { ReportRoomMessage } from "./report-message";
 import { PinRoomMessage } from "./pins";
 import { RoomReactors } from "./reactors";
 import { SaveRoomMessage } from "./save-message";
@@ -43,7 +44,7 @@ export function RoomMessageControls({
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
   const [action, setAction] = useState<
-    "save" | "edit" | "delete" | "forward" | "reactors" | "pin"
+    "save" | "edit" | "delete" | "forward" | "reactors" | "pin" | "report"
   >();
   return (
     <>
@@ -87,6 +88,13 @@ export function RoomMessageControls({
                     setAction("edit");
                   }
                 : undefined
+            }
+            onReport={
+              item.mine
+                ? undefined
+                : () => {
+                    setAction("report");
+                  }
             }
             onDelete={
               item.mine
@@ -230,9 +238,25 @@ function RoomMessageDialog({
   ComponentProps<typeof RoomMessageControls>,
   "data" | "cacheScope" | "roomId" | "item" | "onProfile"
 > & {
-  readonly action: "save" | "edit" | "delete" | "forward" | "reactors" | "pin";
+  readonly action:
+    | "save"
+    | "edit"
+    | "delete"
+    | "forward"
+    | "reactors"
+    | "pin"
+    | "report";
   readonly onClose: () => void;
 }) {
+  if (action === "report")
+    return (
+      <ReportRoomMessage
+        data={data}
+        roomId={roomId}
+        item={item}
+        onClose={onClose}
+      />
+    );
   if (action === "pin")
     return (
       <PinRoomMessage

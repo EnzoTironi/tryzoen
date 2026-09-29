@@ -135,7 +135,7 @@ export function SettingsPanel({
             <View style={styles.divider} />
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: signingOut }}
+              aria-disabled={signingOut}
               disabled={signingOut}
               onPress={onSignOut}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}

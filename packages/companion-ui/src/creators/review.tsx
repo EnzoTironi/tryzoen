@@ -108,10 +108,8 @@ export function CreatorPreviewReview({
               key={verdict}
               accessibilityRole="radio"
               accessibilityLabel={creatorReviewVerdicts[verdict]}
-              accessibilityState={{
-                checked: confirmed && value.verdict === verdict,
-                disabled: save.isPending,
-              }}
+              aria-checked={confirmed && value.verdict === verdict}
+              aria-disabled={save.isPending}
               disabled={save.isPending}
               style={{
                 minHeight: 44,

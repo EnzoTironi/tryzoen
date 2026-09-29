@@ -1,3 +1,4 @@
+import { roomReportResultSchema } from "@zoen/companion-ui/rooms";
 import {
   roomPinsSchema,
   roomPinResultSchema,
@@ -167,6 +168,11 @@ export function companionRoomData(
     async editMessage(input) {
       return roomEditResultSchema.parse(
         await rpc.mutation("workspaces.rooms.editMessage", input)
+      );
+    },
+    async reportMessage(input) {
+      return roomReportResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.reportMessage", input)
       );
     },
     async deleteMessage(input) {

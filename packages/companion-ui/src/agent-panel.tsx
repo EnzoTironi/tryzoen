@@ -49,7 +49,7 @@ export function AgentPanel({
               key={id}
               accessibilityRole="tab"
               accessibilityLabel={label}
-              accessibilityState={{ selected: tab === id }}
+              aria-selected={tab === id}
               onPress={() => {
                 setTab(id);
               }}

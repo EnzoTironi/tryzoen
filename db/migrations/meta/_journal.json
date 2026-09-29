@@ -666,6 +666,13 @@
       "when": 1790678168453,
       "tag": "0094_group-membership-retry",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1790701376832,
+      "tag": "0095_matrix-message-reports",
+      "breakpoints": true
     }
   ]
 }

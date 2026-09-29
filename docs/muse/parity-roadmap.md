@@ -1250,3 +1250,39 @@ Os demais apontamentos incluem wrappers de contrato, churn e componentes JSX;
 nenhuma supressão foi adicionada.
 
 Evidência visual desktop/mobile: [indicador, participantes e preferências](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5894839282), com imagens e vídeo composto anexados por `gh --attach`.
+
+### Rodada 36 — denúncia de mensagens no Matrix — 29/09/2026
+
+COMM-09 ganha denúncia explícita no menu compartilhado de DMs, grupos e threads.
+A interface mostra a mensagem escolhida, exige um motivo e explica que o evento,
+sua autoria e o motivo chegam à moderação. Mobile usa sheet; desktop usa modal.
+Não há coleta de mensagens vizinhas, denúncia automática, bloqueio implícito ou
+promessa de remoção do conteúdo.
+
+O servidor valida sessão humana, participação atual e revisão exata antes de
+usar o endpoint nativo Matrix. O evento editado é denunciado por seu próprio ID;
+uma edição concorrente exige rever a mensagem. Mensagens próprias, invisíveis e
+atores revogados são recusados. Um recibo PostgreSQL sem motivo ou corpo privado
+impede duplicação por pessoa/evento entre sessões e workers. Dez admissões por
+24 horas são conferidas com consulta indexada limitada e lock por pessoa.
+A intenção é persistida antes do POST, que não oferece idempotência nativa:
+resposta perdida ou interrupção fica incerta e nunca reenvia automaticamente.
+O recibo não substitui a fila de moderação, que continua sendo do Synapse.
+
+Migração aditiva 0095 aplicada somente ao banco isolado/review. O teste com
+PostgreSQL e Synapse reais observa a fila de denúncias e prova envio único sob
+concorrência e resposta perdida, revisão editada, thread, limite e revogação.
+Operação e limites: [moderação Matrix](../operations/matrix-moderation.md).
+
+O check serial passou com 280 arquivos / 1.740 testes e nove tarefas; build
+passou. A revisão real confirmou o envio, o recibo ao repetir a mesma mensagem
+e os layouts desktop/mobile. A seleção de motivo expõe `aria-checked`; abas,
+radios, expansões e botões compartilhados passaram aos aliases ARIA suportados
+por React Native e React Native Web. Não houve mudança de permissões ou dados
+nos controles existentes.
+
+Revisão estrutural: 24 observações / 14 gates, sem supressões. Incluem churn
+dos donos existentes, wrappers RPC tipados e tamanho/condições do formulário;
+a indicação de componente sem uso é uma limitação da análise de chamadas JSX.
+[Menu, revisão e recibo, com imagens e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5895341092)
+anexados com `gh --attach`. Não houve deploy de produção.

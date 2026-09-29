@@ -159,7 +159,6 @@ export default function ReactionPicker({
                     accessibilityRole="tab"
                     accessibilityLabel={item.name}
                     aria-selected={category === index}
-                    accessibilityState={{ selected: category === index }}
                     onPress={() => {
                       setCategory(index);
                     }}

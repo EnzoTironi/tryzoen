@@ -8,6 +8,7 @@ import {
   Bookmark,
   Pencil,
   Trash2,
+  Flag,
   MessageCircle,
   Smile,
   Pin,
@@ -29,6 +30,7 @@ export function MessageActions({
   reactionCount,
   onReact,
   onDelete,
+  onReport,
   onEdit,
   onSave,
   onForward,
@@ -43,6 +45,7 @@ export function MessageActions({
   readonly onSave?: () => void;
   readonly onEdit?: () => void;
   readonly onDelete?: () => void;
+  readonly onReport?: () => void;
   readonly onThread?: () => void;
   readonly onViewReactions?: () => void;
   readonly onUnread?: () => void;
@@ -175,11 +178,17 @@ export function MessageActions({
                 ]}
               />
             </View>
-            {onDelete && (
+            {(onDelete ?? onReport) && (
               <View style={styles.divider}>
                 <MessageMenuGroup
                   onClose={close}
                   items={[
+                    {
+                      icon: Flag,
+                      label: "Denunciar mensagem",
+                      onPress: onReport,
+                      destructive: true,
+                    },
                     {
                       icon: Trash2,
                       label: "Excluir mensagem",

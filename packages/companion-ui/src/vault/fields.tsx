@@ -62,10 +62,8 @@ export function VaultFields({
               key={value}
               accessibilityRole="radio"
               accessibilityLabel={value}
-              accessibilityState={{
-                checked: values.identifierType === value,
-                disabled: pending,
-              }}
+              aria-checked={values.identifierType === value}
+              aria-disabled={pending}
               disabled={pending}
               onPress={() => {
                 onChange("identifierType", value);

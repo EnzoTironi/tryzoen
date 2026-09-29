@@ -27,6 +27,7 @@ export * from "./feed";
 export * from "./workspace-agents";
 export * from "./personal-trust";
 export * from "./matrix";
+export * from "./matrix-reports";
 export * from "./matrix-direct";
 export * from "./matrix-activity";
 export * from "./model-connections";
