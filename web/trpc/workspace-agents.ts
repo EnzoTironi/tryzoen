@@ -1,4 +1,4 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { withSignal } from "../../server/operations/async";
 import { WhatsAppBridgeUnavailable } from "../../server/whatsapp/client";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";

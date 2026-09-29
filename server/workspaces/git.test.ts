@@ -9,16 +9,14 @@ test("exports real Git history and restores prior file contents from a fresh bun
   const initial = await publishWorkspaceGit({
     bundle: null,
     parent: null,
-    path: "knowledge/plan.md",
-    content: "# Original\n",
+    changes: [{ path: "knowledge/plan.md", content: "# Original\n" }],
     message: "Create plan",
   });
   expect(initial.bundle.subarray(0, 16).toString()).toContain("git bundle");
   const updated = await publishWorkspaceGit({
     bundle: initial.bundle,
     parent: initial.revision,
-    path: "knowledge/plan.md",
-    content: "# Revised\n",
+    changes: [{ path: "knowledge/plan.md", content: "# Revised\n" }],
     message: "Revise plan",
   });
   const previous = await readWorkspaceGit(
@@ -36,8 +34,7 @@ test("exports real Git history and restores prior file contents from a fresh bun
   const deleted = await publishWorkspaceGit({
     bundle: updated.bundle,
     parent: updated.revision,
-    path: "knowledge/plan.md",
-    content: null,
+    changes: [{ path: "knowledge/plan.md", content: null }],
     message: "Remove plan",
   });
   expect(
@@ -52,17 +49,22 @@ test("adds a published skill and removes its proposal in one revision", async ()
   const drafted = await publishWorkspaceGit({
     bundle: null,
     parent: null,
-    path: "proposals/skills/inbox.md",
-    content: "---\nrequires: []\n---\n# Inbox\n",
+    changes: [
+      {
+        path: "proposals/skills/inbox.md",
+        content: "---\nrequires: []\n---\n# Inbox\n",
+      },
+    ],
     message: "Propose inbox",
   });
   const published = await publishWorkspaceGit({
     bundle: drafted.bundle,
     parent: drafted.revision,
-    path: "skills/inbox.md",
-    content: "---\nrequires: []\n---\n# Inbox\n",
+    changes: [
+      { path: "skills/inbox.md", content: "---\nrequires: []\n---\n# Inbox\n" },
+      { path: "proposals/skills/inbox.md", content: null },
+    ],
     message: "Publish inbox",
-    remove: "proposals/skills/inbox.md",
   });
   expect(
     (await readWorkspaceGit(published.bundle, published.revision)).files
@@ -86,8 +88,7 @@ test.each([
     publishWorkspaceGit({
       bundle: null,
       parent: null,
-      path,
-      content: "content",
+      changes: [{ path, content: "content" }],
       message: "Invalid",
     })
   ).then(
@@ -102,8 +103,7 @@ test("enforces byte limits and rejects corrupt bundles instead of returning miss
     publishWorkspaceGit({
       bundle: null,
       parent: null,
-      path: "knowledge/large.md",
-      content: "🌳".repeat(100_000),
+      changes: [{ path: "knowledge/large.md", content: "🌳".repeat(100_000) }],
       message: "Too large",
     })
   ).then(

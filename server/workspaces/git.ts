@@ -1,7 +1,8 @@
 import {
   GitRevisionSchema,
   WorkspacePathSchema,
-} from "@shared/workspaces/files";
+  WorkspaceChangesSchema,
+} from "@zoen/companion-ui/workspace-files";
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -199,57 +200,65 @@ export const searchWorkspaceGit = async function (
   });
 };
 
+async function stageWorkspaceChanges(
+  { directory, repository }: { directory: string; repository: string },
+  changes: z.output<typeof WorkspaceChangesSchema>
+) {
+  for (const { content } of changes) {
+    if (
+      content !== null &&
+      Buffer.byteLength(content) > workspaceGitLimits.fileBytes
+    )
+      throw new WorkspaceGitError({ reason: "too_large" });
+    if (content?.includes("\0"))
+      throw new WorkspaceGitError({ reason: "invalid_file" });
+  }
+  // Remove first so a batch may replace a file with a directory, or vice versa.
+  for (const { path, content } of changes) {
+    if (content === null)
+      await git(repository, ["update-index", "--force-remove", "--", path]);
+  }
+  for (const { path, content } of changes) {
+    if (content === null) continue;
+    const file = `${directory}/content`;
+    await fs.writeFile(file, content, { mode: 0o600 });
+    const blob = (
+      await git(repository, ["hash-object", "-w", "--", file])
+    ).trim();
+    await git(repository, [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `100644,${blob},${path}`,
+    ]);
+  }
+}
+
 export const publishWorkspaceGit = async function (input: {
   readonly bundle: Uint8Array | null;
   readonly parent: string | null;
-  readonly path: string;
-  readonly content: string | null;
+  readonly changes: z.input<typeof WorkspaceChangesSchema>;
   readonly message: string;
-  readonly remove?: string;
 }) {
   return withBundle(input.bundle, async ({ directory, repository }) => {
-    const path = await WorkspacePathSchema.parseAsync(input.path);
-    const removed =
-      input.remove === undefined
-        ? null
-        : await WorkspacePathSchema.parseAsync(input.remove);
-    if (removed === path)
-      throw new WorkspaceGitError({ reason: "invalid_file" });
+    const changes = await WorkspaceChangesSchema.parseAsync(input.changes);
     const parent =
       input.parent === null
         ? null
         : await GitRevisionSchema.parseAsync(input.parent);
-    if (
-      input.content !== null &&
-      Buffer.byteLength(input.content) > workspaceGitLimits.fileBytes
-    )
-      throw new WorkspaceGitError({ reason: "too_large" });
-    if (input.content?.includes("\0"))
-      throw new WorkspaceGitError({ reason: "invalid_file" });
     if (parent) await git(repository, ["read-tree", parent]);
-    if (input.content === null)
-      await git(repository, ["update-index", "--force-remove", "--", path]);
-    else {
-      const file = `${directory}/content`;
-      await fs.writeFile(file, input.content, { mode: 0o600 });
-      const blob = (
-        await git(repository, ["hash-object", "-w", "--", file])
-      ).trim();
-      await git(repository, [
-        "update-index",
-        "--add",
-        "--cacheinfo",
-        `100644,${blob},${path}`,
-      ]);
-    }
-    if (removed)
-      await git(repository, ["update-index", "--force-remove", "--", removed]);
+    await stageWorkspaceChanges({ directory, repository }, changes);
     const tree = (await git(repository, ["write-tree"])).trim();
     const files = (
       await git(repository, ["ls-tree", "-r", "--name-only", "-z", tree])
     )
       .split("\0")
       .filter(Boolean);
+    if (
+      files.filter((path) => path.startsWith("proposals/knowledge/")).length >
+      24
+    )
+      throw new WorkspaceGitError({ reason: "too_large" });
     if (files.length > workspaceGitLimits.files)
       throw new WorkspaceGitError({ reason: "too_large" });
     const revision = (

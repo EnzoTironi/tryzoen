@@ -680,6 +680,13 @@
       "when": 1790704523040,
       "tag": "0096_group-avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1790710137773,
+      "tag": "0097_workspace-publication",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,7 @@ import { WorkspaceRepository } from "../workspaces/repository";
 import {
   WorkspacePathSchema,
   GitRevisionSchema,
-} from "@shared/workspaces/files";
+} from "@zoen/companion-ui/workspace-files";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { LearnedMemory } from "../memory/learned";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";

@@ -91,6 +91,14 @@
     "./local-messages": {
       "types": "./dist/conversation/local-messages.d.ts",
       "default": "./dist/conversation/local-messages.js"
+    },
+    "./knowledge": {
+      "types": "./dist/library/knowledge-schema.d.ts",
+      "default": "./dist/library/knowledge-schema.js"
+    },
+    "./workspace-files": {
+      "types": "./dist/library/files-schema.d.ts",
+      "default": "./dist/library/files-schema.js"
     }
   },
   "dependencies": {

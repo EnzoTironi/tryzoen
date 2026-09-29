@@ -2039,3 +2039,41 @@ Greenfield removal of obsolete code/schemas/APIs/configuration is authorized;
 no backward-compatibility, dual writes/reads or data backfills unless requested.
 Correctness invariants and deterministic setup remain required, and applied
 migration rewrites require resetting affected development/test databases.
+
+### Reviewed knowledge changes — K1 / wave 41
+
+Merged PR 152 at `b700ad48d51d8426ac0097dee1556e269dd00e16` after all six
+required checks passed, then started `codex/unified-knowledge` from that head.
+
+The native knowledge proposal tool, transactional multi-file publisher and
+shared Library reviewer are implemented. Review shows current/proposed file
+contents, dependencies and exact source revisions. An administrator approves or
+rejects a whole proposal; the generic editor and agent document save tool cannot
+bypass that review for proposals or canonical model/definition/routing writes.
+Operation replay, historical proposal access, final authorization and CAS remain
+at the existing repository owner. Receipt paths are now an array, with no dual
+receipt format. Workspace schemas moved to the shared UI package as the single
+web/Expo/server contract.
+
+The isolated integration verifies multi-file approval, member restrictions,
+private/team separation, historical citation content, draft removal, replay,
+concurrent approve/reject, changed-source conflict, no partial publication,
+revoked memberships, generic-editor rejection and the actual native proposal
+call. Existing repository/model/skill tests and native tools also passed during
+this slice. Migration 0097 requires empty disposable workspace repository
+records; only the named isolated/local review tables were cleared and migrated.
+See `local-runtime-setup.md` before upgrading another development database.
+
+The desktop and mobile browser flow uses synthetic budget files. It does not
+execute Malloy or use external provider data. Full K1, Akita replacement, retained
+filesystem, semantic projections and dreams remain open in `knowledge-plan.md`;
+creator work remains deferred. Do not report this as complete Muse/TextQL parity
+or proven million-user capacity.
+
+Final validation: `pnpm check --concurrency=1` passes all nine tasks, 280 test
+files and 1,742 tests; `pnpm build` passes. The final isolated knowledge suite
+passes four cases. Chrome verifies the mobile review sheet, desktop modal,
+file selection, citations, successful publication and the updated visual editor.
+The definition and model histories both show revision `466bc6b` from the same
+publication. Image evidence and a clearly labeled screenshot-sequence video
+are attached to the current pull request using `gh --attach`.

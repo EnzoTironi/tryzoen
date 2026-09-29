@@ -1,6 +1,6 @@
 import type { DocumentHistoryData } from "@zoen/companion-ui";
 import { z } from "zod";
-import { workspaceRevisionSchema } from "../workspaces/files";
+import { workspaceRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { companionFilesSchema } from "./schema";
 
 export function companionDocumentHistory(

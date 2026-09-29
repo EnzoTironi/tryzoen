@@ -1,4 +1,4 @@
-import { WorkspacePathSchema } from "@shared/workspaces/files";
+import { WorkspacePathSchema } from "@zoen/companion-ui/workspace-files";
 import { z } from "zod";
 
 const toolId = /^[a-z][a-zA-Z0-9._-]{0,79}$/;

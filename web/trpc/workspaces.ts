@@ -11,7 +11,7 @@ import { searchComposerReferences } from "../../server/workspaces/references";
 import {
   GitRevisionSchema,
   WorkspacePathSchema,
-} from "@shared/workspaces/files";
+} from "@zoen/companion-ui/workspace-files";
 import {
   reminderStatusSchema,
   reminderHistoryInputSchema,
@@ -73,7 +73,43 @@ import {
   LearnedMemory,
   LearnedMemoryWriteSchema,
 } from "../../server/memory/learned";
+import {
+  listKnowledgeProposals,
+  readKnowledgeProposal,
+  reviewKnowledgeProposal,
+  ReviewKnowledgeSchema,
+} from "../../server/workspaces/knowledge";
+import { knowledgeProposalPathSchema } from "@zoen/companion-ui/knowledge";
 export const workspacesRouter = {
+  knowledge: {
+    proposals: workspaceProcedure.query(({ ctx, signal }) =>
+      withSignal(signal, () => listKnowledgeProposals(ctx.actor))
+    ),
+    proposal: workspaceProcedure
+      .input(z.object({ path: knowledgeProposalPathSchema }))
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () => readKnowledgeProposal(ctx.actor, input.path))
+      ),
+    review: workspaceProcedure
+      .input(ReviewKnowledgeSchema)
+      .mutation(({ ctx, input, signal }) =>
+        withSignal(signal, async () => {
+          try {
+            return await reviewKnowledgeProposal(ctx.actor, input);
+          } catch (error) {
+            if (error instanceof WorkspaceRepositoryError)
+              throw new TRPCError({
+                code: error.reason === "conflict" ? "CONFLICT" : "BAD_REQUEST",
+                message:
+                  error.reason === "conflict"
+                    ? "The files changed. Refresh this proposal before reviewing it."
+                    : "Unable to review this proposal.",
+              });
+            throw error;
+          }
+        })
+      ),
+  },
   linkPreview: workspaceProcedure
     .input(linkPreviewInputSchema)
     .output(linkPreviewSchema)
@@ -261,13 +297,14 @@ export const workspacesRouter = {
         return {
           ...result,
           canEdit:
-            ctx.actor.role !== "member" ||
-            Boolean(
-              input.path &&
-              (input.path.startsWith("knowledge/") ||
-                input.path.startsWith("proposals/skills/") ||
-                input.path.startsWith("proposals/tools/"))
-            ),
+            !input.path?.startsWith("proposals/knowledge/") &&
+            (ctx.actor.role !== "member" ||
+              Boolean(
+                input.path &&
+                (input.path.startsWith("knowledge/") ||
+                  input.path.startsWith("proposals/skills/") ||
+                  input.path.startsWith("proposals/tools/"))
+              )),
         };
       })
     ),

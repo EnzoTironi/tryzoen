@@ -47,7 +47,7 @@ export const workspaceRevisions = pgTable(
     parentRevision: text("parent_revision"),
     operationId: uuid("operation_id").notNull(),
     requestHash: text("request_hash").notNull(),
-    path: text("path").notNull(),
+    paths: text("paths").array().notNull(),
     authorUserId: text("author_user_id").notNull(),
     source: text("source").notNull().default("editor"),
     sourceSha256: text("source_sha256"),
@@ -64,6 +64,10 @@ export const workspaceRevisions = pgTable(
     check(
       "workspace_revision_revision_check",
       sql`${table.revision} ~ '^[a-f0-9]{40}$'`
+    ),
+    check(
+      "workspace_revision_paths_check",
+      sql`cardinality(${table.paths}) BETWEEN 1 AND 24`
     ),
     index("workspace_revision_history").on(
       table.workspaceId,

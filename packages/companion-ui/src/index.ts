@@ -64,3 +64,5 @@ export {
   MessageGestureSettings,
   type GesturePreferenceStorage,
 } from "./conversation/gesture-preferences";
+
+export type { KnowledgeProposalData } from "./library/knowledge";

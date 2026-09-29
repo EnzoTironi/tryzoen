@@ -139,3 +139,45 @@ The running local production build also verifies Library filtering, exact source
 editing, saved revision reload and historical preview in Chrome. The editor
 surface can shrink on mobile so long filenames do not push actions off-screen.
 This is browser verification, not physical Expo-device qualification.
+
+## K1 progress — reviewed multi-file publication (29 September 2026)
+
+The existing repository now publishes up to 24 file changes as one Git revision
+and one PostgreSQL operation receipt. The receipt records every touched path;
+history for each file points at the same publication. The Git staging contract
+was replaced directly; individual editor saves compose the same publisher.
+The workspace path/revision schemas now have one owner in the shared UI package,
+used by server, web and Expo without a legacy re-export.
+
+`workspace-knowledge-propose` stages a bounded JSON proposal in
+`proposals/knowledge/`. A proposal includes its base revision, title, reason,
+exact file changes, dependencies and citations. Authorized historical file
+citations must contain the cited excerpt. The review checks current content
+against the base for changed files, dependencies and cited workspace files.
+Unrelated edits can coexist; changed sources block approval. Model/definition/
+routing writes from the agent's generic save tool are denied. Requested ordinary
+documents still use the direct save tool. Neither path executes an analysis model.
+
+Library adds Review changes with the same React Native UI on web/Electron and
+Expo: desktop modal, mobile sheet, current/proposed contents, file selection and
+sources. Members can propose and inspect; administrators publish or reject.
+Publication updates all files and removes the draft in one commit. Rejection
+removes only the draft, retaining its historical version. The generic editor
+cannot alter or remove a proposal. Decisions capture the exact displayed head,
+recheck authorization, preserve durable operation IDs on retry and use the
+existing CAS gate to prevent stale or partial publication. Initial proposal work
+is restricted to private signed-in application conversations; group, delegated,
+scheduled and external-channel proposal workflows are not qualified here.
+
+Migration 0097 directly replaces `workspace_revision.path` with `paths[]` and
+requires empty development workspace repository tables. The named isolated test
+and local review databases were cleared only in those three disposable tables,
+then migrated. No production database or provider deployment was touched. New
+installations apply the coherent chain normally; existing disposable fixtures
+must follow the coordinated reset in `local-runtime-setup.md`.
+
+K1 remains open for stable identity across file moves, purpose/routing discovery
+and field-level provenance. The retained filesystem, unified claim/session
+owner, bitemporal queries, projections and safe consolidation remain K3/K4 work.
+The actual memory runtime is still Akita; this slice supplies its replacement's
+review/publication boundary rather than installing a second memory engine.

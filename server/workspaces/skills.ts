@@ -1,4 +1,4 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { isValid } from "@shared/validation";
 import { z } from "zod";
 import {

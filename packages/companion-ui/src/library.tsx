@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Shapes,
+  ShieldCheck,
   Braces,
   Video,
 } from "lucide-react-native";
@@ -29,9 +30,18 @@ import {
 import { CompanionPage, pageStyles } from "./page";
 import { IconButton } from "./icon-button";
 import { colors } from "./theme";
+import {
+  KnowledgeProposals,
+  type KnowledgeProposalData,
+} from "./library/knowledge";
 import { FileTree } from "./library/tree";
 
 const categories = [
+  {
+    label: "Review changes",
+    icon: ShieldCheck,
+    pattern: /^proposals\/knowledge\//u,
+  },
   {
     label: "All creations",
     icon: Shapes,
@@ -66,20 +76,23 @@ export function Library({
   items,
   onOpen,
   onCreate,
+  proposals,
   ...state
 }: Omit<ComponentProps<typeof CompanionPage>, "title" | "children"> & {
   readonly items: readonly { id: string; title: string; description: string }[];
+  readonly proposals: KnowledgeProposalData;
   readonly onOpen: (id: string) => void;
   readonly onCreate: (kind: "document" | "model") => void;
 }) {
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
-    categories[0]
+    categories[1]
   );
   const [showCategories, setShowCategories] = useState(false);
   const [query, setQuery] = useState("");
   const [descending, setDescending] = useState(false);
   const [list, setList] = useState(false);
+  const reviewing = category.label === "Review changes";
   const systemFiles = category.label === "System files";
   const matching = items
     .filter(
@@ -144,7 +157,7 @@ export function Library({
                   }}
                 />
               )}
-              {!systemFiles && (
+              {!systemFiles && !reviewing && (
                 <IconButton
                   icon={list ? LayoutGrid : List}
                   label={list ? "Grid view" : "List view"}
@@ -160,27 +173,33 @@ export function Library({
                   setDescending(!descending);
                 }}
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={
-                  category.label === "Analysis models"
-                    ? "Create an analysis model"
-                    : "Create a file"
-                }
-                onPress={() => {
-                  onCreate(
-                    category.label === "Analysis models" ? "model" : "document"
-                  );
-                }}
-                style={styles.create}
-              >
-                <Plus size={22} color="white" />
-              </Pressable>
+              {!reviewing && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    category.label === "Analysis models"
+                      ? "Create an analysis model"
+                      : "Create a file"
+                  }
+                  onPress={() => {
+                    onCreate(
+                      category.label === "Analysis models"
+                        ? "model"
+                        : "document"
+                    );
+                  }}
+                  style={styles.create}
+                >
+                  <Plus size={22} color="white" />
+                </Pressable>
+              )}
             </View>
           }
           {...state}
         >
-          {systemFiles ? (
+          {reviewing ? (
+            <KnowledgeProposals data={proposals} query={query} />
+          ) : systemFiles ? (
             <FileTree
               paths={items.map((item) => item.id)}
               query={query}
@@ -188,58 +207,80 @@ export function Library({
               onOpen={onOpen}
             />
           ) : (
-            <>
-              <Text accessibilityRole="header" style={pageStyles.heading}>
-                {query ? "Search results" : "Your files"}
-              </Text>
-              <View style={list ? styles.rows : styles.grid}>
-                {matching.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={item.title}
-                    onPress={() => {
-                      onOpen(item.id);
-                    }}
-                    style={list ? styles.fileRow : styles.card}
-                  >
-                    {list ? (
-                      <FileText size={24} color={colors.muted} />
-                    ) : (
-                      <View style={styles.preview}>
-                        <FileText
-                          size={56}
-                          strokeWidth={1}
-                          color={colors.muted}
-                        />
-                        <Text numberOfLines={2} style={styles.previewTitle}>
-                          {item.title}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={list ? styles.rowCaption : styles.caption}>
-                      <Text numberOfLines={1} style={pageStyles.rowTitle}>
-                        {item.title}
-                      </Text>
-                      <Text numberOfLines={1} style={pageStyles.copy}>
-                        {item.description}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-              {!state.loading && !state.error && matching.length === 0 && (
-                <Text style={pageStyles.copy}>
-                  {query
-                    ? "No files match your search."
-                    : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
-                </Text>
-              )}
-            </>
+            <LibraryFiles
+              matching={matching}
+              list={list}
+              query={query}
+              category={category.label}
+              settled={!state.loading && !state.error}
+              onOpen={onOpen}
+            />
           )}
         </CompanionPage>
       </View>
     </View>
+  );
+}
+function LibraryFiles({
+  matching,
+  list,
+  query,
+  category,
+  settled,
+  onOpen,
+}: {
+  readonly matching: ComponentProps<typeof Library>["items"];
+  readonly onOpen: ComponentProps<typeof Library>["onOpen"];
+  readonly list: boolean;
+  readonly query: string;
+  readonly category: string;
+  readonly settled: boolean;
+}) {
+  return (
+    <>
+      <Text accessibilityRole="header" style={pageStyles.heading}>
+        {query ? "Search results" : "Your files"}
+      </Text>
+      <View style={list ? styles.rows : styles.grid}>
+        {matching.map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            onPress={() => {
+              onOpen(item.id);
+            }}
+            style={list ? styles.fileRow : styles.card}
+          >
+            {list ? (
+              <FileText size={24} color={colors.muted} />
+            ) : (
+              <View style={styles.preview}>
+                <FileText size={56} strokeWidth={1} color={colors.muted} />
+                <Text numberOfLines={2} style={styles.previewTitle}>
+                  {item.title}
+                </Text>
+              </View>
+            )}
+            <View style={list ? styles.rowCaption : styles.caption}>
+              <Text numberOfLines={1} style={pageStyles.rowTitle}>
+                {item.title}
+              </Text>
+              <Text numberOfLines={1} style={pageStyles.copy}>
+                {item.description}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+      {settled && matching.length === 0 && (
+        <Text style={pageStyles.copy}>
+          {query
+            ? "No files match your search."
+            : `No ${category.toLowerCase()} yet. Create something with Zoen to add it here.`}
+        </Text>
+      )}
+    </>
   );
 }
 const styles = StyleSheet.create({

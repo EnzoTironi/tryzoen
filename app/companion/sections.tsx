@@ -4,6 +4,7 @@ import { ConnectedSearch } from "./search";
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
+import { companionKnowledgeData } from "@shared/companion/knowledge";
 import { companionGoalsData } from "@shared/companion/goals";
 import {
   IdeaCollection,
@@ -91,6 +92,21 @@ function ConnectedLibrary({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const utils = api.useUtils();
+  const params = useSearchParams();
+  const scope = params.get("space") ?? "personal";
+  const proposals = useMemo(
+    () =>
+      companionKnowledgeData(
+        getUntypedClient(utils.client),
+        scope,
+        () => crypto.randomUUID(),
+        () => {
+          void utils.workspaces.files.invalidate();
+        }
+      ),
+    [utils, scope]
+  );
   const files = api.workspaces.files.useQuery({});
   const [path, setPath] = useState<string>();
   if (path)
@@ -105,16 +121,19 @@ function ConnectedLibrary({
     );
   return (
     <Library
-      items={(files.data?.files ?? []).map((file) => ({
-        id: file,
-        title: file.split("/").at(-1) ?? file,
-        description: file,
-      }))}
+      proposals={proposals}
+      items={(files.data?.files ?? [])
+        .filter((file) => !file.startsWith("proposals/knowledge/"))
+        .map((file) => ({
+          id: file,
+          title: file.split("/").at(-1) ?? file,
+          description: file,
+        }))}
       onOpen={setPath}
       onCreate={(kind) => {
         onPrompt(
           kind === "model"
-            ? "Help me create an analysis model. Ask what I want to analyze, then save the Malloy source in knowledge/models/ so I can review it in my library."
+            ? "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
             : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
         );
       }}

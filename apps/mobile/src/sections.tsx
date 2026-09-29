@@ -1,8 +1,8 @@
 import { MobileSettings } from "./settings";
 import { SearchSection } from "./search";
 import { randomUUID } from "expo-crypto";
-import { useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActionButton,
   DiscoverBots,
@@ -14,6 +14,7 @@ import {
   Library,
   type CompanionSection,
 } from "@zoen/companion-ui";
+import { companionKnowledgeData } from "../../../shared/companion/knowledge";
 import { companionFeedData } from "../../../shared/companion/feed";
 import { companionIdeasData } from "../../../shared/companion/ideas";
 import { client } from "./conversation";
@@ -117,6 +118,16 @@ function LibrarySection({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const cache = useQueryClient();
+  const session = auth.useSession();
+  const scope = session.data?.user.id ?? "signed-out";
+  const proposals = useMemo(
+    () =>
+      companionKnowledgeData(rpc, scope, randomUUID, () => {
+        void cache.invalidateQueries({ queryKey: ["files"] });
+      }),
+    [cache, scope]
+  );
   const files = useQuery({
     queryKey: ["files"],
     queryFn: () => queries.files(),
@@ -134,16 +145,19 @@ function LibrarySection({
     );
   return (
     <Library
-      items={(files.data?.files ?? []).map((file) => ({
-        id: file,
-        title: file.split("/").at(-1) ?? file,
-        description: file,
-      }))}
+      proposals={proposals}
+      items={(files.data?.files ?? [])
+        .filter((file) => !file.startsWith("proposals/knowledge/"))
+        .map((file) => ({
+          id: file,
+          title: file.split("/").at(-1) ?? file,
+          description: file,
+        }))}
       onOpen={setPath}
       onCreate={(kind) => {
         onPrompt(
           kind === "model"
-            ? "Help me create an analysis model. Ask what I want to analyze, then save the Malloy source in knowledge/models/ so I can review it in my library."
+            ? "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
             : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder."
         );
       }}

@@ -1,4 +1,4 @@
-import { WorkspacePathSchema } from "@shared/workspaces/files";
+import { WorkspacePathSchema } from "@zoen/companion-ui/workspace-files";
 import { ZodError as SchemaError } from "zod";
 import { jsonString, isValid } from "@shared/validation";
 import { createHash } from "node:crypto";

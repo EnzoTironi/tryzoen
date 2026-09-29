@@ -1,4 +1,4 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { withSignal } from "../../../../server/operations/async";
 import { WorkspaceRepositoryError } from "../../../../server/workspaces/repository";
 import { WorkspaceImportError } from "../../../../server/workspaces/import";
