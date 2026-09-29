@@ -60,33 +60,43 @@ export function useDoubleTap(onDoubleTap?: () => void) {
 }
 
 export function useDoubleTapReaction(
-  onReact: ((emoji: string) => Promise<void>) | undefined,
+  onReact: ((emoji: string | null) => Promise<void>) | undefined,
   selected: string | null | undefined,
   disabled: boolean
 ) {
   const emoji = useQuickReaction();
   const busy = useRef(false);
+  const attempt = useRef(0);
   const [status, setStatus] = useState<"pending" | "failed">();
-  const react = async () => {
-    if (!emoji || !onReact || disabled || busy.current || selected === emoji)
-      return;
+  const react = async (choice: string | null) => {
+    if (!onReact || disabled) return;
+    const current = ++attempt.current;
     busy.current = true;
     setStatus("pending");
     try {
-      await onReact(emoji);
-      setStatus(undefined);
+      await onReact(choice);
+      if (current === attempt.current) setStatus(undefined);
     } catch {
-      setStatus("failed");
+      if (current === attempt.current) setStatus("failed");
     } finally {
-      busy.current = false;
+      if (current === attempt.current) busy.current = false;
     }
   };
   const tap = useDoubleTap(
     emoji && onReact && !disabled
       ? () => {
-          void react();
+          if (!busy.current && selected !== emoji) void react(emoji);
         }
       : undefined
   );
-  return { ...tap, status };
+  return {
+    ...tap,
+    status,
+    react:
+      onReact && !disabled
+        ? (choice: string | null) => {
+            void react(choice);
+          }
+        : undefined,
+  };
 }

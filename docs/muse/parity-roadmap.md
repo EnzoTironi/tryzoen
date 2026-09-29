@@ -1126,3 +1126,26 @@ Revisão estrutural: três observações / dois gates de churn em testes e um au
 menor no dono de sync; sem acknowledgements. Nenhuma alteração em produção.
 Build final passou após a limpeza de cache. A correção não muda a interface;
 a evidência visual da rodada 30 continua cobrindo os mesmos componentes.
+
+### Trigésima segunda rodada — reações instantâneas — 29/09/2026
+
+Reações de conversas Matrix e do chat privado Eve usam mutations TanStack com
+prévia separada do cache confirmado. Menus fecham imediatamente, falhas restauram
+o estado confirmado e deixam erro visível. A ordenação por conversa também vale
+entre a tela principal e threads; a segunda alteração usa a revisão confirmada
+pela primeira. Refetch não apaga a intenção ainda pendente. O resultado confirmado
+atualiza apenas páginas carregadas e evita uma releitura redundante imediata.
+
+Check: 278 arquivos / 1.733 testes, nove tarefas; build passou. Testes cobrem
+reversão, preservação das reações de outras pessoas e ordenação entre telas.
+Navegador com 2,5 s de latência confirmou menu fechado/prévia antes da resposta,
+erro offline e recuperação com rascunho preservado. Reação no chat Eve persistiu
+após recarga; duplo toque mobile 390×844 confirmou o mesmo fluxo otimista.
+O serviço local de containers precisou ser reiniciado após queda; foram iniciados
+apenas os containers existentes de teste, sem reset de dados.
+
+[Imagens e sequência de capturas anexadas com gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893325236).
+Revisão estrutural: dez observações / seis gates, sem acknowledgements; complexidade
+e churn nos donos existentes seguem dívida. Reações não entram na fila offline
+de mensagens: falham explicitamente e permitem nova tentativa. Nenhuma migração
+ou implantação de produção. Paridade integral e capacidade não estão declaradas.

@@ -2,13 +2,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { useEffect, type EffectCallback, type SetStateAction } from "react";
 import {
   QueryClient,
+  MutationObserver,
   onlineManager,
   type QueryObserverResult,
   type UseQueryOptions,
+  type UseMutationOptions,
+  type useMutationState,
 } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useRoomReactions } from "./reactions";
-import type { RoomData } from "./schema";
+import type { RoomData, roomReactionWriteSchema } from "./schema";
+import type { z } from "zod";
 
 const state = vi.hoisted(() => ({
   foreground: "active",
@@ -53,9 +57,38 @@ vi.mock("react-native", () => ({
 vi.mock("@tanstack/react-query", async (original) => ({
   ...(await original<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => state.client,
+  useMutation: (
+    options: UseMutationOptions<
+      void,
+      Error,
+      Pick<z.infer<typeof roomReactionWriteSchema>, "messageId" | "emoji">
+    >
+  ) => {
+    if (!state.client) throw new Error("Query client did not mount");
+    const observer = new MutationObserver(state.client, options);
+    return {
+      mutateAsync: (
+        input: Pick<
+          z.infer<typeof roomReactionWriteSchema>,
+          "messageId" | "emoji"
+        >
+      ) => observer.mutate(input),
+    };
+  },
+  useMutationState: <T,>(
+    options: NonNullable<Parameters<typeof useMutationState<T>>[0]>
+  ) =>
+    state.client
+      ?.getMutationCache()
+      .findAll(options.filters)
+      .map((mutation) => options.select?.(mutation) ?? mutation.state) ?? [],
   useQuery: (options: typeof state.options) => {
     state.options = options;
-    return { data: state.page, isError: false, refetch: state.refetch };
+    return {
+      data: state.client?.getQueryData(options?.queryKey ?? []) ?? state.page,
+      isError: false,
+      refetch: state.refetch,
+    };
   },
 }));
 
@@ -145,7 +178,9 @@ it.each(["background", "offline", "unmounted"])(
     );
     const hook = mount();
     const saving = hook.setReaction("$message", "❤️");
-    expect(state.refetch).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(state.refetch).toHaveBeenCalledOnce();
+    });
     if (reason === "background") state.foreground = "background";
     if (reason === "offline") onlineManager.setOnline(false);
     if (reason === "unmounted") for (const cleanup of cleanups) cleanup();
@@ -168,7 +203,9 @@ it("does not overwrite a reopened view when an accepted write completes late", a
   state.client?.setQueryData(key, [summary]);
   const hook = mount();
   const saving = hook.setReaction("$message", "❤️");
-  expect(data.react).toHaveBeenCalledOnce();
+  await vi.waitFor(() => {
+    expect(data.react).toHaveBeenCalledOnce();
+  });
   for (const cleanup of cleanups) cleanup();
   state.client?.removeQueries({ queryKey: key });
   const newer = [{ ...summary, mine: "🔥", mineEventId: "$later" }];
@@ -204,4 +241,60 @@ it("retries an uncertain reaction with the same operation ID and updates only it
   expect(data.react.mock.calls[0]).toEqual(data.react.mock.calls[1]);
   expect(state.client?.getQueryData(key)).toMatchObject([{ mine: "❤️" }]);
   expect(state.client?.getQueryData(other)).toEqual([summary]);
+});
+
+it("shows a pending choice immediately and rolls it back on failure without modifying confirmed data", async () => {
+  let reject: ((error: Error) => void) | undefined;
+  data.react.mockImplementationOnce(
+    () =>
+      new Promise((_done, fail) => {
+        reject = fail;
+      })
+  );
+  state.client?.setQueryData(key, [summary]);
+  const hook = mount();
+  const saving = hook.setReaction("$message", "❤️");
+  const failure = saving.catch((error: unknown) => error);
+  await vi.waitFor(() => {
+    expect(data.react).toHaveBeenCalledOnce();
+  });
+  expect(mount().result.data).toMatchObject([
+    { mine: "❤️", reactions: [{ emoji: "❤️", count: 1 }] },
+  ]);
+  expect(state.client?.getQueryData(key)).toEqual([summary]);
+  reject?.(new Error("Synthetic offline"));
+  expect(await failure).toEqual(new Error("Synthetic offline"));
+  expect(mount().result.data).toEqual([summary]);
+});
+
+it("serializes native writes across views and projects the most recent queued choice", async () => {
+  let resolve:
+    | ((value: Awaited<ReturnType<RoomData["react"]>>) => void)
+    | undefined;
+  data.react.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      })
+  );
+  state.client?.setQueryData(key, [summary]);
+  const first = mount().setReaction("$message", "❤️");
+  const second = mount().setReaction("$message", "👍");
+  await vi.waitFor(() => {
+    expect(data.react).toHaveBeenCalledOnce();
+  });
+  expect(mount().result.data).toMatchObject([
+    { mine: "👍", reactions: [{ emoji: "👍", count: 1 }] },
+  ]);
+  resolve?.({
+    ...summary,
+    mine: "❤️",
+    mineEventId: "$heart",
+    reactions: [{ emoji: "❤️", count: 1 }],
+  });
+  await Promise.all([first, second]);
+  expect(data.react.mock.calls[1]?.[0]).toMatchObject({
+    emoji: "👍",
+    previousEventId: "$heart",
+  });
 });

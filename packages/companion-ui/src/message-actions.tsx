@@ -112,7 +112,14 @@ export function MessageActions({
             anchor={anchor}
             outgoing={outgoing}
             selected={reaction}
-            onSelect={onReact}
+            onSelect={
+              interaction.react
+                ? (emoji) => {
+                    interaction.react?.(emoji);
+                    return Promise.resolve();
+                  }
+                : onReact
+            }
             onClose={close}
           >
             <MessageMenuGroup

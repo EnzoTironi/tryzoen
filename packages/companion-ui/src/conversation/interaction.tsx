@@ -31,6 +31,7 @@ const MessageInteractionContext = createContext<
       active: boolean;
       open: () => void;
       close: () => void;
+      react?: (emoji: string | null) => void;
     }
   | undefined
 >(undefined);
@@ -53,7 +54,7 @@ export function MessageInteraction({
   readonly footer: ReactNode;
   readonly onReply: () => void;
   readonly reaction?: string | null;
-  readonly onQuickReact?: (emoji: string) => Promise<void>;
+  readonly onQuickReact?: (emoji: string | null) => Promise<void>;
   readonly outgoing: boolean;
   readonly disabled?: boolean;
 }) {
@@ -166,8 +167,9 @@ export function MessageInteraction({
       close: () => {
         setAnchor(undefined);
       },
+      react: tap.react,
     }),
-    [anchor, hovered, open]
+    [anchor, hovered, open, tap.react]
   );
   return (
     <MessageInteractionContext value={interaction}>
@@ -281,7 +283,7 @@ export function MessageInteraction({
         )}
         {tap.status === "failed" && (
           <Text accessibilityRole="alert" style={styles.error}>
-            Não foi possível reagir. Toque duas vezes para tentar novamente.
+            Não foi possível salvar a reação. Tente novamente.
           </Text>
         )}
         {footer}

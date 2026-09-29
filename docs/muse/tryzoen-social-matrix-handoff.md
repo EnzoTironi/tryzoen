@@ -1893,3 +1893,21 @@ only regenerable Next/Homebrew caches were removed, with user data preserved.
 Source: https://github.com/element-hq/synapse/blob/v1.160.0/synapse/handlers/sliding_sync/__init__.py
 Final production build passed after cache cleanup. This correction does not
 change the rendered UI; wave 30 visual evidence still covers those components.
+
+### Optimistic reactions — wave 32
+
+Both reaction hooks use TanStack mutations and pending mutation projections;
+confirmed query data remains untouched until the provider accepts the write.
+Mutation scopes serialize room writes across timeline/thread instances. Native
+replacement reads the latest confirmed event ID at execution time, preserving
+existing idempotent retry. Private-agent reads normalize missing reactions to
+null for the requested bounded page. Success updates loaded pages without an
+immediate redundant refetch. Shared interaction owns error display while menus
+close immediately; unsuccessful previews disappear without rewriting the cache.
+
+Check: 278 files / 1,733 tests and nine tasks; build passed. Browser desktop and
+390×844 confirmed immediate menu close/preview at 2.5-second latency, rollback
+offline, retry, retained drafts, private-agent persistence and touch reactions.
+[Evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5893325236).
+Structural delta: ten observations / six gates, zero acknowledgements. Reactions
+are explicitly retryable, not persisted in the message outbox. No production changes.

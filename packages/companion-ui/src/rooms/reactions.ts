@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
-import { onlineManager, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  onlineManager,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { z } from "zod";
-import type { RoomData, roomReactionsPageSchema } from "./schema";
+import {
+  roomReactionWriteSchema,
+  type RoomData,
+  type roomReactionsPageSchema,
+} from "./schema";
+import { previewReaction } from "./reaction-preview";
+
+const changeSchema = roomReactionWriteSchema.pick({
+  messageId: true,
+  emoji: true,
+});
 
 export function useRoomReactions(
   data: Pick<RoomData, "reactions" | "react" | "operationId">,
@@ -30,6 +46,7 @@ export function useRoomReactions(
     >()
   );
   const prefix = ["matrix-reactions", cacheScope, roomId];
+  const mutationKey = [...prefix, "set"];
   const result = useQuery({
     queryKey: [...prefix, ids],
     queryFn: ({ signal }) =>
@@ -61,8 +78,15 @@ export function useRoomReactions(
         throw new Error("Return to the active conversation to react.");
     };
     requireActive();
+    const cached =
+      client.getQueryData<z.infer<typeof roomReactionsPageSchema>>([
+        ...prefix,
+        ids,
+      ]) ?? result.data;
     const latest =
-      result.isError || !result.data ? await result.refetch() : result;
+      result.isError || !cached
+        ? await result.refetch()
+        : { data: cached, isError: false };
     requireActive();
     const summary = latest.data?.find((item) => item.messageId === messageId);
     if (latest.isError || !summary)
@@ -90,7 +114,35 @@ export function useRoomReactions(
       (current) =>
         current?.map((item) => (item.messageId === messageId ? saved : item))
     );
-    void client.invalidateQueries({ queryKey: prefix });
+    void client.invalidateQueries({ queryKey: prefix, refetchType: "none" });
   };
-  return { result, showMessages, setReaction };
+  const change = useMutation({
+    mutationKey,
+    // Main timeline and thread share ordering, including changes queued on the same event.
+    scope: { id: JSON.stringify(mutationKey) },
+    networkMode: "always",
+    retry: false,
+    mutationFn: (input: z.infer<typeof changeSchema>) =>
+      setReaction(input.messageId, input.emoji),
+  });
+  const pendingChanges = useMutationState({
+    filters: { mutationKey, status: "pending" },
+    select: (mutation) => changeSchema.parse(mutation.state.variables),
+  });
+  const previews = new Map(
+    pendingChanges.map((item) => [item.messageId, item.emoji])
+  );
+  return {
+    result: {
+      ...result,
+      data: result.data?.map((item) =>
+        previews.has(item.messageId)
+          ? previewReaction(item, previews.get(item.messageId) ?? null)
+          : item
+      ),
+    },
+    showMessages,
+    setReaction: (messageId: string, emoji: string | null) =>
+      change.mutateAsync({ messageId, emoji }),
+  };
 }
