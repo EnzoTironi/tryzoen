@@ -18,8 +18,10 @@ import { MemoryHistory } from "./history";
 import { MemoryRelations } from "./relations";
 import { MemoryCard } from "../cards/memory";
 import { IconButton } from "../icon-button";
+import { MemoryBackup } from "./backup";
 
 export interface LearnedNotesData {
+  backup: () => Promise<void>;
   relate: (
     input: z.infer<typeof learnedMemoryRelationEditSchema>,
     operationId: string
@@ -206,6 +208,12 @@ export function LearnedNotes({
         <Text style={pageStyles.copy}>
           Things you ask Zoen to remember will appear here.
         </Text>
+      )}
+      {memory.data && (
+        <MemoryBackup
+          disabled={actionsDisabled || memory.data.needsAttention}
+          onBackup={data.backup}
+        />
       )}
       {!!memory.data?.documents.length && (
         <View style={pageStyles.section}>

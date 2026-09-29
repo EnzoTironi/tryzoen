@@ -11,6 +11,7 @@ import type {
 import { openMemoryEngine } from "./engine";
 import { readNotes, readNoteHistory } from "./notes";
 import { FileMemoryError, mutateNotes } from "./mutations";
+import { learnedMemoryBackup } from "./backup";
 
 async function withLearnedCorpus<Result>(
   namespace: string,
@@ -44,6 +45,13 @@ async function withLearnedCorpus<Result>(
 
 /** Call only under the authorized namespace's database lock. No client-supplied paths or scopes. */
 export const FileMemory = {
+  backup(namespace: string) {
+    return withLearnedCorpus(
+      namespace,
+      (engine) => learnedMemoryBackup(engine, namespace),
+      true
+    );
+  },
   recover(namespace: string) {
     return withLearnedCorpus(
       namespace,

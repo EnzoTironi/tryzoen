@@ -32,3 +32,17 @@ export async function downloadConversationArchive(
   }
   downloadBlob(await response.blob(), "zoen-conversation.jsonl");
 }
+
+export async function downloadMemoryBackup(
+  origin: string,
+  space?: string | null
+) {
+  const url = new URL("/api/workspaces/memory/backup", origin);
+  if (space) url.searchParams.set("space", space);
+  const response = await fetch(url, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Couldn’t download your memory backup.");
+  downloadBlob(await response.blob(), "zoen-learned-memory.zip");
+}

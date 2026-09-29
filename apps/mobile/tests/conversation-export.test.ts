@@ -29,6 +29,7 @@ vi.mock("expo-file-system", () => ({
 }));
 import { File } from "expo-file-system";
 import { exportConversation } from "../src/files/conversation.native";
+import { exportMemory } from "../src/files/memory.native";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,4 +70,18 @@ it("does not download private content when native sharing is unavailable", async
   );
   expect(native.create).not.toHaveBeenCalled();
   expect(native.download).not.toHaveBeenCalled();
+});
+
+it("downloads the private learned-memory archive with account credentials", async () => {
+  await exportMemory();
+  expect(native.download).toHaveBeenCalledWith(
+    "https://example.test/api/workspaces/memory/backup",
+    expect.any(File),
+    { headers: { Cookie: "synthetic-session" } }
+  );
+  expect(native.share).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ mimeType: "application/zip" })
+  );
+  expect(native.remove).toHaveBeenCalledOnce();
 });

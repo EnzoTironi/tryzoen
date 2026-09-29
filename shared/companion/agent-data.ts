@@ -26,7 +26,8 @@ export function companionAgentData(
     ) => Promise<unknown>;
     mutation: (path: string, input?: unknown) => Promise<unknown>;
   },
-  newOperationId: () => string
+  newOperationId: () => string,
+  backupMemory: () => Promise<void>
 ): AgentPanelData {
   return {
     async activity(input, signal) {
@@ -35,6 +36,7 @@ export function companionAgentData(
       );
     },
     learned: {
+      backup: backupMemory,
       newOperationId,
       async history(input) {
         return learnedMemoryHistorySchema.parse(

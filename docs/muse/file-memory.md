@@ -574,3 +574,34 @@ budgets. The real-engine isolated test queues 175 sources across seven healthy
 accounts plus one damaged account: one scheduled invocation acknowledges all
 healthy sources, retains the damaged batch with one retry increment and reports
 the failure. This does not qualify production cron latency or host-loss recovery.
+
+## Learned corpus download
+
+The learned-memory screen downloads `zoen-learned-memory.zip` through the
+authenticated `/api/workspaces/memory/backup` route. It is a complete snapshot of
+**one private learned corpus**, not a full account or volume backup. Its native
+`akita.tar.gz` contains the online SQLite snapshot, wiki including Git history,
+and configuration. The outer ZIP also includes Zoen's `zoen-operations` receipts
+and a versioned manifest with namespace, engine release, timestamp and SHA-256
+digests. Raw sessions, the separate session engine, personal profile, published
+workspace files and PostgreSQL records are explicitly excluded.
+
+Exports require a live human session and workspace membership, hold the existing
+namespace lock through snapshot creation, and recheck access before releasing the
+bytes. Paused learning does not prevent export; an uncertain pending mutation does.
+An accepted corpus with missing files is never initialized as an empty replacement.
+No native engine token/address is exposed. Responses use private/no-store caching.
+The native response has a 30-second fetch deadline and 48 MiB compressed limit;
+receipts are limited to 10,000 private regular files, 16 KiB each and 16 MiB total.
+ZIP packaging uses maintained MIT-licensed fflate 0.8.3 without recompressing the
+native archive. Oversized or incomplete exports fail; no partial archive is sent.
+
+`tests/runtime/memory-backup.integration.ts` exercises the actual 2.4.1 engine,
+PostgreSQL authorization, two users, paused memory, uncertain writes and revoked
+sessions. A fresh private quarantine restores current and historical content and
+Zoen's idempotency receipts. Native restore can remove an existing target before
+validating an archive; it is **never** called on a live corpus by this feature.
+There is no self-service restore endpoint. Restoring snapshots into production
+still requires current erasure/tombstone checks, owner mapping, an offline fence
+and coordinated PostgreSQL/volume recovery. Downloaded copies retain their own
+lifecycle and can contain previously removed Git versions.

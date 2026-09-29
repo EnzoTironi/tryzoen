@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 
 import {
   requireWorkspaceAccess,
+  WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import {
@@ -17,6 +18,7 @@ import {
   learnedMemoryHistoryInputSchema,
 } from "@zoen/companion-ui/memory";
 import { FileMemory } from "./ai-memory/learned";
+import { FileMemoryError } from "./ai-memory/mutations";
 import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 export { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
@@ -87,6 +89,29 @@ export const memoryNamespace = async function (
   };
 };
 export const LearnedMemory = {
+  backup: async function (actor: z.output<typeof WorkspaceActorSchema>) {
+    // Full history is a human export, never a delegated agent's memory read.
+    if (
+      !actor.authSessionId ||
+      actor.agentGrantId ||
+      actor.channelIdentityId ||
+      actor.protocolTaskId ||
+      actor.scheduledRunId ||
+      actor.groupBindingId ||
+      actor.matrixIdentityId
+    )
+      throw new WorkspaceAccessDenied();
+    return withDatabaseTransaction(async () => {
+      const partition = await memoryNamespace(actor);
+      if (partition.pendingOperation !== null)
+        throw new LearnedMemoryError({ reason: "stale_recall" });
+      if (!(await memoryCorpusInitialized(partition.id, "learned-memory")))
+        throw new FileMemoryError("not_found");
+      const archive = await FileMemory.backup(partition.id);
+      await requireWorkspaceAccess(actor);
+      return archive;
+    });
+  },
   history: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
     raw: z.infer<typeof learnedMemoryHistoryInputSchema>

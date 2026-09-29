@@ -13,7 +13,7 @@ Um lugar para conversar com pessoas, grupos e agentes, realizar trabalho e prese
 | Slack                    | Threads, atenção, busca e colaboração contextual                                       | Discussões organizadas sem perder o contexto; menções, acompanhamento e conteúdo encontrável         |
 | Ando / Buzz              | Pessoas e agentes participando de espaços compartilhados                               | Hangouts e colaboração com identidade explícita, atenção controlada e revisão de resultados          |
 | Muse                     | Agente pessoal que executa, propõe, acompanha e cria                                   | Chat, Feed, Ideias, Metas, Biblioteca, aprovações, rotinas, conectores e arquivos editáveis          |
-| Akita ai-memory          | Arquivos e Git como autoridade; índice derivado; relações e histórico                  | Memória inspecionável, corrigível, recuperável e isolada por dono                                    |
+| Akita ai-memory          | Arquivos e Git inspecionáveis; SQLite preserva versões e recibos; relações e histórico | Memória inspecionável, corrigível, recuperável e isolada por dono                                    |
 | Visão Zoen / marketplace | Criadores ensinam bots por conversa e publicam uma versão aprovada                     | Conhecimento atribuído, testes com o criador, acesso claro e conversas privadas de cada participante |
 
 As referências são ideias de interação, não uma obrigação de reproduzir todos os produtos ou seus ecossistemas. Os requisitos explícitos do usuário prevalecem: manter a barra mobile de Conversas, Feed, Ideias, Metas, Biblioteca e Configurações; Descobrir fica fora dela. Sheets mobile viram modais no desktop, exceto sugestões do compositor, que ficam acima do campo nos dois. Bots têm tipo de conta e selo IA, sem sufixo obrigatório. Criar, ensinar e corrigir um bot acontece no chat; o editor visual serve para inspecionar e editar seus arquivos.
@@ -1176,3 +1176,45 @@ qualificado com Synapse 1.160.0. Caixa global de threads acompanhadas, assinatur
 automática ao responder e push em segundo plano continuam pendentes. Revisão
 estrutural: 17 observações / oito gates, sem acknowledgements. O CI do commit
 anterior 757a6057 concluiu os seis jobs com sucesso.
+
+### Conhecimento e ontologia — contrato v2.2 — 29/09/2026
+
+O [plano integrado de conhecimento](knowledge-plan.md) preserva os donos atuais,
+a publicação Git transacional e o Akita real. Não será construído um interpretador
+TQL. A [comparação executável inicial](semantic-engine-review.md) entre Malloy
+0.0.434 e Wren WASM 0.4.1 confirmou os totais sintéticos e registrou limites reais
+de drivers, parâmetros, isolamento e execução. Malloy é o candidato escolhido
+para a primeira integração governada, com gates explícitos antes de produção.
+Nenhum motor analítico foi adicionado ao aplicativo nem memória migrada.
+A documentação de infraestrutura foi corrigida: o histórico SQLite completo
+do Akita não pode ser reconstruído somente com os arquivos Markdown.
+
+### Rodada 34 — cópia completa da memória aprendida — 29/09/2026
+
+A tela de memórias aprendidas oferece download privado por usuário/workspace,
+inclusive com aprendizado pausado. O ZIP reutiliza o snapshot online nativo
+do Akita e acrescenta os recibos de idempotência do Zoen e um manifesto com
+integridade SHA-256 por arquivo. Inclui SQLite, wiki/histórico Git, configuração
+e operações; não é uma exportação de todas as conversas ou da conta. Não há
+endpoint de restauração sobre dados existentes.
+
+A autorização humana é revalidada no fim da transação que mantém o lock do
+namespace. Agentes delegados, sessões revogadas e alterações pendentes não
+podem exportar. O transporte é privado/no-store, com prazo e limites de bytes.
+Web/Electron baixam o arquivo; Expo reutiliza o download autenticado e a folha
+nativa de compartilhamento, apagando sua cópia temporária ao terminar.
+
+O teste isolado restaurou a cópia em quarentena e recuperou conteúdo atual,
+uma versão anterior e repetição idempotente, sem incluir a nota de outro usuário.
+Backup automático do volume, retenção, aplicação de tombstones e restauração
+operacional continuam pendentes. Isso não habilita dreams nem comprova escala.
+
+Validação desta rodada: check serial passou com 279 arquivos / 1.737 testes e
+nove tarefas; build passou. O teste real de backup/restauração passou em 3,08 s.
+Navegador confirmou o download e a integridade do ZIP de 32.086 bytes, incluindo
+a nota sintética; layouts 1440×900 e 390×844 conferidos.
+[Capturas e sequência de telas anexadas com gh](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5894329120).
+Revisão estrutural registrou 13 observações / cinco gates, sem supressões: os
+wrappers existentes de corpus e o churn dos adapters permanecem; o componente
+de backup está conectado por JSX, embora o scanner o marque como código morto.
+O CI da rodada 33 concluiu todos os jobs com sucesso.

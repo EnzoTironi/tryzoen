@@ -9,6 +9,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { z } from "zod";
 import type { MemoryCorpus } from "@db/services/memory-corpora";
 import { privateMemoryDirectory } from "../session-files";
+import { nativeMemoryBackup } from "./backup";
 
 type CorpusDirectory = MemoryCorpus | "creator-knowledge";
 
@@ -314,6 +315,7 @@ export async function openMemoryEngine(
       data,
       client,
       checkpoint: () => checkpointMemory(runtime.address, headers),
+      backup: () => nativeMemoryBackup(runtime.address, headers),
       deliver: (items: Parameters<typeof deliverSessionBatch>[2]) =>
         deliverSessionBatch(runtime.address, headers, items),
       async [Symbol.asyncDispose]() {

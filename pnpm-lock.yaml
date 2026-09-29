@@ -164,6 +164,9 @@ importers:
       evlog:
         specifier: 2.27.1
         version: 2.27.1(ai@7.0.107(zod@4.5.4))(eve@0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1)))(express@5.2.1(supports-color@8.1.1))(hono@4.13.5)(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ofetch@1.5.1)(react@19.2.8)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       hash-wasm:
         specifier: 4.12.0
         version: 4.12.0
@@ -5954,6 +5957,9 @@ packages:
 
   fflate@0.4.9:
     resolution: {integrity: sha512-zdxgIEddhfsyCaWpJ2SdXEP8ZMrKJ6+5jl4OupODcywU0IhRk6gdXuVGcPICyfx2H97hVK7xmJtRLPjkxAX8Vw==}
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   figures@6.1.0:
     resolution: {integrity: sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg==}
@@ -15726,6 +15732,8 @@ snapshots:
   fetch-nodeshim@0.4.10: {}
 
   fflate@0.4.9: {}
+
+  fflate@0.8.3: {}
 
   figures@6.1.0:
     dependencies:
