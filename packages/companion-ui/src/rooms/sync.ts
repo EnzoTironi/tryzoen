@@ -20,6 +20,7 @@ export function useRoomSync(
   const client = useQueryClient();
   const scope = JSON.stringify([cacheScope, roomId, enabled]);
   const [failure, setFailure] = useState<string>();
+  const [denied, setDenied] = useState<string>();
   const [snapshot, setSnapshot] = useState<{
     scope: string;
     userIds: string[];
@@ -33,8 +34,13 @@ export function useRoomSync(
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     let expiry: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
+    let accessDenied = false;
     const allowed = () =>
-      enabled && active && onlineManager.isOnline() && !disposed;
+      enabled &&
+      active &&
+      onlineManager.isOnline() &&
+      !disposed &&
+      !accessDenied;
     const history = ["matrix-messages", "matrix-thread"].map((kind) => ({
       queryKey: [kind, cacheScope, roomId],
     }));
@@ -70,6 +76,22 @@ export function useRoomSync(
           controller.signal
         );
         if (stopped()) return;
+        if (result.status === "denied") {
+          accessDenied = true;
+          clear();
+          change(false);
+          setFailure(undefined);
+          setDenied(scope);
+          await Promise.all([
+            client.invalidateQueries({
+              queryKey: ["conversation-inbox", cacheScope],
+            }),
+            client.invalidateQueries({
+              queryKey: ["matrix-room-directory", cacheScope],
+            }),
+          ]);
+          return;
+        }
         if (result.status !== "ready") throw new Error("Room sync unavailable");
         const applied = await reconcileRoomViews(
           client,
@@ -131,6 +153,7 @@ export function useRoomSync(
   return {
     userIds: snapshot?.scope === scope ? snapshot.userIds : [],
     reconnecting: failure === scope,
+    accessDenied: denied === scope,
     change,
   };
 }

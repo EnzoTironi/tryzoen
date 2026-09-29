@@ -833,3 +833,36 @@ Matrix e PostgreSQL não formam uma transação distribuída: falha após a escr
 nativa continua visível e pode exigir repetição. Não há garantia global de
 exatamente uma operação ou CAS entre clientes Matrix externos. Criadores
 continuam adiados; paridade completa e capacidade de produção permanecem abertas.
+
+### Vigésima quarta rodada — participação em grupos — 29/09/2026
+
+Pessoas podem sair dos grupos; administradores do espaço podem adicionar,
+recolocar e remover participantes comuns do mesmo espaço. A busca usa nome ou
+username, a confirmação identifica a pessoa e as consequências, e o mesmo
+componente usa modal desktop e sheet mobile. Administradores do espaço não são
+removidos por esse controle. Convites externos, grupos privados independentes
+do espaço e papéis administrativos por grupo continuam abertos.
+
+A projeção de membros passa a distinguir `joined`, `left` e `removed`. Sair ou
+ser removido impede que abrir a conversa provoque reentrada automática; inbox,
+histórico, arquivos e autoridade do agente aplicam a mesma restrição. O bloqueio
+no produto é persistido antes da retirada no Matrix. Falhas nativas ficam
+registradas para retry, com próximo horário, índice parcial, lote de dez e
+orçamento de início de 30 segundos no reconciliador Eve existente. Uma chamada
+já iniciada pode terminar depois desse orçamento. Reentrada verifica o estado
+nativo antes de restabelecer acesso. Eventos atrasados consultam o estado atual
+do homeserver; não desfazem uma reentrada mais recente.
+
+O navegador encontrou e motivou a correção de dois detalhes: o grupo focado
+revogado não deve interromper o sync do restante do inbox; a conversa removida
+mostra acesso indisponível, sem conteúdo antigo ou reconexão interminável.
+Rascunhos próprios ficam preservados ao sair. Não foi criado um serviço paralelo
+de chat, armazenamento de mensagens ou presença.
+
+`pnpm check`: 272 arquivos / 1.703 testes; cinco testes em três suítes com
+PostgreSQL/Synapse reais cobrem saída, reentrada, mensagens preservadas,
+permissões, falha de retirada, retry e callbacks atrasados. As migrações aditivas
+0093–0094 foram aplicadas apenas nos bancos locais de teste e revisão. Nenhuma
+dependência nova. Criadores continuam adiados. Matrix e SQL não são uma
+transação distribuída; a entrega não declara capacidade para um milhão de pessoas,
+E2EE, push do sistema operacional ou paridade completa.

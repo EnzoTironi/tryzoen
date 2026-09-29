@@ -155,6 +155,12 @@ export async function readInboxSyncHead(
           )
         )
     : [];
-  if (scope.length !== ids.length) throw new WorkspaceAccessDenied();
-  return { rows, scope };
+  // A focused room may have been revoked since the client opened it. Filter it
+  // out instead of preventing the rest of the authorized inbox from syncing.
+  return {
+    rows: rows.filter(
+      (row) => row.kind !== "room" || scope.some((room) => room.id === row.id)
+    ),
+    scope,
+  };
 }

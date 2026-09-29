@@ -1,3 +1,4 @@
+import { roomMembershipResultSchema } from "@zoen/companion-ui/rooms";
 import {
   roomRenameResultSchema,
   roomNotificationsSchema,
@@ -32,6 +33,11 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async changeMembership(input) {
+      return roomMembershipResultSchema.parse(
+        await rpc.mutation("workspaces.rooms.changeMembership", input)
+      );
+    },
     async rename(input) {
       return roomRenameResultSchema.parse(
         await rpc.mutation("workspaces.rooms.rename", input)

@@ -95,7 +95,13 @@ test("revocation during I/O fails closed and cursor cannot cross room epochs", a
   mocks.access.mockRejectedValue(new WorkspaceAccessDenied());
   await expect(
     readMatrixRoomSync(actor, { id: room.id })
-  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  ).resolves.toMatchObject({
+    status: "denied",
+    changes: null,
+    userIds: [],
+    cursor: null,
+  });
+  mocks.access.mockResolvedValue(room);
   mocks.open.mockResolvedValue({ roomId: room.roomId, epoch: "other" });
   await expect(
     readMatrixRoomSync(actor, { id: room.id, cursor: "wrong" })

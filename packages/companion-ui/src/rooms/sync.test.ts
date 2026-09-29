@@ -625,3 +625,30 @@ test("recovers automatically after both sync and history fail without a remount"
     room.observer.getCurrentResult().data?.pages[0]?.messages[0]?.text
   ).toBe("$recent");
 });
+
+test("revoked access stops polling and refreshes the authorized inbox", async () => {
+  const inbox = new QueryObserver(client, {
+    queryKey: ["conversation-inbox", "account:workspace"],
+    queryFn: async () => [],
+    staleTime: Infinity,
+    initialData: ["room"],
+  });
+  unsubscribe.push(inbox.subscribe(vi.fn<() => void>()));
+  data.readSync.mockResolvedValue({
+    status: "denied",
+    cursor: null,
+    userIds: [],
+    expiresAt: 0,
+    timelineChanged: false,
+    reactionsChanged: false,
+    changes: null,
+    reset: false,
+  });
+  mount();
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(data.readSync).toHaveBeenCalledTimes(1);
+  expect(inbox.getCurrentResult().data).toEqual([]);
+  expect(state.snapshots).toContain(
+    JSON.stringify(["account:workspace", "room", true])
+  );
+});

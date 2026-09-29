@@ -67,6 +67,17 @@ export const roomRenameResultSchema = z.object({
   status: z.enum(["saved", "conflict"]),
   room: roomSchema,
 });
+export const roomMembershipChangeSchema = z.discriminatedUnion("action", [
+  z.object({ id: z.uuid(), action: z.literal("leave") }),
+  z.object({
+    id: z.uuid(),
+    action: z.enum(["add", "remove"]),
+    username: directOpenSchema.shape.username,
+  }),
+]);
+export const roomMembershipResultSchema = z.object({
+  nativePending: z.boolean(),
+});
 export const roomSendSchema = z
   .object({
     id: z.uuid(),
@@ -133,7 +144,7 @@ export const roomMessageSchema = z.object({
     .nullable(),
 });
 export const roomSyncPageSchema = z.object({
-  status: z.enum(["ready", "unavailable"]),
+  status: z.enum(["ready", "unavailable", "denied"]),
   cursor: z.string().max(16384).nullable(),
   timelineChanged: z.boolean(),
   reactionsChanged: z.boolean(),
@@ -159,6 +170,7 @@ export const roomForwardResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("changed"), message: roomMessageSchema }),
 ]);
 export const roomMemberSchema = z.object({
+  mayRemove: z.boolean().optional(),
   id: z.string(),
   name: z.string(),
   mine: z.boolean(),
@@ -218,6 +230,9 @@ export const roomSearchPageSchema = z.object({
 });
 
 export interface RoomData {
+  changeMembership: (
+    input: z.infer<typeof roomMembershipChangeSchema>
+  ) => Promise<z.infer<typeof roomMembershipResultSchema>>;
   rename: (
     input: z.infer<typeof roomRenameSchema>
   ) => Promise<z.infer<typeof roomRenameResultSchema>>;

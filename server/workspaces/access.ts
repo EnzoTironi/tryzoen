@@ -209,7 +209,7 @@ export const requireWorkspaceAccess = async function (
     )
       throw new WorkspaceAccessDenied();
     const rooms = await query(sql`SELECT b.id FROM workspace_group_bindings b
-        JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${actor.userId}
+        JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${actor.userId} AND m.state = 'joined'
         JOIN matrix_identities i ON i.user_id = m.user_id AND i.matrix_id = ${actor.matrixIdentityId}
         WHERE b.id = ${actor.groupBindingId} AND b.epoch = ${actor.groupEpoch}
           AND b.workspace_id = ${actor.workspaceId} AND b.channel = 'matrix' AND b.revoked_at IS NULL FOR SHARE OF b, m, i`);

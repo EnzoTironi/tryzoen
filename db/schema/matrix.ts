@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   pgTable,
@@ -24,11 +25,25 @@ export const matrixRoomMembers = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => matrixIdentities.userId, { onDelete: "cascade" }),
+    state: text("state").notNull().default("joined"),
+    nativePending: boolean("native_pending").notNull().default(false),
+    nativeRetryAt: timestamp("native_retry_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
-  (t) => [primaryKey({ columns: [t.bindingId, t.userId] })]
+  (t) => [
+    primaryKey({ columns: [t.bindingId, t.userId] }),
+    check(
+      "matrix_room_members_state_check",
+      sql`${t.state} IN ('joined', 'left', 'removed')`
+    ),
+    index("matrix_room_members_pending_idx")
+      .on(t.nativeRetryAt, t.bindingId)
+      .where(sql`${t.nativePending}`),
+  ]
 );
 export const matrixTransactions = pgTable("matrix_transactions", {
   id: text("id").primaryKey(),

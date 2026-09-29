@@ -21,13 +21,13 @@ export async function readMatrixRoomSync(
   if (!actor.authSessionId || actor.groupBindingId || actor.protocolTaskId)
     throw new WorkspaceAccessDenied();
   const previous = await openRoomSyncCursor(actor, input.cursor);
-  const room = await joinMatrixRoom(actor, input.id);
-  if (
-    previous &&
-    (previous.roomId !== room.roomId || previous.epoch !== room.epoch)
-  )
-    throw new WorkspaceAccessDenied();
   try {
+    const room = await joinMatrixRoom(actor, input.id);
+    if (
+      previous &&
+      (previous.roomId !== room.roomId || previous.epoch !== room.epoch)
+    )
+      throw new WorkspaceAccessDenied();
     const native = await pollNativeSync(
       room.matrixId,
       [room.roomId],
@@ -88,10 +88,17 @@ export async function readMatrixRoomSync(
       expiresAt: previous ? expiresAt : 0,
     });
   } catch (error) {
-    if (!(error instanceof MatrixError)) throw error;
-    await requireMatrixRoom(actor, input.id);
+    // A stale cursor still retries. Only a fresh authorization failure ends access.
+    const denied = await requireMatrixRoom(actor, input.id).then(
+      () => false,
+      (currentError: unknown) => {
+        if (currentError instanceof WorkspaceAccessDenied) return true;
+        throw currentError;
+      }
+    );
+    if (!denied && !(error instanceof MatrixError)) throw error;
     return roomSyncPageSchema.parse({
-      status: "unavailable",
+      status: denied ? "denied" : "unavailable",
       cursor: null,
       timelineChanged: false,
       reactionsChanged: false,

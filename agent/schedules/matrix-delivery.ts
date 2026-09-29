@@ -1,3 +1,4 @@
+import { reconcileGroupDepartures } from "../../server/matrix/membership";
 import { reconcileMatrixActivity } from "../../server/matrix/activity-reconcile";
 import { mapAsync } from "../../server/operations/async";
 import { defineSchedule } from "eve/schedules";
@@ -13,6 +14,7 @@ export default defineSchedule({
   run({ to, appAuth, waitUntil }) {
     waitUntil(
       (async function () {
+        await reconcileGroupDepartures();
         await reconcileMatrixRooms();
         await reconcileMatrixActivity();
         const events = await pendingMatrixEvents();

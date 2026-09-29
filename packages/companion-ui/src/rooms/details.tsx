@@ -1,3 +1,4 @@
+import { GroupMembership } from "./membership";
 import { RoomNotificationSettings } from "./notifications";
 import { RenameRoom } from "./rename";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +24,8 @@ export function RoomDetails({
   page,
   avatarUri,
   onClose,
+  onLeft,
+  onChanged,
   onConversation,
   onProfile,
 }: {
@@ -31,13 +34,18 @@ export function RoomDetails({
   readonly page: z.infer<typeof roomPageSchema>;
   readonly avatarUri?: string;
   readonly onClose: () => void;
+  readonly onLeft: () => void;
+  readonly onChanged: () => Promise<unknown>;
   readonly onConversation: () => void;
   readonly onProfile: (
     person: z.infer<typeof roomPageSchema>["members"][number]
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [renaming, setRenaming] = useState(false);
+  const [panel, setPanel] = useState<"rename" | "manage" | "leave">();
+  const closePanel = () => {
+    setPanel(undefined);
+  };
   const permissions = useQuery({
     queryKey: ["matrix-room-directory", cacheScope],
     queryFn: () => data.list(),
@@ -46,15 +54,25 @@ export function RoomDetails({
   const people = page.members.filter((member) => !member.bot).length;
   const bots = page.members.filter((member) => member.bot).length;
   const members = expanded ? page.members : page.members.slice(0, 6);
-  if (renaming)
+  if (panel === "manage" || panel === "leave")
+    return (
+      <GroupMembership
+        data={data}
+        cacheScope={cacheScope}
+        page={page}
+        leaving={panel === "leave"}
+        onClose={closePanel}
+        onLeft={onLeft}
+        onChanged={onChanged}
+      />
+    );
+  if (panel === "rename")
     return (
       <RenameRoom
         data={data}
         cacheScope={cacheScope}
         room={page.room}
-        onClose={() => {
-          setRenaming(false);
-        }}
+        onClose={closePanel}
       />
     );
   return (
@@ -86,7 +104,7 @@ export function RoomDetails({
               accessibilityRole="button"
               accessibilityLabel="Editar nome do grupo"
               onPress={() => {
-                setRenaming(true);
+                setPanel("rename");
               }}
               style={{
                 minHeight: 44,
@@ -120,6 +138,20 @@ export function RoomDetails({
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Participantes
           </Text>
+          {permissions.data?.mayManage && !permissions.isError && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Gerenciar participantes"
+              onPress={() => {
+                setPanel("manage");
+              }}
+              style={styles.more}
+            >
+              <Text style={styles.actionText}>
+                Adicionar ou remover pessoas
+              </Text>
+            </Pressable>
+          )}
           <View style={styles.card}>
             {members.map((member, index) => (
               <Pressable
@@ -218,6 +250,18 @@ export function RoomDetails({
             Uma conversa compartilhada com os membros deste espaço.
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sair do grupo"
+          onPress={() => {
+            setPanel("leave");
+          }}
+          style={styles.messageAction}
+        >
+          <Text style={[styles.actionText, { color: colors.danger }]}>
+            Sair do grupo
+          </Text>
+        </Pressable>
       </ScrollView>
     </SheetSurface>
   );

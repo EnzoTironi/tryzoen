@@ -1,3 +1,4 @@
+import { joinNativeGroup } from "./membership";
 import { readRoomMembers } from "./members";
 import { projectMatrixActivity } from "./activity";
 import { uploadMatrixMedia } from "./media/upload";
@@ -49,7 +50,8 @@ export const requireMatrixRoom = async function (
   const rows =
     await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
     WHERE id = ${id} AND workspace_id = ${actor.workspaceId} AND channel = 'matrix'
-      AND installation_id = ${config.serverName} AND revoked_at IS NULL FOR SHARE`);
+      AND installation_id = ${config.serverName} AND revoked_at IS NULL
+      ${manage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined')`} FOR SHARE`);
   if (rows.length !== 1) throw new WorkspaceAccessDenied();
   return await roomSchema.parseAsync(rows[0]);
 };
@@ -68,7 +70,7 @@ export const listMatrixRooms = async function (
 
   const rows =
     await query(sql`SELECT id, conversation_id AS "roomId", label, epoch, 'group' AS kind FROM workspace_group_bindings
-    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL ORDER BY created_at LIMIT 20`);
+    WHERE workspace_id = ${actor.workspaceId} AND channel = 'matrix' AND revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = workspace_group_bindings.id AND m.user_id = ${actor.userId} AND m.state <> 'joined') ORDER BY created_at LIMIT 20`);
   return {
     configured,
     mayManage: !!access.organizationId && access.role !== "member",
@@ -154,29 +156,7 @@ export const joinMatrixRoom = async function (
       sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${id} AND user_id = ${actor.userId}`
     );
     if (!members.length) {
-      const joined = await z
-        .object({
-          joined: z.record(z.string(), z.unknown()),
-        })
-        .parseAsync(
-          await matrixRequest(
-            "GET",
-            `rooms/${encodeURIComponent(room.roomId)}/joined_members`
-          )
-        );
-      if (!(matrixId in joined.joined)) {
-        await matrixRequest(
-          "POST",
-          `rooms/${encodeURIComponent(room.roomId)}/invite`,
-          { user_id: matrixId }
-        );
-        await matrixRequest(
-          "POST",
-          `join/${encodeURIComponent(room.roomId)}`,
-          {},
-          matrixId
-        );
-      }
+      await joinNativeGroup(room.roomId, matrixId);
       await query(
         sql`INSERT INTO matrix_room_members(binding_id, user_id) VALUES (${id}, ${actor.userId}) ON CONFLICT DO NOTHING`
       );
@@ -371,7 +351,7 @@ export const reconcileMatrixRooms = async function () {
     SELECT m.binding_id AS "bindingId", m.user_id AS "userId", i.matrix_id AS "matrixId", b.conversation_id AS "roomId"
     FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
     JOIN matrix_identities i ON i.user_id = m.user_id
-    WHERE b.channel = 'matrix' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
+    WHERE b.channel = 'matrix' AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
       SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
       JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
       WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id

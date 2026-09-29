@@ -1,3 +1,4 @@
+import { readNativeGroupMembership } from "./membership";
 import { projectMatrixActivity } from "./activity";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -134,7 +135,7 @@ export const acceptMatrixTransaction = async function (
         JOIN workspace_memberships w ON w.workspace_id = b.workspace_id AND w.user_id = m.user_id
         JOIN workspaces s ON s.id = w.workspace_id
         JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = m.user_id
-        WHERE m.binding_id = ${binding.id} AND i.matrix_id = ${event.sender}`);
+        WHERE m.binding_id = ${binding.id} AND m.state = 'joined' AND i.matrix_id = ${event.sender}`);
       if (!users[0]) continue;
       // In groups only an explicit Zoen mention activates the agent.
       if (!/(^|\s)@?zoen\b/i.test(event.content.body)) continue;
@@ -154,24 +155,35 @@ async function projectGroupMembership(
   bindingId: string,
   event: z.infer<typeof MatrixEventSchema>
 ) {
-  // Invite callbacks can follow a synchronous join; they don't change audience.
-  const membership = event.content.membership;
-  if (membership !== "join" && membership !== "leave" && membership !== "ban")
-    return;
-  if (membership === "join") {
-    // joinMatrixRoom fenced this audience before committing the membership.
-    // Its asynchronous callback must not invalidate newly issued cursors.
-    const known = await query(sql`SELECT 1 FROM matrix_room_members m
-      JOIN matrix_identities i ON i.user_id=m.user_id
-      WHERE m.binding_id=${bindingId} AND i.matrix_id=${event.state_key ?? ""}`);
-    if (known.length) return;
-  }
-  await query(
-    sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+  if (!event.state_key || !event.room_id) return;
+  const current = await readNativeGroupMembership(
+    event.room_id,
+    event.state_key
   );
-  if (membership !== "join")
-    await query(sql`DELETE FROM matrix_room_members WHERE binding_id = ${bindingId}
-      AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key ?? ""})`);
+  // Read current native state: delayed leave callbacks must not undo a later re-add.
+  if (current === "join") {
+    const known =
+      await query(sql`SELECT 1 FROM matrix_room_members m JOIN matrix_identities i ON i.user_id = m.user_id
+      WHERE m.binding_id = ${bindingId} AND i.matrix_id = ${event.state_key} AND m.state = 'joined'`);
+    if (known.length) return;
+    await query(
+      sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+    );
+    await query(sql`UPDATE matrix_room_members SET native_pending = true, native_retry_at = now()
+      WHERE binding_id = ${bindingId} AND state <> 'joined'
+        AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key})`);
+    return;
+  }
+  if (current !== "leave" && current !== "ban") return;
+  const changed = await query(sql`UPDATE matrix_room_members SET state = CASE
+      WHEN state = 'removed' OR ${current} = 'ban' THEN 'removed' ELSE 'left' END,
+      native_pending = false
+    WHERE binding_id = ${bindingId} AND (state = 'joined' OR native_pending)
+      AND user_id IN (SELECT user_id FROM matrix_identities WHERE matrix_id = ${event.state_key}) RETURNING binding_id`);
+  if (changed.length)
+    await query(
+      sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+    );
 }
 
 /** Keep accepted transaction fingerprints stable as display-only aggregation schemas evolve. */

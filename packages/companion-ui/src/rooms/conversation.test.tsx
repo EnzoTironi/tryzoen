@@ -19,6 +19,7 @@ vi.mock("./sync", () => ({
   useRoomSync: vi.fn<typeof useRoomSync>(() => ({
     userIds: [],
     reconnecting: false,
+    accessDenied: false,
     change: vi.fn<(value: boolean) => void>(),
   })),
 }));
@@ -78,6 +79,7 @@ vi.mock("@tanstack/react-query", async (original) => ({
 const data: RoomData = {
   notifications: vi.fn<RoomData["notifications"]>(),
   rename: vi.fn<RoomData["rename"]>(),
+  changeMembership: vi.fn<RoomData["changeMembership"]>(),
   setNotifications: vi.fn<RoomData["setNotifications"]>(),
   setTyping: vi.fn<RoomData["setTyping"]>(),
   readSync: vi.fn<RoomData["readSync"]>(),
@@ -232,4 +234,19 @@ it("keeps reconnection enabled after a read failure while hiding cached private 
   expect(html).not.toContain("Synthetic private text");
   expect(html).toContain("Tentar novamente");
   expect(useRoomSync).toHaveBeenLastCalledWith(data, "viewer", "binding", true);
+});
+
+it("explains revoked access without showing history or a reconnect loop", () => {
+  vi.mocked(useRoomSync).mockReturnValueOnce({
+    userIds: [],
+    reconnecting: false,
+    accessDenied: true,
+    change: vi.fn<(value: boolean) => void>(),
+  });
+  const html = render();
+  expect(html).toContain("Conversa indisponível");
+  expect(html).toContain("Voltar às conversas");
+  expect(html).not.toContain("Synthetic private text");
+  expect(html).not.toContain("Mensagem ao grupo");
+  expect(html).not.toContain("Reconectando");
 });

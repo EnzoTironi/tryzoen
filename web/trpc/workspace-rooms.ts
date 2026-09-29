@@ -1,3 +1,8 @@
+import { changeMatrixGroupMembership } from "../../server/matrix/membership";
+import {
+  roomMembershipChangeSchema,
+  roomMembershipResultSchema,
+} from "@zoen/companion-ui/rooms";
 import {
   readRoomNotifications,
   setRoomNotifications,
@@ -96,6 +101,12 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  changeMembership: workspaceProcedure
+    .input(roomMembershipChangeSchema)
+    .output(roomMembershipResultSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, () => changeMatrixGroupMembership(ctx.actor, input))
+    ),
   rename: workspaceProcedure
     .input(roomRenameSchema)
     .output(roomRenameResultSchema)

@@ -35,6 +35,7 @@ export async function authorizedInboxRooms(
       JOIN workspaces w ON w.id = b.workspace_id
       JOIN organization_memberships om ON om.organization_id = w.organization_id AND om.user_id = ${actor.userId}
       WHERE ${scope === "workspace" ? sql`b.workspace_id = ${actor.workspaceId}` : sql`TRUE`} AND b.channel = 'matrix' AND b.installation_id = ${config.serverName} AND b.revoked_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM matrix_room_members m WHERE m.binding_id = b.id AND m.user_id = ${actor.userId} AND m.state <> 'joined')
       UNION ALL
       SELECT d.workspace_id AS "workspaceId", d.id::text, d.room_id AS "roomId", d.id::text AS epoch, u.name AS label, 'direct'::text AS kind,
         n.username, u.image AS "avatarUri"

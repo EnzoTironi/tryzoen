@@ -16,6 +16,7 @@ import { ArrowLeft, Info, Search, X } from "lucide-react-native";
 import type { z } from "zod";
 import { RoomComposer } from "./composer";
 import { useRoomDraft } from "./draft";
+import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
 import { ConversationAvatar } from "../chats/avatar";
 import { colors } from "../theme";
@@ -55,7 +56,7 @@ export function RoomConversation({
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const exposed = useContext(CompanionVisibility);
   const visible = exposed && !details && !profile && !searching;
-  const active = useRoomLifecycle(cacheScope, roomId, visible);
+  const active = useRoomLifecycle(cacheScope, roomId, exposed);
   const wide = useWindowDimensions().width >= 1100;
   const compact = useWindowDimensions().width < 720;
   const timelineVisible = visible && (!root || wide);
@@ -75,7 +76,7 @@ export function RoomConversation({
         ? last.nextCursor
         : undefined,
     staleTime: Infinity,
-    enabled: active && visible,
+    enabled: active && exposed,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
@@ -87,7 +88,7 @@ export function RoomConversation({
     cacheScope,
     roomId,
     // Keep the authorized, backed-off sync alive so a failed history read can recover.
-    visible && (!!room || messages.isError)
+    exposed && (!!room || messages.isError)
   );
   const showProfile = () => {
     if (room?.kind === "direct")
@@ -111,6 +112,19 @@ export function RoomConversation({
     timeline,
     !messages.isError && timelineVisible
   );
+  if (typing.accessDenied)
+    return (
+      <View style={styles.unavailable}>
+        <Text accessibilityRole="header" style={styles.title}>
+          Conversa indisponível
+        </Text>
+        <Text accessibilityRole="alert" style={styles.caption}>
+          Você não tem mais acesso a esta conversa. Um administrador pode
+          adicionar você novamente.
+        </Text>
+        <ActionButton onPress={onBack}>Voltar às conversas</ActionButton>
+      </View>
+    );
   return (
     <View style={styles.layout}>
       {(!root || wide || messages.isError) && (
@@ -224,6 +238,8 @@ export function RoomConversation({
       )}
       {details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
+          onLeft={onBack}
+          onChanged={() => messages.refetch()}
           data={data}
           cacheScope={cacheScope}
           page={current.pages[0]}
@@ -466,6 +482,13 @@ function RoomThread({
 }
 
 const styles = StyleSheet.create({
+  unavailable: {
+    flex: 1,
+    padding: 32,
+    gap: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   layout: {
     flex: 1,
     flexDirection: "row",

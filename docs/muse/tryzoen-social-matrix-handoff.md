@@ -1625,3 +1625,35 @@ The native write and SQL projection are not a distributed transaction. A failure
 after the native write is visible and can require retry; there is no global
 exactly-once or external Matrix-client CAS guarantee. Additional creator work,
 full parity and production capacity remain outside this completed increment.
+
+### Workspace group participation — wave 24
+
+Shared participant management now supports leave and administrator add/re-add or
+remove of existing workspace people. Current workspace-wide discovery remains
+for people who have never left; this is not external invitations or independent
+private-group ACLs. Workspace admins cannot be removed by these controls.
+
+`server/matrix/membership.ts` owns the native and application lifecycle using the
+existing room advisory lock. The SQL projection retains departed membership;
+reads cannot auto-rejoin it. Departure denies product access before native leave
+or kick. Persisted pending/due state is reconciled by the existing Eve delivery
+schedule: ten due entries, one-minute retries, and a 30-second budget for starting
+work. Current native membership is verified; delayed callbacks cannot undo a
+newer authorized join. Initial join reuses the same bounded native state read
+instead of enumerating every joined member.
+
+Inbox, history, media, inbound sender authority and group-agent authorization
+honor departed state. A focused revoked room is excluded from inbox sync rather
+than breaking that sync; a fresh authorization denial yields an empty `denied`
+room-sync result. Stale epochs still retry rather than reporting permanent loss.
+The UI hides history/composer on denial and offers a return to conversations.
+Voluntary leave retains only the user's draft among room query caches.
+
+Check passes 272 files / 1,703 tests. Five real PostgreSQL/Synapse tests across
+three suites cover lifecycle, isolation, preserved messages, native retirement
+failure/recovery and delayed callbacks. Additive migrations 0093–0094 have been
+applied only to isolated runtime and local review databases. No dependencies were
+added. Native and SQL writes are not a distributed transaction; pending native
+retirement is visible rather than silently treated as complete. Further creator
+work remains deferred; this increment does not claim complete parity, native OS
+push, E2EE or production capacity.
