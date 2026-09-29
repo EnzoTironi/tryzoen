@@ -73,11 +73,16 @@ export function OntologyEntityForm({
               : [
                   [
                     property.id,
-                    property.type === "number"
-                      ? Number(value)
-                      : property.type === "boolean"
-                        ? value === "true"
-                        : value,
+                    {
+                      value:
+                        property.type === "number"
+                          ? Number(value)
+                          : property.type === "boolean"
+                            ? value === "true"
+                            : value,
+                      sources: [],
+                      validTime: null,
+                    },
                   ],
                 ];
           })
@@ -163,7 +168,13 @@ export function OntologyRelations({
           const target = z
             .string()
             .parse(new FormData(event.currentTarget).get("target"));
-          const link = { type: relationId, from: entity.id, to: target };
+          const link = {
+            type: relationId,
+            from: entity.id,
+            to: target,
+            sources: [],
+            validTime: null,
+          };
           if (
             !graph.links.some(
               (entry) =>

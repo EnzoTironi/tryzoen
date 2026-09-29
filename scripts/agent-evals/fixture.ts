@@ -83,7 +83,9 @@ export const launchFixture = async function (
             id: "release_project",
             type: "project",
             name: "Beta release",
-            properties: { status: "planned" },
+            properties: {
+              status: { value: "planned", sources: [], validTime: null },
+            },
             sources: [],
           },
         ],

@@ -3,11 +3,55 @@ import { z } from "zod";
 
 import { OntologyInvalid, OntologySchema } from "@shared/workspaces/ontology";
 
+export function ontologyCitations(graph: z.output<typeof OntologySchema>) {
+  const citations = [
+    ...graph.entities.flatMap((entity) => [
+      ...entity.sources,
+      ...Object.values(entity.properties).flatMap((claim) => claim.sources),
+    ]),
+    ...graph.links.flatMap((link) => link.sources),
+  ];
+  if (
+    citations.length > 60 ||
+    new Set(citations.map((source) => `${source.revision}:${source.path}`))
+      .size > 24
+  )
+    throw new OntologyInvalid({ reason: "source" });
+  return citations;
+}
+
+/** A historical projection leaves unknown world-valid dates explicitly unknown. */
+export function ontologyValidOn(
+  graph: z.output<typeof OntologySchema>,
+  day: string
+) {
+  const includes = (
+    time: z.output<typeof OntologySchema>["links"][number]["validTime"]
+  ) =>
+    time === null ||
+    ((time.from === null || time.from <= day) &&
+      (time.until === null || day < time.until));
+  return {
+    ...graph,
+    actions: [],
+    entities: graph.entities.map((entity) => ({
+      ...entity,
+      properties: Object.fromEntries(
+        Object.entries(entity.properties).filter(([, claim]) =>
+          includes(claim.validTime)
+        )
+      ),
+    })),
+    links: graph.links.filter((link) => includes(link.validTime)),
+  };
+}
+
 /** No free-form code or inferred permissions in ontology definitions. */
 export const validateOntology = async function (
   raw: z.output<typeof OntologySchema>
 ) {
   const graph = await OntologySchema.strict().parseAsync(raw);
+  ontologyCitations(graph);
   for (const records of [
     graph.types,
     graph.relations,
@@ -36,7 +80,7 @@ export const validateOntology = async function (
     )
       throw new OntologyInvalid({ reason: "property" });
     for (const property of type.properties) {
-      const value = entity.properties[property.id];
+      const value = entity.properties[property.id]?.value;
       if (value === undefined || value === null) {
         if (property.required)
           throw new OntologyInvalid({ reason: "property" });
@@ -67,7 +111,7 @@ export const validateOntology = async function (
   const links = new Set<string>();
   for (const link of graph.links) {
     const relation = graph.relations.find((item) => item.id === link.type);
-    const id = JSON.stringify(link);
+    const id = JSON.stringify([link.type, link.from, link.to]);
     if (
       !relation ||
       relation.from !== entities.get(link.from)?.type ||

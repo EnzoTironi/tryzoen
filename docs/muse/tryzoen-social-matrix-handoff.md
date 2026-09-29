@@ -2099,3 +2099,50 @@ qualification pass; this includes all failing CI journeys. The discovery
 structural delta still records eight findings / three churn gates, without
 acknowledgements; the new knowledge policy and discovery function retain size/
 complexity observations. This is not a clean structural-quality claim.
+
+### Ontology provenance and historical projections — K1 / wave 42
+
+The authored ontology property shape now owns its value, exact citations and
+nullable valid-time interval. Links carry their own citations/intervals. Existing
+primitive-property callers, native action inputs, forms, fixtures and the live
+approval evaluation were replaced directly; no compatibility reader remains.
+A manual action clears the prior value's evidence. Publication verifies cited
+excerpts at authorized historical revisions, with 60 citations / 24 source pairs.
+Explicit dates require evidence and use an exclusive upper bound.
+
+Native and authenticated API reads accept a known `revision` and `validOn` date.
+They recheck current access, preserve unknown validity and omit actions from a
+historical projection. Source status is checked against today's authorized files
+at `sourceCheckedAtRevision`; a present passage does not prove full-file or
+provider freshness. The existing knowledge page can attach evidence to a record,
+property or relation and open the exact historical source. Shared native Library
+dossiers, timestamp-based as_of and complete private claim/session history remain
+open. This is not the Akita replacement or a semantic query executor.
+
+The discovery CI rerun passed 441 of 442 runtime cases. The last failure was an
+exact external-agent tool inventory missing `workspace_knowledge_discover`. Its
+assertion now includes that actual read-only capability and checks delegated
+discovery, while preserving denial of private profiles, historical reads, exports
+and writes. The affected external-agent and native suites pass locally.
+
+Final local `pnpm check --concurrency=1`: all nine tasks, 281 files / 1,748 tests
+pass; `pnpm build` passes. Ontology/repository integration has five passing cases;
+external-agent/native integration has twelve passing cases (ontology's final
+source-state refactor also passes its two cases). The focused unit pass has twelve
+cases. No model/provider evaluation, production deployment or real-account data
+was used. The claim-shape change requires recreating disposable old ontology
+documents; no migration or old-data converter was added.
+
+Structural delta for this wave: nine observations and one existing native
+dispatcher churn gate, with no acknowledgements. The new form's complexity was
+reduced by keeping source targeting and immutable graph edits in their concrete
+UI owner. Remaining JSX size observations and the preexisting large knowledge
+page are not a clean structural-quality claim.
+
+Chrome verification of the final production build also passed: an administrator
+attached an exact source passage and its explicit validity dates to a property,
+then opened the historical citation. The relationship kept its distinct source.
+The same evidence remains readable at 390×844 in the mobile sheet; desktop sizing
+was restored. Screenshots are attached to PR 155 with `gh --attach`. All records
+belong to the named synthetic local review workspace. This does not qualify the
+pending shared native Library dossier or physical mobile devices.

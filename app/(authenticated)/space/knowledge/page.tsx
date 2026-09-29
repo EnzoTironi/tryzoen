@@ -85,10 +85,10 @@ export default function WorkspaceKnowledgePage() {
                 </span>
               </summary>
               <div className={styles.create}>
-                {Object.entries(entity.properties).map(([key, value]) => (
+                {Object.entries(entity.properties).map(([key, claim]) => (
                   <p key={key}>
                     {t(key === "status" ? "Status" : key)}:{" "}
-                    {String(value ?? "—")}
+                    {String(claim.value ?? "—")}
                   </p>
                 ))}
                 {graph.links
@@ -115,6 +115,7 @@ export default function WorkspaceKnowledgePage() {
                 <OntologySources
                   entity={entity}
                   graph={graph}
+                  sourceStates={state.data?.sources ?? []}
                   mayManage={!!state.data?.mayManage}
                   pending={publish.isPending}
                   onSave={save}
@@ -149,6 +150,8 @@ export default function WorkspaceKnowledgePage() {
                             .mutateAsync({
                               entityId: entity.id,
                               actionId: action.id,
+                              sources: [],
+                              validTime: null,
                               value:
                                 property?.type === "number"
                                   ? Number(value)

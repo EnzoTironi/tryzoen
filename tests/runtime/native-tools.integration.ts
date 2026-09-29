@@ -146,7 +146,9 @@ test("a workspace project exposes its local approved action by default and respe
           id: "audit_project",
           type: "project",
           name: "Functional audit project",
-          properties: { status: "planned" },
+          properties: {
+            status: { value: "planned", sources: [], validTime: null },
+          },
           sources: [],
         },
       ],
@@ -164,13 +166,22 @@ test("a workspace project exposes its local approved action by default and respe
   expect(inventory).toMatchObject({
     revision: saved.revision,
     graph: {
-      entities: [{ id: "audit_project", properties: { status: "planned" } }],
+      entities: [
+        {
+          id: "audit_project",
+          properties: {
+            status: { value: "planned", sources: [], validTime: null },
+          },
+        },
+      ],
     },
   });
   const input = {
     entityId: "audit_project",
     actionId: "project_status",
     value: "active",
+    sources: [],
+    validTime: null,
     expectedRevision: saved.revision,
     approvalMessage: "Change Functional audit project from planned to active?",
   };
@@ -189,7 +200,7 @@ test("a workspace project exposes its local approved action by default and respe
   );
   const current = await readOntology(actor);
   expect(changed).toMatchObject({ revision: current.revision });
-  expect(current.graph.entities[0]?.properties.status).toBe("active");
+  expect(current.graph.entities[0]?.properties.status?.value).toBe("active");
   expect(
     await repository.history(actor, "ontology/workspace.json")
   ).toHaveLength(2);
@@ -212,9 +223,9 @@ test("a workspace project exposes its local approved action by default and respe
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema or pinned SDK contract establishes this boundary.
     action?.execute(retainedInput as never, context)
   ).rejects.toMatchObject({ name: "WorkspaceAccessDenied" });
-  expect((await readOntology(actor)).graph.entities[0]?.properties.status).toBe(
-    "active"
-  );
+  expect(
+    (await readOntology(actor)).graph.entities[0]?.properties.status?.value
+  ).toBe("active");
 });
 
 test("scheduled result turns expose only their reporting capabilities", async () => {

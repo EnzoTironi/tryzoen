@@ -7,6 +7,8 @@ const action = {
   entityId: "release_project",
   actionId: "project_status",
   value: "active",
+  sources: [],
+  validTime: null,
   expectedRevision: "a".repeat(40),
 };
 

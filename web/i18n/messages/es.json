@@ -1181,5 +1181,15 @@
   "Connected services have their own terms and privacy policies. Review them when connecting an account.": "Los servicios conectados tienen sus propios términos y políticas de privacidad. Revísalos al conectar una cuenta.",
   "Source code and license": "Código fuente y licencia",
   "Cancel": "Cancelar",
-  "Remove": "Eliminar"
+  "Remove": "Eliminar",
+  "Registro": "Registro",
+  "Sem evidência vinculada": "Sin evidencia vinculada",
+  "Válido de": "Válido desde",
+  "Até (exclusivo)": "Hasta (exclusivo)",
+  "O trecho mudou na fonte atual": "El fragmento cambió en la fuente actual",
+  "Fonte atual indisponível": "Fuente actual no disponible",
+  "Evidência para": "Evidencia para",
+  "Trecho usado como evidência": "Fragmento utilizado como evidencia",
+  "Informe datas apenas quando constarem na evidência.": "Indica fechas solo si constan en la evidencia.",
+  "Copie um trecho exato da fonte selecionada.": "Copia un fragmento exacto de la fuente seleccionada."
 }

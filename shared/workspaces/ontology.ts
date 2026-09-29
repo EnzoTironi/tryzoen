@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
+import { knowledgePathSchema } from "@zoen/companion-ui/knowledge";
 
 const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const label = z.string().trim().min(1).max(120);
@@ -8,6 +10,40 @@ const value = z.union([
   z.boolean(),
   z.null(),
 ]);
+export const OntologySourceSchema = z.strictObject({
+  path: knowledgePathSchema,
+  revision: GitRevisionSchema,
+  excerpt: z.string().min(1).max(2000),
+});
+export const OntologySourceStateSchema = OntologySourceSchema.extend({
+  status: z.enum(["passage-present", "passage-changed", "unavailable"]),
+});
+const sources = z
+  .array(OntologySourceSchema)
+  .max(10)
+  .refine(
+    (items) =>
+      new Set(items.map((item) => JSON.stringify(item))).size === items.length,
+    "Each citation must be unique"
+  );
+const validTime = z
+  .strictObject({
+    from: z.iso.date().nullable(),
+    until: z.iso.date().nullable(),
+  })
+  .refine(
+    (time) =>
+      (time.from !== null || time.until !== null) &&
+      (time.from === null || time.until === null || time.from < time.until),
+    "A valid-time interval must be nonempty; until is exclusive"
+  )
+  .nullable();
+export const OntologyClaimSchema = z
+  .strictObject({ value, sources, validTime })
+  .refine(
+    (claim) => claim.validTime === null || claim.sources.length > 0,
+    "World-valid dates require cited evidence; otherwise leave validTime null"
+  );
 const property = z.object({
   id: key,
   name: label,
@@ -34,19 +70,21 @@ export const OntologySchema = z.object({
         id: key,
         type: key,
         name: label,
-        properties: z.record(key, value),
-        sources: z
-          .array(
-            z.object({
-              path: z.string().regex(/^knowledge\/[a-zA-Z0-9_./-]+\.md$/),
-              revision: z.string().regex(/^[a-f0-9]{40}$/),
-            })
-          )
-          .max(10),
+        properties: z.record(key, OntologyClaimSchema),
+        sources,
       })
     )
     .max(500),
-  links: z.array(z.object({ type: key, from: key, to: key })).max(2000),
+  links: z
+    .array(
+      z
+        .strictObject({ type: key, from: key, to: key, sources, validTime })
+        .refine(
+          (link) => link.validTime === null || link.sources.length > 0,
+          "World-valid dates require cited evidence"
+        )
+    )
+    .max(2000),
   actions: z
     .array(z.object({ id: key, name: label, entityType: key, property: key }))
     .max(30),
@@ -95,10 +133,14 @@ export const emptyOntology: z.output<typeof OntologySchema> = {
   ],
 };
 export const ontologyPath = "ontology/workspace.json";
+export const OntologyReadSchema = z.strictObject({
+  revision: GitRevisionSchema.optional(),
+  validOn: z.iso.date().optional(),
+});
 export const OntologyActionSchema = z.object({
   entityId: key,
   actionId: key,
-  value,
+  ...OntologyClaimSchema.shape,
 });
 
 export class OntologyInvalid extends Error {

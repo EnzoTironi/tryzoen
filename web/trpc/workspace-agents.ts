@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import {
   OntologySchema,
   OntologyActionSchema,
+  OntologyReadSchema,
 } from "@shared/workspaces/ontology";
 
 import {
@@ -70,9 +71,11 @@ const revisionFields = {
 };
 export const workspaceAgentsRouter = {
   ontology: {
-    read: workspaceProcedure.query(({ ctx, signal }) =>
-      withSignal(signal, async () => readOntology(ctx.actor))
-    ),
+    read: workspaceProcedure
+      .input(OntologyReadSchema.optional())
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, async () => readOntology(ctx.actor, input))
+      ),
     publish: workspaceProcedure
       .input(
         z.object({

@@ -16,6 +16,7 @@ import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { LearnedMemory } from "../memory/learned";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";
 import { readOntology } from "../workspaces/ontology";
+import { OntologyReadSchema } from "@shared/workspaces/ontology";
 import {
   discoverKnowledge,
   DiscoverKnowledgeSchema,
@@ -77,8 +78,8 @@ const tools = [
     path: "workspace_ontology_read",
     plugin: "ontology",
     description:
-      "Read workspace projects and other structured records: entities, current properties/status, relations, available actions and Git revision. Use this inventory before changing a project's status.",
-    input: "{}",
+      "Read published workspace entities, property claims, relationships and their exact file citations. Each claim has value, sources and validTime; null validTime means the dates are unknown. Pass revision for the known state at a published Git revision and validOn (ISO date) to exclude evidence outside its explicit world-valid interval; until is exclusive. Claims with unknown dates remain visible but must not be described as known-valid on that date. Historical projections are read-only. sources reports whether each cited passage still exists in today's authorized file, not whether the whole source is unchanged. File revision, world-valid dates and live-source freshness are separate. Access is rechecked on every read.",
+    input: "{ revision?: string, validOn?: string }",
   },
   {
     path: "workspace_google_mail_search",
@@ -118,7 +119,7 @@ const schemas = {
   workspace_files_read: ReadFile,
   workspace_files_search: Query,
   workspace_memory_search: Query,
-  workspace_ontology_read: NoArguments,
+  workspace_ontology_read: OntologyReadSchema,
   workspace_google_mail_search: GoogleSearchQuery,
   workspace_google_contacts_search: GoogleSearchQuery,
   workspace_google_calendar_list: GoogleCalendarQuery,
@@ -217,9 +218,12 @@ export const invokeWorkspaceTool = async function (
       return { results: memory.results.slice(0, 8) };
     }
     case "workspace_ontology_read": {
-      await NoArguments.strict().parseAsync(call.args);
-      const result = await readOntology(actor);
-      return { graph: result.graph, revision: result.revision };
+      const input = await OntologyReadSchema.parseAsync(call.args);
+      const { mayManage: _mayManage, ...result } = await readOntology(
+        actor,
+        input
+      );
+      return result;
     }
     default:
       if (

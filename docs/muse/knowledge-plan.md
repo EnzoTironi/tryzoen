@@ -214,3 +214,48 @@ and valid-time retrieval, source erasure and reviewed consolidation still need
 their unified owner. The Akita implementation remains active until that whole
 contract and its callers can be replaced together; this slice does not add an
 Akita importer, a dual writer or an alternate memory engine.
+
+## K1 progress — evidence per property and relationship
+
+Ontology property values now use one claim shape: value, exact source citations
+and nullable world-valid interval. Links use the same citation and interval
+contract. Each file citation contains its authorized workspace path, published
+revision and exact excerpt. Publication validates the excerpt against that scoped
+historical file; fabricated excerpts and foreign revisions are rejected. Reads
+are bounded to 60 citations and 24 distinct source-file/revision pairs. Record
+level citations remain distinct from field and link citations; they do not
+automatically establish the source of every property.
+
+A declared action replaces the complete claim. A manual value carries an empty
+source list and unknown valid time rather than inheriting the previous value's
+evidence. Dates require citations, are ISO calendar dates, allow open intervals,
+and use an exclusive upper bound. No ingestion or publication date is substituted
+for missing world-valid evidence. The native read tool accepts a published
+`revision` and optional `validOn`. It can inspect the state known at that revision
+and exclude explicitly out-of-range claims/links; unknown intervals remain
+visible and must be described as unknown. Historical projections offer no actions.
+This is a two-coordinate view of the bounded authored ontology, not complete
+bitemporal learned-memory history or timestamp-based `as_of`.
+
+Source status checks the quoted passage against current authorized files at a
+declared `sourceCheckedAtRevision`. Passage-present does not attest that the whole
+file is unchanged or that live provider data is fresh. Corrected passages and
+unavailable sources are visible in the existing knowledge view. Citations open
+their historical source. Administrators can attach evidence to the record, a
+property or a relationship; quoted text and dates are preserved on validation
+failure. The existing web view uses the local primitives and translations; a
+shared native Library ontology dossier is still open.
+
+The claim shape replaced primitive properties directly. Native tools, web forms,
+synthetic fixtures and the approval evaluation consume the same schema; no
+primitive-value compatibility reader was added. Disposable development ontology
+documents using the former shape must be recreated. No production data was reset
+and no deployment was performed. Explicit historical reads also reject a foreign
+revision when the selected workspace has no repository. This complements the
+existing receipt check for nonempty repositories.
+
+Actual isolated integration covers scoped citations, property/link validity,
+exclusive dates, historical state, current source correction/deletion, action
+evidence replacement, invalid excerpts, access revocation and durable history.
+Akita remains the learned-memory runtime until K3 replaces its complete owner;
+semantic computation, private claims/sessions and dream review remain open.

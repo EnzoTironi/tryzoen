@@ -24,7 +24,10 @@ import {
   readProtocolTask,
 } from "../../server/a2a/tasks";
 import { listProtocolTasks } from "../../server/a2a/list";
-import { readWorkspaceToolCatalog } from "../../server/tools/workspace";
+import {
+  readWorkspaceToolCatalog,
+  invokeWorkspaceTool,
+} from "../../server/tools/workspace";
 import { readAgentCard } from "../../server/a2a/card";
 
 const profile = () => ({
@@ -367,10 +370,21 @@ test("external agents only read shared current files and cannot export memory, h
   expect(
     (await readWorkspaceToolCatalog(external)).tools.map((tool) => tool.path)
   ).toEqual([
+    "workspace_knowledge_discover",
     "workspace_files_list",
     "workspace_files_read",
     "workspace_files_search",
   ]);
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_knowledge_discover",
+      args: {},
+    })
+  ).toMatchObject({
+    purpose: null,
+    records: [],
+    documents: [],
+  });
 });
 
 test("A2A messages are idempotent and tasks and contexts are private to their grant", async () => {

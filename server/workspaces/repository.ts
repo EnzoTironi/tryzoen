@@ -283,17 +283,21 @@ export const WorkspaceRepository = {
           ? await readAgentGrantCapabilities(actor)
           : null;
         const stored = await snapshot(actor.workspaceId);
-        if (!stored)
+        if (revision !== undefined && sharedExecution(actor))
+          throw new WorkspaceAccessDenied();
+        if (!stored) {
+          if (revision !== undefined)
+            throw new WorkspaceRepositoryError({ reason: "not_found" });
           return {
             revision: null,
             documents: [],
           };
+        }
         const sha =
           revision === undefined
             ? stored.head
             : await GitRevisionSchema.parseAsync(revision);
         if (revision !== undefined) {
-          if (sharedExecution(actor)) throw new WorkspaceAccessDenied();
           const published =
             await query(sql`SELECT revision FROM workspace_revision
             WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
@@ -371,6 +375,8 @@ export const WorkspaceRepository = {
           : null;
         const stored = await snapshot(actor.workspaceId);
         if (!stored) {
+          if (revision !== undefined)
+            throw new WorkspaceRepositoryError({ reason: "not_found" });
           const files: string[] = [];
           return {
             revision: null,
