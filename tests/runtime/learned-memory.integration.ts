@@ -685,15 +685,35 @@ test("deleted accounts queue durable file erasure; filesystem failure retains th
         ).toHaveLength(1);
     };
     await queued();
-    vi.spyOn(sourceFiles, "eraseSessionSources").mockRejectedValueOnce(
-      new Error("Synthetic filesystem failure")
-    );
-    await expect(drainMemoryErasures()).rejects.toThrow(
-      "Synthetic filesystem failure"
-    );
-    await queued();
-    for (let i = 0; i < 20; i++)
-      if ((await drainMemoryErasures()).cleared === 0) break;
+    const failedPartition = partitions[0]?.id;
+    if (!failedPartition) throw new Error("Expected a synthetic partition");
+    await query(sql`UPDATE workspace_memory_erasure SET available_at='1970-01-01'
+      WHERE owner_user_id=${actor.userId}`);
+    const erase = sourceFiles.eraseSessionSources;
+    const attempts = vi
+      .spyOn(sourceFiles, "eraseSessionSources")
+      .mockImplementation(async (root, id) => {
+        if (id === failedPartition)
+          throw new Error("Synthetic filesystem failure");
+        await erase(root, id);
+      });
+    await expect(drainMemoryErasures()).rejects.toMatchObject({
+      errors: [
+        expect.objectContaining({ message: "Synthetic filesystem failure" }),
+      ],
+    });
+    expect(
+      await query(sql`SELECT namespace_id FROM workspace_memory_erasure
+      WHERE owner_user_id=${actor.userId}`)
+    ).toEqual([{ namespace_id: failedPartition }]);
+    expect(
+      await query(sql`SELECT status FROM account_deletion_ledger
+      WHERE request_id=${requestId} AND surface='file_memory'`)
+    ).toEqual([{ status: "pending_external" }]);
+    attempts.mockRestore();
+    await query(sql`UPDATE workspace_memory_erasure SET available_at='1970-01-01'
+      WHERE namespace_id=${failedPartition}`);
+    await drainMemoryErasures();
     for (const { id } of partitions)
       expect(
         await query(

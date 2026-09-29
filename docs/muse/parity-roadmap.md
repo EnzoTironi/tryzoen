@@ -431,3 +431,53 @@ leitura protegida possuem donos separados, sem wrappers criados para testes.
 
 Restam qualificação em aparelhos reais, autenticação adicional para segredos,
 provedor de pagamentos e capacidade de produção. O checkpoint não encerra a paridade.
+
+### Décima segunda rodada — recuperação da exclusão de memória — 29/09/2026
+
+Uma falha de filesystem não desfaz mais as confirmações de outras contas. Cada
+recibo de exclusão mantém sua transação e trava; falhas preservam a obrigação e
+registram somente contagem, horário e próxima tentativa. O atraso cresce de um
+minuto até uma hora. O erro continua visível como falha da execução após terminar
+as partições saudáveis, sem salvar caminhos ou conteúdo no recibo.
+
+Workers concorrentes pulam recibos ocupados. Ao finalizar duas partições da mesma
+conta, a confirmação da obrigação `file_memory` é serializada no pedido de
+exclusão e só ocorre depois de todas as partições dessa conta. A obrigação do
+provedor anterior continua separada. Interrupção após apagar arquivos mantém o
+recibo até uma nova tentativa idempotente confirmar os subdiretórios.
+
+O schedule Eve passa a executar a cada minuto, com até oito lotes de cinco
+partições e orçamento suave de 45 segundos. Sobreposições no mesmo processo
+compartilham a execução; operações de disco já iniciadas são aguardadas. Isso
+limita trabalho por tick, sem declarar prazo máximo de exclusão nem vazão em
+produção. Réplicas ainda precisam de placement e armazenamento persistente
+qualificados; os testes usam o mesmo diretório de corpus.
+
+A consulta da fila foi medida com 1.000.000 de recibos adiados e um elegível no
+PostgreSQL isolado: `workspace_memory_erasure_pending_idx`, uma linha lida,
+cinco buffers em cache e 0,017 ms de execução nesta amostra. O experimento foi
+revertido e confirmou zero recibos sintéticos restantes. [Relatório da consulta](evidence/memory-erasure-query-2026-09-29.json).
+É uma amostra local com cache aquecido, sem exclusão de arquivos, rede ou
+concorrência; não comprova capacidade para um milhão de usuários ativos.
+
+A regressão original foi reproduzida antes da alteração. Seis cenários novos
+cobrem falha, backoff, limite, trava, concorrência e interrupção; os testes de
+memória e corpus existentes também passaram (28 testes em três arquivos).
+A migração aditiva 0092 foi aplicada aos bancos locais isolado e de revisão,
+preservando registros. `pnpm check` passou com 265 arquivos e 1.614 testes;
+`pnpm build` e `pnpm db:check` passaram. A suíte completa do runtime passou com
+106 arquivos e 420 testes.
+
+O [cron real do build Eve](evidence/memory-erasure-cron-2026-09-29.json) também
+processou duas partições sintéticas: a saudável terminou enquanto a outra manteve
+o recibo e registrou a falha. Depois de reparar somente o marcador sintético e
+reiniciar o app, a próxima execução concluiu a exclusão sem alterar manualmente
+a elegibilidade. Nenhuma conta real foi excluída. Os dois diretórios vazios de
+teste foram removidos após confirmar o resultado.
+
+[A conferência visual](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883517046)
+verificou as memórias sintéticas preexistentes preservadas em desktop e mobile.
+Duas capturas e um vídeo composto dessas capturas foram anexados via `gh --attach`.
+Esta rodada não mudou a UI de memória. A revisão estrutural apontou três
+observações, duas gating: formato repetido dos schedules e churn; não foram
+introduzidas supressões nem uma abstração genérica para esconder a repetição.

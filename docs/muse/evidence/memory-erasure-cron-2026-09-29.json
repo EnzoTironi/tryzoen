@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "experiment": "Actual minute cron on local compiled Eve build; two synthetic erasure receipts, one with an invalid directory marker. No user account was deleted.",
+  "createdAt": "2026-09-29T04:07:48.517Z",
+  "firstTick": {
+    "observedAt": "2026-09-29T04:08:27.792Z",
+    "partitions": [
+      {
+        "syntheticBroken": true,
+        "pending": true,
+        "failures": 1,
+        "markerPresent": false,
+        "nextAttempt": "2026-09-29 01:09:00.023683-03"
+      },
+      {
+        "syntheticBroken": false,
+        "pending": false,
+        "failures": 0,
+        "markerPresent": false,
+        "nextAttempt": null
+      }
+    ]
+  },
+  "repair": "Removed only the synthetic invalid-directory marker; retry metadata was not edited.",
+  "restart": "Stopped and restarted the compiled application before the successful retry.",
+  "afterRestart": {
+    "observedAt": "2026-09-29T04:09:54.003Z",
+    "partitions": [
+      {
+        "syntheticBroken": true,
+        "pending": false,
+        "failures": 0,
+        "markerPresent": false,
+        "nextAttempt": null
+      },
+      {
+        "syntheticBroken": false,
+        "pending": false,
+        "failures": 0,
+        "markerPresent": false,
+        "nextAttempt": null
+      }
+    ]
+  },
+  "cleanup": "Only the two now-empty synthetic namespace directories were removed. Both durable receipts were cleared by the schedule."
+}

@@ -1309,3 +1309,32 @@ contains four screenshots and a labelled screenshot-sequence video, attached
 with `gh --attach` after verifying the running build. The latest blank card form
 did not autofill site credentials; reopening the synthetic item after restart
 preserved its saved content.
+
+### Durable memory erasure — wave 12
+
+The erasure queue now acknowledges one partition per transaction and persists
+bounded exponential retry metadata on failure. Other accounts still complete;
+workers skip locked receipts. Account request locks serialize final acknowledgement
+across concurrent namespace workers. Only `file_memory` is marked erased when
+all that account's receipts are gone; historical provider obligations stay intact.
+Interrupted filesystem deletion is replayable without losing the receipt.
+
+The Eve schedule awaits up to eight batches of five each minute within a 45-second
+soft budget and shares overlapping in-process ticks. It does not abort an active
+filesystem operation. Additive migration 0092 adds retry metadata and its index.
+The new regression was reproduced against the earlier implementation; six new
+runtime cases plus existing memory/corpus tests passed (28 total).
+
+[A local query measurement](evidence/memory-erasure-query-2026-09-29.json) used a
+million delayed receipts plus one eligible receipt. One index search returned
+one row in 0.017 ms; the synthetic transaction was rolled back. This measures a
+warm queue selection only. It does not qualify filesystem throughput, placement,
+replicas or million-account operation. Checks passed with 1,614 tests and the
+build passed. Migration 0092 was applied only to the local isolated/review databases.
+The full runtime suite passed (106 files / 420 tests), as did the migration check.
+[The actual Eve cron experiment](evidence/memory-erasure-cron-2026-09-29.json)
+confirmed healthy progress, durable failure and successful retry after repairing
+a synthetic marker and restarting the app, without changing retry timestamps.
+The existing account's learned notes remained available in both browser sizes;
+[screenshots and a labelled screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5883517046)
+were attached with `gh --attach`. No new memory UI was introduced in wave 12.
