@@ -111,9 +111,11 @@ function ConnectedLibrary({
         description: file,
       }))}
       onOpen={setPath}
-      onCreate={() => {
+      onCreate={(kind) => {
         onPrompt(
-          "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
+          kind === "model"
+            ? "Help me create an analysis model. Ask what I want to analyze, then save the Malloy source in knowledge/models/ so I can review it in my library."
+            : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
         );
       }}
       loading={files.isPending}

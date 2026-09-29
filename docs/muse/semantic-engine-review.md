@@ -2,6 +2,12 @@
 
 29 September 2026. Two candidates only; no application dependency or production data changed. Official npm releases inspected: `@malloydata/malloy` and `@malloydata/db-postgres` **0.0.434** (MIT), `@wrenai/wren-core-wasm` **0.4.1** (Apache-2.0). Node 24.21.0, local PostgreSQL 18, synthetic schemas/roles in the isolated runtime database on port 15432.
 
+The user subsequently clarified that **TextQL is the primary ontology reference**.
+This compiler comparison addresses only bounded computation inside that file-based,
+reviewed knowledge experience. It does not select Malloy as the product ontology,
+replace the conversational workflow, or justify a parallel memory authority.
+The unified memory target and greenfield Akita replacement are defined in [knowledge-plan](knowledge-plan.md).
+
 ## Finding and next implementation choice
 
 Use **Malloy as the compiler candidate for K1/K2**, preserving its native files. Both engines produced the expected results; direct PostgreSQL execution, inspectable SQL and the existing TypeScript runtime make Malloy the smaller integration for this first server-side journey. This is a scoped engineering choice, not a general performance ranking. Production adoption is gated on the executor boundaries below. Wren remains a useful future candidate for explicit local analysis; it is not loaded by chat. No TQL interpreter is planned.
@@ -28,6 +34,6 @@ End-process RSS observations were approximately **125 MiB** for Malloy and **314
 
 ## Production gate
 
-Before K2 is complete: stable published revision and model validation; principal-bound source credentials/policies; schema and result caches scoped by authorization/revision; source revocation; hard query time/row/byte limits and actual cancellation; no external URL imports; known parameter branches and changed schemas; execution manifests with snapshot/freshness; two independent product users and restart. None of the new SDKs replaces Akita, Eve or Matrix.
+Before K2 is complete: stable published revision and model validation; principal-bound source credentials/policies; schema and result caches scoped by authorization/revision; source revocation; hard query time/row/byte limits and actual cancellation; no external URL imports; known parameter branches and changed schemas; execution manifests with snapshot/freshness; two independent product users and restart. Neither SDK supplies the unified memory replacement. Eve and Matrix retain execution and communication ownership; Akita replacement follows the unified greenfield knowledge contract.
 
 Sources: [Malloy](https://github.com/malloydata/malloy), [typed runtime parameters](https://github.com/malloydata/malloy/blob/main/packages/malloy/src/lang/test/givens.spec.ts), [Wren MDL](https://github.com/Canner/WrenAI/blob/main/docs/core/reference/mdl.md), [Wren WASM SDK](https://docs.getwren.ai/oss/sdk/wasm). Findings use the installed npm releases, not an assumption that all branch documentation is released.

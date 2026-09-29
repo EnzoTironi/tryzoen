@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Shapes,
+  Braces,
   Video,
 } from "lucide-react-native";
 import {
@@ -43,6 +44,11 @@ const categories = [
   },
   { label: "Web artifacts", icon: Globe, pattern: /\.(html?|jsx?|tsx?)$/iu },
   {
+    label: "Analysis models",
+    icon: Braces,
+    pattern: /^knowledge\/models\/.*\.malloy$/u,
+  },
+  {
     label: "Images",
     icon: ImageIcon,
     pattern: /\.(png|jpe?g|gif|webp|svg|avif)$/iu,
@@ -64,7 +70,7 @@ export function Library({
 }: Omit<ComponentProps<typeof CompanionPage>, "title" | "children"> & {
   readonly items: readonly { id: string; title: string; description: string }[];
   readonly onOpen: (id: string) => void;
-  readonly onCreate: () => void;
+  readonly onCreate: (kind: "document" | "model") => void;
 }) {
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
@@ -97,16 +103,16 @@ export function Library({
               style={styles.searchInput}
             />
           </View>
-          {categories.map((item, index) => (
+          {categories.map((item) => (
             <View key={item.label}>
-              {(index === 0 || index === 3) && (
+              {(item.label === "All creations" || item.label === "Images") && (
                 <Text style={styles.categoryHeading}>
-                  {index === 0 ? "Artifacts" : "Media"}
+                  {item.label === "All creations" ? "Artifacts" : "Media"}
                 </Text>
               )}
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ selected: category.label === item.label }}
+                aria-pressed={category.label === item.label}
                 onPress={() => {
                   setCategory(item);
                   setShowCategories(false);
@@ -156,8 +162,16 @@ export function Library({
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Create a file"
-                onPress={onCreate}
+                accessibilityLabel={
+                  category.label === "Analysis models"
+                    ? "Create an analysis model"
+                    : "Create a file"
+                }
+                onPress={() => {
+                  onCreate(
+                    category.label === "Analysis models" ? "model" : "document"
+                  );
+                }}
                 style={styles.create}
               >
                 <Plus size={22} color="white" />

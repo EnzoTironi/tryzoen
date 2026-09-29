@@ -1996,3 +1996,46 @@ and missing/lost acknowledgements. Full check: 280 files / 1,742 tests and nine 
 Global followed-thread inbox, background push and device qualification remain open.
 
 Build and desktop/mobile browser checks passed. Evidence: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896204935.
+
+### Native analytic source files — K1 initial slice / wave 40
+
+`WorkspacePathSchema` accepts `.malloy` under `knowledge/models/`, through the
+existing publisher, authorization, history, search and export. The shared Library
+has an analysis-model category and its creation prompt asks for source in that
+namespace. Existing web/Expo source editors preserve model text. No compiler,
+query engine, credentials, migration or production deployment was added.
+
+The isolated PostgreSQL/Git integration covers unchanged source content, scoped
+member reads, personal isolation, replay, stale revision, history and export.
+Multi-file proposal review, stable model identity, retained filesystem, attributed
+temporal claims and governed execution are still open in `knowledge-plan.md`.
+
+Full check passes 280 files / 1,742 tests and all nine tasks; production build
+passes. Browser verification covers category, source editing, save/reopen and
+historical preview. The source editor now contains long filenames at mobile
+width. Model execution, physical-device behavior and full K1 remain unqualified.
+Evidence attached with `gh --attach`: https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896581619.
+
+### TextQL priority and one knowledge system — user clarification
+
+TextQL is now explicitly the main ontology/product reference. Reviewed its
+skills at `31123f39645d3b7872319ee8b304dae0f0f0a12f`, starter kits at
+`72c9a5df9da1e52f094a7faf80d3eb5aebbc653e` and ontology product page. No
+vendor pack or runtime was installed. `knowledge-plan.md` supersedes the earlier
+permanent Akita decision: one file-backed knowledge authority for sessions,
+claims and authored definitions, with derived search/graph projections. Akita
+is still the actual running owner in this commit; its direct replacement must
+update callers and behavior tests together. The subsequent greenfield instruction
+explicitly removes the need to convert old corpora or preserve development data.
+No new memory engine or runtime replacement happened in this slice.
+
+Next K1 work must prioritize chat-led scoped discovery, bounded routing and
+reviewable multi-file publication. Malloy is only a provisional computation
+candidate; source-file support does not determine the ontology architecture.
+
+The user confirmed on 2026-09-29 that there are no production users or production
+data. Updated root AGENTS.md to supersede the persistent-rollout assumption.
+Greenfield removal of obsolete code/schemas/APIs/configuration is authorized;
+no backward-compatibility, dual writes/reads or data backfills unless requested.
+Correctness invariants and deterministic setup remain required, and applied
+migration rewrites require resetting affected development/test databases.
