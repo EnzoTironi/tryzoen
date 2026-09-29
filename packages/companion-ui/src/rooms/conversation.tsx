@@ -149,6 +149,9 @@ export function RoomConversation({
             cacheScope={cacheScope}
             avatarUri={avatarUri}
             onCopy={onCopyText}
+            outgoing={draft.outgoing}
+            onRetrySend={draft.retry}
+            onSettleSend={draft.settle}
             onReply={draft.replyTo}
             onProfile={setProfile}
             members={current?.pages[0]?.members ?? []}
@@ -436,6 +439,9 @@ function RoomThread({
         cacheScope={cacheScope}
         avatarUri={avatarUri}
         onCopy={onCopyText}
+        outgoing={draft.outgoing}
+        onRetrySend={draft.retry}
+        onSettleSend={draft.settle}
         onReply={draft.replyTo}
         onProfile={onProfile}
         members={result.isError ? [] : (result.data?.pages[0]?.members ?? [])}

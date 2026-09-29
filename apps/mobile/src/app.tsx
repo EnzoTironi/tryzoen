@@ -5,7 +5,7 @@ import { linkPreviewSchema } from "@zoen/companion-ui/previews";
 import { renderMedia } from "./media";
 import { referenceResultsSchema } from "@zoen/companion-ui/references";
 import { rpc } from "./api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -105,8 +105,16 @@ function AccountCompanion() {
   const [client] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+        defaultOptions: {
+          queries: { staleTime: 30_000, gcTime: 30 * 60_000, retry: 1 },
+        },
       })
+  );
+  useEffect(
+    () => () => {
+      client.clear();
+    },
+    [client]
   );
   return (
     <QueryClientProvider client={client}>

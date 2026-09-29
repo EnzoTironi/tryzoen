@@ -64,16 +64,19 @@ vi.mock("@tanstack/react-query", async (original) => ({
       },
     };
   },
-  useQuery: () => ({
-    data: [
-      {
-        messageId: "$message",
-        mine: null,
-        mineEventId: null,
-        complete: true,
-        reactions: [{ emoji: "❤️", count: 2 }],
-      },
-    ],
+  useQuery: (options: { queryKey: readonly string[] }) => ({
+    data:
+      options.queryKey[0] === "matrix-outbox"
+        ? []
+        : [
+            {
+              messageId: "$message",
+              mine: null,
+              mineEventId: null,
+              complete: true,
+              reactions: [{ emoji: "❤️", count: 2 }],
+            },
+          ],
   }),
 }));
 const data: RoomData = {

@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { AppRouter } from "./router";
 import { useSearchParams } from "next/navigation";
 
@@ -28,7 +28,18 @@ function WorkspaceTRPCProvider({
   readonly children: ReactNode;
   readonly workspaceId: string | null;
 }) {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { staleTime: 30_000, gcTime: 30 * 60_000 } },
+      })
+  );
+  useEffect(
+    () => () => {
+      queryClient.clear();
+    },
+    [queryClient]
+  );
   const [trpcClient] = useState(() =>
     api.createClient({
       links: [

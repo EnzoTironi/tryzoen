@@ -1657,3 +1657,51 @@ added. Native and SQL writes are not a distributed transaction; pending native
 retirement is visible rather than silently treated as complete. Further creator
 work remains deferred; this increment does not claim complete parity, native OS
 push, E2EE or production capacity.
+
+
+Wave 24 visual verification and production build passed. Administrator removal,
+re-addition with preserved history and mobile leave confirmation were checked;
+the synthetic memberships were restored. [Visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406)
+was attached with `gh --attach`. [Record](evidence/group-membership-2026-09-29.json).
+Draft preservation on leave was not separately proven visually.
+
+### Optimistic delivery and navigation caches — wave 25
+
+`conversation/outbox.ts` owns a bounded TanStack-backed local queue; native Eve
+and Matrix remain the delivery authorities. Enqueue clears the composer and
+accepts another message immediately. Errors/retry stay on the affected message;
+late responses never restore over the next draft. Matrix text/file transactions
+retain their operation IDs on retry and reconcile exact own-event transaction
+IDs, including partial media delivery. Eve correlates its public response stream's
+receipt to the local echo, never text. The live projection waits for outstanding
+receipts when the continuous stream outruns a POST acknowledgement; collection
+continues. Uncertain Eve sends require manual review/retry because public delivery
+identity/idempotency options are unavailable in the pinned SDK.
+
+The persistent companion layout owns account-scoped QueryClient lifetime; its
+workspace provider still isolates workspace changes. Providers clear on unmount,
+queued sends check cache ownership before starting, and late mutation results
+cannot recreate cleared entries. Native browser history changes section query
+parameters; session route changes retain server authorization. Live session
+history and drafts use the same cache and resume at the existing cursor. Default
+inactive retention is 30 minutes. Feed likes and native mute use serialized
+optimistic mutations. Global textfield styles include dialog portals, with quiet
+neutral focus and a forced-color fallback.
+
+The running build verified group/thread/agent bursts under 3.5-second simulated
+latency, continued typing, unique confirmations and draft retention. Cached Feed
+and chat reopened without loading screens under five-second latency. Desktop,
+390x844 mobile and modal focus were inspected; no console errors. [Five images
+and a labelled 15-second screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889698768) were attached with
+`gh --attach`. [Record](evidence/instant-messaging-2026-09-29.json).
+
+Check: 273 files / 1,704 tests; production build passed. Five focused real
+PostgreSQL/Synapse tests passed. Structural review records 47 observations / 28
+gates without suppression, primarily owner size/complexity/churn; the delivery
+indicator is shared. No new dependencies/migrations in this wave. Expo exports
+and physical-device testing were not repeated.
+
+The queue is memory-only, capped at 20 entries per conversation. Reload/crash
+persistence, fully offline delivery, global layout stability and production
+capacity are not supplied by this increment. Cold visits still load data.
+Creator expansion remains deferred.

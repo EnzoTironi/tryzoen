@@ -1,0 +1,59 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889698768",
+  "environment": "Local production build, synthetic owner account, real Eve/Matrix delivery, Chrome desktop and 390x844 mobile viewport",
+  "verifiedFlows": {
+    "groupBurstMessages": 3,
+    "threadBurstMessages": 2,
+    "agentBurstMessages": 2,
+    "networkLatencyMilliseconds": 3500,
+    "draftEditableDuringSend": true,
+    "draftPreservedAfterConfirmation": true,
+    "nativeMessagesReconciledWithoutDuplicates": true,
+    "cachedFeedAndChatWithoutLoadingScreen": true,
+    "cachedNavigationLatencyMilliseconds": 5000,
+    "mainAndModalFocusNeutral": true,
+    "consoleErrors": 0
+  },
+  "validation": {
+    "check": "passed",
+    "checkFiles": 273,
+    "checkTests": 1704,
+    "build": "passed",
+    "focusedRealSynapseSuites": 2,
+    "focusedRealSynapseTests": 5,
+    "focusedTests": [
+      "Late acknowledgement cannot duplicate live messages",
+      "Identical messages keep separate native identities",
+      "Exact turn cancellation",
+      "Retry reuses Matrix transaction identity",
+      "Late failure preserves the next draft",
+      "Partial attachment delivery",
+      "Account cache clear blocks queued sends"
+    ],
+    "structuralReview": {
+      "observations": 47,
+      "gating": 28,
+      "suppressed": false
+    }
+  },
+  "cache": {
+    "inactiveGcMinutes": 30,
+    "outboxEntriesPerConversation": 20,
+    "durableAcrossReload": false,
+    "accountAndWorkspaceScoped": true
+  },
+  "media": {
+    "screenshots": 5,
+    "screenshotSequenceSeconds": 15,
+    "continuousRecording": false
+  },
+  "limits": [
+    "Memory cache only; reload/crash durability and a persistent offline outbox remain open",
+    "Cold first visits still require a network load",
+    "Eve exposes no public delivery-id or idempotency-key option; response receipt correlation uses public streams and manual retry for uncertain failures",
+    "New live events are collected but their projection waits for pending submission receipts, avoiding race-induced duplicate echoes",
+    "Expo exports and physical-device qualification were not repeated in this increment",
+    "No million-user capacity or complete-parity claim"
+  ]
+}

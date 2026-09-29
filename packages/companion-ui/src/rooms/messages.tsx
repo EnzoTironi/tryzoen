@@ -1,3 +1,7 @@
+import { MessageDelivery } from "../conversation/delivery";
+import { AttachmentCard } from "../attachments/card";
+import { projectOutgoingRoomMessages, type RoomMessageView } from "./outgoing";
+import type { useRoomDraft } from "./draft";
 import { RoomMessageControls } from "./message-controls";
 import { captureMessageAnchor } from "../conversation/scroll-anchor";
 import { MessageLinks } from "../cards/link";
@@ -28,11 +32,16 @@ import { AssistantMarkdown } from "../markdown";
 import type { roomReactionSummarySchema, roomMemberSchema } from "./schema";
 import type { roomMessageSchema } from "./schema";
 
+const noOutgoing: ReturnType<typeof useRoomDraft>["outgoing"] = [];
+
 export function RoomMessages({
   data,
   roomId,
   cacheScope,
-  messages,
+  messages: confirmedMessages,
+  outgoing = noOutgoing,
+  onRetrySend,
+  onSettleSend,
   onThread,
   loading,
   error,
@@ -62,6 +71,9 @@ export function RoomMessages({
   readonly onVisibleMessagesChange: (ids: string[]) => void;
   readonly avatarUri?: string;
   readonly messages: z.infer<typeof roomMessageSchema>[];
+  readonly outgoing?: ReturnType<typeof useRoomDraft>["outgoing"];
+  readonly onRetrySend?: (id: string) => void;
+  readonly onSettleSend?: (ids: string[]) => void;
   readonly onThread?: (message: z.infer<typeof roomMessageSchema>) => void;
   readonly loading: boolean;
   readonly error: boolean;
@@ -71,7 +83,15 @@ export function RoomMessages({
   readonly fetching: boolean;
   readonly onMore: () => void;
 }) {
-  const list = useRef<FlatList<z.infer<typeof roomMessageSchema>>>(null);
+  const projected = useMemo(
+    () => projectOutgoingRoomMessages(confirmedMessages, outgoing),
+    [confirmedMessages, outgoing]
+  );
+  const messages = projected.messages;
+  useEffect(() => {
+    if (projected.settled.length) onSettleSend?.(projected.settled);
+  }, [projected, onSettleSend]);
+  const list = useRef<FlatList<RoomMessageView>>(null);
   const nearBottom = useRef(true);
   const restoreWebAnchor = useRef<(() => void) | undefined>(undefined);
   const [atHistoryEdge, setAtHistoryEdge] = useState<number>();
@@ -99,7 +119,11 @@ export function RoomMessages({
       }: {
         viewableItems: ViewToken<z.infer<typeof roomMessageSchema>>[];
       }) => {
-        visible.current(viewableItems.map(({ item }) => item.id));
+        visible.current(
+          viewableItems
+            .filter(({ item }) => !item.id.startsWith("local:"))
+            .map(({ item }) => item.id)
+        );
       }
   );
   return (
@@ -199,6 +223,7 @@ export function RoomMessages({
                 cacheScope={cacheScope}
                 item={item}
                 onThread={onThread}
+                onRetrySend={onRetrySend}
                 avatarUri={avatarUri}
                 onCopy={onCopy}
                 onReply={onReply}
@@ -271,12 +296,14 @@ function RoomMessage({
   members,
   reaction,
   onReact,
+  onRetrySend,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
   | "data"
   | "roomId"
   | "cacheScope"
   | "onThread"
+  | "onRetrySend"
   | "avatarUri"
   | "onCopy"
   | "onReply"
@@ -284,9 +311,10 @@ function RoomMessage({
   | "members"
   | "onReact"
 > & {
-  readonly item: z.infer<typeof roomMessageSchema>;
+  readonly item: RoomMessageView;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const outgoing = item.outgoing;
   const person = members.find((member) => member.id === item.senderId) ?? {
     id: item.senderId,
     name: item.sender,
@@ -316,6 +344,7 @@ function RoomMessage({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Ver perfil de ${person.name}`}
+            disabled={!!item.outgoing}
             onPress={profile}
           >
             <Text style={styles.sender}>
@@ -340,7 +369,7 @@ function RoomMessage({
         </View>
         <View
           style={
-            item.media
+            item.media || item.outgoing?.file
               ? { maxWidth: "100%" }
               : [styles.bubble, item.mine && styles.blue]
           }
@@ -353,7 +382,9 @@ function RoomMessage({
               </Text>
             </View>
           )}
-          {item.media ? (
+          {item.outgoing?.file ? (
+            <AttachmentCard file={item.outgoing.file} />
+          ) : item.media ? (
             <RoomAttachment
               item={item}
               data={data}
@@ -365,17 +396,30 @@ function RoomMessage({
           )}
         </View>
         {!item.redacted && !item.media && <MessageLinks text={item.text} />}
-        <RoomMessageControls
-          data={data}
-          roomId={roomId}
-          cacheScope={cacheScope}
-          item={item}
-          reaction={reaction}
-          onReact={onReact}
-          onReply={onReply}
-          onCopy={onCopy}
-          onThread={onThread}
-        />
+        {outgoing ? (
+          <MessageDelivery
+            status={outgoing.status}
+            onRetry={
+              onRetrySend
+                ? () => {
+                    onRetrySend(outgoing.id);
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <RoomMessageControls
+            data={data}
+            roomId={roomId}
+            cacheScope={cacheScope}
+            item={item}
+            reaction={reaction}
+            onReact={onReact}
+            onReply={onReply}
+            onCopy={onCopy}
+            onThread={onThread}
+          />
+        )}
       </View>
     </>
   );

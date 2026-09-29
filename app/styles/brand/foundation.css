@@ -154,3 +154,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Text inputs use the caret and a quiet keyboard focus, never the UA blue halo. */
+:root input,
+:root textarea,
+:root [contenteditable="true"] {
+  outline: none;
+}
+
+:root input:focus-visible,
+:root textarea:focus-visible {
+  outline: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  :root input:focus-visible,
+  :root textarea:focus-visible,
+  :root [contenteditable="true"]:focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}

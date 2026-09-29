@@ -119,6 +119,7 @@ export const roomReadPositionSchema = z.object({
   rootId: roomThreadSchema.shape.rootId.optional(),
 });
 export const roomMessageSchema = z.object({
+  transactionId: z.string().max(100).optional(),
   redacted: z.boolean().optional(),
   forwarded: z.boolean().optional(),
   editId: z.string().optional(),

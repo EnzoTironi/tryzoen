@@ -87,6 +87,9 @@ export function projectMatrixMessage(
           },
         }
       : {}),
+    ...(event.sender === viewerId && event.content["org.zoen.transaction_id"]
+      ? { transactionId: event.content["org.zoen.transaction_id"] }
+      : {}),
     senderId: event.sender,
     reply: reply
       ? {

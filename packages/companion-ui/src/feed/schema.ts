@@ -46,6 +46,7 @@ export const feedPostSchema = feedPostInputSchema.omit({ key: true }).extend({
   createdAt: z.iso.datetime(),
   liked: z.boolean(),
 });
+export const feedLikeSchema = feedPostSchema.pick({ id: true, liked: true });
 export const feedCursorSchema = z.object({
   createdAt: z.iso.datetime(),
   id: z.uuid(),

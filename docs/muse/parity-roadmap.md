@@ -866,3 +866,58 @@ permissões, falha de retirada, retry e callbacks atrasados. As migrações adit
 dependência nova. Criadores continuam adiados. Matrix e SQL não são uma
 transação distribuída; a entrega não declara capacidade para um milhão de pessoas,
 E2EE, push do sistema operacional ou paridade completa.
+
+
+No build real da rodada 24, foram conferidos o modal de participantes, remoção,
+reentrada com histórico preservado e confirmação mobile de saída. Os dois membros
+sintéticos foram restaurados. [Imagens e sequência de capturas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406)
+anexadas com `gh --attach`; [registro](evidence/group-membership-2026-09-29.json).
+O build passou. A preservação do rascunho ao sair não foi comprovada visualmente
+em separado.
+
+### Vigésima quinta rodada — respostas imediatas e cache de navegação — 29/09/2026
+
+Enviar para o agente, grupos e threads agora cria uma bolha local e libera o
+compositor imediatamente. A fila usa o QueryClient e mutações TanStack; o trabalho
+do agente continua sem bloquear o próximo envio. Falhas pertencem à mensagem,
+e confirmações ou erros atrasados não apagam o novo rascunho. O mesmo componente
+apresenta entrega e retry. Reações e ações remotas só aparecem após a confirmação.
+
+Matrix mantém sua transação nativa por envio/anexo e carrega essa identidade nos
+eventos próprios, inclusive para reconciliar uploads parcialmente confirmados.
+Eve usa apenas APIs públicas e associa a bolha ao `message.received` do seu stream
+de resposta. Quando o histórico contínuo chega antes dessa confirmação, os eventos
+continuam sendo recolhidos, mas sua nova projeção aguarda os recibos pendentes.
+Isso evita duplicação sem comparar texto e sem confundir mensagens idênticas.
+O SDK não expõe uma chave pública de idempotência: um envio Eve incerto mostra
+aviso e exige conferir a conversa antes de repetir manualmente.
+
+O provider web permanece acima das rotas de conversa. Trocar seções por query
+string preserva a conversa selecionada e usa o histórico integrado do Next, sem
+uma nova navegação de servidor. Histórico e rascunhos do agente reaparecem do
+cache e o stream retoma do cursor conhecido. Caches são isolados por conta/espaço,
+limpos ao desmontar essa fronteira e expiram após 30 minutos de inatividade.
+Curtidas do Feed e silenciar conversas também respondem de modo otimista, com
+ordenação das escritas e recuperação de erro. Campos de texto, inclusive em
+portais de modal, usam foco neutro; alto contraste mantém indicador explícito.
+
+No navegador real: três mensagens seguidas em grupo, duas na thread e duas com
+o agente sob 3,5 segundos de latência; rascunhos preservados e confirmações únicas.
+Feed e conversa já carregados reapareceram sem tela de carregamento com cinco
+segundos de latência. Desktop e viewport 390 × 844 foram conferidos, sem erros
+no console. [Cinco capturas e sequência de 15 segundos](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889698768) anexadas
+com `gh --attach`; o vídeo não é uma gravação contínua.
+[Registro](evidence/instant-messaging-2026-09-29.json).
+
+`pnpm check`: 273 arquivos / 1.704 testes; build passou. Cinco testes com
+PostgreSQL/Synapse reais verificaram envio, relações e sincronização. A revisão
+estrutural mantém 47 observações / 28 gates sem supressões: tamanho, complexidade
+e churn dos donos existentes permanecem visíveis; o indicador de entrega foi
+consolidado e os novos donos separam fila, projeção e transporte. Nenhuma nova
+dependência ou migração nesta rodada.
+
+A fila é limitada a 20 entradas por conversa e existe em memória, não sobrevive
+a fechar/recarregar o aplicativo. Primeiras visitas sem cache ainda carregam dados.
+Não é a conclusão de operação offline durável, ausência global de layout shifts,
+qualificação em aparelhos físicos, paridade completa ou capacidade para um milhão
+de pessoas. Criadores permanecem adiados.

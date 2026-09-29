@@ -34,7 +34,6 @@ export function RoomComposer({
           draft.change(text);
           onTyping?.(text.trim().length > 0);
         }}
-        sendStatus={draft.status}
         reply={
           reply
             ? {
@@ -60,7 +59,7 @@ export function RoomComposer({
         }
         placeholder={thread ? "Responder…" : "Mensagem…"}
         disabled={disabled}
-        sendDisabled={paused || !visible}
+        sendDisabled={!visible}
         onSend={(message) => {
           onTyping?.(false);
           return draft.send(message);

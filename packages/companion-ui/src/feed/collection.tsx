@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useMutationState,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import type { z } from "zod";
 import { SlidersHorizontal } from "lucide-react-native";
 import { Text, View } from "react-native";
@@ -8,6 +14,7 @@ import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
 import { FeedCard } from "./card";
 import { FeedOptions } from "./options";
+import { feedLikeSchema } from "./schema";
 import type {
   feedCursorSchema,
   feedPageSchema,
@@ -20,7 +27,7 @@ export interface FeedData {
   list: (
     cursor?: z.infer<typeof feedCursorSchema> | null
   ) => Promise<z.infer<typeof feedPageSchema>>;
-  like: (input: { id: string; liked: boolean }) => Promise<void>;
+  like: (input: z.infer<typeof feedLikeSchema>) => Promise<void>;
   remove: (id: string) => Promise<void>;
   instructions: () => Promise<z.infer<typeof feedInstructionsSchema>>;
   saveInstructions: (
@@ -37,6 +44,8 @@ export function FeedCollection({
   readonly cacheScope: string;
   readonly onPrompt: (prompt: string) => void;
 }) {
+  const client = useQueryClient();
+  const [likeError, setLikeError] = useState<string>();
   const [selected, setSelected] = useState<string>();
   const [editing, setEditing] = useState(false);
   const feed = useInfiniteQuery({
@@ -44,11 +53,43 @@ export function FeedCollection({
     queryFn: ({ pageParam }) => data.list(pageParam),
     initialPageParam: null as z.infer<typeof feedCursorSchema> | null,
     getNextPageParam: (page) => page.nextCursor,
+    staleTime: 30_000,
+  });
+  const likeKey = ["feed-like", cacheScope];
+  const pendingLikes = useMutationState({
+    filters: { mutationKey: likeKey, status: "pending" },
+    select: (mutation) => feedLikeSchema.parse(mutation.state.variables),
   });
   const like = useMutation({
+    mutationKey: likeKey,
+    scope: { id: JSON.stringify(likeKey) },
     mutationFn: data.like,
-    onSuccess: async () => {
-      await feed.refetch();
+    onMutate: () => {
+      setLikeError(undefined);
+    },
+    onSuccess: (_result, input) => {
+      client.setQueryData<InfiniteData<z.infer<typeof feedPageSchema>>>(
+        ["personal-feed", cacheScope],
+        (current) =>
+          current && {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              items: page.items.map((post) =>
+                post.id === input.id ? { ...post, liked: input.liked } : post
+              ),
+            })),
+          }
+      );
+    },
+    onError: () => {
+      setLikeError("Your reaction could not be saved. Please try again.");
+    },
+    onSettled: () => {
+      if (client.isMutating({ mutationKey: likeKey }) === 1)
+        void client.invalidateQueries({
+          queryKey: ["personal-feed", cacheScope],
+        });
     },
   });
   const remove = useMutation({
@@ -58,7 +99,13 @@ export function FeedCollection({
       await feed.refetch();
     },
   });
-  const items = feed.data?.pages.flatMap((page) => page.items) ?? [];
+  const liked = new Map(pendingLikes.map((input) => [input.id, input.liked]));
+  const items = (feed.data?.pages.flatMap((page) => page.items) ?? []).map(
+    (post) =>
+      liked.has(post.id)
+        ? Object.assign({}, post, { liked: liked.get(post.id) ?? post.liked })
+        : post
+  );
   const current = items.find((post) => post.id === selected);
   const customize = () => {
     onPrompt(
@@ -80,8 +127,9 @@ export function FeedCollection({
           />
         }
         loading={feed.isPending}
-        error={feed.error?.message ?? like.error?.message}
+        error={feed.error?.message ?? likeError}
         onRetry={() => {
+          setLikeError(undefined);
           like.reset();
           void feed.refetch();
         }}
@@ -90,7 +138,7 @@ export function FeedCollection({
           <FeedCard
             key={post.id}
             post={post}
-            pending={like.isPending}
+            pending={false}
             onLike={() => {
               like.mutate({ id: post.id, liked: !post.liked });
             }}

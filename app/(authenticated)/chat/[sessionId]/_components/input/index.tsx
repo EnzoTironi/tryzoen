@@ -1,5 +1,6 @@
 "use client";
 
+import { SquareIcon } from "lucide-react";
 import { useI18n } from "@web/i18n/context";
 import {
   PromptInput,
@@ -46,7 +47,6 @@ export function ChatInput({
     const text = message.text.trim();
     if (
       (text.length === 0 && message.files.length === 0) ||
-      agent.status === "submitted" ||
       isRestoring ||
       isAuthorizing
     ) {
@@ -66,9 +66,7 @@ export function ChatInput({
         <PromptInputBody>
           <PromptInputTextarea
             className="min-h-0"
-            disabled={
-              !isTerminal && (agent.status === "submitted" || isAuthorizing)
-            }
+            disabled={!isTerminal && (isRestoring || isAuthorizing)}
             placeholder={t("Send a message…")}
           />
         </PromptInputBody>
@@ -84,11 +82,19 @@ export function ChatInput({
               {t("New chat")}
             </Button>
           ) : (
-            <PromptInputSubmit
-              disabled={isRestoring}
-              onStop={() => void agent.cancel()}
-              status={isBusy ? agent.status : undefined}
-            />
+            <>
+              {isBusy && (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("Stop")}
+                  onClick={() => void agent.cancel()}
+                >
+                  <SquareIcon className="size-3.5" fill="currentColor" />
+                </Button>
+              )}
+              <PromptInputSubmit disabled={isRestoring || isAuthorizing} />
+            </>
           )}
         </PromptInputFooter>
       </PromptInput>

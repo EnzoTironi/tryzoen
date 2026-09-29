@@ -26,16 +26,24 @@ export function RoomNotificationSettings({
     queryKey,
     queryFn: ({ signal }) => data.notifications({ id: roomId }, signal),
     retry: false,
+    staleTime: 30_000,
   });
   const change = useMutation({
+    scope: { id: JSON.stringify(queryKey) },
     mutationFn: (muted: boolean) =>
       data.setNotifications({ id: roomId, muted }),
     onSuccess: (result) => {
-      client.setQueryData(queryKey, result);
+      client.setQueryData(
+        queryKey,
+        (current: typeof result | undefined) => current && result
+      );
     },
   });
   const failed = preference.isError || change.isError;
-  const busy = preference.isFetching || change.isPending;
+  const busy = preference.isPending;
+  const displayedMuted = change.isPending
+    ? change.variables
+    : preference.data?.muted;
   return (
     <View style={styles.section}>
       <View style={styles.row}>
@@ -47,11 +55,11 @@ export function RoomNotificationSettings({
           <Switch
             accessibilityLabel="Silenciar conversa"
             accessibilityHint="Silencia novos alertas e menções desta conversa para você."
-            value={preference.data.muted}
+            value={displayedMuted}
             onValueChange={(muted) => {
               change.mutate(muted);
             }}
-            disabled={busy || failed}
+            disabled={busy || preference.isError}
             trackColor={{ false: "#e5e5ea", true: "#34c759" }}
           />
         ) : busy ? (
@@ -59,11 +67,9 @@ export function RoomNotificationSettings({
         ) : null}
       </View>
       <Text style={styles.caption}>
-        {change.isPending
-          ? "Salvando…"
-          : preference.data?.muted && !preference.isError
-            ? "Silenciada até você reativar. Você continua recebendo as mensagens, sem novos alertas nem menções."
-            : "Silencie novos alertas, inclusive menções. As mensagens continuam na conversa."}
+        {displayedMuted && !preference.isError
+          ? "Silenciada até você reativar. Você continua recebendo as mensagens, sem novos alertas nem menções."
+          : "Silencie novos alertas, inclusive menções. As mensagens continuam na conversa."}
       </Text>
       {failed && (
         <View style={styles.error}>

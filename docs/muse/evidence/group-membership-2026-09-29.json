@@ -1,0 +1,32 @@
+{
+  "date": "2026-09-29",
+  "visualEvidence": "https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406",
+  "environment": "Local production build, synthetic administrator/member accounts; Chrome desktop and 390x844 mobile viewport",
+  "verifiedFlows": [
+    "Administrator participant modal",
+    "Remove ordinary member",
+    "Revoked conversation hides history/composer",
+    "Re-add member restores native access and history",
+    "Mobile leave confirmation",
+    "Synthetic memberships restored"
+  ],
+  "validation": {
+    "checkTests": 1703,
+    "check": "passed",
+    "build": "passed",
+    "focusedRealSynapseSuites": 3,
+    "focusedRealSynapseTests": 5,
+    "migrations": "0093–0094 applied only to isolated/local review databases"
+  },
+  "media": {
+    "screenshots": 2,
+    "screenshotSequenceSeconds": 6,
+    "continuousRecording": false
+  },
+  "limits": [
+    "Draft preservation on leave is implemented, but not separately confirmed visually",
+    "External invitations and independent private-group ACLs remain open",
+    "Matrix and SQL writes are not a distributed transaction",
+    "No physical-device or production-capacity qualification"
+  ]
+}

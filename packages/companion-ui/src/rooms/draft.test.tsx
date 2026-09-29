@@ -97,105 +97,65 @@ it("restores text and quote after navigation, with separate account, room and th
   expect(open("viewer:workspace", "room", "$another-thread").text).toBe("");
 });
 
-it("keeps failed drafts and retries the same native transaction after reopening", async () => {
+it("clears immediately and retries a failed echo without replacing the next draft", async () => {
   vi.mocked(data.send).mockRejectedValueOnce(new Error("Lost response"));
   open().change("Reply");
   open().replyTo(quote);
-  await expect(open().send({ text: "Reply", files: [] })).rejects.toThrow(
-    "Lost response"
-  );
-  expect(open()).toMatchObject({
-    text: "Reply",
-    reply: quote,
-    status: "failed",
-  });
   await open().send({ text: "Reply", files: [] });
-  expect(data.send).toHaveBeenNthCalledWith(
-    2,
-    vi.mocked(data.send).mock.calls[0]?.[0]
+  expect(open().text).toBe("");
+  open().change("Next draft");
+  await vi.waitFor(() => {
+    expect(open().outgoing[0]?.status).toBe("failed");
+  });
+  open().retry(open().outgoing[0]?.id ?? "missing");
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(2);
+  });
+  expect(vi.mocked(data.send).mock.calls[1]).toEqual(
+    vi.mocked(data.send).mock.calls[0]
   );
-  expect(open()).toMatchObject({ text: "", status: "idle" });
+  expect(open().text).toBe("Next draft");
   expect(open().reply).toBeUndefined();
 });
 
-it("uses a new transaction when editing a failed message or changing its quote", async () => {
-  vi.mocked(data.send).mockRejectedValue(new Error("Offline"));
-  open().change("First");
-  await expect(open().send({ text: "First" })).rejects.toThrow("Offline");
-  open().change("Revised");
-  await expect(open().send({ text: "Revised" })).rejects.toThrow("Offline");
-  open().replyTo(quote);
-  await expect(open().send({ text: "Revised" })).rejects.toThrow("Offline");
+it("keeps multiple sends through navigation in transport order with distinct identities", async () => {
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  await open().send({ text: "Same text" });
+  await open().send({ text: "Same text" });
+  expect(open().outgoing).toHaveLength(2);
+  expect(open().text).toBe("");
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(1);
+  });
+  pending.resolve();
+  await vi.waitFor(() => {
+    expect(data.send).toHaveBeenCalledTimes(2);
+  });
   const ids = vi
     .mocked(data.send)
     .mock.calls.map(([input]) => input.operationId);
-  expect(new Set(ids).size).toBe(3);
-});
-
-it("keeps pending state through navigation and prevents duplicate concurrent submissions", async () => {
-  const pending = pendingSend();
-  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
-  open().change("Sending");
-  const sent = open().send({ text: "Sending" });
-  expect(open().status).toBe("sending");
-  open().change("Must not replace in-flight text");
-  open().replyTo(quote);
-  await expect(open().send({ text: "Sending" })).rejects.toThrow(
-    "already being sent"
-  );
-  expect(data.send).toHaveBeenCalledTimes(1);
-  expect(open().text).toBe("Sending");
-  pending.settle();
-  await sent;
-  expect(open().text).toBe("");
+  expect(new Set(ids).size).toBe(2);
 });
 
 it.each([false, true])(
-  "does not recreate cleared account data when an in-flight send settles (failure=%s)",
+  "does not recreate cleared account data after delivery (failure=%s)",
   async (fails) => {
     const pending = pendingSend();
     vi.mocked(data.send).mockReturnValueOnce(pending.promise);
-    open().change("Private draft");
-    const sent = open().send({ text: "Private draft" });
+    await open().send({ text: "Private draft" });
+    await vi.waitFor(() => {
+      expect(data.send).toHaveBeenCalledTimes(1);
+    });
     client.clear();
-    if (fails) pending.settle(new Error("Unavailable"));
-    else pending.settle();
-    await sent.catch(() => undefined);
+    if (fails) pending.reject(new Error("Unavailable"));
+    else pending.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   }
 );
 
-it("sends a thread draft to its own root and clears only that draft", async () => {
-  open().change("Main draft");
-  const thread = () => open("viewer:workspace", "room", "$root");
-  thread().change("Thread reply");
-  thread().replyTo(quote);
-  await thread().send({ text: "Thread reply" });
-  expect(data.send).toHaveBeenCalledWith(
-    expect.objectContaining({
-      id: "room",
-      rootId: "$root",
-      replyTo: "$quote",
-      text: "Thread reply",
-    })
-  );
-  expect(thread().text).toBe("");
-  expect(open().text).toBe("Main draft");
-});
-
-function pendingSend() {
-  let settle: ((error?: Error) => void) | undefined;
-  const promise = new Promise<void>((resolve, reject) => {
-    settle = (error?: Error) => {
-      if (error) reject(error);
-      else resolve();
-    };
-  });
-  if (!settle) throw new Error("Send not initialized");
-  return { promise, settle };
-}
-
-it("retains attachments through failure and navigation, then clears only the successful room draft", async () => {
+it("sends thread replies and attachments without touching the main or next draft", async () => {
   const files = [
     {
       type: "file" as const,
@@ -204,14 +164,40 @@ it("retains attachments through failure and navigation, then clears only the suc
       url: "data:audio/wav;base64,AAAA",
     },
   ];
-  open().changeFiles(files);
-  vi.mocked(data.send).mockRejectedValueOnce(new Error("Offline"));
-  await expect(open().send({ text: "", files })).rejects.toThrow("Offline");
-  expect(open().files).toEqual(files);
-  expect(open("viewer:other").files).toBeUndefined();
-  await open().send({ text: "", files });
-  expect(vi.mocked(data.send).mock.calls[0]?.[0]).toEqual(
-    vi.mocked(data.send).mock.calls[1]?.[0]
+  const thread = () => open("viewer:workspace", "room", "$root");
+  const pending = pendingSend();
+  vi.mocked(data.send).mockReturnValueOnce(pending.promise);
+  open().change("Main draft");
+  thread().replyTo(quote);
+  thread().changeFiles(files);
+  await thread().send({ text: "Thread reply", files });
+  thread().change("Next reply");
+  thread().changeFiles(files);
+  pending.reject(new Error("Offline"));
+  await vi.waitFor(() => {
+    expect(thread().outgoing[0]?.status).toBe("failed");
+  });
+  expect(data.send).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: "room",
+      rootId: "$root",
+      replyTo: "$quote",
+      text: "Thread reply",
+      files,
+    })
   );
-  expect(open().files).toBeUndefined();
+  expect(thread()).toMatchObject({ text: "Next reply", files });
+  expect(thread().outgoing[0]?.input.files).toEqual(files);
+  expect(open().text).toBe("Main draft");
+  expect(open("other:workspace").outgoing).toHaveLength(0);
 });
+
+function pendingSend() {
+  let resolve!: () => void;
+  let reject!: (cause: Error) => void;
+  const promise = new Promise<void>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}

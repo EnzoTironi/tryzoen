@@ -1,3 +1,4 @@
+import { MessageDelivery } from "./conversation/delivery";
 import { useConversationScroll } from "./conversation/scroll";
 import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
@@ -34,6 +35,7 @@ export function Conversation({
   status,
   error,
   onSend,
+  onRetrySend,
   onRespond,
   onCancel,
   onLoadOlder,
@@ -41,6 +43,7 @@ export function Conversation({
   olderError,
   onCopyText,
   initialDraft,
+  onDraftChange,
   reactions,
   onReact,
   onVisibleMessagesChange,
@@ -49,6 +52,7 @@ export function Conversation({
   readonly status: UseEveAgentStatus;
   readonly error?: string;
   readonly onSend: ChatAgent["send"];
+  readonly onRetrySend?: (id: string) => void;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
   readonly onCancel: () => void;
   readonly onLoadOlder?: () => Promise<void>;
@@ -56,6 +60,7 @@ export function Conversation({
   readonly olderError?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
   readonly initialDraft?: ConversationDraft;
+  readonly onDraftChange?: (draft: ConversationDraft) => void;
   readonly reactions?: ReadonlyMap<string, string | null>;
   readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange?: (ids: string[]) => void;
@@ -89,7 +94,11 @@ export function Conversation({
   const [onViewableItemsChanged] = useState(
     () =>
       ({ viewableItems }: { viewableItems: ViewToken<EveMessage>[] }) => {
-        reportVisible.current?.(viewableItems.map(({ item }) => item.id));
+        reportVisible.current?.(
+          viewableItems
+            .filter(({ item }) => !item.metadata?.optimistic)
+            .map(({ item }) => item.id)
+        );
       }
   );
   return (
@@ -141,26 +150,47 @@ export function Conversation({
                   onRespond={onRespond}
                 />
               ))}
-              {message.metadata?.status === "failed" && (
-                <Text style={styles.error}>Message not delivered.</Text>
+              {message.metadata?.status === "failed" &&
+                !message.metadata.optimistic && (
+                  <Text style={styles.error}>
+                    A resposta não pôde ser concluída.
+                  </Text>
+                )}
+            </View>
+            <View style={{ minHeight: 44, justifyContent: "center" }}>
+              {message.metadata?.optimistic ? (
+                <MessageDelivery
+                  status={
+                    message.metadata.status === "failed" ? "failed" : "sending"
+                  }
+                  failureText="Envio não confirmado. Verifique a conversa antes de reenviar."
+                  onRetry={
+                    onRetrySend
+                      ? () => {
+                          onRetrySend(message.id);
+                        }
+                      : undefined
+                  }
+                />
+              ) : (
+                <MessageActions
+                  text={messageText(message)}
+                  outgoing={message.role === "user"}
+                  onCopy={onCopyText}
+                  onReply={() => {
+                    setReply({
+                      id: message.id,
+                      role: message.role,
+                      text: messageText(message),
+                    });
+                  }}
+                  reaction={reactions?.get(message.id)}
+                  onReact={
+                    onReact ? (emoji) => onReact(message.id, emoji) : undefined
+                  }
+                />
               )}
             </View>
-            <MessageActions
-              text={messageText(message)}
-              outgoing={message.role === "user"}
-              onCopy={onCopyText}
-              onReply={() => {
-                setReply({
-                  id: message.id,
-                  role: message.role,
-                  text: messageText(message),
-                });
-              }}
-              reaction={reactions?.get(message.id)}
-              onReact={
-                onReact ? (emoji) => onReact(message.id, emoji) : undefined
-              }
-            />
           </View>
         )}
         ListFooterComponent={
@@ -196,6 +226,16 @@ export function Conversation({
               text: staged?.text ?? initialDraft?.text ?? "",
               files: initialDraft?.files ?? [],
             }}
+            onDraftChange={
+              onDraftChange
+                ? (draft) => {
+                    onDraftChange({
+                      ...draft,
+                      text: replyMessage(draft.text, reply),
+                    });
+                  }
+                : undefined
+            }
             onSend={async (message) => {
               await onSend(
                 messageContent({

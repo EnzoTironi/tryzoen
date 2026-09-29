@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
@@ -22,6 +23,26 @@ export function SessionConversation({
   readonly reactions: ReactionData;
   readonly cacheScope: string;
 }) {
+  const queryClient = useQueryClient();
+  const draftKey = useMemo(
+    () => ["agent-draft", cacheScope, sessionId],
+    [cacheScope, sessionId]
+  );
+  const [draft] = useState(
+    () => queryClient.getQueryData<ConversationDraft>(draftKey) ?? initialDraft
+  );
+  useEffect(() => {
+    queryClient.setQueryDefaults(draftKey, { gcTime: 30 * 60_000 });
+    if (!queryClient.getQueryData(draftKey))
+      queryClient.setQueryData(draftKey, draft ?? { text: "", files: [] });
+  }, [draft, draftKey, queryClient]);
+  const saveDraft = useCallback(
+    (next: ConversationDraft) => {
+      if (queryClient.getQueryCache().find({ queryKey: draftKey, exact: true }))
+        queryClient.setQueryData(draftKey, next);
+    },
+    [draftKey, queryClient]
+  );
   const agent = useSessionAgent(sessionId, client, cacheScope);
   const feedback = useMessageReactions(reactions, cacheScope, sessionId);
   const messages = useMemo(
@@ -29,12 +50,12 @@ export function SessionConversation({
     [agent.data.messages, agent.events]
   );
   const [actionError, setActionError] = useState<string>();
-  const busy = agent.status === "streaming" || agent.status === "submitted";
   return (
     <Conversation
       key={sessionId}
       messages={messages}
-      initialDraft={initialDraft}
+      initialDraft={draft}
+      onDraftChange={saveDraft}
       onCopyText={onCopyText}
       onVisibleMessagesChange={feedback.showMessages}
       reactions={
@@ -51,9 +72,8 @@ export function SessionConversation({
           ? "Couldn’t load reactions. Reopen the conversation to try again."
           : undefined)
       }
-      onSend={(text) =>
-        agent.send(text, busy ? { turnPolicy: "steer" } : undefined)
-      }
+      onSend={agent.send}
+      onRetrySend={agent.retrySend}
       onRespond={agent.respond}
       onCancel={() => {
         setActionError(undefined);

@@ -278,6 +278,7 @@ export const sendMatrixMessage = async function (
           `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}`,
           {
             msgtype: "m.text",
+            "org.zoen.transaction_id": input.operationId,
             body,
             ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
           },
@@ -294,6 +295,7 @@ export const sendMatrixMessage = async function (
           `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${input.operationId}.file.${index}`,
           {
             ...media,
+            "org.zoen.transaction_id": `${input.operationId}.file.${index}`,
             msgtype: ["image", "audio", "video"].includes(category)
               ? `m.${category}`
               : "m.file",

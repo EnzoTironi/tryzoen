@@ -222,6 +222,7 @@ it("uses native Matrix thread relations and a stable transaction ID for sends", 
     expect.stringContaining("/send/m.room.message/deduplicated-operation"),
     {
       msgtype: "m.text",
+      "org.zoen.transaction_id": "deduplicated-operation",
       body: "Ready",
       "m.relates_to": {
         rel_type: "m.thread",

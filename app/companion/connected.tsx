@@ -63,7 +63,13 @@ export function ConnectedCompanion({
   const [draftError, setDraftError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = (path: string) => {
-    router.push(workspaceHref(path, workspaceId));
+    const href = workspaceHref(path, workspaceId);
+    if (
+      new URL(href, window.location.origin).pathname ===
+      window.location.pathname
+    )
+      window.history.pushState(null, "", href);
+    else router.push(href, { scroll: false });
   };
   const openConversation = (id?: string) => {
     navigate(
@@ -72,7 +78,15 @@ export function ConnectedCompanion({
   };
   const navigateSection = (next: CompanionSection) => {
     if (next === "settings") setSettingsOpen(true);
-    else navigate(`/companion?view=${next}`);
+    else {
+      const query = new URLSearchParams(params);
+      query.set("view", next);
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}?${query.toString()}`
+      );
+    }
   };
   const stagePrompt = (prompt: string) => {
     try {
