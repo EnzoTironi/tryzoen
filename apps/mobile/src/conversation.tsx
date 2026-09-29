@@ -37,6 +37,7 @@ export function MobileConversation({
     />
   ) : (
     <NewConversation
+      cacheScope={cacheScope}
       client={client}
       initialDraft={initialDraft}
       avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}

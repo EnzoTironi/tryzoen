@@ -224,6 +224,13 @@ export function RoomMessages({
                 item={item}
                 onThread={onThread}
                 onRetrySend={onRetrySend}
+                onRemoveSend={
+                  onSettleSend
+                    ? (id) => {
+                        onSettleSend([id]);
+                      }
+                    : undefined
+                }
                 avatarUri={avatarUri}
                 onCopy={onCopy}
                 onReply={onReply}
@@ -297,6 +304,7 @@ function RoomMessage({
   reaction,
   onReact,
   onRetrySend,
+  onRemoveSend,
 }: Pick<
   ComponentProps<typeof RoomMessages>,
   | "data"
@@ -311,6 +319,7 @@ function RoomMessage({
   | "members"
   | "onReact"
 > & {
+  readonly onRemoveSend?: (id: string) => void;
   readonly item: RoomMessageView;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
@@ -398,6 +407,13 @@ function RoomMessage({
         {!item.redacted && !item.media && <MessageLinks text={item.text} />}
         {outgoing ? (
           <MessageDelivery
+            onRemove={
+              onRemoveSend
+                ? () => {
+                    onRemoveSend(outgoing.id);
+                  }
+                : undefined
+            }
             status={outgoing.status}
             onRetry={
               onRetrySend

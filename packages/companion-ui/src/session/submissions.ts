@@ -1,4 +1,6 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ConversationDraft } from "./input";
 import type {
   Client,
   MessageResponse,
@@ -13,6 +15,7 @@ import { isTerminalSession } from "./events";
 
 // Local projection identity only; the runtime owns delivery and turn identities.
 let nextSubmission = 0;
+const submissionPrefix = `${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
 
 export function useSessionSubmissions(
   client: Client,
@@ -22,46 +25,80 @@ export function useSessionSubmissions(
   responseRef: RefObject<Promise<MessageResponse> | undefined>,
   events: readonly MessageStreamEvent[]
 ) {
+  const queries = useQueryClient();
+  const responses = useRef(
+    new Map<
+      string,
+      {
+        response: ReturnType<typeof submissionPromise<MessageResponse>>;
+        options?: SendTurnOptions;
+      }
+    >()
+  );
+  const prepare = (id: string, options?: SendTurnOptions) => {
+    const response = submissionPromise<MessageResponse>();
+    void response.promise.catch(() => undefined);
+    responses.current.set(id, { response, options });
+    responseRef.current = response.promise;
+  };
+  const fail = (id: string, cause: unknown) => {
+    const pending = responses.current.get(id);
+    if (!pending) return;
+    pending.response.reject(cause);
+    if (responseRef.current === pending.response.promise)
+      responseRef.current = undefined;
+    responses.current.delete(id);
+  };
   const outbox = useMessageOutbox<
     {
       message: string | UserContent;
-      options?: SendTurnOptions;
+      turnPolicy?: SendTurnOptions["turnPolicy"];
       streamIndex: number;
-      response: ReturnType<typeof submissionPromise<MessageResponse>>;
     },
     Extract<MessageStreamEvent, { type: "message.received" }>
-  >(["agent-outbox", cacheScope, sessionId], async (input) => {
-    const received =
-      submissionPromise<
-        Extract<MessageStreamEvent, { type: "message.received" }>
-      >();
-    // Consume only this submission's public response stream to correlate its echo.
-    // Keep draining after receipt so Stop retains the exact native turn identity.
-    void (async () => {
-      try {
-        const session = client.sessions.attach(sessionId, {
-          streamIndex: history.current?.endIndex ?? 0,
-        });
-        const response = await session.send(input.message, input.options);
-        input.response.resolve(response);
-        for await (const event of response) {
-          if (
-            event.type === "message.received" &&
-            event.data.kind !== "execution.background_task"
-          )
-            received.resolve(event);
+  >(
+    ["agent-outbox", cacheScope, sessionId],
+    async (input, id) => {
+      const pending = responses.current.get(id);
+      if (!pending)
+        throw new Error("Review the recovered message before retrying.");
+      const received =
+        submissionPromise<
+          Extract<MessageStreamEvent, { type: "message.received" }>
+        >();
+      // Consume only this submission's public response stream to correlate its echo.
+      // Keep draining after receipt so Stop retains the exact native turn identity.
+      void (async () => {
+        try {
+          const session = client.sessions.attach(sessionId, {
+            streamIndex: history.current?.endIndex ?? 0,
+          });
+          const response = await session.send(input.message, {
+            ...pending.options,
+            turnPolicy: input.turnPolicy,
+          });
+          pending.response.resolve(response);
+          for await (const event of response) {
+            if (
+              event.type === "message.received" &&
+              event.data.kind !== "execution.background_task"
+            )
+              received.resolve(event);
+          }
+          received.reject(new Error("The message was not confirmed."));
+        } catch (cause) {
+          pending.response.reject(cause);
+          received.reject(cause);
+        } finally {
+          responses.current.delete(id);
+          if (responseRef.current === pending.response.promise)
+            responseRef.current = undefined;
         }
-        received.reject(new Error("The message was not confirmed."));
-      } catch (cause) {
-        input.response.reject(cause);
-        received.reject(cause);
-      } finally {
-        if (responseRef.current === input.response.promise)
-          responseRef.current = undefined;
-      }
-    })();
-    return received.promise;
-  });
+      })();
+      return received.promise;
+    },
+    fail
+  );
   const confirmed = new Set(events.map((event) => event.meta.id));
   // The continuous stream can outrun the POST acknowledgement. Hold its new
   // projection until every local submission has an exact receipt; matching text
@@ -79,6 +116,9 @@ export function useSessionSubmissions(
       outbox.remove(settled.map((entry) => entry.id));
   }, [outbox, settled, pendingFromIndex]);
   return {
+    remove: (id: string) => {
+      outbox.remove([id]);
+    },
     pendingFromIndex,
     entries: outbox.entries.filter(
       (entry) =>
@@ -89,14 +129,16 @@ export function useSessionSubmissions(
     retry: (id: string) => {
       const entry = outbox.entries.find((item) => item.id === id);
       if (
+        !history.current ||
         entry?.status !== "failed" ||
-        isTerminalSession(history.current?.events ?? [])
+        isTerminalSession(history.current.events)
       )
         return;
-      const response = submissionPromise<MessageResponse>();
-      void response.promise.catch(() => undefined);
-      outbox.retry(id, { ...entry.input, response });
-      responseRef.current = response.promise;
+      prepare(id);
+      outbox.retry(id, {
+        ...entry.input,
+        streamIndex: history.current.endIndex,
+      });
     },
     send: async <TOutput>(
       message: string | UserContent,
@@ -106,16 +148,22 @@ export function useSessionSubmissions(
       if (!current) throw new Error("The conversation is still loading.");
       if (isTerminalSession(current.events))
         throw new Error("This conversation has ended. Start a new chat.");
-      const response = submissionPromise<MessageResponse>();
-      // Stop may wait on this promise; transport failures belong to the message.
-      void response.promise.catch(() => undefined);
-      outbox.enqueue(`local:${++nextSubmission}`, {
-        message,
-        streamIndex: current.endIndex,
-        options: { ...options, turnPolicy: options?.turnPolicy ?? "steer" },
-        response,
-      });
-      responseRef.current = response.promise;
+      const id = `local:${submissionPrefix}:${++nextSubmission}`;
+      prepare(id, options);
+      try {
+        outbox.enqueue(id, {
+          message,
+          streamIndex: current.endIndex,
+          turnPolicy: options?.turnPolicy ?? "steer",
+        });
+        queries.setQueryData<ConversationDraft>(
+          ["agent-draft", cacheScope, sessionId],
+          (savedDraft) => savedDraft && { text: "", files: [] }
+        );
+      } catch (cause) {
+        fail(id, cause);
+        throw cause;
+      }
     },
   };
 }

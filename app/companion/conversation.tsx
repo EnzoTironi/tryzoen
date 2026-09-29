@@ -52,6 +52,7 @@ export function ConnectedConversation({
     />
   ) : (
     <NewConversation
+      cacheScope={historyScope}
       key={token}
       client={browserSessionClient}
       avatarUri="/marketing/zoen-avatar.webp"

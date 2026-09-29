@@ -6,9 +6,11 @@ import type { OutgoingMessage } from "./outbox";
 export function MessageDelivery({
   status,
   onRetry,
+  onRemove,
   failureText = "Não foi possível confirmar o envio.",
 }: Pick<OutgoingMessage<unknown, unknown>, "status"> & {
   readonly onRetry?: () => void;
+  readonly onRemove?: () => void;
   readonly failureText?: string;
 }) {
   return (
@@ -33,6 +35,11 @@ export function MessageDelivery({
             ? "Sincronizando…"
             : "Enviando…"}
       </Text>
+      {status === "failed" && onRemove && (
+        <ActionButton quiet onPress={onRemove}>
+          Remover deste dispositivo
+        </ActionButton>
+      )}
       {status === "failed" && onRetry && (
         <ActionButton quiet onPress={onRetry}>
           Reenviar

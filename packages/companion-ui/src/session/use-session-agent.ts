@@ -293,6 +293,7 @@ export function useSessionAgent(
     resume,
     send: submissions.send,
     retrySend: submissions.retry,
+    removeSend: submissions.remove,
     status:
       submissions.entries.some((entry) => entry.status === "sending") &&
       status === "ready"

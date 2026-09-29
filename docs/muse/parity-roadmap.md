@@ -867,7 +867,6 @@ dependência nova. Criadores continuam adiados. Matrix e SQL não são uma
 transação distribuída; a entrega não declara capacidade para um milhão de pessoas,
 E2EE, push do sistema operacional ou paridade completa.
 
-
 No build real da rodada 24, foram conferidos o modal de participantes, remoção,
 reentrada com histórico preservado e confirmação mobile de saída. Os dois membros
 sintéticos foram restaurados. [Imagens e sequência de capturas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406)
@@ -921,3 +920,48 @@ a fechar/recarregar o aplicativo. Primeiras visitas sem cache ainda carregam dad
 Não é a conclusão de operação offline durável, ausência global de layout shifts,
 qualificação em aparelhos físicos, paridade completa ou capacidade para um milhão
 de pessoas. Criadores permanecem adiados.
+
+### Vigésima sexta rodada — rascunhos e envios duráveis — 29/09/2026
+
+Rascunhos de conversas novas/existentes, grupos e threads agora ficam no disco,
+com a fila de envio. TanStack continua como fonte do estado da interface; somente
+esses registros locais são persistidos. Web/Electron usam IndexedDB (`idb` 8.0.3)
+e o adaptador Expo usa SQLite 57.0.3, compatível com SDK 57. Ambos são as versões
+estáveis atuais verificadas nesta rodada. Credenciais, resultados de ferramentas
+e o cache geral de consultas não entram nessa persistência.
+
+Gravar a mensagem e remover seu rascunho usa uma transação local antes da chamada
+de rede. Os registros são individuais para uma aba não sobrescrever a fila de
+outra. O escopo é a sessão autenticada, com as chaves de conta/workspace da
+interface. Sair revoga a sessão local e apaga registros na mesma transação;
+escritas tardias de outras abas são recusadas. Limites: 200 registros / 32 MiB por
+sessão autenticada, além das 20 mensagens por conversa. Rascunhos vazios liberam
+seu registro. Falta de espaço mantém a tentativa visível e impede envio sem
+persistência; retry volta a tentar o lote local. Conexões aos bancos são reutilizadas.
+
+Ao reabrir a conversa, Matrix retoma a transação original, incluindo suas partes
+de mídia. Eve preserva recibos confirmados; uma tentativa sem confirmação exige
+revisão/reenvio manual porque seu SDK público não oferece a chave de idempotência
+necessária. Promessas, schemas de execução e AbortSignals ficam fora do disco.
+Tentativas com falha podem ser removidas apenas do dispositivo, sem apagar o
+histórico remoto. Rascunhos da primeira conversa também persistem; criar o
+primeiro turno ainda aguarda o estabelecimento atômico da sessão/owner no Eve.
+
+No build local, uma mensagem ficou pendente sem rede; a aba foi fechada ainda
+sem rede e outra foi aberta. A fila foi recuperada, a mensagem apareceu uma única
+vez com os controles nativos, e o texto seguinte permaneceu no compositor.
+Recarregar também preservou o rascunho de uma conversa nova. Desktop e viewport
+390×844 foram conferidos. [Registro](evidence/durable-messaging-2026-09-29.json).
+
+Isto não fornece inicialização fria totalmente offline da aplicação Next,
+execução de filas de conversas fechadas em segundo plano, sincronização de
+rascunhos entre dispositivos ou armazenamento local criptografado/E2EE. Fechar
+e reabrir a aba foi verificado; desligar o sistema à força não foi simulado.
+O adaptador SQLite foi compilado, mas sua execução em aparelhos físicos segue
+como gate. Capacidade de produção e a paridade restante não estão declaradas
+concluídas. Criadores continuam fora da expansão atual.
+
+Visual evidence attached with `gh --attach`: [screenshots and screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5890406756).
+Validation: `pnpm check` (274 files / 1,710 tests), `pnpm build`, and the three
+isolated Matrix runtime tests passed. Structural review recorded 41 observations /
+10 gates without suppressions; existing owner complexity/size/churn remains visible.

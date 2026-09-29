@@ -3,17 +3,24 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AppRouter } from "./router";
 import { useSearchParams } from "next/navigation";
+
+import { authClient } from "@web/auth/client";
+import { LocalMessagesProvider } from "@zoen/companion-ui/local-messages";
+import { browserMessageStorage } from "./message-storage";
 
 export const api = createTRPCReact<AppRouter>();
 
 export function TRPCProvider({ children }: { readonly children: ReactNode }) {
+  const account = authClient.useSession();
   const workspaceId = useSearchParams().get("space");
+  if (account.isPending) return null;
   return (
     <WorkspaceTRPCProvider
-      key={workspaceId ?? "personal"}
+      key={`${account.data?.session.id ?? "anonymous"}:${workspaceId ?? "personal"}`}
+      sessionId={account.data?.session.id}
       workspaceId={workspaceId}
     >
       {children}
@@ -24,10 +31,16 @@ export function TRPCProvider({ children }: { readonly children: ReactNode }) {
 function WorkspaceTRPCProvider({
   children,
   workspaceId,
+  sessionId,
 }: {
   readonly children: ReactNode;
   readonly workspaceId: string | null;
+  readonly sessionId?: string;
 }) {
+  const storage = useMemo(
+    () => (sessionId ? browserMessageStorage(sessionId) : undefined),
+    [sessionId]
+  );
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -54,7 +67,13 @@ function WorkspaceTRPCProvider({
   return (
     <QueryClientProvider client={queryClient}>
       <api.Provider client={trpcClient} queryClient={queryClient}>
-        {children}
+        {storage ? (
+          <LocalMessagesProvider storage={storage}>
+            {children}
+          </LocalMessagesProvider>
+        ) : (
+          children
+        )}
       </api.Provider>
     </QueryClientProvider>
   );

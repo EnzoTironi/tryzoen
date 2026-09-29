@@ -19,7 +19,6 @@ import {
 } from "../../server/matrix/reactions";
 import { editMatrixMessage } from "../../server/matrix/edits";
 import { deleteMatrixMessage } from "../../server/matrix/message-actions";
-import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 
 let receiver: Awaited<ReturnType<typeof matrixReceiver>> | undefined;
 beforeAll(async () => {
@@ -263,6 +262,13 @@ test(
     await query(
       sql`DELETE FROM workspace_memberships WHERE workspace_id=${fixture.guest.workspaceId} AND user_id=${fixture.guest.userId}`
     );
-    await expect(sync()).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    expect(
+      await readMatrixRoomSync(fixture.guest, { id: room.id, cursor })
+    ).toMatchObject({
+      status: "denied",
+      cursor: null,
+      userIds: [],
+      changes: null,
+    });
   }
 );

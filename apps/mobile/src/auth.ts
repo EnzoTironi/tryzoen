@@ -3,8 +3,15 @@ import { expoClient } from "@better-auth/expo/client";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { apiOrigin } from "./environment";
+import { clearMobileMessages } from "./message-storage";
 export const auth = createAuthClient({
   baseURL: apiOrigin,
+  fetchOptions: {
+    async onSuccess(context) {
+      if (String(context.request.url).endsWith("/sign-out"))
+        await clearMobileMessages();
+    },
+  },
   plugins: [
     expoClient({ scheme: "zoen", storagePrefix: "zoen", storage: SecureStore }),
   ],

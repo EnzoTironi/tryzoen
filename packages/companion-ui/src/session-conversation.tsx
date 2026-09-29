@@ -1,5 +1,5 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useConversationDraft } from "./session/draft";
 import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
@@ -23,25 +23,10 @@ export function SessionConversation({
   readonly reactions: ReactionData;
   readonly cacheScope: string;
 }) {
-  const queryClient = useQueryClient();
-  const draftKey = useMemo(
-    () => ["agent-draft", cacheScope, sessionId],
-    [cacheScope, sessionId]
-  );
-  const [draft] = useState(
-    () => queryClient.getQueryData<ConversationDraft>(draftKey) ?? initialDraft
-  );
-  useEffect(() => {
-    queryClient.setQueryDefaults(draftKey, { gcTime: 30 * 60_000 });
-    if (!queryClient.getQueryData(draftKey))
-      queryClient.setQueryData(draftKey, draft ?? { text: "", files: [] });
-  }, [draft, draftKey, queryClient]);
-  const saveDraft = useCallback(
-    (next: ConversationDraft) => {
-      if (queryClient.getQueryCache().find({ queryKey: draftKey, exact: true }))
-        queryClient.setQueryData(draftKey, next);
-    },
-    [draftKey, queryClient]
+  const { draft, saveDraft } = useConversationDraft(
+    cacheScope,
+    sessionId,
+    initialDraft
   );
   const agent = useSessionAgent(sessionId, client, cacheScope);
   const feedback = useMessageReactions(reactions, cacheScope, sessionId);
@@ -74,6 +59,7 @@ export function SessionConversation({
       }
       onSend={agent.send}
       onRetrySend={agent.retrySend}
+      onRemoveSend={agent.removeSend}
       onRespond={agent.respond}
       onCancel={() => {
         setActionError(undefined);

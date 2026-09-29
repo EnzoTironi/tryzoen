@@ -1,11 +1,15 @@
+import { LocalMessagesProvider } from "@zoen/companion-ui/local-messages";
+import { mobileMessageStorage } from "./message-storage";
 import { MobileOverlayProvider } from "./overlay";
 import { useAudioRecording } from "./audio-recording";
 import { renderComposerEditor } from "./composer";
 import { linkPreviewSchema } from "@zoen/companion-ui/previews";
 import { renderMedia } from "./media";
 import { referenceResultsSchema } from "@zoen/companion-ui/references";
+import { useNetworkState } from "expo-network";
+import { onlineManager } from "@tanstack/react-query";
 import { rpc } from "./api";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -42,6 +46,12 @@ function renderMarkdownEditor(props: MarkdownEditorProps) {
 const composerAdapter = { Input: renderComposerEditor };
 
 export function App() {
+  const network = useNetworkState();
+  useEffect(() => {
+    onlineManager.setOnline(
+      network.isConnected !== false && network.isInternetReachable !== false
+    );
+  }, [network.isConnected, network.isInternetReachable]);
   const session = auth.useSession();
   const [error, setError] = useState<string>();
   const [signingIn, setSigningIn] = useState(false);
@@ -55,7 +65,10 @@ export function App() {
             <ActivityIndicator accessibilityLabel="Signing in" />
           </View>
         ) : session.data ? (
-          <AccountCompanion key={session.data.user.id} />
+          <AccountCompanion
+            key={session.data.session.id}
+            sessionId={session.data.session.id}
+          />
         ) : (
           <View style={styles.center}>
             <Text style={styles.brand}>Zoen</Text>
@@ -100,7 +113,8 @@ export function App() {
   );
 }
 
-function AccountCompanion() {
+function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
+  const storage = useMemo(() => mobileMessageStorage(sessionId), [sessionId]);
   const startAudioRecording = useAudioRecording();
   const [client] = useState(
     () =>
@@ -118,29 +132,31 @@ function AccountCompanion() {
   );
   return (
     <QueryClientProvider client={client}>
-      <MobileOverlayProvider>
-        <MarkdownEditorProvider value={renderMarkdownEditor}>
-          <ComposerEditorProvider value={composerAdapter}>
-            <AttachmentProvider
-              pick={pickAttachments}
-              save={saveAttachment}
-              renderMedia={renderMedia}
-              startAudioRecording={startAudioRecording}
-            >
-              <MobileCompanion
-                onSignOut={async () => {
-                  const result = await auth.signOut();
-                  if (result.error)
-                    throw new Error(
-                      result.error.message ?? "Could not sign out."
-                    );
-                  client.clear();
-                }}
-              />
-            </AttachmentProvider>
-          </ComposerEditorProvider>
-        </MarkdownEditorProvider>
-      </MobileOverlayProvider>
+      <LocalMessagesProvider storage={storage}>
+        <MobileOverlayProvider>
+          <MarkdownEditorProvider value={renderMarkdownEditor}>
+            <ComposerEditorProvider value={composerAdapter}>
+              <AttachmentProvider
+                pick={pickAttachments}
+                save={saveAttachment}
+                renderMedia={renderMedia}
+                startAudioRecording={startAudioRecording}
+              >
+                <MobileCompanion
+                  onSignOut={async () => {
+                    const result = await auth.signOut();
+                    if (result.error)
+                      throw new Error(
+                        result.error.message ?? "Could not sign out."
+                      );
+                    client.clear();
+                  }}
+                />
+              </AttachmentProvider>
+            </ComposerEditorProvider>
+          </MarkdownEditorProvider>
+        </MobileOverlayProvider>
+      </LocalMessagesProvider>
     </QueryClientProvider>
   );
 }

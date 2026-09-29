@@ -270,12 +270,17 @@ test(
     await query(
       sql`DELETE FROM workspace_memberships WHERE workspace_id=${fixture.guest.workspaceId} AND user_id=${fixture.guest.userId}`
     );
-    await expect(
-      readMatrixRoomSync(fixture.guest, {
+    expect(
+      await readMatrixRoomSync(fixture.guest, {
         id: room.id,
         cursor: first.cursor ?? undefined,
       })
-    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    ).toMatchObject({
+      status: "denied",
+      cursor: null,
+      userIds: [],
+      changes: null,
+    });
     await expect(
       setMatrixTyping(fixture.guest, { id: room.id, typing: true })
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);

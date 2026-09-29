@@ -135,8 +135,10 @@ it("reloads failed initial history before accepting another message", async () =
   await mocks.agent?.resume();
   expect(mocks.history).toHaveBeenCalledTimes(2);
   await mocks.agent?.send("Continue this conversation");
-  expect(mocks.send).toHaveBeenCalledWith("Continue this conversation", {
-    turnPolicy: "steer",
+  await vi.waitFor(() => {
+    expect(mocks.send).toHaveBeenCalledWith("Continue this conversation", {
+      turnPolicy: "steer",
+    });
   });
   for (const cleanup of cleanups) cleanup?.();
 });
@@ -176,8 +178,10 @@ it("follows turns received after an idle boundary and detaches without cancellin
   await observed.promise;
   await mocks.agent?.send("Reply from this tab");
   expect(mocks.stream).toHaveBeenCalledTimes(1);
-  expect(mocks.attach).toHaveBeenLastCalledWith("conversation", {
-    streamIndex: 3,
+  await vi.waitFor(() => {
+    expect(mocks.attach).toHaveBeenLastCalledWith("conversation", {
+      streamIndex: 3,
+    });
   });
   for (const cleanup of cleanups) cleanup?.();
   expect(mocks.stream.mock.calls[0]?.[0].signal?.aborted).toBe(true);

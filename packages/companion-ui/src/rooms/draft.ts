@@ -14,7 +14,7 @@ interface RoomDraft {
   reply?: z.infer<typeof roomMessageSchema>;
 }
 
-/** Navigation-only drafts: private to this query client and account/workspace scope. */
+/** Local drafts: private to this authenticated account and workspace. */
 export function useRoomDraft(
   data: RoomData,
   cacheScope: string,
@@ -33,7 +33,7 @@ export function useRoomDraft(
         queryFn: skipToken,
         initialData: { text: "" },
         staleTime: Infinity,
-        gcTime: 30 * 60_000,
+        gcTime: Infinity,
       }),
     [client, cacheScope, roomId, rootId]
   );

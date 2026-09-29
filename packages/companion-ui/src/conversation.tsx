@@ -36,6 +36,7 @@ export function Conversation({
   error,
   onSend,
   onRetrySend,
+  onRemoveSend,
   onRespond,
   onCancel,
   onLoadOlder,
@@ -52,6 +53,7 @@ export function Conversation({
   readonly status: UseEveAgentStatus;
   readonly error?: string;
   readonly onSend: ChatAgent["send"];
+  readonly onRemoveSend?: (id: string) => void;
   readonly onRetrySend?: (id: string) => void;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
   readonly onCancel: () => void;
@@ -160,6 +162,13 @@ export function Conversation({
             <View style={{ minHeight: 44, justifyContent: "center" }}>
               {message.metadata?.optimistic ? (
                 <MessageDelivery
+                  onRemove={
+                    onRemoveSend
+                      ? () => {
+                          onRemoveSend(message.id);
+                        }
+                      : undefined
+                  }
                   status={
                     message.metadata.status === "failed" ? "failed" : "sending"
                   }

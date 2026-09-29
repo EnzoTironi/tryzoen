@@ -1658,7 +1658,6 @@ retirement is visible rather than silently treated as complete. Further creator
 work remains deferred; this increment does not claim complete parity, native OS
 push, E2EE or production capacity.
 
-
 Wave 24 visual verification and production build passed. Administrator removal,
 re-addition with preserved history and mobile leave confirmation were checked;
 the synthetic memberships were restored. [Visual evidence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5889635406)
@@ -1705,3 +1704,51 @@ The queue is memory-only, capped at 20 entries per conversation. Reload/crash
 persistence, fully offline delivery, global layout stability and production
 capacity are not supplied by this increment. Cold visits still load data.
 Creator expansion remains deferred.
+
+### Durable local drafts and outbox — wave 26
+
+This supersedes wave 25's memory-only queue limitation. `conversation/persistence.ts`
+subscribes to successful TanStack updates for four explicit local query families.
+It restores before mounting composers, persists separate outbox records, batches
+draft removal and queue admission atomically, and awaits disk commit before a
+transport starts. `session/draft.ts` shares draft ownership between new and
+existing agent conversations. Pending transport promises/options remain ephemeral.
+
+Platform adapters use `idb` 8.0.3 (MIT) and `expo-sqlite` 57.0.3 (MIT, Expo SDK 57
+bundled version). Session-scoped reads/writes are bounded to 200 records / 32 MiB;
+browser transactions maintain usage counters rather than reading payloads on each
+keystroke. Logout revokes local session scopes and deletes records atomically,
+including protection against another tab's late write. Native network state feeds
+TanStack's online manager. Unrelated server caches and credentials are excluded.
+
+Matrix recovery occurs when its conversation opens, using the original operation
+and per-file transaction IDs. It may replay an uncertain native PUT safely. Eve
+has no public equivalent idempotency key in the pinned SDK; unknown submissions
+recover as failed/reviewable, with no automatic agent replay. Receipt-bearing
+entries reconcile with native history. Removing a failed local echo does not
+redact a delivered remote event. The initial session still uses Eve's atomic
+owner-establishing create rather than speculative prewarming.
+
+Browser evidence closes an offline tab with a queued synthetic message, opens a
+fresh tab and verifies exactly one native message plus the next retained draft.
+It also verifies group reload and a new-agent draft on reload, and inspects the
+390×844 layout. Native SQLite/device execution and cold offline boot are not
+claimed. [Record](evidence/durable-messaging-2026-09-29.json).
+
+Regression coverage exercises session isolation, logout revocation, independent
+tab entries, atomic quota rejection, uncertain-agent recovery and commit failures.
+The previous CI's two Matrix sync failures expected an exception after membership
+revocation; they now assert the deliberate `denied` result with empty content.
+Corrupt/replayed cursor and unauthorized typing checks retain their rejection
+expectations. The focused real PostgreSQL/Synapse suites passed (3 tests).
+
+References: [idb](https://github.com/jakearchibald/idb),
+[Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/).
+Remaining gates include account-wide background draining, cold offline startup,
+physical-device validation, encrypted local storage, push/E2EE/calls, global cache
+retention and demonstrated production capacity. Creator expansion remains deferred.
+
+Visual evidence attached with `gh --attach`: [screenshots and screenshot sequence](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5890406756).
+Validation: `pnpm check` (274 files / 1,710 tests), `pnpm build`, and the three
+isolated Matrix runtime tests passed. Structural review recorded 41 observations /
+10 gates without suppressions; existing owner complexity/size/churn remains visible.

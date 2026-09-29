@@ -26,6 +26,7 @@ export interface ChatAgent {
     message: string | UserContent,
     options?: SendTurnOptions<TOutput>
   ) => Promise<void>;
+  readonly removeSend?: (id: string) => void;
   readonly retrySend?: (id: string) => void;
   readonly status: UseEveAgentStatus;
 }

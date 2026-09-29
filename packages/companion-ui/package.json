@@ -87,6 +87,10 @@
     "./vault": {
       "types": "./dist/vault/schema.d.ts",
       "default": "./dist/vault/schema.js"
+    },
+    "./local-messages": {
+      "types": "./dist/conversation/local-messages.d.ts",
+      "default": "./dist/conversation/local-messages.js"
     }
   },
   "dependencies": {
