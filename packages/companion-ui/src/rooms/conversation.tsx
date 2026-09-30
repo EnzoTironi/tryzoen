@@ -8,6 +8,7 @@ import { ConnectionStatus } from "../conversation/connection";
 import { PresenceIndicator } from "./presence";
 import { useRoomLifecycle } from "./lifecycle";
 import { useRoomSync } from "./sync";
+import { useRoomParticipation } from "./participation";
 import { RoomTypingIndicator } from "./typing-indicator";
 import { useMemo, useContext, useState, type ComponentProps } from "react";
 import { CompanionVisibility } from "../visibility";
@@ -102,8 +103,10 @@ export function RoomConversation({
     !options &&
     !selectedMessage;
   const active = useRoomLifecycle(cacheScope, roomId, exposed);
+  const participation = useRoomParticipation(data, cacheScope, roomId, active);
+  const ready = active && participation.ready;
   const wide = width >= 1100;
-  const timelineVisible = visible && (!root || wide);
+  const timelineVisible = ready && visible && (!root || wide);
   const reactions = useRoomReactions(
     data,
     cacheScope,
@@ -113,14 +116,16 @@ export function RoomConversation({
   const messages = useInfiniteQuery({
     queryKey: ["matrix-messages", cacheScope, roomId],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) =>
-      data.messages({ id: roomId, from: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) => {
+      participation.requireJoined();
+      return data.messages({ id: roomId, from: pageParam }, signal);
+    },
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
     staleTime: Infinity,
-    enabled: active && exposed,
+    enabled: ready && exposed,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
@@ -141,7 +146,8 @@ export function RoomConversation({
     cacheScope,
     roomId,
     // Keep the authorized, backed-off sync alive so a failed history read can recover.
-    exposed && (!!room || messages.isError)
+    ready && exposed && (!!room || messages.isError),
+    participation
   );
   const showProfile = () => {
     if (room?.kind === "direct")
@@ -165,7 +171,7 @@ export function RoomConversation({
     timeline,
     !messages.isError && timelineVisible && !unread.isPending
   );
-  if (typing.accessDenied)
+  if (participation.status === "denied" || typing.accessDenied)
     return (
       <View style={styles.unavailable}>
         <Text accessibilityRole="header" style={styles.title}>
@@ -182,8 +188,13 @@ export function RoomConversation({
     <View style={styles.layout}>
       <ConnectionStatus top={headerHeight} reconnecting={typing.reconnecting} />
       <View
+        pointerEvents={ready ? "auto" : "none"}
+        aria-hidden={!ready}
+        accessibilityElementsHidden={!ready}
+        importantForAccessibility={ready ? "auto" : "no-hide-descendants"}
         style={[
           styles.main,
+          !ready && styles.paused,
           root && !wide && !messages.isError && styles.hidden,
         ]}
       >
@@ -218,7 +229,7 @@ export function RoomConversation({
               receipt.threadId === null || receipt.threadId === "main"
           )}
           onUnread={
-            unread.isPending
+            !ready || unread.isPending
               ? undefined
               : () => {
                   unread.mutate();
@@ -249,7 +260,7 @@ export function RoomConversation({
           loading={messages.isPending}
           error={Boolean(messages.error)}
           onRetry={() => {
-            void messages.refetch();
+            if (ready) void messages.refetch();
           }}
           hasMore={messages.hasNextPage}
           loadingMore={messages.isFetchingNextPage}
@@ -287,7 +298,17 @@ export function RoomConversation({
         </View>
       </View>
       {root && !messages.isError && (
-        <View style={[styles.thread, !wide && styles.fullThread]}>
+        <View
+          pointerEvents={ready ? "auto" : "none"}
+          aria-hidden={!ready}
+          accessibilityElementsHidden={!ready}
+          importantForAccessibility={ready ? "auto" : "no-hide-descendants"}
+          style={[
+            styles.thread,
+            !wide && styles.fullThread,
+            !ready && styles.paused,
+          ]}
+        >
           <View
             testID="thread-header"
             pointerEvents="box-none"
@@ -349,13 +370,14 @@ export function RoomConversation({
             onCopyText={onCopyText}
             messageLink={messageLink}
             onProfile={setProfile}
-            visible={visible}
-            active={active}
+            visible={ready && visible}
+            active={ready}
+            requireJoined={participation.requireJoined}
             typing={typing}
           />
         </View>
       )}
-      {options && (
+      {ready && options && (
         <CompanionSheet
           title="Conversa"
           onClose={() => {
@@ -407,7 +429,7 @@ export function RoomConversation({
           </View>
         </CompanionSheet>
       )}
-      {details && room?.kind === "group" && current?.pages[0] && (
+      {ready && details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
           presence={typing.presence}
           onLeft={onBack}
@@ -429,7 +451,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {selectedMessage && onCloseMessage && (
+      {ready && selectedMessage && onCloseMessage && (
         <RoomMessageContext
           key={selectedMessage}
           data={data}
@@ -442,7 +464,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {pins && room && (
+      {ready && pins && room && (
         <RoomPins
           data={data}
           cacheScope={cacheScope}
@@ -456,7 +478,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {searching && room && (
+      {ready && searching && room && (
         <RoomSearch
           key={`${cacheScope}:${roomId}`}
           data={data}
@@ -474,7 +496,7 @@ export function RoomConversation({
           }
         />
       )}
-      {profile && room && (
+      {ready && profile && room && (
         <ParticipantProfile
           person={profile}
           presence={
@@ -496,6 +518,31 @@ export function RoomConversation({
             setRoot(undefined);
           }}
         />
+      )}
+      {!ready && (
+        <View style={styles.participation}>
+          <Text
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            style={styles.caption}
+          >
+            {participation.status === "error"
+              ? "Não foi possível conectar à conversa."
+              : participation.status === "cancelled"
+                ? "Conexão pausada."
+                : "Conectando à conversa…"}
+          </Text>
+          {participation.status === "pending" ? (
+            <ActionButton onPress={participation.cancel}>
+              Cancelar conexão
+            </ActionButton>
+          ) : (
+            <ActionButton onPress={participation.retry}>
+              Tentar novamente
+            </ActionButton>
+          )}
+          <ActionButton onPress={onBack}>Voltar às conversas</ActionButton>
+        </View>
       )}
     </View>
   );
@@ -604,6 +651,7 @@ function RoomThread({
   onProfile,
   visible,
   active,
+  requireJoined,
   typing,
   onUnread,
 }: Pick<
@@ -617,6 +665,9 @@ function RoomThread({
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
   readonly active: boolean;
+  readonly requireJoined: ReturnType<
+    typeof useRoomParticipation
+  >["requireJoined"];
   readonly typing: ReturnType<typeof useRoomSync>;
 }) {
   const colors = useColors();
@@ -637,8 +688,13 @@ function RoomThread({
   const result = useInfiniteQuery({
     queryKey: ["matrix-thread", cacheScope, roomId, root.id],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) =>
-      data.thread({ id: roomId, rootId: root.id, from: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) => {
+      requireJoined();
+      return data.thread(
+        { id: roomId, rootId: root.id, from: pageParam },
+        signal
+      );
+    },
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
@@ -719,13 +775,19 @@ function RoomThread({
         loading={result.isPending}
         error={Boolean(result.error)}
         onRetry={() => {
-          void result.refetch();
+          if (active && visible) void result.refetch();
         }}
         hasMore={result.hasNextPage}
         loadingMore={result.isFetchingNextPage}
         fetching={result.isFetching}
         onMore={() => {
-          if (result.hasNextPage && !result.isFetching && !result.isError)
+          if (
+            active &&
+            visible &&
+            result.hasNextPage &&
+            !result.isFetching &&
+            !result.isError
+          )
             void result.fetchNextPage({ cancelRefetch: false });
         }}
       />
@@ -770,6 +832,20 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       backgroundColor: colors.canvas,
     },
     main: { flex: 1, minWidth: 0, minHeight: 0 },
+    paused: { opacity: 0 },
+    participation: {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 50,
+      padding: 32,
+      gap: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.canvas,
+    },
     composer: {
       position: "absolute",
       bottom: 0,

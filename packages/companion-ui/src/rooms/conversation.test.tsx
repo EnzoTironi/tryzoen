@@ -10,6 +10,8 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RoomConversation } from "./conversation";
 import { useRoomSync } from "./sync";
+import type { useRoomParticipation } from "./participation";
+import { RoomMessageContext } from "./context";
 import type { RoomData } from "./schema";
 
 vi.mock("react-native", async () => {
@@ -45,7 +47,26 @@ vi.mock("./sync", () => ({
     change: vi.fn<(value: boolean) => void>(),
   })),
 }));
+vi.mock("./participation", () => ({
+  useRoomParticipation: vi.fn<typeof useRoomParticipation>(() => ({
+    ready: mocks.participation === "joined",
+    revision: 1,
+    status: mocks.participation,
+    requireJoined: () => {
+      if (mocks.participation !== "joined")
+        throw new Error("Room participation is not confirmed.");
+    },
+    cancel: vi.fn<() => void>(),
+    retry: vi.fn<() => void>(),
+  })),
+}));
+vi.mock("./context", () => ({
+  RoomMessageContext: vi.fn<typeof RoomMessageContext>(() => (
+    <p>Message context</p>
+  )),
+}));
 const mocks = vi.hoisted(() => ({
+  participation: "joined" as ReturnType<typeof useRoomParticipation>["status"],
   revoked: false,
   direct: false,
   hints: [] as string[],
@@ -147,18 +168,22 @@ const data: RoomData = {
   create: vi.fn<RoomData["create"]>(),
 };
 beforeEach(() => {
+  mocks.participation = "joined";
+  vi.mocked(RoomMessageContext).mockClear();
   mocks.revoked = false;
   mocks.direct = false;
   mocks.hints = [];
   vi.mocked(useRoomSync).mockClear();
 });
-function render() {
+function render(selectedMessage?: string, client = new QueryClient()) {
   return renderToStaticMarkup(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <RoomConversation
         data={data}
         cacheScope="viewer"
         roomId="binding"
+        selectedMessage={selectedMessage}
+        onCloseMessage={vi.fn<() => void>()}
         onBack={vi.fn<() => void>()}
         onCopyText={vi.fn<(text: string) => Promise<void>>()}
       />
@@ -273,7 +298,13 @@ it("keeps reconnection enabled after a read failure while hiding cached private 
   const html = render();
   expect(html).not.toContain("Synthetic private text");
   expect(html).toContain("Tentar novamente");
-  expect(useRoomSync).toHaveBeenLastCalledWith(data, "viewer", "binding", true);
+  expect(useRoomSync).toHaveBeenLastCalledWith(
+    data,
+    "viewer",
+    "binding",
+    true,
+    expect.objectContaining({ ready: true })
+  );
 });
 
 it("explains revoked access without showing history or a reconnect loop", () => {
@@ -292,3 +323,98 @@ it("explains revoked access without showing history or a reconnect loop", () => 
   expect(html).not.toContain("Mensagem ao grupo");
   expect(html).not.toContain("Reconectando");
 });
+
+it("waits for participation before history, sync and selected-message context while retaining the scoped cache", () => {
+  mocks.participation = "pending";
+  const draft = { text: "Unsent room draft" };
+  historyClient.setQueryData(
+    ["matrix-draft", "viewer", "binding", null],
+    draft
+  );
+  const html = render("$selected", historyClient);
+  expect(mocks.options?.queryKey).toEqual([
+    "matrix-messages",
+    "viewer",
+    "binding",
+  ]);
+  expect(mocks.options?.enabled).toBe(false);
+  expect(useRoomSync).toHaveBeenLastCalledWith(
+    data,
+    "viewer",
+    "binding",
+    false,
+    expect.objectContaining({ ready: false })
+  );
+  expect(RoomMessageContext).not.toHaveBeenCalled();
+  expect(html).toContain("Conectando à conversa");
+  expect(html).toContain("Cancelar conexão");
+  expect(html).toContain('aria-hidden="true"');
+  // Cached nodes remain mounted to retain the list anchor and controlled draft.
+  expect(html).toContain("Synthetic private text");
+  expect(html).toContain("Unsent room draft");
+  expect(
+    historyClient.getQueryData(["matrix-draft", "viewer", "binding", null])
+  ).toBe(draft);
+});
+
+it("rejects a manual history refetch while participation is pending", async () => {
+  mocks.participation = "pending";
+  vi.mocked(data.messages).mockResolvedValue({
+    room: {
+      id: "binding",
+      roomId: "!room:test",
+      label: "Test",
+      kind: "group",
+      workspaceId: "workspace",
+      epoch: "1",
+    },
+    members: [],
+    membersTruncated: false,
+    messages: [],
+    nextCursor: null,
+  });
+  render();
+  if (!mocks.options) throw new Error("Expected room query options");
+  const observer = new InfiniteQueryObserver(historyClient, {
+    ...mocks.options,
+    enabled: false,
+    retry: false,
+  });
+  const result = await observer.refetch();
+  expect(result.error?.message).toBe("Room participation is not confirmed.");
+  expect(data.messages).not.toHaveBeenCalled();
+});
+
+it("distinguishes terminal participation denial from pending connection without exposing cached history", () => {
+  mocks.participation = "denied";
+  const html = render();
+  expect(html).toContain("Conversa indisponível");
+  expect(html).not.toContain("Synthetic private text");
+  expect(html).not.toContain("Conectando à conversa");
+  expect(mocks.options?.enabled).toBe(false);
+  expect(useRoomSync).toHaveBeenLastCalledWith(
+    data,
+    "viewer",
+    "binding",
+    false,
+    expect.objectContaining({ ready: false })
+  );
+});
+
+it.each(["error", "cancelled"] as const)(
+  "keeps %s participation retry explicit without enabling history",
+  (status) => {
+    mocks.participation = status;
+    const html = render();
+    expect(html).toContain("Tentar novamente");
+    expect(html).not.toContain("Cancelar conexão");
+    expect(mocks.options?.enabled).toBe(false);
+    expect(useRoomSync).toHaveBeenLastCalledWith(
+      data,
+      "viewer",
+      "binding",
+      false,
+      expect.objectContaining({ ready: false })
+    );
+  }
+);
