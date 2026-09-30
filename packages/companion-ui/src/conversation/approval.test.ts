@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   gmailSendSchema,
   NetworkContactInputSchema,
@@ -40,12 +40,10 @@ function readyText(toolName: string, input: unknown) {
 
 function expectInvalid(toolName: string, input: unknown) {
   const result = renderApprovalDisclosure(toolName, input);
-  expect(result).toMatchObject({
-    kind: "invalid",
-    message: expect.any(String),
-  });
+  expect(result.kind).toBe("invalid");
   if (result.kind !== "invalid")
     throw new Error("Invalid known proposals must fail closed.");
+  expect(typeof result.message).toBe("string");
   expect(result.message.trim().length).toBeGreaterThan(0);
   expect(result).not.toHaveProperty("text");
 }
@@ -113,6 +111,7 @@ describe("shared exact approval disclosure", () => {
   test.each([null, [], "not a proposal", 5])(
     "rejects non-object known payload %j",
     (input) => {
+      expect.hasAssertions();
       expectInvalid("gmail-send", input);
       expectInvalid("network-contact", input);
     }
@@ -178,6 +177,7 @@ describe("shared exact approval disclosure", () => {
   ])(
     "fails closed instead of truncating oversized %s disclosure",
     (toolName, input) => {
+      expect.hasAssertions();
       expectInvalid(toolName, input);
     }
   );
@@ -185,8 +185,73 @@ describe("shared exact approval disclosure", () => {
   test.each(["", "  ", "Malformed \uD800"])(
     "rejects malformed supplementary text %j",
     (approvalMessage) => {
+      expect.hasAssertions();
       expectInvalid("gmail-send", { ...gmail, approvalMessage });
       expectInvalid("network-contact", { ...network, approvalMessage });
     }
   );
+
+  test("preserves valid surrogate pairs and emoji in exact Gmail and network content", () => {
+    const body = "Valid \uD83D\uDE80 surrogate pair and 🛰️ content.";
+    const subject = "Synthetic 📨 memo";
+    const text = "Valid \uD83D\uDE80 exact network content.";
+    expect(readyText("gmail-send", { ...gmail, subject, body })).toContain(
+      JSON.stringify(body)
+    );
+    expect(readyText("gmail-send", { ...gmail, subject, body })).toContain(
+      JSON.stringify(subject)
+    );
+    expect(readyText("network-contact", { ...network, text })).toContain(
+      JSON.stringify(text)
+    );
+  });
+
+  test.each(["\uD800", "\uDC00", "\uD800X\uDC00"])(
+    "rejects unpaired surrogate sequence %j in material and supplementary text",
+    (invalid) => {
+      expect.hasAssertions();
+      expectInvalid("gmail-send", { ...gmail, body: invalid });
+      expectInvalid("gmail-send", { ...gmail, subject: invalid });
+      expectInvalid("network-contact", { ...network, text: invalid });
+      expectInvalid("gmail-send", { ...gmail, approvalMessage: invalid });
+      expectInvalid("network-contact", {
+        ...network,
+        approvalMessage: invalid,
+      });
+    }
+  );
+
+  test("validates exact text without invoking the ES2024 String well-formedness method", () => {
+    const wellFormed = vi
+      .spyOn(String.prototype, "isWellFormed")
+      .mockImplementation(() => {
+        throw new Error(
+          "Portable approval validation must not invoke the ES2024 String method."
+        );
+      });
+    try {
+      const body = "Valid \uD83D\uDE80 content without a runtime polyfill.";
+      expect(readyText("gmail-send", { ...gmail, body })).toContain(
+        JSON.stringify(body)
+      );
+      expect(
+        readyText("network-contact", { ...network, text: body })
+      ).toContain(JSON.stringify(body));
+      expectInvalid("gmail-send", { ...gmail, body: "\uDC00" });
+      expectInvalid("network-contact", { ...network, text: "\uD800" });
+      expect(wellFormed).not.toHaveBeenCalled();
+    } finally {
+      wellFormed.mockRestore();
+    }
+  });
+
+  test("accepts the full 16384-character disclosure and rejects the next character without truncation", () => {
+    const { approvalMessage: _summary, ...payload } = gmail;
+    const baseline = renderGmailApproval({ ...payload, body: "x" });
+    const body = "x".repeat(16_384 - baseline.length + 1);
+    const text = readyText("gmail-send", { ...payload, body });
+    expect(text).toHaveLength(16_384);
+    expect(text).toContain(JSON.stringify(body));
+    expectInvalid("gmail-send", { ...payload, body: `${body}x` });
+  });
 });
