@@ -99,9 +99,10 @@ export function postgresReadQuery(
   );
   values.push(postgresSourceLimits.rows + 1);
   signal.throwIfAborted();
+  // Inherited children are outside this binding's validated relation.
   return {
     text: `SELECT ${projection.join(", ")}, (${binding.columns.map(({ source }) => oversized(source)).join(" OR ")}) IS TRUE AS "_zoen_oversized"
-FROM ${escapeIdentifier(binding.relation.schema)}.${escapeIdentifier(binding.relation.table)}${predicates.length ? ` WHERE ${predicates.join(" AND ")}` : ""}
+FROM ONLY ${escapeIdentifier(binding.relation.schema)}.${escapeIdentifier(binding.relation.table)}${predicates.length ? ` WHERE ${predicates.join(" AND ")}` : ""}
 ORDER BY ${identity.map((source) => escapeIdentifier(source)).join(", ")} LIMIT $${values.length}`,
     values,
   };
