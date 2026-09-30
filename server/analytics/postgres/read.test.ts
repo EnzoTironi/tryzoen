@@ -32,9 +32,29 @@ test("fixed reads use published parameters and byte/row guards without embedding
   expect(query.text).not.toContain("15.00000000000000000001");
   expect(query.values).toEqual(["15.00000000000000000001", 4096, 101]);
   expect(query.text).toContain('"budget" >= $1::pg_catalog.numeric');
-  expect(query.text).toContain('FROM "studio"."projects"');
+  expect(query.text).toContain('FROM ONLY "studio"."projects"');
   expect(query.text).toContain("CASE WHEN pg_catalog.octet_length");
 });
+test.each([true, false])(
+  "restricts the source to the validated relation instead of inherited children (filters: %s)",
+  (filtered) => {
+    const query = postgresReadQuery(
+      {
+        ...published,
+        binding: { ...binding, filters: filtered ? binding.filters : [] },
+      },
+      catalog,
+      filtered ? { minimum: "0" } : {},
+      signal
+    );
+    expect(query.text.split("\n")[1]).toBe(
+      'FROM ONLY "studio"."projects"' +
+        (filtered ? ' WHERE "budget" >= $1::pg_catalog.numeric' : "")
+    );
+    expect(query.values).toEqual(filtered ? ["0", 4096, 101] : [4096, 101]);
+    expect(query.text).toContain('ORDER BY "id" LIMIT');
+  }
+);
 test("text that resembles SQL stays a value and quoted identifiers stay one identifier", () => {
   const textBinding = {
     ...binding,
@@ -60,7 +80,9 @@ test("text that resembles SQL stays a value and quoted identifiers stay one iden
     { minimum: "0" },
     signal
   );
-  expect(quoted.text).toContain('FROM "studio"."projects""; SELECT 1; --"');
+  expect(quoted.text).toContain(
+    'FROM ONLY "studio"."projects""; SELECT 1; --"'
+  );
 });
 test.each([
   { minimum: "NaN" },
