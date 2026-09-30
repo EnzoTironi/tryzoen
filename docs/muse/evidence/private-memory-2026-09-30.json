@@ -1,0 +1,96 @@
+{
+  "capturedAt": "2026-09-30T15:59:38.736882+00:00",
+  "status": "K3 private publisher/source foundation verified; live memory cutover pending",
+  "baselineHead": "4d4bd77c29cbebee893b16211cf0ecb6f9aaa16b",
+  "uncommitted": true,
+  "sourceSha256": {
+    "server/files/git.ts": "7b4c9430677680e18c622793de5d2b5420ec194f49f87e04eee064b1e368b6d8",
+    "server/memory/claims.ts": "f56211c524cede04e35403596b87494cbc7e191a892b8d8ac6bfdc1ebaf75926",
+    "server/memory/git.ts": "1a3a528eea7d771fc3a4246060a69c011b417669d2e1087a56a3f1d46411da3c",
+    "server/memory/repository.ts": "979ae9b873fceec28b9d535c4d34b7daab42bb750d3966db67504964fe1c031e",
+    "server/memory/session-export.ts": "0583219df5cebcb06cb48f04fbc9cb90cd0dd19b4f2d8100aeb4723321a4649c",
+    "server/memory/namespace.ts": "ca1a6bd4cb7815c9bbcbc0dc94e2e3d6d829b8ff0679cc47d22c596b99c9af81",
+    "server/memory/retrieval.ts": "ffab26a80e6a8aea75f8a9368aed500ff686c4f9fdf716bbfa51e877de7b1fe5",
+    "packages/companion-ui/src/learned/claim.ts": "668367bda6257f8893872a69832267dd0b37808a5d12d5a2b36defa98f76a48e",
+    "db/schema/private-memory.ts": "da5a0084f9a335ec5f7ee25c2e3220bf5b451442a539b20d3fd78a5b512c8ac6",
+    "db/migrations/0098_private-memory.sql": "b0dc486a8eb3115372a667ddb3e0b6c692c56d451d6bbf49b5cc57c4ae2aa312",
+    "tests/runtime/private-claims.integration.ts": "b7423f3b306c31bc417941bd14dab464582832b6d78a93923981ddc96c1ca571",
+    "tests/runtime/private-session-claims.integration.ts": "b6b340ff9f53068f3162e082d9c011128711aa2c655c7131cd224cffe4bbba19",
+    "server/memory/git.test.ts": "2511ba9beb4473df19ff15c497deae50ee6042c890def914059ccebeb1d327c6"
+  },
+  "gates": {
+    "actualPrivatePublisherAndSourceJourneys": {
+      "passed": 11,
+      "files": 2,
+      "durationSeconds": 5.59,
+      "log": "/tmp/zoen-k3-private-runtime-current.log"
+    },
+    "focusedClaimAndGit": {
+      "passed": 48,
+      "files": 4,
+      "log": "/tmp/zoen-k3-git-integrity-tests.log"
+    },
+    "wholeRepositoryTypeScript": "PASS current",
+    "focusedLint": "PASS current",
+    "aggregate": {
+      "tasksPassed": 9,
+      "testFilesPassed": 302,
+      "testsPassed": 1964,
+      "durationSeconds": 74.287,
+      "log": "/tmp/zoen-parity-check-k3.log"
+    },
+    "build": {
+      "tasksPassed": 2,
+      "durationSeconds": 26.945,
+      "log": "/tmp/zoen-parity-build-k3.log"
+    },
+    "K2CompiledRegressionAfterSharedGitExtraction": "pending; prior K2 checkpoint compiled/restart proof remains historical"
+  },
+  "verified": [
+    "Different people in one workspace have disjoint private bundles; shared export/search/history exclude both",
+    "Real Git commit binds publication and receipt; immutable commit metadata rebuilds operation indexes",
+    "Concurrent expected-revision writers admit one; receipt failure rolls back bundle/head",
+    "Replay of an older operation cannot resurrect a later tombstone",
+    "Current file/source/membership revocation prevents release; historical audit still uses current authority",
+    "Immutable session evidence binds SHA256 and actual user or accepted assistant source; absent timestamps remain absent",
+    "Missing source receipts reconstruct without changing claim files/Git versions; pending deliveries are not acknowledged by rebuild",
+    "Valid operation metadata cannot conceal an unrecorded modification to another claim"
+  ],
+  "migration": {
+    "at": "2026-09-30T14:41:06.789Z",
+    "database": "companion_runtime_test",
+    "onlyAdditiveMigration": "0098_private-memory",
+    "before": "1790710137773",
+    "after": "1790777784377",
+    "tables": {
+      "repository": "private_memory_repository",
+      "operations": "private_memory_operation"
+    },
+    "firstMs": 62,
+    "secondIdempotentMs": 9
+  },
+  "limits": {
+    "claimCountPerSnapshotIncludingTombstones": 200,
+    "claimFileBytes": 65536,
+    "claimSnapshotBytes": 8388608,
+    "privateGitBundleBytes": 25165824,
+    "operationsPerGitRead": 10000,
+    "sourceExportOrRebuildFiles": 10000,
+    "sourceExportOrRebuildBytes": 134217728,
+    "semantics": "fail-closed processing budgets, not retention policy or production scale proof"
+  },
+  "remaining": [
+    "Live learned-memory tools/UI/recall owner cutover",
+    "Complete export/restore with retained tombstones, source journals and erasure fences",
+    "Session/creator corpus consumers and final Akita removal",
+    "Current-source permission recheck on durable recall receipt replay",
+    "Measured product capacity and account-level native-operation admission/settlement",
+    "Native Electron/Expo visual and complete authenticated multi-account journey"
+  ],
+  "uiScope": "Aggregate includes finalized navigation and prior rooms/reactions slices; new compact reply/message spacing refinement is separately reserved and not covered by this checkpoint.",
+  "uiBaselineSha256": {
+    "packages/companion-ui/src/rooms/messages.tsx": "cb20c4467fca6b6441bd85453a6df58d5a18e22962239f8521dd0bb27d580374",
+    "packages/companion-ui/src/rooms/message-controls.tsx": "249940049615a458e39dd393ea22d63bf9de11560247484c8c90635242b76f68",
+    "packages/companion-ui/src/rooms/messages.test.tsx": "5cd3dea045f2ea8a5437a4b7df46221b1c952cd261cddcc936d889522ebc2064"
+  }
+}

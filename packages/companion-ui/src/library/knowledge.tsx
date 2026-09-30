@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, FileText } from "lucide-react-native";
@@ -16,8 +16,8 @@ import type {
 } from "./knowledge-schema";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { systemFont, useColors } from "../theme";
 import { ontologyPath } from "./ontology/schema";
 import { OntologyReview } from "./ontology/review";
 
@@ -43,6 +43,9 @@ export function KnowledgeProposals({
   readonly data: KnowledgeProposalData;
   readonly query: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [path, setPath] = useState<string>();
   const proposals = useQuery({
     queryKey: [...data.cacheKey, "list"],
@@ -135,6 +138,9 @@ function KnowledgeReview({
   readonly data: KnowledgeProposalData;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const compact = useWindowDimensions().width < 720;
   const cache = useQueryClient();
   const review = useQuery({
@@ -347,6 +353,8 @@ function KnowledgeSource({
   readonly columns: boolean;
   readonly ontology: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={[styles.source, columns && styles.sourceColumn]}>
       <Text style={styles.sourceLabel}>{label}</Text>
@@ -362,66 +370,83 @@ function KnowledgeSource({
   );
 }
 
-const styles = StyleSheet.create({
-  collection: { gap: 14 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  caption: { flex: 1, gap: 5 },
-  detail: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  files: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  file: {
-    maxWidth: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: colors.wash,
-  },
-  selectedFile: { backgroundColor: "#e4ebf1" },
-  fileName: { flexShrink: 1, fontSize: 13, color: colors.ink },
-  comparison: { gap: 12 },
-  columns: { flexDirection: "row" },
-  sourceColumn: { flex: 1 },
-  source: {
-    minWidth: 0,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    gap: 10,
-  },
-  sourceLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-  sourceText: {
-    color: colors.ink,
-    fontSize: 13,
-    lineHeight: 21,
-    fontFamily: "monospace",
-  },
-  evidence: {
-    gap: 6,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: colors.wash,
-  },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "flex-end",
-    paddingTop: 10,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    collection: { gap: 14 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    icon: {
+      width: 44,
+      height: 44,
+      borderRadius: 13,
+      backgroundColor: colors.wash,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    caption: { flex: 1, gap: 5 },
+    detail: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    files: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    file: {
+      maxWidth: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      padding: 10,
+      borderRadius: 12,
+      backgroundColor: colors.wash,
+    },
+    selectedFile: { backgroundColor: "#e4ebf1" },
+    fileName: {
+      fontFamily: systemFont,
+      flexShrink: 1,
+      fontSize: 13,
+      color: colors.ink,
+    },
+    comparison: { gap: 12 },
+    columns: { flexDirection: "row" },
+    sourceColumn: { flex: 1 },
+    source: {
+      minWidth: 0,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: colors.wash,
+      gap: 10,
+    },
+    sourceLabel: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    sourceText: {
+      color: colors.ink,
+      fontSize: 13,
+      lineHeight: 21,
+      fontFamily: "monospace",
+    },
+    evidence: {
+      gap: 6,
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: colors.wash,
+    },
+    actions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      justifyContent: "flex-end",
+      paddingTop: 10,
+    },
+  });
+}

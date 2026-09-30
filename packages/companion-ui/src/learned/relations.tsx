@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { LearnedNotesData } from "./notes";
 
 const labels = {
@@ -30,6 +30,7 @@ export function MemoryRelations({
   readonly onSaved: () => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const note = documents.find((item) => item.id === noteId);
   const [expected] = useState(note?.relations ?? []);
   const [draft, setDraft] = useState({

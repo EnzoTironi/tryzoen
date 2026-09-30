@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { z } from "zod";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { roomPresenceSchema } from "./schema";
 
 export function PresenceIndicator({
@@ -8,6 +9,8 @@ export function PresenceIndicator({
 }: {
   readonly state?: z.infer<typeof roomPresenceSchema>["state"];
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   if (!state || state === "offline") return null;
   return (
     <View style={styles.status}>
@@ -24,8 +27,15 @@ export function PresenceIndicator({
   );
 }
 
-const styles = StyleSheet.create({
-  caption: { fontSize: 13, lineHeight: 18, color: colors.muted },
-  status: { flexDirection: "row", alignItems: "center", gap: 5 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    caption: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.muted,
+    },
+    status: { flexDirection: "row", alignItems: "center", gap: 5 },
+    dot: { width: 7, height: 7, borderRadius: 4 },
+  });
+}

@@ -7,7 +7,7 @@ import {
   type MessageStorage,
 } from "./persistence";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { useColors } from "../theme";
 
 export function LocalMessagesProvider(props: {
   readonly storage: MessageStorage;
@@ -34,6 +34,7 @@ function LocalMessagesSession({
   readonly children: ReactNode;
   readonly onRetry: () => void;
 }) {
+  const colors = useColors();
   const client = useQueryClient();
   const [persistence, setPersistence] = useState<MessagePersistence>();
   const [error, setError] = useState<string>();

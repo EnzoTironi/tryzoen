@@ -4,13 +4,13 @@ import {
   MessageCircle,
   ShieldCheck,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import type { EveDynamicToolPart } from "eve/react";
 import type { InputResponse } from "eve/client";
 import { ResourceCard } from "../cards/resource";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { useInputResponse } from "./response";
 
 export function InputRequestCard({
@@ -22,6 +22,8 @@ export function InputRequestCard({
   readonly enabled: boolean;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState("");
   const [expanded, setExpanded] = useState(false);
   const request = part.toolMetadata?.eve?.inputRequest;
@@ -150,21 +152,34 @@ export function InputRequestCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: 600 },
-  text: { fontSize: 16, lineHeight: 25, color: colors.ink },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  request: { gap: 12, paddingVertical: 8 },
-  answer: {
-    minHeight: 88,
-    maxHeight: 240,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
-    padding: 12,
-    fontSize: 16,
-    lineHeight: 24,
-    color: colors.ink,
-  },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 21 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    card: { width: 600 },
+    text: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      lineHeight: 25,
+      color: colors.ink,
+    },
+    options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    request: { gap: 12, paddingVertical: 8 },
+    answer: {
+      fontFamily: systemFont,
+      minHeight: 88,
+      maxHeight: 240,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 14,
+      padding: 12,
+      fontSize: 16,
+      lineHeight: 24,
+      color: colors.ink,
+    },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 21,
+    },
+  });
+}

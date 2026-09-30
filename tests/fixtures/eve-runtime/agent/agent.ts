@@ -17,6 +17,26 @@ export default defineAgent({
             tools,
             messages,
           } = request;
+          if (
+            lastUserMessage?.startsWith("knowledge-query ") &&
+            !messages
+              .slice(
+                messages.findLastIndex((message) => message.role === "user") + 1
+              )
+              .some((message) => message.role === "tool")
+          )
+            return {
+              toolCalls: [
+                {
+                  name: "workspace_knowledge_query",
+                  input: JSON.parse(
+                    lastUserMessage.slice("knowledge-query ".length)
+                  ),
+                },
+              ],
+            };
+          if (lastUserMessage === "knowledge-query-history")
+            return JSON.stringify({ toolResults });
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           for (const name of [

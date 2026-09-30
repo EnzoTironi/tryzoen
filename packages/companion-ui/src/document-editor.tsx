@@ -1,9 +1,9 @@
-import { Fragment, useContext, useRef, useState } from "react";
+import { useMemo, Fragment, useContext, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { pageStyles } from "./page";
+import { usePageStyles } from "./page";
 import { ActionButton } from "./button";
 import { CompanionOverlay } from "./overlay";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 import { DocumentHistory, type DocumentHistoryData } from "./document-history";
 import { MarkdownSourceEditor } from "./editor/source";
 import {
@@ -39,6 +39,9 @@ export function DocumentEditor({
   readonly onSave: (text: string) => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const renderMarkdown = useContext(MarkdownEditorProvider);
   const renderEditor =
     markdown && renderMarkdown
@@ -192,33 +195,36 @@ export function DocumentEditor({
     </CompanionOverlay>
   );
 }
-const styles = StyleSheet.create({
-  surface: { flex: 1, backgroundColor: colors.canvas },
-  documentHeader: {
-    minHeight: 64,
-    padding: 12,
-    paddingHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    gap: 16,
-  },
-  filename: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: colors.ink,
-    flexShrink: 1,
-  },
-  headerActions: { flexDirection: "row", gap: 8 },
-  error: { color: colors.danger, padding: 16 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
-  discard: {
-    gap: 8,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: colors.wash,
-    marginTop: 24,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    surface: { flex: 1, backgroundColor: colors.canvas },
+    documentHeader: {
+      minHeight: 64,
+      padding: 12,
+      paddingHorizontal: 24,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+      gap: 16,
+    },
+    filename: {
+      fontFamily: systemFont,
+      fontSize: 17,
+      fontWeight: "600",
+      color: colors.ink,
+      flexShrink: 1,
+    },
+    headerActions: { flexDirection: "row", gap: 8 },
+    error: { color: colors.danger, padding: 16 },
+    actions: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
+    discard: {
+      gap: 8,
+      padding: 20,
+      borderRadius: 20,
+      backgroundColor: colors.wash,
+      marginTop: 24,
+    },
+  });
+}

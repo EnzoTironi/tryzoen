@@ -15,7 +15,7 @@ export default {
       entry: [
         "agent/channels/**/*.ts",
         "agent/instrumentation/**/*.ts",
-        "tests/fixtures/eve-runtime/agent/**/*.ts",
+        "tests/fixtures/eve-*/agent/**/*.ts",
         "agent/hooks/**/*.ts",
         "agent/instructions/**/*.ts",
         "agent/memory/**/*.ts",
@@ -35,6 +35,12 @@ export default {
         "scripts/groups-live-e2e.ts",
         // Launched in a separate process before web/worker traffic is admitted.
         "scripts/reconcile-account-erasures.ts",
+        // Dedicated execution capsule and standalone synthetic performance runner.
+        "server/workspaces/semantic/worker.ts",
+        "server/workspaces/semantic/service.ts",
+        "benchmarks/performance/run.ts",
+        // Read-only platform prerequisite inventory, invoked independently of native builds.
+        "scripts/native-readiness.ts",
       ],
       ignoreDependencies: [
         // Next resolves React Native imports to this web renderer.

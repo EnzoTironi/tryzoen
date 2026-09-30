@@ -3,7 +3,8 @@ import { type BillingPlanId, quotaLimitsForPlan } from "@shared/billing/plans";
 
 /**
  * Release-1 self-host minimum quotas (P11 admission).
- * Callers supply observed usage; over-limit work fails closed with
+ * Callers supply usage including committed resources and outstanding holds;
+ * over-limit work fails closed with
  * QuotaAdmissionError reason "exceeded". Media attachment caps remain in
  * server/channels/media/policy.ts.
  */
@@ -83,23 +84,9 @@ const quotaUsageStruct = z.object({
   }),
 });
 
-export interface QuotaUsage {
-  user: {
-    concurrentTurns: number;
-    dailyModelTokens: number;
-    dailyToolCalls: number;
-    dailyProactiveMessages: number;
-    storageBytes: number;
-    sandboxActiveSecondsPerDay: number;
-  };
-  installation: {
-    concurrentTurns: number;
-    dailyModelTokens: number;
-    activeUsersPerDay: number;
-  };
-}
+export type QuotaUsage = z.output<typeof quotaUsageStruct>;
 
-const quotaDemandStruct = z.object({
+const quotaDemandStruct = z.strictObject({
   concurrentTurns: z.optional(nonNegativeInt),
   modelTokens: z.optional(nonNegativeInt),
   toolCalls: z.optional(nonNegativeInt),
@@ -110,15 +97,15 @@ const quotaDemandStruct = z.object({
   activeUser: z.optional(z.literal([0, 1])),
 });
 
-export interface QuotaDemand {
-  concurrentTurns?: number;
-  modelTokens?: number;
-  toolCalls?: number;
-  proactiveMessages?: number;
-  storageBytes?: number;
-  sandboxSeconds?: number;
-  activeUser?: 0 | 1;
-}
+export type QuotaDemand = z.output<typeof quotaDemandStruct>;
+
+// Concurrency is a refundable gauge; completing an allocation releases it.
+// Other fields describe confirmed consumption, retained storage, or membership
+// in the active-user set. Finishing a turn does not erase those contributions.
+const quotaConsumptionStruct = quotaDemandStruct.omit({
+  concurrentTurns: true,
+});
+export type QuotaConsumption = z.output<typeof quotaConsumptionStruct>;
 
 export class QuotaAdmissionError extends Error {
   readonly _tag = "QuotaAdmissionError";
@@ -286,22 +273,25 @@ export function emptyQuotaUsage(): QuotaUsage {
   };
 }
 
-async function decodeUsage(usage: QuotaUsage) {
+function decodeUsage(usage: QuotaUsage) {
   try {
-    const decoded = await quotaUsageStruct.parseAsync(usage);
-    return {
-      user: { ...decoded.user },
-      installation: { ...decoded.installation },
-    };
+    return quotaUsageStruct.parse(usage);
   } catch {
     throw new QuotaAdmissionError({ reason: "invalid_input" });
   }
 }
 
-async function decodeDemand(demand: QuotaDemand) {
+function decodeDemand(demand: QuotaDemand) {
   try {
-    const decoded = await quotaDemandStruct.parseAsync(demand);
-    return { ...decoded };
+    return quotaDemandStruct.parse(demand);
+  } catch {
+    throw new QuotaAdmissionError({ reason: "invalid_input" });
+  }
+}
+
+function decodeConsumption(consumption: QuotaConsumption) {
+  try {
+    return quotaConsumptionStruct.parse(consumption);
   } catch {
     throw new QuotaAdmissionError({ reason: "invalid_input" });
   }
@@ -313,8 +303,8 @@ export const admitQuota = async function (
   demand: QuotaDemand,
   limits: Release1QuotaLimits = admissionLimitsForPlan()
 ) {
-  const decodedUsage = await decodeUsage(usage);
-  const decodedDemand = await decodeDemand(demand);
+  const decodedUsage = decodeUsage(usage);
+  const decodedDemand = decodeDemand(demand);
   for (const check of checks(limits, decodedUsage, decodedDemand)) {
     if (check.used + check.requested > check.limit) {
       throw new QuotaAdmissionError({
@@ -332,20 +322,82 @@ export const admitQuota = async function (
 
 /**
  * Apply a reserved demand to a usage snapshot after a successful admit.
- * Concurrent turns and model tokens increment both user and installation.
+ * The durable owner must atomically admit and reserve against the same snapshot;
+ * this function validates arithmetic but does not enforce limits or persist it.
  */
 export function reserveQuota(
   usage: QuotaUsage,
   demand: QuotaDemand
 ): QuotaUsage {
-  const concurrentTurns = demand.concurrentTurns ?? 0;
-  const modelTokens = demand.modelTokens ?? 0;
-  const toolCalls = demand.toolCalls ?? 0;
-  const proactiveMessages = demand.proactiveMessages ?? 0;
-  const storageBytes = demand.storageBytes ?? 0;
-  const sandboxSeconds = demand.sandboxSeconds ?? 0;
-  const activeUser = demand.activeUser === 1 ? 1 : 0;
-  return {
+  return changeQuota(decodeUsage(usage), decodeDemand(demand), 1);
+}
+
+/**
+ * Release known concurrent-turn slots without refunding consumed resources.
+ * The durable owner must claim each release exactly once. Aggregate arithmetic
+ * cannot distinguish a duplicate release from another allocation's slots.
+ */
+export function settleConcurrentTurns(
+  usage: QuotaUsage,
+  turns: number
+): QuotaUsage {
+  const demand = decodeDemand({ concurrentTurns: turns });
+  if (demand.concurrentTurns === undefined) {
+    throw new QuotaAdmissionError({ reason: "invalid_input" });
+  }
+  return changeQuota(decodeUsage(usage), demand, -1);
+}
+
+/**
+ * Finish one allocation, release its concurrency, and replace estimates with
+ * confirmed contributions. Every reserved non-concurrency field needs an
+ * explicit actual value, including zero: unknown outcomes cannot be refunded.
+ * Counters retain spent amounts even after failure/cancellation or when actual
+ * use exceeds the estimate. Storage means bytes still retained, and activeUser
+ * stays 1 once the user has joined the window's active set.
+ *
+ * Preconditions: the durable owner has claimed this allocation's terminal
+ * transition exactly once, verified its reservation and accounting window,
+ * and locked the affected usage rows. These pure functions are NOT idempotent
+ * and cannot identify an allocation from an aggregate usage snapshot. Release
+ * all resources as zero only when non-consumption is confirmed; a timeout or
+ * expired lease alone is insufficient.
+ */
+export function settleQuota(
+  usage: QuotaUsage,
+  reserved: QuotaDemand,
+  consumption: QuotaConsumption
+): QuotaUsage {
+  const decodedUsage = decodeUsage(usage);
+  const decodedReserved = decodeDemand(reserved);
+  const decodedConsumption = decodeConsumption(consumption);
+  for (const resource of quotaConsumptionStruct.keyof().options) {
+    if (
+      decodedReserved[resource] !== undefined &&
+      decodedConsumption[resource] === undefined
+    ) {
+      throw new QuotaAdmissionError({ reason: "invalid_input" });
+    }
+  }
+  // Validate the subtraction before adding actual use. Otherwise a positive
+  // actual amount could conceal release beyond the current reservation.
+  const released = changeQuota(decodedUsage, decodedReserved, -1);
+  return changeQuota(released, decodedConsumption, 1);
+}
+
+function changeQuota(
+  usage: QuotaUsage,
+  demand: QuotaDemand,
+  direction: 1 | -1
+): QuotaUsage {
+  const concurrentTurns = direction * (demand.concurrentTurns ?? 0);
+  const modelTokens = direction * (demand.modelTokens ?? 0);
+  const toolCalls = direction * (demand.toolCalls ?? 0);
+  const proactiveMessages = direction * (demand.proactiveMessages ?? 0);
+  const storageBytes = direction * (demand.storageBytes ?? 0);
+  const sandboxSeconds = direction * (demand.sandboxSeconds ?? 0);
+  const activeUser = direction * (demand.activeUser ?? 0);
+  return decodeUsage({
     user: {
       concurrentTurns: usage.user.concurrentTurns + concurrentTurns,
       dailyModelTokens: usage.user.dailyModelTokens + modelTokens,
@@ -361,26 +413,5 @@ export function reserveQuota(
       dailyModelTokens: usage.installation.dailyModelTokens + modelTokens,
       activeUsersPerDay: usage.installation.activeUsersPerDay + activeUser,
     },
-  };
-}
-
-/** Release a prior concurrent-turn reservation (never below zero). */
-export function settleConcurrentTurns(
-  usage: QuotaUsage,
-  turns: number
-): QuotaUsage {
-  const release = Math.max(0, turns);
-  return {
-    user: {
-      ...usage.user,
-      concurrentTurns: Math.max(0, usage.user.concurrentTurns - release),
-    },
-    installation: {
-      ...usage.installation,
-      concurrentTurns: Math.max(
-        0,
-        usage.installation.concurrentTurns - release
-      ),
-    },
-  };
+  });
 }

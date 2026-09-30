@@ -23,6 +23,7 @@ export function useConversationScroll({
   const list = useRef<FlatList<EveMessage>>(null);
   const nearBottom = useRef(true);
   const positioned = useRef(false);
+  const intentional = useRef(false);
   const offset = useRef(0);
   const requested = useRef(false);
   const restore = useRef<(() => void) | undefined>(undefined);
@@ -48,6 +49,7 @@ export function useConversationScroll({
       return;
     positioned.current = true;
     nearBottom.current = false;
+    intentional.current = true;
     restore.current = captureMessageAnchor(
       list.current?.getScrollableNode(),
       "agent-message"
@@ -68,13 +70,14 @@ export function useConversationScroll({
     connection.current.cleanup?.();
     connection.current.node = node;
     connection.current.cleanup = listenHistoryIntent(node, () => {
+      intentional.current = true;
       if (offset.current < 240) load();
     });
   };
   useEffect(() => {
     if (!messages.length || positioned.current) return undefined;
     const frame = requestAnimationFrame(() => {
-      list.current?.scrollToEnd({ animated: false });
+      scrollToEnd(list.current);
       positioned.current = true;
       nearBottom.current = true;
     });
@@ -89,10 +92,10 @@ export function useConversationScroll({
     },
     onLayout: () => {
       connect();
-      if (nearBottom.current && messages.length)
-        list.current?.scrollToEnd({ animated: false });
+      if (nearBottom.current && messages.length) scrollToEnd(list.current);
     },
     onScrollBeginDrag: () => {
+      intentional.current = true;
       positioned.current = true;
       if (offset.current < 240) load();
     },
@@ -104,10 +107,23 @@ export function useConversationScroll({
         100;
       const movedUp = nativeEvent.contentOffset.y < offset.current;
       offset.current = nativeEvent.contentOffset.y;
-      if (positioned.current && movedUp && offset.current < 240) load();
+      if (
+        intentional.current &&
+        positioned.current &&
+        movedUp &&
+        offset.current < 240
+      )
+        load();
       if (atBottom && offset.current > 0) positioned.current = true;
-      if (positioned.current && !requested.current)
+      // Virtualized rows and media can grow after the first scrollToEnd.
+      // Only a user gesture can leave follow-bottom; layout alone cannot.
+      if (
+        positioned.current &&
+        !requested.current &&
+        (intentional.current || atBottom)
+      )
         nearBottom.current = atBottom;
+      if (atBottom) intentional.current = false;
       restore.current = nearBottom.current
         ? undefined
         : captureMessageAnchor(
@@ -117,7 +133,15 @@ export function useConversationScroll({
     },
     onContentSizeChange: () => {
       if (!nearBottom.current) restore.current?.();
-      else list.current?.scrollToEnd({ animated: false });
+      else scrollToEnd(list.current);
     },
   };
+}
+
+function scrollToEnd(list: FlatList<EveMessage> | null) {
+  const node: unknown = list?.getScrollableNode();
+  // DOM geometry includes virtualized spacers, footer and variable text heights.
+  if (typeof HTMLElement !== "undefined" && node instanceof HTMLElement)
+    node.scrollTop = node.scrollHeight;
+  else list?.scrollToEnd({ animated: false });
 }

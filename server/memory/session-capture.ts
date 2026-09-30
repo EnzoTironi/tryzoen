@@ -10,7 +10,7 @@ import {
 import { env } from "@shared/environment/env";
 import { openMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
-import { memoryNamespace } from "./learned";
+import { memoryNamespace } from "./namespace";
 import { sessionSourceSchema, writeSessionSource } from "./session-files";
 import {
   WorkspaceAccessDenied,

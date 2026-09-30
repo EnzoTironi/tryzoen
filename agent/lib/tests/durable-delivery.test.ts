@@ -3,10 +3,12 @@ import { z } from "zod";
 import { expect, test, vi } from "vitest";
 import type { ChannelReceiveContext } from "eve/channels";
 import type { Session } from "eve/channels";
+import { parseInputResponses } from "eve/client";
 import {
   deliveryContext,
   deliverOnce,
   sendDurableMessage,
+  respondDurableInput,
   type DeliveryState,
 } from "../durable-delivery";
 import { withSignal } from "../../../server/operations/async";
@@ -224,4 +226,89 @@ test("caller cancellation prevents a send and also interrupts an unconfirmed han
   );
   controller.abort(reason);
   await expect(pending).rejects.toBe(reason);
+});
+
+test("fixed-session answers share native receipts, strip markers and replay once", async () => {
+  const f = fixture();
+  const fixed = session("consumer-session");
+  const responses = parseInputResponses([
+    { requestId: "question", text: "Friday" },
+  ]);
+  const native = parseInputResponses([
+    { requestId: "question", optionId: "friday" },
+  ]);
+  const validate = vi.fn<() => Promise<typeof native>>(async () => native);
+  const respond = vi.fn<Session["respond"]>();
+  fixed.respond = respond;
+  respond.mockImplementation(async (inputResponses, options) => {
+    const accepted = await deliverOnce(
+      { inputResponses, context: options.context },
+      f.context
+    );
+    expect(accepted).toEqual({
+      inputResponses: native,
+      context: ["Question binding"],
+    });
+    return { status: "accepted", sessionId: fixed.id };
+  });
+  const options = { auth, context: ["Question binding"] };
+  await respondDurableInput(fixed, "answer-1", responses, options, validate);
+  await respondDurableInput(fixed, "answer-1", responses, options, validate);
+  expect(respond).toHaveBeenCalledOnce();
+  expect(validate).toHaveBeenCalledOnce();
+  await expect(
+    respondDurableInput(
+      fixed,
+      "answer-1",
+      parseInputResponses([{ requestId: "question", text: "Monday" }]),
+      options,
+      validate
+    )
+  ).rejects.toThrow("Conflicting delivery replay");
+  await expect(
+    respondDurableInput(
+      session("other-session"),
+      "answer-1",
+      responses,
+      options,
+      validate
+    )
+  ).rejects.toThrow("Conflicting delivery replay");
+});
+
+test("consumer rejection and receipt-write failure preserve the native fence", async () => {
+  const f = fixture();
+  const receipt = { id: "answer", digest: "f".repeat(64) };
+  const payload = {
+    inputResponses: parseInputResponses([
+      { requestId: "question", text: "Yes" },
+    ]),
+    context: [`zoen.delivery:${JSON.stringify(receipt)}`],
+  };
+  expect(
+    await deliverOnce(payload, f.context, async () => false)
+  ).toBeUndefined();
+  expect(f.state.receipts).toEqual({});
+  const failure = new Error("Receipt database unavailable");
+  vi.mocked(recordNativeReceipt).mockRejectedValueOnce(failure);
+  await expect(deliverOnce(payload, f.context, async () => true)).rejects.toBe(
+    failure
+  );
+  expect(f.state.receipts).toEqual({});
+});
+
+test("a stale fixed-session answer fails validation before dispatch", async () => {
+  const respond = vi.fn<Session["respond"]>();
+  const fixed = { ...session("consumer-session"), respond };
+  fixture();
+  const responses = parseInputResponses([
+    { requestId: "question", text: "Yes" },
+  ]);
+  const failure = new Error("Question is stale");
+  await expect(
+    respondDurableInput(fixed, "answer", responses, { auth }, async () => {
+      throw failure;
+    })
+  ).rejects.toBe(failure);
+  expect(respond).not.toHaveBeenCalled();
 });

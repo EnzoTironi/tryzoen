@@ -12,7 +12,7 @@ import { OntologyHistory } from "./history";
 import { ontologyReadOptions } from "./query";
 import type { DocumentHistoryData } from "../../document-history";
 import { ActionButton } from "../../button";
-import { pageStyles } from "../../page";
+import { usePageStyles } from "../../page";
 import { OntologyRecords } from "./records";
 
 export interface OntologyData {
@@ -33,6 +33,7 @@ export function OntologyCollection({
   readonly data: OntologyData;
   readonly query: string;
 }) {
+  const pageStyles = usePageStyles();
   const [selected, setSelected] = useState<string>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [view, setView] = useState<z.output<typeof OntologyReadSchema>>({});

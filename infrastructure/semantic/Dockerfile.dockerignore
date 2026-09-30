@@ -1,0 +1,5 @@
+**
+!.output
+!.output/server
+!.output/server/semantic
+!.output/server/semantic/**

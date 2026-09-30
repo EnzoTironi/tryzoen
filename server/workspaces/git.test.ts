@@ -1,8 +1,9 @@
+import { GitBundleError } from "../files/git";
 import { expect, test } from "vitest";
 import {
   publishWorkspaceGit,
   readWorkspaceGit,
-  WorkspaceGitError,
+  readWorkspaceGitSelection,
 } from "./git";
 
 test("exports real Git history and restores prior file contents from a fresh bundle", async () => {
@@ -95,7 +96,7 @@ test.each([
     (value) => ({ ok: true as const, value }),
     (error: unknown) => ({ ok: false as const, error })
   );
-  expect(!result.ok && result.error).toBeInstanceOf(WorkspaceGitError);
+  expect(!result.ok && result.error).toBeInstanceOf(GitBundleError);
 });
 
 test("enforces byte limits and rejects corrupt bundles instead of returning missing files", async () => {
@@ -122,4 +123,66 @@ test("enforces byte limits and rejects corrupt bundles instead of returning miss
   expect(!corrupt.ok && corrupt.error).toMatchObject({
     reason: "unavailable",
   });
+});
+
+test("selects existing files from the captured revision without losing deleted history", async () => {
+  const first = await publishWorkspaceGit({
+    bundle: null,
+    parent: null,
+    changes: [{ path: "knowledge/old.md", content: "Original" }],
+    message: "Create source",
+  });
+  const current = await publishWorkspaceGit({
+    bundle: first.bundle,
+    parent: first.revision,
+    changes: [
+      { path: "knowledge/old.md", content: null },
+      { path: "knowledge/new.md", content: "Current" },
+    ],
+    message: "Move source",
+  });
+  const paths = [
+    "knowledge/old.md",
+    "knowledge/new.md",
+    "knowledge/missing.md",
+  ];
+  expect(
+    await readWorkspaceGitSelection(current.bundle, first.revision, paths)
+  ).toEqual([{ path: "knowledge/old.md", content: "Original" }]);
+  expect(
+    await readWorkspaceGitSelection(current.bundle, current.revision, paths)
+  ).toEqual([{ path: "knowledge/new.md", content: "Current" }]);
+  await expect(
+    readWorkspaceGitSelection(Buffer.from("invalid"), current.revision, paths)
+  ).rejects.toMatchObject({ reason: "unavailable" });
+});
+
+test("linked discovery stays at its captured revision after the current source changes", async () => {
+  const original = await publishWorkspaceGit({
+    bundle: null,
+    parent: null,
+    changes: [
+      { path: "knowledge/index.md", content: "knowledge/fact.md" },
+      { path: "knowledge/fact.md", content: "Original fact" },
+    ],
+    message: "Publish linked knowledge",
+  });
+  const latest = await publishWorkspaceGit({
+    bundle: original.bundle,
+    parent: original.revision,
+    changes: [{ path: "knowledge/fact.md", content: "Corrected fact" }],
+    message: "Correct fact",
+  });
+  const documents = await readWorkspaceGitSelection(
+    latest.bundle,
+    original.revision,
+    async (read) => {
+      const index = await read(["knowledge/index.md"]);
+      return [...index, ...(await read([index[0]?.content ?? ""]))];
+    }
+  );
+  expect(documents).toEqual([
+    { path: "knowledge/index.md", content: "knowledge/fact.md" },
+    { path: "knowledge/fact.md", content: "Original fact" },
+  ]);
 });

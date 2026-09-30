@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { OutgoingMessage } from "./outbox";
 import { useConversationOnline } from "./connection";
 
@@ -15,6 +15,7 @@ export function MessageDelivery({
   readonly onRemove?: () => void;
   readonly failureText?: string;
 }) {
+  const colors = useColors();
   const online = useConversationOnline();
   let label = online
     ? queued
@@ -36,6 +37,7 @@ export function MessageDelivery({
       <Text
         accessibilityLiveRegion="polite"
         style={{
+          fontFamily: systemFont,
           fontSize: 12,
           color: status === "failed" ? colors.danger : colors.muted,
         }}

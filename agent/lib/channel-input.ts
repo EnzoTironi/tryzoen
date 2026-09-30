@@ -1,4 +1,6 @@
 import { approvalMessageSchema } from "./approval-message";
+import { renderGmailApproval } from "./google-workspace/gmail";
+import { renderNetworkApproval } from "../../server/workspaces/network";
 import { z } from "zod";
 import type { Session } from "eve/channels";
 import {
@@ -30,6 +32,16 @@ export const channelQuestionSchema = z
   );
 export function renderChannelInput(request: InputRequest) {
   if (request.kind === "tool-approval") {
+    if (request.action.toolName === "gmail-send")
+      return renderGmailApproval(
+        request.action.input,
+        request.action.input.approvalMessage
+      );
+    if (request.action.toolName === "network-contact")
+      return renderNetworkApproval(
+        request.action.input,
+        request.action.input.approvalMessage
+      );
     if (request.action.input.approvalMessage !== undefined)
       return approvalMessageSchema.parse(request.action.input.approvalMessage);
     return approvalMessageSchema.parse(

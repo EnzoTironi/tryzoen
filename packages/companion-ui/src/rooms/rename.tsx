@@ -7,9 +7,9 @@ import {
 import { Text, TextInput } from "react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CompanionSheet } from "../sheet";
-import { colors } from "../theme";
+import { useColors } from "../theme";
 import {
   roomRenameSchema,
   type RoomData,
@@ -28,6 +28,8 @@ export function RenameRoom({
   readonly room: z.infer<typeof roomSchema>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   const [name, setName] = useState(room.label);
   const [expectedName, setExpectedName] = useState(room.label);
   const client = useQueryClient();

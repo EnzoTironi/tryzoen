@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Clock3 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { ActionButton } from "./button";
-import { colors } from "./theme";
+import { useColors } from "./theme";
 
 export interface UpcomingItem {
   readonly id: string;
@@ -40,6 +40,7 @@ export function Upcoming({
   readonly onCreate: () => void;
   readonly renderHistory: (id: string) => ReactNode;
 }) {
+  const pageStyles = usePageStyles();
   return (
     <CompanionPage
       title="Upcoming"
@@ -100,6 +101,9 @@ function UpcomingRow({
   readonly onConversation: (id: string) => void;
   readonly renderHistory: (id: string) => ReactNode;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [expanded, setExpanded] = useState(false);
   const Chevron = expanded ? ChevronDown : ChevronRight;
   return (
@@ -160,19 +164,21 @@ function UpcomingRow({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  item: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#f1f1f2",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  detail: { gap: 12, paddingLeft: 60, paddingBottom: 20 },
-  actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    item: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    icon: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: "#f1f1f2",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    detail: { gap: 12, paddingLeft: 60, paddingBottom: 20 },
+    actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  });
+}

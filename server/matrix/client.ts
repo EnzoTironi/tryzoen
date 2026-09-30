@@ -180,6 +180,12 @@ const matrixContent = z.object({
   msgtype: z.string().optional(),
   membership: z.string().optional(),
   "m.relates_to": matrixRelation.optional(),
+  "m.mentions": z
+    .object({
+      user_ids: z.array(z.string().min(1).max(255)).max(2000).optional(),
+      room: z.boolean().optional(),
+    })
+    .optional(),
 });
 const matrixEvent = z.object({
   redacts: z.string().optional(),

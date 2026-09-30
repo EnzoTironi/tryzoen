@@ -13,7 +13,7 @@ import {
 } from "../markdown-editor";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { useColors } from "../theme";
 import {
   roomEditSchema,
   type RoomData,
@@ -34,6 +34,7 @@ export function EditRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
   const renderEditor = useContext(MarkdownEditorProvider);
   const { editor, baseline, error, setError, save, close, reload } =
     useMessageEdit({ data, roomId, cacheScope, item, onClose });

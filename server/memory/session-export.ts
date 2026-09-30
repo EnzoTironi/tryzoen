@@ -12,6 +12,7 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { sessionSourceSchema, sessionSourceSegments } from "./session-files";
+import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
 
 const segmentSchema = sessionSourceSchema.extend({
   segment: z.object({
@@ -35,14 +36,25 @@ export class SessionArchiveUnavailable extends Error {
 
 async function archiveNamespace(
   actor: z.infer<typeof WorkspaceActorSchema>,
-  sessionId: string
+  sessionId: string,
+  lockNamespace = false
 ) {
+  if (
+    actor.agentGrantId ||
+    actor.protocolTaskId ||
+    actor.scheduledRunId ||
+    actor.groupBindingId ||
+    actor.groupEpoch ||
+    actor.matrixIdentityId
+  )
+    throw new WorkspaceAccessDenied();
   await requireWorkspaceAccess(actor);
   const rows =
     await query(sql`SELECT n.namespace_id FROM workspace_memory_namespace n
     JOIN agent_sessions s ON s.workspace_id = n.workspace_id AND s.created_by_user_id = n.user_id
     WHERE n.workspace_id = ${actor.workspaceId} AND n.user_id = ${actor.userId}
-      AND s.session_id = ${sessionId} FOR SHARE OF n, s`);
+      AND s.session_id = ${sessionId}
+      ${lockNamespace ? sql`FOR UPDATE OF n FOR SHARE OF s` : sql`FOR SHARE OF n, s`}`);
   if (!rows[0]) throw new WorkspaceAccessDenied();
   return z.uuid().parse(rows[0].namespace_id);
 }
@@ -216,11 +228,11 @@ async function* sessionRecords(
       join(directory, entry.name)
     );
     if (!content) continue;
-    size += content.byteLength;
+    size += content.content.byteLength;
     if (size > exportLimit)
       throw new Error("This conversation archive exceeds the download limit.");
     signal.throwIfAborted();
-    yield content;
+    yield content.content;
   }
 }
 
@@ -246,6 +258,108 @@ async function verifiedSource(
       throw new Error(
         "The saved conversation archive does not match its receipt."
       );
-    return receipt.stored_at ? file.content : null;
+    return receipt.stored_at ? file : null;
   });
+}
+
+/** Exact immutable source evidence for a private claim. A completed stream block
+ * is not an accepted assistant answer. Ownership and delivery receipts are
+ * rechecked under the caller's transaction; no citation establishes access. */
+export async function verifySessionClaimSource(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  raw: z.infer<typeof LearnedClaimSessionSourceSchema>
+) {
+  const citation = LearnedClaimSessionSourceSchema.parse(raw);
+  const root = env.ZOEN_SESSION_ARCHIVE_DIR;
+  if (!root) throw new SessionArchiveUnavailable();
+  try {
+    return await transaction(async () => {
+      const namespace = await archiveNamespace(actor, citation.sessionId);
+      const directory = await sessionDirectory(
+        root,
+        namespace,
+        citation.sessionId
+      );
+      const file = await verifiedSource(
+        actor,
+        citation.sessionId,
+        namespace,
+        join(directory, `${hash(citation.eventId)}.jsonl`)
+      );
+      if (!file || file.digest !== citation.sha256) return false;
+      const source = file.source;
+      const accepted =
+        (source.kind === "message.received" &&
+          source.role === "user" &&
+          source.settlement === null) ||
+        (source.kind === "message.settled" &&
+          source.role === "assistant" &&
+          source.settlement === "accepted");
+      return (
+        accepted &&
+        source.eventId === citation.eventId &&
+        (source.text?.includes(citation.excerpt) ?? false)
+      );
+    });
+  } catch (error) {
+    if (error instanceof WorkspaceAccessDenied) throw error;
+    throw new SessionArchiveUnavailable();
+  }
+}
+
+/** Reconstruct only missing receipt indexes from this owner's immutable files.
+ * Never acknowledge an existing pending delivery or recreate permissions/session
+ * ownership. Rebuild time is operational; it is not a fabricated source date. */
+export async function rebuildSessionSourceReceipts(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  sessionId: string
+) {
+  z.string().min(1).max(256).parse(sessionId);
+  const root = env.ZOEN_SESSION_ARCHIVE_DIR;
+  if (!root) throw new SessionArchiveUnavailable();
+  try {
+    return await transaction(async () => {
+      const namespace = await archiveNamespace(actor, sessionId, true);
+      const directory = await sessionDirectory(root, namespace, sessionId);
+      let count = 0;
+      let bytes = 0;
+      let restored = 0;
+      let pending = 0;
+      for await (const entry of await opendir(directory)) {
+        if (++count > 10_000) throw new SessionArchiveUnavailable();
+        if (entry.name.startsWith(".") && entry.name.endsWith(".tmp")) continue;
+        if (!/^[a-f0-9]{64}\.jsonl$/u.test(entry.name) || !entry.isFile())
+          throw new SessionArchiveUnavailable();
+        const file = await sourceFile(
+          join(directory, entry.name),
+          sessionId,
+          entry.name
+        );
+        bytes += file.content.byteLength;
+        if (bytes > exportLimit) throw new SessionArchiveUnavailable();
+        const existing = (
+          await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
+          FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR UPDATE`)
+        )[0];
+        if (existing) {
+          if (
+            existing.digest !== file.digest ||
+            existing.sequence !== String(file.captureSequence)
+          )
+            throw new SessionArchiveUnavailable();
+          if (!existing.stored_at) pending++;
+        } else {
+          await query(sql`INSERT INTO memory_session_sources
+            (namespace_id, event_id, digest, capture_sequence, stored_at)
+            VALUES (${namespace}, ${file.source.eventId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
+          restored++;
+        }
+      }
+      await requireWorkspaceAccess(actor);
+      return { restored, pending };
+    });
+  } catch (error) {
+    if (error instanceof WorkspaceAccessDenied) throw error;
+    throw new SessionArchiveUnavailable();
+  }
 }

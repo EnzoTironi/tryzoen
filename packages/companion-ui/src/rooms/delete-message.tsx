@@ -8,7 +8,7 @@ import { Text } from "react-native";
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomData, roomPageSchema, roomMessageSchema } from "./schema";
 
 export function DeleteRoomMessage({
@@ -24,6 +24,7 @@ export function DeleteRoomMessage({
   readonly messageId: string;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
   const deletion = useMessageDeletion({
     data,
     roomId,
@@ -38,7 +39,14 @@ export function DeleteRoomMessage({
         if (!deletion.isPending) onClose();
       }}
     >
-      <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>
+      <Text
+        style={{
+          fontFamily: systemFont,
+          color: colors.muted,
+          fontSize: 15,
+          lineHeight: 22,
+        }}
+      >
         O conteúdo será removido da conversa. Respostas na thread continuam
         disponíveis. Isso não apaga cópias ou arquivos que outras pessoas já
         salvaram.

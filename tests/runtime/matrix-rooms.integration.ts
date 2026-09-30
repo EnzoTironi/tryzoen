@@ -80,12 +80,12 @@ test(
     await sendMatrixMessage(guest, {
       id: room.id,
       operationId: sendId,
-      text: "Zoen, summarize our shared workspace.",
+      text: "@Zoen, summarize our shared workspace.",
     });
     await sendMatrixMessage(guest, {
       id: room.id,
       operationId: sendId,
-      text: "Zoen, summarize our shared workspace.",
+      text: "@Zoen, summarize our shared workspace.",
     });
     const deliveries = await (async function () {
       for (let n = 0; n < 150; n++) {

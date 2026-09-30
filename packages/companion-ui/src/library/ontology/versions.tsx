@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Clock } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -5,8 +6,8 @@ import type { z } from "zod";
 import type { OntologyReadSchema } from "./schema";
 import type { OntologyData } from "./collection";
 import { ActionButton } from "../../button";
-import { pageStyles } from "../../page";
-import { colors } from "../../theme";
+import { usePageStyles } from "../../page";
+import { useColors } from "../../theme";
 
 export function OntologyVersions({
   data,
@@ -23,6 +24,9 @@ export function OntologyVersions({
     value: z.output<typeof OntologyReadSchema>["revision"]
   ) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const history = useQuery({
     queryKey: [...data.cacheKey, "history"],
     queryFn: data.history,
@@ -105,16 +109,18 @@ export function OntologyVersions({
   );
 }
 
-const styles = StyleSheet.create({
-  version: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    minHeight: 52,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  detail: { gap: 5 },
-  title: { flex: 1 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    version: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      minHeight: 52,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+    },
+    detail: { gap: 5 },
+    title: { flex: 1 },
+  });
+}

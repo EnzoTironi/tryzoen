@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { CreatorStudioData } from "./studio";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorReleaseReview } from "./release-review";
 import { CreatorRelease } from "./release";
 
@@ -21,6 +21,7 @@ export function CreatorReleases({
   readonly archived: boolean;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [reviewing, setReviewing] = useState(false);
   const [selected, setSelected] = useState<string>();
   const versions = useQuery({

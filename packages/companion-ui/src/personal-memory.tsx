@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { ActionButton } from "./button";
 import { DocumentEditor } from "./document-editor";
 import { MemoryCard } from "./cards/memory";
@@ -34,6 +34,7 @@ export function PersonalMemory({
   readonly onCorrectProfile: () => void;
   readonly onLearned: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<MemoryDocumentView>();
   return (
     <CompanionPage

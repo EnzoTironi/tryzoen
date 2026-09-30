@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { List, ShieldCheck, Clock3, Fingerprint, X } from "lucide-react-native";
-import { colors } from "./theme";
+import { useColors } from "./theme";
 import { IconButton } from "./icon-button";
 import { SheetSurface } from "./sheet";
 
@@ -23,6 +23,8 @@ export function AgentPanel({
   readonly renderHeader?: (onEdit: () => void) => ReactNode;
   readonly children: (tab: AgentPanelTab) => ReactNode;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [tab, setTab] = useState<AgentPanelTab>("activity");
   const compact = useWindowDimensions().width < 720;
   return (
@@ -71,29 +73,36 @@ export function AgentPanel({
     </SheetSurface>
   );
 }
-const styles = StyleSheet.create({
-  close: { alignItems: "flex-end", paddingHorizontal: 16 },
-  panel: { height: "85%", maxHeight: 780 },
-  toolbar: { flexDirection: "row", alignItems: "center", gap: 8, padding: 16 },
-  tabs: {
-    flexDirection: "row",
-    flex: 1,
-    backgroundColor: "#f1f1f2",
-    borderRadius: 28,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 7,
-    borderRadius: 24,
-  },
-  selected: {
-    backgroundColor: colors.surface,
-    boxShadow: "0 3px 12px rgba(0,0,0,0.09)",
-  },
-  content: { flex: 1, minHeight: 0 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    close: { alignItems: "flex-end", paddingHorizontal: 16 },
+    panel: { height: "85%", maxHeight: 780 },
+    toolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 16,
+    },
+    tabs: {
+      flexDirection: "row",
+      flex: 1,
+      backgroundColor: "#f1f1f2",
+      borderRadius: 28,
+      padding: 4,
+    },
+    tab: {
+      flex: 1,
+      minHeight: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 7,
+      borderRadius: 24,
+    },
+    selected: {
+      backgroundColor: colors.surface,
+      boxShadow: "0 3px 12px rgba(0,0,0,0.09)",
+    },
+    content: { flex: 1, minHeight: 0 },
+  });
+}

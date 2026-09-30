@@ -1,3 +1,5 @@
+import { SemanticQuerySchema } from "../workspaces/semantic/schema";
+import { executePublishedSemanticQuery } from "../workspaces/semantic/published";
 import { withSignal } from "../operations/async";
 import { z } from "zod";
 import { env } from "@shared/environment/env";
@@ -32,6 +34,14 @@ import { discoverToolConnections } from "../connectors/connections";
 import { ConnectorDiscovery } from "../connectors/definition";
 
 const tools = [
+  {
+    path: "workspace_knowledge_query",
+    plugin: "files",
+    description:
+      "Execute a published knowledge/queries/*.json definition at its exact current revision against its declared published CSV snapshots. Discover and read the definition first. Supply only its declared typed arguments. Results include SQL, source hashes, revision and an execution manifest retained in tool history. Live provider freshness is unknown. Imports, raw SQL sources, arbitrary credentials, shared/group and external-agent execution are unavailable. No new definition is implicitly approved by asking a question.",
+    input:
+      "{ path: string, revision: string, arguments?: Record<string, string | number | boolean> }",
+  },
   {
     path: "workspace_knowledge_discover",
     plugin: "files",
@@ -116,6 +126,7 @@ const FileSearch = WorkspaceRecordedViewSchema.safeExtend({
   query: Query.shape.query,
 });
 const schemas = {
+  workspace_knowledge_query: SemanticQuerySchema,
   workspace_knowledge_discover: DiscoverKnowledgeSchema,
   workspace_tools_connections: ConnectorDiscovery,
   workspace_files_list: WorkspaceRecordedViewSchema,
@@ -155,6 +166,8 @@ export const readWorkspaceToolCatalog = async function (
             Boolean(
               env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
             )) &&
+          (!(actor.agentGrantId ?? actor.groupBindingId) ||
+            tool.path !== "workspace_knowledge_query") &&
           (!actor.agentGrantId ||
             tool.path !== "workspace_tools_connections") &&
           (!(actor.agentGrantId ?? actor.groupBindingId) ||
@@ -276,6 +289,11 @@ export const invokeWorkspaceTool = async function (
       if (memory.needsAttention) throw new ToolAccessDenied();
       return { results: memory.results.slice(0, 8) };
     }
+    case "workspace_knowledge_query":
+      return executePublishedSemanticQuery(
+        actor,
+        SemanticQuerySchema.parse(call.args)
+      );
     case "workspace_ontology_read": {
       const input = await OntologyReadSchema.parseAsync(call.args);
       const { mayManage: _mayManage, ...result } = await readOntology(

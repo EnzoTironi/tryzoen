@@ -1,5 +1,5 @@
 import { withSignal } from "../../server/operations/async";
-import { LearnedMemoryError } from "../../server/memory/learned";
+import { LearnedMemoryError } from "../../server/memory/namespace";
 import { FileMemoryError } from "../../server/memory/ai-memory/mutations";
 import { z } from "zod";
 

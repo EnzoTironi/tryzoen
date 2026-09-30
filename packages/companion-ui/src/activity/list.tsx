@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,9 +21,9 @@ import {
   X,
 } from "lucide-react-native";
 import type { z } from "zod";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type {
   ActivityData,
   activityItemSchema,
@@ -49,6 +50,9 @@ export function AgentActivity({
   readonly approvals: boolean;
   readonly onSelect: (sessionId: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const client = useQueryClient();
   const key = ["agent-activity", cacheScope, approvals];
   const history = useInfiniteQuery({
@@ -164,6 +168,9 @@ function ActivityRow({
   readonly item: z.infer<typeof activityItemSchema>;
   readonly onSelect: (sessionId: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const { label, Icon } = presentations[item.kind];
   const date = new Date(item.at).toLocaleString(undefined, {
     day: "numeric",
@@ -195,26 +202,33 @@ function ActivityRow({
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 40, flexGrow: 1 },
-  header: { gap: 2, paddingBottom: 16 },
-  feedback: { gap: 10, alignItems: "flex-start", paddingVertical: 20 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  pressed: { backgroundColor: colors.wash },
-  icon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  copy: { flex: 1, gap: 3 },
-  date: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    content: { padding: 20, paddingBottom: 40, flexGrow: 1 },
+    header: { gap: 2, paddingBottom: 16 },
+    feedback: { gap: 10, alignItems: "flex-start", paddingVertical: 20 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 16,
+      borderRadius: 16,
+    },
+    pressed: { backgroundColor: colors.wash },
+    icon: {
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      backgroundColor: colors.wash,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    copy: { flex: 1, gap: 3 },
+    date: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+  });
+}

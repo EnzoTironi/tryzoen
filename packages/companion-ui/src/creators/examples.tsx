@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorExample } from "./example";
 import type { CreatorStudioData } from "./studio";
 import {
@@ -21,6 +21,7 @@ export function CreatorExamples({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const pageStyles = usePageStyles();
   const [example, setExample] = useState<{
     snapshot: z.infer<typeof creatorDraftSchema>;
     value: z.infer<typeof creatorExampleSchema>;

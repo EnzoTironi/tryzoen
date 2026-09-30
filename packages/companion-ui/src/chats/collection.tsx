@@ -1,4 +1,9 @@
-import { useDeferredValue, useState, type ComponentProps } from "react";
+import {
+  useMemo,
+  useDeferredValue,
+  useState,
+  type ComponentProps,
+} from "react";
 import { useConversationLibrary } from "./library";
 import {
   ActivityIndicator,
@@ -7,9 +12,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { ConversationToolbar } from "./toolbar";
 import { ConversationRow } from "./row";
 import type { ChatData } from "./schema";
@@ -35,6 +40,9 @@ export function ConversationSearch({
   readonly panel?: ComponentProps<typeof ConversationToolbar>["panel"];
   readonly onExport: (sessionId: string) => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [width, setWidth] = useState(0);
@@ -136,18 +144,25 @@ export function ConversationSearch({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    minHeight: 0,
-    paddingHorizontal: 16,
-    paddingTop: 44,
-    paddingBottom: 16,
-    maxWidth: 1128,
-  },
-  wide: { paddingHorizontal: 64 },
-  panel: { paddingHorizontal: 8, paddingTop: 12, paddingBottom: 0 },
-  list: { flex: 1, minHeight: 0 },
-  feedback: { paddingVertical: 16, gap: 12, alignItems: "center" },
-  error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    page: {
+      flex: 1,
+      minHeight: 0,
+      paddingHorizontal: 16,
+      paddingTop: 44,
+      paddingBottom: 16,
+      maxWidth: 1128,
+    },
+    wide: { paddingHorizontal: 64 },
+    panel: { paddingHorizontal: 8, paddingTop: 12, paddingBottom: 0 },
+    list: { flex: 1, minHeight: 0 },
+    feedback: { paddingVertical: 16, gap: 12, alignItems: "center" },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  });
+}

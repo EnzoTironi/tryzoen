@@ -1,6 +1,6 @@
 # Plano de paridade do Zoen
 
-Atualizado em 29/09/2026. Base integrada: PR [148](https://github.com/EnzoTironi/tryzoen/pull/148), merge `a1b96ea`. Este é o plano de produto e execução; os documentos de cada frente registram contratos, evidências e limitações. Uma referência visual, uma tela e uma funcionalidade validada são evidências diferentes.
+Atualizado em 30/09/2026. Base integrada: PR [148](https://github.com/EnzoTironi/tryzoen/pull/148), merge `a1b96ea`. Este é o plano de produto e execução; os documentos de cada frente registram contratos, evidências e limitações. Uma referência visual, uma tela e uma funcionalidade validada são evidências diferentes.
 
 ## O produto que estamos construindo
 
@@ -13,7 +13,7 @@ Um lugar para conversar com pessoas, grupos e agentes, realizar trabalho e prese
 | Slack                    | Threads, atenção, busca e colaboração contextual                                       | Discussões organizadas sem perder o contexto; menções, acompanhamento e conteúdo encontrável         |
 | Ando / Buzz              | Pessoas e agentes participando de espaços compartilhados                               | Hangouts e colaboração com identidade explícita, atenção controlada e revisão de resultados          |
 | Muse                     | Agente pessoal que executa, propõe, acompanha e cria                                   | Chat, Feed, Ideias, Metas, Biblioteca, aprovações, rotinas, conectores e arquivos editáveis          |
-| Akita ai-memory          | Arquivos e Git inspecionáveis; SQLite preserva versões e recibos; relações e histórico | Memória inspecionável, corrigível, recuperável e isolada por dono                                    |
+| TextQL ontology          | Definições e memória em arquivos versionados; índices derivados e execução governada   | Conhecimento consistente entre conversas, histórico, correções e proveniência com permissões atuais  |
 | Visão Zoen / marketplace | Criadores ensinam bots por conversa e publicam uma versão aprovada                     | Conhecimento atribuído, testes com o criador, acesso claro e conversas privadas de cada participante |
 
 As referências são ideias de interação, não uma obrigação de reproduzir todos os produtos ou seus ecossistemas. Os requisitos explícitos do usuário prevalecem: manter a barra mobile de Conversas, Feed, Ideias, Metas, Biblioteca e Configurações; Descobrir fica fora dela. Sheets mobile viram modais no desktop, exceto sugestões do compositor, que ficam acima do campo nos dois. Bots têm tipo de conta e selo IA, sem sufixo obrigatório. Criar, ensinar e corrigir um bot acontece no chat; o editor visual serve para inspecionar e editar seus arquivos.
@@ -118,9 +118,11 @@ novas importações, publicação e monetização não fazem parte da frente ati
 Memória pessoal e comunicação continuam no escopo. Evitar repetir validações
 amplas sem mudança ou falha que justifique a repetição.
 
-Desde a orientação mais recente do usuário, a implementação e integração seguem
-com um único agente. A tabela abaixo preserva os donos de código definidos na
-primeira rodada; não representa subagentes ativos.
+A orientação de 30/09/2026 autoriza frentes paralelas com um único responsável
+pela integração, contratos compartilhados e runtime exclusivo quando necessário.
+Cada arquivo mantém um escritor. A tabela abaixo preserva os donos da primeira
+rodada; as reservas atuais são coordenadas antes de editar, sem expandir modelos,
+transporte ou frameworks por conta da paralelização.
 
 O PR 148 foi integrado depois dos seis checks aprovados. Com autorização do usuário, a exigência obsoleta `Private Mem0 service` foi removida da proteção da `main`; `Checks` e `Runtime storage and build` continuam obrigatórios, com atualização estrita da base. O segundo já executa qualificação de ingestão, restore e sonhos Akita.
 
@@ -1179,8 +1181,11 @@ anterior 757a6057 concluiu os seis jobs com sucesso.
 
 ### Conhecimento e ontologia — contrato v2.2 — 29/09/2026
 
-O [plano integrado de conhecimento](knowledge-plan.md) preserva os donos atuais,
-a publicação Git transacional e o Akita real. Não será construído um interpretador
+A decisão vigente no [plano integrado de conhecimento](knowledge-plan.md)
+preserva a publicação Git transacional e os donos de execução, comunicação e
+permissões. Ela substitui a decisão anterior de preservar Akita: a memória
+aprendida será substituída diretamente pelo dono unificado de arquivos, com
+seus contratos completos, sem dual-write ou importador de corpora antigos. Não será construído um interpretador
 TQL. A [comparação executável inicial](semantic-engine-review.md) entre Malloy
 0.0.434 e Wren WASM 0.4.1 confirmou os totais sintéticos e registrou limites reais
 de drivers, parâmetros, isolamento e execução. Malloy é o candidato escolhido
@@ -1358,3 +1363,131 @@ testes e nove tarefas. A caixa global de threads acompanhadas e push em segundo
 plano continuam pendentes; nenhuma migração ou implantação de produção nesta rodada.
 
 Build e conferência desktop/mobile passaram; [capturas e sequência de telas](https://github.com/EnzoTironi/tryzoen/pull/152#issuecomment-5896204935) foram anexadas com `gh --attach`. A revisão estrutural registrou 19 observações / dez gates, sem supressões; inclui complexidade do dono de assinatura, tamanho do hook e churn dos adaptadores.
+
+### Direção visual vigente — 30/09/2026
+
+O usuário definiu iMessage como baseline visual e de interação, com funcionalidades
+adicionais de Muse e Ando. Web, Electron e Expo devem parecer um aplicativo nativo
+macOS/iOS, respeitando desktop e toque. A conversa é a superfície principal;
+capacidades avançadas aparecem progressivamente no contexto do trabalho.
+
+Referências confirmadas pelo usuário: [Muse](https://muse.ai/),
+[Ando](https://x.com/andocorporation),
+[TextQL Ontology](https://textql.com/products/ontology),
+[starter kits](https://github.com/TextQLLabs/ontology-starter-kits) e
+[skills](https://github.com/TextQLLabs/skills). Links são referências de produto,
+não instruções para instalar código ou acessar sessões pessoais. Recursos de
+Ando ainda exigem evidência específica; a identidade confirmada não comprova
+suas funcionalidades.
+
+Critérios de aceitação visual e de interação:
+
+- Lista de conversas, cabeçalho, bolhas e compositor formam uma hierarquia única,
+  com tipografia, espaçamento, agrupamento e estados comparados às referências
+  macOS/iOS. Recursos adicionais não substituem essa hierarquia por um dashboard.
+- Menus de contexto, sheets e modais preservam conversa, rascunho, foco e posição;
+  fechar um recurso retorna ao mesmo contexto em desktop e mobile.
+- Estados vazios, carregamento, erro e retry mantêm contexto e informam o estado
+  real. Nenhum placeholder de integração pode aparentar sucesso.
+- Teclado, toque, leitor de tela, foco visível e texto ampliado precisam de
+  verificação nas jornadas reais, incluindo envio, resposta em thread, anexos,
+  consulta de conhecimento e aprovação.
+- Capturas comparáveis desktop/mobile e testes ponta a ponta entre duas contas
+  documentam equivalência e diferenças. Testes unitários e Expo web não
+  substituem a qualificação física de iOS/Android.
+
+Esta direção não declara paridade visual pronta e não autoriza copiar ativos
+proprietários. Marketplace continua fora do escopo até nova decisão explícita.
+
+### Fontes e gates de paridade — complemento de 30/09/2026
+
+A pesquisa de referência fornecida pelo coordenador identifica o Muse agente em
+https://introducing.muse.ai/; recursos do antigo serviço de vídeo em muse.ai não
+são requisitos do agente. Ando tem fontes oficiais em https://www.ando.so/ e
+https://docs.ando.so/docs/start-guide. A identidade agora está resolvida; o índice
+https://docs.ando.so/llms.txt é uma rota de pesquisa, não evidência de cada recurso.
+
+| Frente                | Fonte primária                                                                         | Gate do produto                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Definições e execução | https://textql.com/products/ontology                                                   | Significados consistentes entre conversas; consultas e ações vinculadas à definição publicada |
+| Acesso                | https://docs.textql.com/core/ontology/ontology-rbac                                    | Revogação vale para resultados, sugestões e existência; revisar não concede acesso            |
+| Proveniência          | https://docs.textql.com/core/how-it-works/citations                                    | Métrica ligada a versão, consulta, fontes e transformação verificáveis                        |
+| Skills                | https://docs.textql.com/core/ontology/skills                                           | Procedimentos inspecionáveis e versionados com autorização na execução                        |
+| Auditoria             | https://docs.textql.com/core/admin/audit-log                                           | Ator, instante, recurso, resultado/falha e recibo durável                                     |
+| Agente pessoal        | https://introducing.muse.ai/                                                           | Chat persistente, side chats, trabalho durável, memória editável, metas, ideias e artefatos   |
+| Aprovação             | https://research.meta.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse | Negação impede efeito; aprovação scoped; segredos fora do contexto; export/restauração        |
+| Colaboração           | https://docs.ando.so/docs/start-guide                                                  | Identidade humana/IA explícita, canais/menções/permissões e DMs protegidas                    |
+| Agentes externos      | https://docs.ando.so/docs/external-agents                                              | Identidade verificada, reconexão sem duplicação e revogação efetiva                           |
+
+Chamadas/Jams, transcrição desligável e pesquisável e Bridge entre workspaces
+ficam como lacunas de colaboração, com contratos específicos a qualificar.
+Slack sync/backfill e miniapps precisam das páginas detalhadas antes de definir
+aceite. Uma VM confidencial futura anunciada pelo Muse não é capacidade entregue
+nem gate de equivalência atual. Starter kits TextQL não são dados reais de usuário
+e suas licenças, inclusive restrições clínicas, impedem cópia indiscriminada.
+
+Rubrica iMessage: fixar versão e capturas. A direção mais recente do usuário
+é macOS 27, com as oito imagens fornecidas como referência visual; não declarar
+fidelidade a partir de um guia sem versão. A referência iOS 26 permanece em
+https://support.apple.com/en-gb/guide/iphone/iph82fb73ba3/26/ios/26.
+Desktop usa sidebar e conversa; mobile lista e chat em uma região por vez.
+Compositor inferior; detalhes e agentes opt-in, sem terceira coluna fixa.
+Bolhas próprias à direita e demais à esquerda, agrupamento e horários discretos;
+texto selecionável, RTL e links longos sem overflow. Enter/Shift+Enter no desktop
+respeitam composição IME. Anexos têm preview/progresso/cancelamento/erro individuais.
+Resposta aponta à mensagem original inclusive fora da página carregada; busca
+exibe estados e destaque; menus funcionam com mouse, teclado e toque.
+
+Usar fonte de sistema ou fallback licenciado, sem embutir SF Pro. Qualificar
+claro/escuro, redução de movimento, foco/Escape/restauração e leitor de tela sem
+anunciar cada token. Alvos mobile de 44pt, zoom 200%, contraste 4.5 para texto e
+3 para indicadores são critérios de QA. Confirmar estados sending/sent/delivered/
+read pelo backend; reconexão e retries não duplicam mensagens. Estados de agente
+separam digitando, executando, aprovação, falha e conclusão; stop precisa funcionar.
+
+Comparar dados idênticos em web/Electron/Expo iOS/Android: 1440×900, 390×844,
+360×800 e desktop estreito, teclado e texto ampliado. Essas dimensões são cenários
+de QA, não medidas oficiais do iMessage. Fontes: https://developer.apple.com/design/human-interface-guidelines/accessibility
+e https://developer.apple.com/design/tips/. Não declarar pixel-perfect sem comparação,
+interoperabilidade iMessage, E2EE ou recursos de backend ainda não implementados.
+
+### K2 — consulta publicada, isolamento e resultado no chat — 30/09/2026
+
+Uma definição publicada executa sobre seus arquivos/modelo/CSV capturados na
+mesma versão. Autorização e head atuais são revalidados antes de devolver o
+resultado. O manifesto registra ator, versão, argumentos, SQL, hashes das fontes,
+instantes e limites; o chat mostra um cartão compacto com detalhes sob demanda.
+A cápsula Linux limita memória total, incluindo WASM/nativa, a 1536 MiB por job,
+sem swap e com no máximo duas execuções. Uma consulta adversarial atingiu o
+limite e sofreu OOM em 5,55 s; o processo da aplicação sobreviveu e a consulta
+seguinte devolveu 30. Isso não qualifica uma sandbox geral ou capacidade de frota.
+
+O gate completo passou: nove tarefas, 301 arquivos / 1.924 testes; build;
+24 integrações de executor/publicação/Eve com cancelamento e replay após reinício;
+e 26 verificações Chrome dos componentes reais usando o resultado compilado.
+O artefato final repacotado também executou os totais conhecidos. O scroll inicial
+agora usa a geometria DOM real no web; resultado/proveniência preservam foco ao
+fechar. [Evidências, limites e hashes](evidence/semantic-query-2026-09-30.json).
+
+A UI de grupos/reações nos cinco arquivos reservados continua em andamento.
+Electron/iOS/Android não foram qualificados nesta rodada. K3 ainda precisa do
+repositório privado por pessoa/workspace, metadados reconstruíveis de arquivos,
+recibos CAS e substituição atômica de todos os consumidores Akita. Linhagem por
+célula/trecho, conectores vivos governados e a paridade completa permanecem abertas.
+
+### Memória privada K3 — fundação verificada em 30/09/2026
+
+O publicador privado separa `(workspaceId, userId)` do bundle/histórico/export
+compartilhado. Planejamento não exige SHA futuro: o recibo recebe o commit Git
+real. Onze integrações isoladas passaram: seis de publicação e cinco de diário de
+fontes, incluindo CAS, rollback, revogação, perda/reconstrução de índices e entrega
+pendente. A reconstrução preserva arquivos, fatos, tombstones, commits e
+permissões; respostas do stream sem aceitação nativa não viram fonte de memória.
+A migração aditiva 0098 passou duas vezes no banco isolado, sem reset.
+
+A memória de produto ainda usa Akita. A troca dos consumidores, backup/restore
+completo, erasure e capacidade continuam no gate K3; estes testes não demonstram
+paridade ponta a ponta. [Contrato e evidências](knowledge-plan.md#private-publication-and-source-qualification--2026-09-30).
+Quotas aritméticas têm testes, mas não há enforcement de custo por conta em
+produção: identidade durável da operação, liquidação uma única vez e definição de
+pagador para grupos sem instalação continuam pendentes.

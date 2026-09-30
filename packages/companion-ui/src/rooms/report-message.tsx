@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Flag, CheckCircle2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomData, roomMessageSchema } from "./schema";
 
 const reasons = [
@@ -26,6 +26,8 @@ export function ReportRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [category, setCategory] = useState<string>();
   const [details, setDetails] = useState("");
   const report = useMutation({
@@ -142,36 +144,59 @@ export function ReportRoomMessage({
     </CompanionSheet>
   );
 }
-const styles = StyleSheet.create({
-  content: { gap: 16 },
-  preview: {
-    gap: 6,
-    padding: 14,
-    backgroundColor: colors.wash,
-    borderRadius: 18,
-  },
-  author: { fontSize: 13, fontWeight: "600", color: colors.ink },
-  previewText: { fontSize: 14, lineHeight: 20, color: colors.muted },
-  description: { fontSize: 14, lineHeight: 20, color: colors.muted },
-  reasons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  reason: {
-    paddingHorizontal: 14,
-    minHeight: 44,
-    justifyContent: "center",
-    borderRadius: 22,
-    backgroundColor: colors.wash,
-  },
-  selected: { backgroundColor: colors.ink },
-  reasonText: { fontSize: 14, color: colors.ink },
-  selectedText: { color: colors.surface },
-  input: {
-    minHeight: 88,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: colors.wash,
-    color: colors.ink,
-    fontSize: 15,
-    textAlignVertical: "top",
-  },
-  error: { fontSize: 13, lineHeight: 18, color: colors.danger },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    content: { gap: 16 },
+    preview: {
+      gap: 6,
+      padding: 14,
+      backgroundColor: colors.wash,
+      borderRadius: 18,
+    },
+    author: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    previewText: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.muted,
+    },
+    description: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.muted,
+    },
+    reasons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    reason: {
+      paddingHorizontal: 14,
+      minHeight: 44,
+      justifyContent: "center",
+      borderRadius: 22,
+      backgroundColor: colors.wash,
+    },
+    selected: { backgroundColor: colors.ink },
+    reasonText: { fontFamily: systemFont, fontSize: 14, color: colors.ink },
+    selectedText: { color: colors.surface },
+    input: {
+      fontFamily: systemFont,
+      minHeight: 88,
+      padding: 14,
+      borderRadius: 18,
+      backgroundColor: colors.wash,
+      color: colors.ink,
+      fontSize: 15,
+      textAlignVertical: "top",
+    },
+    error: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.danger,
+    },
+  });
+}

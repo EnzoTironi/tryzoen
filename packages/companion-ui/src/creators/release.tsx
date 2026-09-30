@@ -4,7 +4,7 @@ import { Text } from "react-native";
 import type { CreatorStudioData } from "./studio";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorReleaseEvidence } from "./release-evidence";
 import { DocumentEditor } from "../document-editor";
 import { CreatorPilotInvite } from "./pilot-invite";
@@ -20,6 +20,7 @@ export function CreatorRelease({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const release = useQuery({
     queryKey: ["creator-release", cacheScope, id],
     queryFn: () => data.release(id),

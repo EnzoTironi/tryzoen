@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -6,8 +6,8 @@ import { creatorExampleSchema } from "./schema";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 
 const rightsOptions = [
   { value: "original", label: "I created this example" },
@@ -28,6 +28,9 @@ export function CreatorExample({
   readonly onRemove?: () => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [value, setValue] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -204,14 +207,16 @@ export function CreatorExample({
   );
 }
 
-const styles = StyleSheet.create({
-  choice: {
-    minHeight: 44,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-    backgroundColor: colors.wash,
-    padding: 12,
-    borderRadius: 16,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    choice: {
+      minHeight: 44,
+      flexDirection: "row",
+      gap: 12,
+      alignItems: "center",
+      backgroundColor: colors.wash,
+      padding: 12,
+      borderRadius: 16,
+    },
+  });
+}

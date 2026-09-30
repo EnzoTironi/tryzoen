@@ -12,7 +12,7 @@ import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { AssistantMarkdown } from "../markdown";
 import { ConversationAvatar } from "../chats/avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { RoomAttachment } from "./attachment";
 import { ParticipantProfile } from "./profile";
 import type {
@@ -117,6 +117,7 @@ function ContextMessage({
     | undefined;
   readonly onProfile: (id: string) => void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ paddingVertical: 12, gap: 6 }}>
       <Pressable
@@ -144,7 +145,13 @@ function ContextMessage({
           <Text style={{ fontWeight: "600" }}>
             {item.mine ? "Você" : item.sender}
           </Text>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>
+          <Text
+            style={{
+              fontFamily: systemFont,
+              color: colors.muted,
+              fontSize: 12,
+            }}
+          >
             {new Date(item.timestamp).toLocaleString()}
             {item.editId ? " · Editada" : ""}
           </Text>
@@ -188,6 +195,7 @@ function ContextContent({
   readonly onFocus: (value: z.infer<typeof roomMediaReadSchema>) => void;
   readonly onProfile: (id: string) => void;
 }) {
+  const colors = useColors();
   return (
     <ScrollView style={{ maxHeight: 560 }}>
       <Text style={{ fontWeight: "600" }}>Mensagem selecionada</Text>

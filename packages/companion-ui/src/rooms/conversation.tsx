@@ -9,24 +9,34 @@ import { PresenceIndicator } from "./presence";
 import { useRoomLifecycle } from "./lifecycle";
 import { useRoomSync } from "./sync";
 import { RoomTypingIndicator } from "./typing-indicator";
-import { useContext, useState } from "react";
+import { useMemo, useContext, useState, type ComponentProps } from "react";
 import { CompanionVisibility } from "../visibility";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
-import { ArrowLeft, Info, Search, Pin, X } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Info,
+  Search,
+  Pin,
+  X,
+  Ellipsis,
+  ChevronRight,
+} from "lucide-react-native";
 import type { z } from "zod";
 import { RoomComposer } from "./composer";
 import { useRoomDraft } from "./draft";
 import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
+import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "../chats/avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
@@ -62,19 +72,37 @@ export function RoomConversation({
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
+  const colors = useColors();
+  const width = useWindowDimensions().width;
+  const compact = width < 720;
+  const styles = useMemo(
+    () => createStyles(colors, compact),
+    [colors, compact]
+  );
+  const [headerHeight, setHeaderHeight] = useState(compact ? 104 : 80);
+  const [threadHeaderHeight, setThreadHeaderHeight] = useState(
+    compact ? 122 : 98
+  );
+  const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
   const unread = useMarkRoomUnread(data, cacheScope, roomId, onBack);
   const [root, setRoot] = useState<z.infer<typeof roomMessageSchema>>();
   const [details, setDetails] = useState(false);
   const [searching, setSearching] = useState(false);
   const [pins, setPins] = useState(false);
+  const [options, setOptions] = useState(false);
   const draft = useRoomDraft(data, cacheScope, roomId);
   const [profile, setProfile] = useState<z.infer<typeof roomMemberSchema>>();
   const exposed = useContext(CompanionVisibility);
   const visible =
-    exposed && !details && !profile && !searching && !pins && !selectedMessage;
+    exposed &&
+    !details &&
+    !profile &&
+    !searching &&
+    !pins &&
+    !options &&
+    !selectedMessage;
   const active = useRoomLifecycle(cacheScope, roomId, exposed);
-  const wide = useWindowDimensions().width >= 1100;
-  const compact = useWindowDimensions().width < 720;
+  const wide = width >= 1100;
   const timelineVisible = visible && (!root || wide);
   const reactions = useRoomReactions(
     data,
@@ -152,7 +180,7 @@ export function RoomConversation({
     );
   return (
     <View style={styles.layout}>
-      <ConnectionStatus top={66} reconnecting={typing.reconnecting} />
+      <ConnectionStatus top={headerHeight} reconnecting={typing.reconnecting} />
       <View
         style={[
           styles.main,
@@ -160,8 +188,11 @@ export function RoomConversation({
         ]}
       >
         <RoomHeader
-          onPins={() => {
-            setPins(true);
+          onLayout={({ nativeEvent }) => {
+            setHeaderHeight(nativeEvent.layout.height);
+          }}
+          onOptions={() => {
+            setOptions(true);
           }}
           room={room}
           presence={
@@ -180,6 +211,8 @@ export function RoomConversation({
           </Text>
         )}
         <RoomMessages
+          topInset={headerHeight}
+          bottomInset={composerHeight}
           receipts={typing.receipts.filter(
             (receipt) =>
               receipt.threadId === null || receipt.threadId === "main"
@@ -231,49 +264,78 @@ export function RoomConversation({
               void messages.fetchNextPage({ cancelRefetch: false });
           }}
         />
-        <RoomTypingIndicator
-          userIds={typing.userIds}
-          members={current?.pages[0]?.members ?? []}
-        />
-        <RoomComposer
-          onTyping={typing.change}
-          draft={draft}
-          disabled={!room || messages.isError}
-          paused={!active}
-          visible={timelineVisible}
-          direct={room?.kind === "direct"}
-        />
+        <View
+          testID="conversation-composer"
+          pointerEvents="box-none"
+          style={styles.composer}
+          onLayout={({ nativeEvent }) => {
+            setComposerHeight(nativeEvent.layout.height);
+          }}
+        >
+          <RoomTypingIndicator
+            userIds={typing.userIds}
+            members={current?.pages[0]?.members ?? []}
+          />
+          <RoomComposer
+            onTyping={typing.change}
+            draft={draft}
+            disabled={!room || messages.isError}
+            paused={!active}
+            visible={timelineVisible}
+            direct={room?.kind === "direct"}
+          />
+        </View>
       </View>
       {root && !messages.isError && (
         <View style={[styles.thread, !wide && styles.fullThread]}>
-          <View style={styles.header}>
-            {!wide && (
-              <IconButton
-                icon={ArrowLeft}
-                label="Fechar thread"
-                onPress={() => {
-                  setRoot(undefined);
-                }}
+          <View
+            testID="thread-header"
+            pointerEvents="box-none"
+            style={styles.header}
+            onLayout={({ nativeEvent }) => {
+              setThreadHeaderHeight(nativeEvent.layout.height);
+            }}
+          >
+            <View style={styles.headerSide} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Voltar à conversa ${room?.label ?? "Thread"}`}
+              onPress={() => {
+                setRoot(undefined);
+              }}
+              style={styles.identity}
+            >
+              <ConversationAvatar
+                name={room?.label ?? "Thread"}
+                uri={room?.avatarUri ?? undefined}
+                group={room?.kind === "group"}
+                size={compact ? 56 : 40}
               />
-            )}
-            <View style={styles.headerCopy}>
-              <Text style={styles.title}>Thread</Text>
+              <View style={styles.nameCapsule}>
+                <Text numberOfLines={1} style={styles.title}>
+                  {room?.label ?? "Thread"}
+                </Text>
+                <ChevronRight size={12} color={colors.muted} />
+              </View>
               <Text numberOfLines={1} style={styles.caption}>
-                Respostas à mensagem
+                Thread · {root.sender}
               </Text>
+            </Pressable>
+            <View style={styles.headerSide}>
+              <View style={styles.headerControl}>
+                <IconButton
+                  icon={X}
+                  label="Fechar thread"
+                  onPress={() => {
+                    setRoot(undefined);
+                  }}
+                />
+              </View>
             </View>
-            {wide && (
-              <IconButton
-                icon={X}
-                label="Fechar thread"
-                onPress={() => {
-                  setRoot(undefined);
-                }}
-              />
-            )}
           </View>
           <RoomThread
             key={root.id}
+            headerInset={threadHeaderHeight}
             data={data}
             cacheScope={cacheScope}
             roomId={roomId}
@@ -294,6 +356,58 @@ export function RoomConversation({
             typing={typing}
           />
         </View>
+      )}
+      {options && (
+        <CompanionSheet
+          title="Conversa"
+          onClose={() => {
+            setOptions(false);
+          }}
+        >
+          <View style={styles.options}>
+            {[
+              {
+                icon: Search,
+                label: "Buscar na conversa",
+                run: () => {
+                  setSearching(true);
+                },
+              },
+              {
+                icon: Pin,
+                label: "Mensagens fixadas",
+                run: () => {
+                  setPins(true);
+                },
+              },
+              {
+                icon: Info,
+                label:
+                  room?.kind === "direct"
+                    ? "Perfil da pessoa"
+                    : "Detalhes do grupo",
+                run: showProfile,
+              },
+            ].map(({ icon: Icon, label, run }) => (
+              <Pressable
+                key={label}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                onPress={() => {
+                  setOptions(false);
+                  run();
+                }}
+                style={({ pressed }) => [
+                  styles.option,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Icon size={21} color={colors.ink} />
+                <Text style={styles.optionText}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </CompanionSheet>
       )}
       {details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
@@ -390,80 +504,98 @@ export function RoomConversation({
 }
 
 function RoomHeader({
+  onLayout,
   room,
   presence,
   compact,
   onBack,
   onProfile,
   onSearch,
-  onPins,
+  onOptions,
 }: {
+  readonly onLayout: ComponentProps<typeof View>["onLayout"];
   readonly room?: z.infer<typeof roomSchema>;
   readonly presence?: Parameters<typeof PresenceIndicator>[0]["state"];
   readonly compact: boolean;
   readonly onBack: () => void;
   readonly onProfile: () => void;
   readonly onSearch: () => void;
-  readonly onPins: () => void;
+  readonly onOptions: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(
+    () => createStyles(colors, compact),
+    [colors, compact]
+  );
   return (
-    <View style={[styles.header, compact && styles.compactHeader]}>
-      {compact && (
-        <IconButton
-          icon={ArrowLeft}
-          label="Voltar às conversas"
-          onPress={onBack}
-        />
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Ver perfil da conversa"
-        onPress={onProfile}
-      >
-        <ConversationAvatar
-          name={room?.label ?? "Conversa"}
-          uri={room?.avatarUri ?? undefined}
-          group={room?.kind === "group"}
-          size={38}
-        />
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Detalhes de ${room?.label ?? "conversa"}`}
-        onPress={onProfile}
-        style={styles.headerCopy}
-      >
-        <Text accessibilityRole="header" numberOfLines={1} style={styles.title}>
-          {room?.label ?? "Conversa"}
-        </Text>
-        {presence && presence !== "offline" ? (
-          <PresenceIndicator state={presence} />
-        ) : (
-          <Text numberOfLines={1} style={styles.caption}>
-            {room?.kind === "direct"
-              ? room.username
-                ? `@${room.username} · conversa direta`
-                : "Conversa direta"
-              : "Pessoas e Zoen · espaço compartilhado"}
-          </Text>
-        )}
-      </Pressable>
-      <IconButton icon={Pin} label="Mensagens fixadas" onPress={onPins} />
-      <IconButton icon={Search} label="Buscar na conversa" onPress={onSearch} />
-      {!compact && (
-        <IconButton
-          icon={Info}
-          label={
-            room?.kind === "direct" ? "Perfil da pessoa" : "Detalhes do grupo"
+    <View
+      testID="conversation-header"
+      pointerEvents="box-none"
+      onLayout={onLayout}
+      style={styles.header}
+    >
+      <View style={styles.headerSide}>
+        <View style={styles.headerControl}>
+          <IconButton
+            icon={compact ? ArrowLeft : Search}
+            label={compact ? "Voltar às conversas" : "Buscar na conversa"}
+            onPress={compact ? onBack : onSearch}
+          />
+        </View>
+      </View>
+      <View pointerEvents="box-none" style={styles.identity}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Ver perfil da conversa"
+          onPress={onProfile}
+        >
+          <ConversationAvatar
+            name={room?.label ?? "Conversa"}
+            uri={room?.avatarUri ?? undefined}
+            group={room?.kind === "group"}
+            size={compact ? 56 : 40}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Detalhes de ${room?.label ?? "conversa"}`}
+          accessibilityHint={
+            room?.kind === "direct" && room.username
+              ? `@${room.username} · conversa direta`
+              : undefined
           }
           onPress={onProfile}
-        />
-      )}
+          hitSlop={{ top: 9, bottom: 9, left: 4, right: 4 }}
+          style={styles.nameCapsule}
+        >
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={styles.title}
+          >
+            {room?.label ?? "Conversa"}
+          </Text>
+          <ChevronRight size={12} color={colors.muted} />
+        </Pressable>
+        {presence && presence !== "offline" && (
+          <PresenceIndicator state={presence} />
+        )}
+      </View>
+      <View style={styles.headerSide}>
+        <View style={styles.headerControl}>
+          <IconButton
+            icon={Ellipsis}
+            label="Opções da conversa"
+            onPress={onOptions}
+          />
+        </View>
+      </View>
     </View>
   );
 }
 
 function RoomThread({
+  headerInset,
   data,
   cacheScope,
   roomId,
@@ -480,6 +612,7 @@ function RoomThread({
   Parameters<typeof RoomConversation>[0],
   "data" | "cacheScope" | "roomId" | "avatarUri" | "onCopyText"
 > & {
+  readonly headerInset: number;
   readonly onUnread?: () => void;
   readonly messageLink?: (id: string) => string;
   readonly root: z.infer<typeof roomMessageSchema>;
@@ -488,6 +621,14 @@ function RoomThread({
   readonly active: boolean;
   readonly typing: ReturnType<typeof useRoomSync>;
 }) {
+  const colors = useColors();
+  const compact = useWindowDimensions().width < 720;
+  const styles = useMemo(
+    () => createStyles(colors, compact),
+    [colors, compact]
+  );
+  const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
+  const [subscriptionHeight, setSubscriptionHeight] = useState(44);
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
   const reactions = useRoomReactions(
     data,
@@ -529,15 +670,25 @@ function RoomThread({
     root.id
   );
   return (
-    <>
-      <ThreadSubscription
-        data={data}
-        cacheScope={cacheScope}
-        roomId={roomId}
-        rootId={root.id}
-        active={active && visible && !result.isError}
-      />
+    <View style={styles.main}>
+      <View
+        testID="thread-subscription"
+        style={[styles.subscription, { top: headerInset }]}
+        onLayout={({ nativeEvent }) => {
+          setSubscriptionHeight(nativeEvent.layout.height);
+        }}
+      >
+        <ThreadSubscription
+          data={data}
+          cacheScope={cacheScope}
+          roomId={roomId}
+          rootId={root.id}
+          active={active && visible && !result.isError}
+        />
+      </View>
       <RoomMessages
+        topInset={headerInset + subscriptionHeight + 8}
+        bottomInset={composerHeight}
         receipts={typing.receipts.filter(
           (receipt) => receipt.threadId === null || receipt.threadId === root.id
         )}
@@ -580,51 +731,131 @@ function RoomThread({
             void result.fetchNextPage({ cancelRefetch: false });
         }}
       />
-      <RoomTypingIndicator
-        userIds={typing.userIds}
-        members={result.isError ? [] : (result.data?.pages[0]?.members ?? [])}
-      />
-      <RoomComposer
-        onTyping={typing.change}
-        draft={draft}
-        thread
-        disabled={!result.data || result.isError}
-        paused={!active}
-        visible={visible}
-      />
-    </>
+      <View
+        testID="thread-composer"
+        pointerEvents="box-none"
+        style={styles.composer}
+        onLayout={({ nativeEvent }) => {
+          setComposerHeight(nativeEvent.layout.height);
+        }}
+      >
+        <RoomTypingIndicator
+          userIds={typing.userIds}
+          members={result.isError ? [] : (result.data?.pages[0]?.members ?? [])}
+        />
+        <RoomComposer
+          onTyping={typing.change}
+          draft={draft}
+          thread
+          disabled={!result.data || result.isError}
+          paused={!active}
+          visible={visible}
+        />
+      </View>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  unavailable: {
-    flex: 1,
-    padding: 32,
-    gap: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  layout: {
-    flex: 1,
-    flexDirection: "row",
-    minWidth: 0,
-    backgroundColor: colors.surface,
-  },
-  main: { flex: 1, minWidth: 0 },
-  hidden: { display: "none" },
-  header: {
-    minHeight: 78,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: "#efeff1",
-  },
-  headerCopy: { flex: 1, minWidth: 0, gap: 4 },
-  compactHeader: { paddingHorizontal: 12, gap: 8 },
-  title: { fontSize: 17, fontWeight: "600", color: colors.ink },
-  caption: { fontSize: 12, color: colors.muted, lineHeight: 18 },
-  thread: { width: 320, borderLeftWidth: 1, borderLeftColor: "#ededf0" },
-  fullThread: { width: "100%", borderLeftWidth: 0 },
-});
+function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
+  return StyleSheet.create({
+    unavailable: {
+      flex: 1,
+      padding: 32,
+      gap: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    layout: {
+      flex: 1,
+      flexDirection: "row",
+      minWidth: 0,
+      backgroundColor: colors.canvas,
+    },
+    main: { flex: 1, minWidth: 0, minHeight: 0 },
+    composer: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 20,
+    },
+    subscription: {
+      position: "absolute",
+      right: 8,
+      zIndex: 20,
+      maxWidth: "100%",
+      borderRadius: 22,
+      backgroundColor: `${colors.surface}b8`,
+      ...(Platform.OS === "web"
+        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        : {}),
+    },
+    hidden: { display: "none" },
+    header: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 30,
+      minHeight: compact ? 104 : 80,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    headerSide: { width: 44, alignItems: "center" },
+    headerControl: {
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: `${colors.line}70`,
+      backgroundColor: `${colors.surface}b8`,
+      ...(Platform.OS === "web"
+        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        : {}),
+      boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+    },
+    identity: { maxWidth: "70%", minWidth: 0, alignItems: "center", gap: 4 },
+    nameCapsule: {
+      maxWidth: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      minHeight: 26,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: `${colors.line}70`,
+      backgroundColor: `${colors.surface}b8`,
+      ...(Platform.OS === "web"
+        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        : {}),
+    },
+    options: { gap: 2 },
+    option: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+    },
+    optionText: { fontFamily: systemFont, fontSize: 17, color: colors.ink },
+    pressed: { backgroundColor: colors.wash },
+    title: {
+      fontFamily: systemFont,
+      fontSize: compact ? 17 : 13,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    caption: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: colors.muted,
+      lineHeight: 18,
+    },
+    thread: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.line },
+    fullThread: { width: "100%", borderLeftWidth: 0 },
+  });
+}

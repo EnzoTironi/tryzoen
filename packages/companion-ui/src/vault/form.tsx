@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ZodError } from "zod";
 import { AppState, Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import {
   createVaultFormItem,
   loginFormSchema,
@@ -31,6 +31,7 @@ export function VaultItemForm({
   readonly initialOrigin?: string;
   readonly initialIdentifierType?: "email" | "phone" | "username";
 }) {
+  const pageStyles = usePageStyles();
   const [values, setValues] = useState<VaultFormDraft>({
     nickname: initialLabel,
     origin: initialOrigin,

@@ -51,6 +51,7 @@ ENV DATABASE_URL_UNPOOLED=postgresql://postgres:postgres@127.0.0.1:5432/open_ins
 # Skip turbo daemon; run Eve then Next in separate layers (RSS reclaim between).
 RUN pnpm --filter @zoen/companion-ui build:ui
 RUN pnpm exec eve build
+RUN pnpm build:semantic
 RUN pnpm exec next build
 
 FROM node:24-bookworm-slim AS runner

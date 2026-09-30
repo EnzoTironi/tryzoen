@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Archive, ArrowLeft, Plus, Ellipsis, X } from "lucide-react-native";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 
 export function ConversationToolbar({
   title,
@@ -28,6 +28,9 @@ export function ConversationToolbar({
     readonly onClose: () => void;
   };
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [options, setOptions] = useState(false);
   const showArchive = () => {
     onToggleArchive();
@@ -117,38 +120,43 @@ export function ConversationToolbar({
     </>
   );
 }
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: "600",
-    letterSpacing: -1.1,
-    color: colors.ink,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  panelTitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0,
-    paddingLeft: 8,
-  },
-  panelSearch: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
-    padding: 10,
-    marginBottom: 0,
-    borderRadius: 22,
-  },
-  searchRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  panelHeader: { marginBottom: 4, gap: 0 },
-  actions: { flexDirection: "row" },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      marginBottom: 16,
+    },
+    title: {
+      fontFamily: systemFont,
+      fontSize: 34,
+      lineHeight: 40,
+      fontWeight: "600",
+      letterSpacing: -1.1,
+      color: colors.ink,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    panelTitle: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 20,
+      letterSpacing: 0,
+      paddingLeft: 8,
+    },
+    panelSearch: {
+      fontFamily: systemFont,
+      flex: 1,
+      minWidth: 0,
+      fontSize: 14,
+      padding: 10,
+      marginBottom: 0,
+      borderRadius: 22,
+    },
+    searchRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+    panelHeader: { marginBottom: 4, gap: 0 },
+    actions: { flexDirection: "row" },
+  });
+}

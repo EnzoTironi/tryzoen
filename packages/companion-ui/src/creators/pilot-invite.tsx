@@ -7,7 +7,7 @@ import type { CreatorStudioData } from "./studio";
 import { CreatorReleaseEvidence } from "./release-evidence";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPilotInvite({
   release,
@@ -18,6 +18,7 @@ export function CreatorPilotInvite({
   readonly data: CreatorStudioData;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [username, setUsername] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const requestId = useRef<string | undefined>(undefined);

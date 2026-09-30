@@ -1,10 +1,8 @@
+import { LearnedMemoryError } from "../../../../../server/memory/namespace";
 import { withSignal } from "../../../../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../../../../server/workspaces/access";
 import { resolveWorkspaceActor } from "../../../../../server/workspaces/session";
-import {
-  LearnedMemory,
-  LearnedMemoryError,
-} from "../../../../../server/memory/learned";
+import { LearnedMemory } from "../../../../../server/memory/learned";
 import { FileMemoryError } from "../../../../../server/memory/ai-memory/mutations";
 
 export async function GET(request: Request) {

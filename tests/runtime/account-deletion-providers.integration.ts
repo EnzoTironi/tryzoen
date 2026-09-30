@@ -14,7 +14,7 @@ import { startWhatsAppPairing } from "../../server/workspaces/whatsapp";
 
 import { accountDeletionProvidersFixture } from "./account-deletion-providers-fixture";
 
-import { memoryNamespace } from "../../server/memory/learned";
+import { memoryNamespace } from "../../server/memory/namespace";
 import { workspaceFixture } from "./workspace-fixture";
 import { installErasureJournalFixture } from "./erasure-journal-fixture";
 

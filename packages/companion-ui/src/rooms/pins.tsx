@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import { Pin } from "lucide-react-native";
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { RoomMessageContext } from "./context";
 import type { RoomData, roomMessageSchema, roomPinsSchema } from "./schema";
 
@@ -29,6 +29,8 @@ export function PinRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
   const key = ["matrix-pins", cacheScope, roomId];
   const state = useQuery({
@@ -148,6 +150,8 @@ export function RoomPins({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [selected, setSelected] = useState<string>();
   const result = useQuery({
     queryKey: ["matrix-pins", cacheScope, roomId, "messages"],
@@ -227,26 +231,38 @@ export function RoomPins({
     </CompanionSheet>
   );
 }
-const styles = StyleSheet.create({
-  list: { maxHeight: 460, minHeight: 100 },
-  row: {
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  copy: { flex: 1, gap: 6 },
-  name: { fontSize: 14, fontWeight: "600", color: colors.ink },
-  text: { fontSize: 16, color: colors.ink, flexShrink: 1 },
-  caption: { fontSize: 13, color: colors.muted },
-  preview: {
-    flexDirection: "row",
-    gap: 12,
-    backgroundColor: colors.wash,
-    padding: 16,
-    borderRadius: 20,
-  },
-  pressed: { backgroundColor: colors.wash },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    list: { maxHeight: 460, minHeight: 100 },
+    row: {
+      flexDirection: "row",
+      gap: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    copy: { flex: 1, gap: 6 },
+    name: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    text: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      color: colors.ink,
+      flexShrink: 1,
+    },
+    caption: { fontFamily: systemFont, fontSize: 13, color: colors.muted },
+    preview: {
+      flexDirection: "row",
+      gap: 12,
+      backgroundColor: colors.wash,
+      padding: 16,
+      borderRadius: 20,
+    },
+    pressed: { backgroundColor: colors.wash },
+  });
+}

@@ -19,6 +19,8 @@ const runtimeEnvironment = [
   "OPENROUTER_API_KEY",
   ...applicationEnvironment,
   "WORKFLOW_*",
+  "ZOEN_SEMANTIC_URLS",
+  "ZOEN_SEMANTIC_TOKEN",
 ];
 
 describe("Turbo configuration", () => {

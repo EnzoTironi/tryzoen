@@ -1,0 +1,523 @@
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { withGitBundle, GitBundleError } from "../files/git";
+import { expect, test } from "vitest";
+import { z } from "zod";
+import {
+  publishPrivateMemoryGit,
+  readPrivateMemoryGit,
+  privateMemoryGitLimits,
+} from "./git";
+import { planLearnedClaim } from "./claims";
+import { projectLearnedClaims, searchLearnedClaims } from "./retrieval";
+
+const scope = { workspaceId: "private-team", userId: "alice" };
+const publication = (value: number) => ({
+  authorUserId: scope.userId,
+  recordedAt: `2026-09-30T14:00:00.${String(value).padStart(6, "0")}Z`,
+});
+const body = (text: string) => ({
+  text,
+  sources: [],
+  relations: [],
+  validTime: null,
+});
+
+async function firstClaim() {
+  const change = {
+    action: "assert" as const,
+    claimId: randomUUID(),
+    operationId: randomUUID(),
+    expectedRevision: null,
+    body: body("Alice prefers weekly reports"),
+  };
+  const first = await publishPrivateMemoryGit({
+    scope,
+    bundle: null,
+    head: null,
+    change,
+    publication: async () => publication(1),
+  });
+  if (!first.applied || !("claim" in first))
+    throw new Error("Expected first publication");
+  return { first, change };
+}
+
+test("private files and receipts use the real Git SHA; reconstruction preserves facts and authorization scope", async () => {
+  const { first, change } = await firstClaim();
+  expect(first.receipt.revision).toMatch(/^[a-f0-9]{40}$/u);
+  expect(first.claim.file).not.toHaveProperty("revision");
+  expect(first.operation).not.toHaveProperty("revision");
+  const read = await readPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+  });
+  expect(read.snapshot).toEqual(first.snapshot);
+  expect(read.operations).toEqual([
+    { revision: first.receipt.revision, operation: first.operation },
+  ]);
+  expect(first.operation).toMatchObject({
+    scope,
+    parentRevision: null,
+    claimId: change.claimId,
+    requestHash: first.receipt.requestHash,
+  });
+  await expect(
+    readPrivateMemoryGit({
+      scope: { ...scope, userId: "bob" },
+      bundle: first.bundle,
+      head: first.receipt.revision,
+    })
+  ).rejects.toThrow("GitBundleError");
+  await expect(
+    readPrivateMemoryGit({
+      scope: { ...scope, workspaceId: "another-team" },
+      bundle: first.bundle,
+      head: first.receipt.revision,
+    })
+  ).rejects.toThrow("GitBundleError");
+});
+
+test("correction invalidates the old projection while recorded audit preserves the original claim", async () => {
+  const { first, change } = await firstClaim();
+  const oldProjection = projectLearnedClaims(scope, first.snapshot);
+  const second = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "correct",
+      claimId: change.claimId,
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: body("Alice prefers monthly reports"),
+    },
+    publication: async () => publication(2),
+  });
+  if (!second.applied || !("claim" in second))
+    throw new Error("Expected correction");
+  expect(second.claim.file.predecessor).toBe(first.receipt.revision);
+  expect(() =>
+    searchLearnedClaims({
+      scope,
+      current: second.snapshot,
+      projection: oldProjection,
+      query: "reports",
+    })
+  ).toThrow("stale, foreign, or inconsistent");
+  const recovered = await readPrivateMemoryGit({
+    scope,
+    bundle: second.bundle,
+    head: second.receipt.revision,
+  });
+  const projection = projectLearnedClaims(scope, recovered.snapshot);
+  expect(
+    searchLearnedClaims({
+      scope,
+      current: recovered.snapshot,
+      projection,
+      query: "reports",
+    }).matches[0]?.claim.file.state
+  ).toEqual({ kind: "active", body: body("Alice prefers monthly reports") });
+  const historical = await readPrivateMemoryGit({
+    scope,
+    bundle: second.bundle,
+    head: second.receipt.revision,
+    revision: first.receipt.revision,
+  });
+  expect(historical.snapshot).toEqual(first.snapshot);
+});
+
+test("a replay is reconstructed from commit metadata after a tombstone and cannot resurrect the old file", async () => {
+  const { first, change } = await firstClaim();
+  const deleted = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "tombstone",
+      claimId: change.claimId,
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+    },
+    publication: async () => publication(2),
+  });
+  if (!deleted.applied || !("claim" in deleted))
+    throw new Error("Expected deletion");
+  const replay = await publishPrivateMemoryGit({
+    scope,
+    bundle: deleted.bundle,
+    head: deleted.receipt.revision,
+    change,
+    publication: async () => publication(3),
+  });
+  expect(replay).toEqual({ applied: false, receipt: first.receipt });
+  const read = await readPrivateMemoryGit({
+    scope,
+    bundle: deleted.bundle,
+    head: deleted.receipt.revision,
+    historyClaimId: change.claimId,
+  });
+  expect(read.snapshot.claims[0]?.file.state).toEqual({ kind: "tombstone" });
+  expect(read.history).toEqual([deleted.claim, first.claim]);
+  await expect(
+    publishPrivateMemoryGit({
+      scope,
+      bundle: deleted.bundle,
+      head: deleted.receipt.revision,
+      change: { ...change, body: body("Conflicting retry") },
+      publication: async () => publication(3),
+    })
+  ).rejects.toThrow("conflicts with its receipt");
+});
+
+test("explicit reversal proves the real historical ancestor and records a new receipt", async () => {
+  const { first, change } = await firstClaim();
+  const deleted = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "tombstone",
+      claimId: change.claimId,
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+    },
+    publication: async () => publication(2),
+  });
+  if (!deleted.applied || !("claim" in deleted))
+    throw new Error("Expected tombstone");
+  const reversal = {
+    action: "reverse" as const,
+    claimId: change.claimId,
+    operationId: randomUUID(),
+    expectedRevision: deleted.receipt.revision,
+    targetRevision: first.receipt.revision,
+  };
+  const restored = await publishPrivateMemoryGit({
+    scope,
+    bundle: deleted.bundle,
+    head: deleted.receipt.revision,
+    change: reversal,
+    publication: async () => publication(3),
+  });
+  if (!restored.applied || !("claim" in restored))
+    throw new Error("Expected reversal");
+  expect(restored.claim.file).toMatchObject({
+    predecessor: deleted.receipt.revision,
+    restoredFrom: first.receipt.revision,
+    state: first.claim.file.state,
+  });
+  expect(restored.receipt.revision).not.toBe(first.receipt.revision);
+  await expect(
+    publishPrivateMemoryGit({
+      scope,
+      bundle: deleted.bundle,
+      head: deleted.receipt.revision,
+      change: { ...reversal, targetRevision: "a".repeat(40) },
+      publication: async () => publication(3),
+    })
+  ).rejects.toThrow("GitBundleError");
+});
+
+test("planning does not require or accept the future SHA and rejects control characters in operation identities", async () => {
+  const current = { scope, revision: null, recordedAt: null, claims: [] };
+  const change = {
+    action: "assert" as const,
+    claimId: randomUUID(),
+    operationId: randomUUID(),
+    expectedRevision: null,
+    body: body("Manual private note"),
+  };
+  const plan = planLearnedClaim({
+    scope,
+    current,
+    change,
+    publication: publication(1),
+  });
+  expect(plan.applied).toBe(true);
+  expect(plan).not.toHaveProperty("receipt");
+  if (!plan.applied) throw new Error("Expected plan");
+  expect(plan.operation).not.toHaveProperty("revision");
+  const untrustedPublication = { ...publication(1), revision: "a".repeat(40) };
+  expect(() =>
+    planLearnedClaim({
+      scope,
+      current,
+      change,
+      publication: untrustedPublication,
+    })
+  ).toThrow(z.ZodError);
+  expect(() =>
+    planLearnedClaim({
+      scope,
+      current,
+      change: { ...change, operationId: "bad\0operation" },
+      publication: publication(1),
+    })
+  ).toThrow(z.ZodError);
+});
+
+test("a valid operation message cannot conceal an unrecorded mutation to another private claim", async () => {
+  const { first, change } = await firstClaim();
+  const second = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "assert",
+      operationId: randomUUID(),
+      claimId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: body("Another private claim"),
+    },
+    publication: async () => publication(2),
+  });
+  if (!second.applied || !("claim" in second))
+    throw new Error("Expected second publication");
+  const forged = await withGitBundle(
+    { bundle: second.bundle, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      await git(["read-tree", second.receipt.revision]);
+      const file = `${directory}/forged-claim.json`;
+      await writeFile(
+        file,
+        JSON.stringify({
+          ...first.claim.file,
+          state: { kind: "active", body: body("Unrecorded replacement") },
+        }) + "\n"
+      );
+      const blob = (await git(["hash-object", "-w", "--", file])).trim();
+      await git([
+        "update-index",
+        "--cacheinfo",
+        `100644,${blob},claims/${change.claimId}.json`,
+      ]);
+      const tree = (await git(["write-tree"])).trim();
+      const head = (
+        await git([
+          "commit-tree",
+          tree,
+          "-p",
+          first.receipt.revision,
+          "-m",
+          JSON.stringify(second.operation),
+        ])
+      ).trim();
+      await git(["update-ref", "refs/heads/main", head]);
+      const destination = `${directory}/forged.bundle`;
+      await git(["bundle", "create", destination, "--all"]);
+      return { head, bundle: await readFile(destination) };
+    }
+  );
+  await expect(readPrivateMemoryGit({ scope, ...forged })).rejects.toThrow(
+    GitBundleError
+  );
+});
+
+test("corrupted operation metadata and false request receipts fail as typed private bundle errors", async () => {
+  const { first } = await firstClaim();
+  for (const message of [
+    "{invalid-json",
+    JSON.stringify({ ...first.operation, requestHash: "f".repeat(64) }),
+  ]) {
+    const forged = await withGitBundle(
+      { bundle: first.bundle, limits: privateMemoryGitLimits },
+      async ({ directory, git }) => {
+        const tree = (
+          await git(["rev-parse", `${first.receipt.revision}^{tree}`])
+        ).trim();
+        const head = (await git(["commit-tree", tree, "-m", message])).trim();
+        await git(["update-ref", "refs/heads/main", head]);
+        const destination = `${directory}/invalid-receipt.bundle`;
+        await git(["bundle", "create", destination, "--all"]);
+        return { head, bundle: await readFile(destination) };
+      }
+    );
+    await expect(readPrivateMemoryGit({ scope, ...forged })).rejects.toThrow(
+      GitBundleError
+    );
+  }
+});
+
+test("clear uses one actual commit for all tombstones and replay cannot erase a later assertion", async () => {
+  const { first, change } = await firstClaim();
+  const second = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "assert",
+      claimId: randomUUID(),
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: body("Cedar cadence"),
+    },
+    publication: async () => publication(2),
+  });
+  if (!second.applied || !("claim" in second))
+    throw new Error("Expected second claim");
+  const clear = {
+    action: "clear" as const,
+    operationId: randomUUID(),
+    expectedRevision: second.receipt.revision,
+  };
+  const erased = await publishPrivateMemoryGit({
+    scope,
+    bundle: second.bundle,
+    head: second.receipt.revision,
+    change: clear,
+    publication: async () => publication(3),
+  });
+  if (!erased.applied || !("cleared" in erased))
+    throw new Error("Expected atomic clear");
+  expect(erased.cleared).toHaveLength(2);
+  expect(new Set(erased.cleared.map((claim) => claim.revision))).toEqual(
+    new Set([erased.receipt.revision])
+  );
+  expect(erased.receipt.claimId).toBeNull();
+  const captured = await readPrivateMemoryGit({
+    scope,
+    bundle: erased.bundle,
+    head: erased.receipt.revision,
+    historyClaimId: change.claimId,
+  });
+  expect(captured.operations).toHaveLength(3);
+  expect(captured.snapshot.claims.map((claim) => claim.file.state)).toEqual([
+    { kind: "tombstone" },
+    { kind: "tombstone" },
+  ]);
+  expect(captured.history[1]).toEqual(first.claim);
+  const later = await publishPrivateMemoryGit({
+    scope,
+    bundle: erased.bundle,
+    head: erased.receipt.revision,
+    change: {
+      action: "assert",
+      claimId: randomUUID(),
+      operationId: randomUUID(),
+      expectedRevision: erased.receipt.revision,
+      body: body("New intentionally remembered fact"),
+    },
+    publication: async () => publication(4),
+  });
+  if (!later.applied) throw new Error("Expected later assertion");
+  expect(
+    await publishPrivateMemoryGit({
+      scope,
+      bundle: later.bundle,
+      head: later.receipt.revision,
+      change: clear,
+      publication: async () => publication(5),
+    })
+  ).toEqual({ applied: false, receipt: erased.receipt });
+  expect(
+    (
+      await readPrivateMemoryGit({
+        scope,
+        bundle: later.bundle,
+        head: later.receipt.revision,
+      })
+    ).snapshot.claims.filter((claim) => claim.file.state.kind === "active")
+  ).toHaveLength(1);
+});
+
+test("clearing an empty private repository creates a durable actual-SHA receipt and remains replayable", async () => {
+  const change = {
+    action: "clear" as const,
+    operationId: randomUUID(),
+    expectedRevision: null,
+  };
+  const first = await publishPrivateMemoryGit({
+    scope,
+    bundle: null,
+    head: null,
+    change,
+    publication: async () => publication(1),
+  });
+  if (!first.applied || !("cleared" in first))
+    throw new Error("Expected empty clear receipt");
+  expect(first.cleared).toEqual([]);
+  const captured = await readPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+  });
+  expect(captured.snapshot.claims).toEqual([]);
+  expect(captured.operations).toHaveLength(1);
+  expect(
+    await publishPrivateMemoryGit({
+      scope,
+      bundle: first.bundle,
+      head: first.receipt.revision,
+      change,
+      publication: async () => publication(2),
+    })
+  ).toEqual({ applied: false, receipt: first.receipt });
+});
+
+test("a clear receipt cannot omit an active parent claim or conceal additional file changes", async () => {
+  const { first } = await firstClaim();
+  const second = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "assert",
+      claimId: randomUUID(),
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: body("Another active claim"),
+    },
+    publication: async () => publication(2),
+  });
+  if (!second.applied) throw new Error("Expected second claim");
+  const cleared = await publishPrivateMemoryGit({
+    scope,
+    bundle: second.bundle,
+    head: second.receipt.revision,
+    change: {
+      action: "clear",
+      operationId: randomUUID(),
+      expectedRevision: second.receipt.revision,
+    },
+    publication: async () => publication(3),
+  });
+  if (
+    !cleared.applied ||
+    !("cleared" in cleared) ||
+    cleared.operation.claimId !== null
+  )
+    throw new Error("Expected clear");
+  const clearOperation = cleared.operation;
+  const forged = await withGitBundle(
+    { bundle: cleared.bundle, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      const tree = (
+        await git(["rev-parse", `${cleared.receipt.revision}^{tree}`])
+      ).trim();
+      const message = {
+        ...clearOperation,
+        clearedClaimIds: clearOperation.clearedClaimIds.slice(0, 1),
+      };
+      const head = (
+        await git([
+          "commit-tree",
+          tree,
+          "-p",
+          second.receipt.revision,
+          "-m",
+          JSON.stringify(message),
+        ])
+      ).trim();
+      await git(["update-ref", "refs/heads/main", head]);
+      const destination = `${directory}/false-clear.bundle`;
+      await git(["bundle", "create", destination, "--all"]);
+      return { head, bundle: await readFile(destination) };
+    }
+  );
+  await expect(readPrivateMemoryGit({ scope, ...forged })).rejects.toThrow(
+    GitBundleError
+  );
+});

@@ -1,3 +1,5 @@
+import { GitBundleError } from "../files/git";
+import { SemanticDefinitionSchema } from "./semantic/schema";
 import {
   GitRevisionSchema,
   WorkspacePathSchema,
@@ -49,7 +51,6 @@ import {
 } from "@shared/workspaces/capabilities";
 import {
   publishWorkspaceGit,
-  WorkspaceGitError,
   readWorkspaceGit,
   readWorkspaceGitSelection,
   searchWorkspaceGit,
@@ -237,9 +238,13 @@ async function validateKnowledgeChange(
   if (
     source.kind === "agent" &&
     (input.path === "knowledge/purpose.md" ||
-      /^knowledge\/(?:models|definitions|routing)\//u.test(input.path))
+      /^knowledge\/(?:models|definitions|routing|queries|data)\//u.test(
+        input.path
+      ))
   )
     throw new WorkspaceAccessDenied();
+  if (input.path.startsWith("knowledge/queries/") && input.content !== null)
+    await jsonString(SemanticDefinitionSchema).parseAsync(input.content);
   if (input.path === knowledgeRoutingPath && input.content !== null)
     await jsonString(knowledgeRoutingSchema).parseAsync(input.content);
   if (isValid(knowledgeProposalPathSchema, input.path)) {
@@ -358,9 +363,29 @@ async function validateWorkspaceChange(
 }
 
 export const WorkspaceRepository = {
+  /** Current authority check without fetching or reconstructing the Git bundle. */
+  currentRevision: async function (
+    actor: z.output<typeof WorkspaceActorSchema>
+  ) {
+    try {
+      return await withDatabaseTransaction(async () => {
+        await requireWorkspaceAccess(actor);
+        const rows =
+          await query(sql`SELECT head_sha AS head FROM workspace_repository
+          WHERE workspace_id = ${actor.workspaceId}`);
+        return rows[0]
+          ? z.object({ head: GitRevisionSchema }).parse(rows[0]).head
+          : null;
+      });
+    } catch (error) {
+      if (error instanceof SqlError || error instanceof SchemaError)
+        return unavailable();
+      throw error;
+    }
+  },
   selection: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
-    paths: readonly string[],
+    paths: Parameters<typeof readWorkspaceGitSelection>[2],
     view: z.output<typeof WorkspaceRecordedViewSchema> = {}
   ) {
     try {
@@ -368,19 +393,15 @@ export const WorkspaceRepository = {
         const selected = await selectRecordedRepository(actor, view);
         if (!selected.revision || !selected.bundle)
           return { revision: null, documents: [] };
-        const listing = await readWorkspaceGit(
-          selected.bundle,
-          selected.revision
-        );
+        const visible = (path: string) =>
+          visibleToGrant(path, selected.grants) &&
+          (!sharedExecution(actor) || visibleInSharedExecution(path));
         const documents = await readWorkspaceGitSelection(
           selected.bundle,
           selected.revision,
-          paths.filter(
-            (path) =>
-              listing.files.includes(path) &&
-              visibleToGrant(path, selected.grants) &&
-              (!sharedExecution(actor) || visibleInSharedExecution(path))
-          )
+          typeof paths === "function"
+            ? (read) => paths((requested) => read(requested.filter(visible)))
+            : paths.filter(visible)
         );
         return {
           revision: selected.revision,
@@ -702,6 +723,30 @@ export const WorkspaceRepository = {
           candidate.bundle,
           candidate.revision
         );
+        const queryPaths = tree.files.filter((path) =>
+          path.startsWith("knowledge/queries/")
+        );
+        if (queryPaths.length > 24)
+          throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+        if (queryPaths.length) {
+          const definitions = await readWorkspaceGitSelection(
+            candidate.bundle,
+            candidate.revision,
+            queryPaths
+          );
+          for (const document of definitions) {
+            const definition = jsonString(SemanticDefinitionSchema).parse(
+              document.content
+            );
+            if (
+              ![
+                definition.model,
+                ...definition.sources.map((item) => item.path),
+              ].every((path) => tree.files.includes(path))
+            )
+              throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+          }
+        }
         if (tree.files.includes(knowledgeRoutingPath)) {
           const index = await readWorkspaceGit(
             candidate.bundle,
@@ -773,12 +818,12 @@ export const WorkspaceRepository = {
         };
       });
     } catch (error) {
-      if (error instanceof WorkspaceGitError && error.reason !== "unavailable")
+      if (error instanceof GitBundleError && error.reason !== "unavailable")
         throw new WorkspaceRepositoryError({ reason: "invalid_input" });
       if (
         error instanceof SqlError ||
         error instanceof SchemaError ||
-        error instanceof WorkspaceGitError
+        error instanceof GitBundleError
       ) {
         return unavailable();
       }

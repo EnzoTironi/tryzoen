@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { VaultData } from "./data";
 import type { VaultItem } from "./schema";
 import { VaultItemEditor } from "./editor";
@@ -25,6 +25,7 @@ export function VaultItemDetails({
   readonly onBack: () => void;
   readonly renderPermission?: (id: string) => ReactNode;
 }) {
+  const pageStyles = usePageStyles();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   if (editing && mayManage)

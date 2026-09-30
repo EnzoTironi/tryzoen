@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -13,8 +13,8 @@ import type { z } from "zod";
 import { ActionButton } from "../button";
 import { ConversationAvatar } from "../chats/avatar";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { systemFont, useColors } from "../theme";
 import type {
   RoomData,
   roomMembershipChangeSchema,
@@ -54,6 +54,9 @@ export function GroupMembership({
   readonly onLeft: () => void;
   readonly onChanged: () => Promise<unknown>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const client = useQueryClient();
   const [selection, setSelection] = useState<MembershipSelection | undefined>(
     leaving
@@ -150,6 +153,9 @@ function GroupMemberConfirmation({
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   return (
     <>
       <View style={styles.identity}>
@@ -182,6 +188,9 @@ function GroupPeople({
   readonly page: z.infer<typeof roomPageSchema>;
   readonly onSelect: (selection: MembershipSelection) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [search, setSearch] = useState("");
   const people = useQuery({
     queryKey: ["matrix-people", cacheScope, search.trim()],
@@ -306,32 +315,40 @@ function GroupPeople({
   );
 }
 
-const styles = StyleSheet.create({
-  identity: { alignItems: "center", gap: 12, paddingVertical: 12 },
-  name: { fontSize: 16, fontWeight: "600", color: colors.ink },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 10,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 64,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  copy: { flex: 1, gap: 3 },
-  action: {
-    minHeight: 44,
-    minWidth: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  error: { color: colors.danger, fontSize: 14 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    identity: { alignItems: "center", gap: 12, paddingVertical: 12 },
+    name: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    label: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.muted,
+      marginTop: 10,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 64,
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    copy: { flex: 1, gap: 3 },
+    action: {
+      minHeight: 44,
+      minWidth: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+    },
+    error: { fontFamily: systemFont, color: colors.danger, fontSize: 14 },
+  });
+}

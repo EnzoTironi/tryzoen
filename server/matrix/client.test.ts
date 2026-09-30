@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { matrixRequest, MatrixError } from "./client";
+import { matrixRequest, MatrixError, MatrixEventSchema } from "./client";
 vi.mock("@shared/environment", () => ({
   env: {
     ZOEN_MATRIX_URL: "https://matrix.test",
@@ -44,4 +44,20 @@ it("parses a response within the explicit byte budget", async () => {
       maxResponseBytes: 1024,
     })
   ).toEqual({ next_batch: "token" });
+});
+
+it("preserves native mention metadata on originals and replacements", () => {
+  const mentions = { user_ids: ["@person:test"] };
+  const event = MatrixEventSchema.parse({
+    event_id: "$edit",
+    type: "m.room.message",
+    sender: "@author:test",
+    content: {
+      body: "* After",
+      "m.mentions": { user_ids: [], room: false },
+      "m.new_content": { body: "After", "m.mentions": mentions },
+    },
+  });
+  expect(event.content["m.mentions"]).toEqual({ user_ids: [], room: false });
+  expect(event.content["m.new_content"]?.["m.mentions"]).toEqual(mentions);
 });

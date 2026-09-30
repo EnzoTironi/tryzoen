@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function MemoryBackup({
   disabled,
@@ -10,6 +10,7 @@ export function MemoryBackup({
   readonly disabled: boolean;
   readonly onBackup: () => Promise<void>;
 }) {
+  const pageStyles = usePageStyles();
   const backup = useMutation({ mutationFn: onBackup });
   return (
     <View style={pageStyles.section}>

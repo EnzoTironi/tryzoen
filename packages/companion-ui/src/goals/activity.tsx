@@ -1,10 +1,10 @@
-import { Fragment } from "react";
+import { useMemo, Fragment } from "react";
 import { CircleCheck } from "lucide-react-native";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { systemFont, useColors } from "../theme";
 import type { GoalsData } from "./collection";
 
 export function GoalActivity({
@@ -18,6 +18,9 @@ export function GoalActivity({
   readonly revision: number;
   readonly cacheScope: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const compact = useWindowDimensions().width < 720;
   const history = useInfiniteQuery({
     queryKey: ["goal-history", cacheScope, id, revision],
@@ -107,40 +110,50 @@ export function GoalActivity({
   );
 }
 
-const styles = StyleSheet.create({
-  section: { marginTop: 8 },
-  heading: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 24,
-  },
-  day: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "500",
-    marginBottom: 24,
-    marginTop: 4,
-  },
-  entry: { flexDirection: "row", gap: 16 },
-  track: { width: 20, alignItems: "center", paddingTop: 4 },
-  line: {
-    width: 1,
-    flex: 1,
-    marginTop: 8,
-    marginBottom: 8,
-    borderLeftWidth: 1,
-    borderColor: colors.line,
-    borderStyle: "dotted",
-  },
-  copy: { flex: 1, paddingBottom: 24, gap: 4 },
-  title: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "600",
-  },
-  summary: { color: colors.muted, fontSize: 15, lineHeight: 21 },
-  compactHeading: { fontSize: 18 },
-  compactCopy: { fontSize: 14, lineHeight: 19 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    section: { marginTop: 8 },
+    heading: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 20,
+      fontWeight: "600",
+      marginBottom: 24,
+    },
+    day: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      fontWeight: "500",
+      marginBottom: 24,
+      marginTop: 4,
+    },
+    entry: { flexDirection: "row", gap: 16 },
+    track: { width: 20, alignItems: "center", paddingTop: 4 },
+    line: {
+      width: 1,
+      flex: 1,
+      marginTop: 8,
+      marginBottom: 8,
+      borderLeftWidth: 1,
+      borderColor: colors.line,
+      borderStyle: "dotted",
+    },
+    copy: { flex: 1, paddingBottom: 24, gap: 4 },
+    title: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 21,
+      fontWeight: "600",
+    },
+    summary: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 21,
+    },
+    compactHeading: { fontFamily: systemFont, fontSize: 18 },
+    compactCopy: { fontFamily: systemFont, fontSize: 14, lineHeight: 19 },
+  });
+}

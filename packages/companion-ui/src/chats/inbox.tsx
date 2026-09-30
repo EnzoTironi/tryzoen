@@ -2,6 +2,7 @@ import { SavedRoomMessages } from "../rooms/saved";
 import {
   useContext,
   useDeferredValue,
+  useMemo,
   useState,
   type ComponentProps,
 } from "react";
@@ -14,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -24,10 +26,15 @@ import {
   SquarePen,
   Plus,
   RefreshCw,
+  Ellipsis,
+  ListFilter,
+  Check,
+  ChevronRight,
 } from "lucide-react-native";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
+import { CompanionSheet } from "../sheet";
 import { ConversationRow } from "./row";
 import { ConversationAvatar } from "./avatar";
 import type {
@@ -130,6 +137,10 @@ export function ConversationInbox({
   readonly onDiscover: () => void;
   readonly onExport: (id: string) => Promise<void>;
 }) {
+  const compact = useWindowDimensions().width < 720;
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [menu, setMenu] = useState<"options" | "filters">();
   const [saved, setSaved] = useState(false);
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
@@ -186,8 +197,24 @@ export function ConversationInbox({
       }),
     ]);
   };
+  const searchField = (
+    <View style={[styles.search, compact && styles.mobileSearch]}>
+      <Search size={18} color={colors.muted} />
+      <TextInput
+        accessibilityLabel="Buscar conversas"
+        placeholder="Buscar"
+        placeholderTextColor={colors.muted}
+        value={query}
+        onChangeText={setQuery}
+        maxLength={200}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        style={styles.input}
+      />
+    </View>
+  );
   return (
-    <View style={styles.inbox}>
+    <View style={[styles.inbox, compact && styles.mobileInbox]}>
       {saved && (
         <SavedRoomMessages
           data={rooms}
@@ -199,68 +226,114 @@ export function ConversationInbox({
         />
       )}
       <View style={styles.heading}>
-        <Text accessibilityRole="header" style={styles.title}>
-          {archived ? "Arquivadas" : "Conversas"}
+        <IconButton
+          quiet
+          icon={Ellipsis}
+          label="Opções das conversas"
+          onPress={() => {
+            setMenu("options");
+          }}
+        />
+        <Text
+          accessibilityRole="header"
+          style={[styles.title, compact && styles.mobileTitle]}
+        >
+          {archived ? "Arquivadas" : filter === "Todas" ? "Conversas" : filter}
         </Text>
         <IconButton
-          icon={Bookmark}
-          label="Mensagens salvas"
+          quiet
+          icon={ListFilter}
+          label="Filtrar conversas"
+          selected={filter !== "Todas"}
           onPress={() => {
-            setSaved(true);
+            setMenu("filters");
           }}
         />
-        <IconButton
-          icon={RefreshCw}
-          label="Atualizar conversas"
-          disabled={conversations.isFetching}
-          onPress={refresh}
-        />
-        <IconButton
-          icon={Archive}
-          label={archived ? "Ver conversas ativas" : "Ver arquivadas"}
-          selected={archived}
-          onPress={() => {
-            setArchived(!archived);
-          }}
-        />
-        <IconButton
-          icon={SquarePen}
-          label="Nova conversa"
-          onPress={() => {
-            setComposing(true);
-          }}
-        />
-      </View>
-      <View style={styles.search}>
-        <Search size={17} color={colors.muted} />
-        <TextInput
-          accessibilityLabel="Buscar conversas"
-          placeholder="Buscar"
-          value={query}
-          onChangeText={setQuery}
-          maxLength={200}
-          style={styles.input}
-        />
-      </View>
-      <View accessibilityRole="tablist" style={styles.filters}>
-        {filters.map((label) => (
-          <Pressable
-            key={label}
-            accessibilityRole="tab"
-            aria-selected={filter === label}
+        {!compact && (
+          <IconButton
+            icon={SquarePen}
+            label="Nova conversa"
             onPress={() => {
-              setFilter(label);
+              setComposing(true);
             }}
-            style={[styles.filter, filter === label && styles.activeFilter]}
-          >
-            <Text
-              style={[styles.filterText, filter === label && styles.activeText]}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
+          />
+        )}
       </View>
+      {!compact && searchField}
+      {menu && (
+        <CompanionSheet
+          title={
+            menu === "filters" ? "Filtrar conversas" : "Opções das conversas"
+          }
+          onClose={() => {
+            setMenu(undefined);
+          }}
+        >
+          <View style={styles.menu}>
+            {menu === "filters"
+              ? filters.map((label) => (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: filter === label }}
+                    onPress={() => {
+                      setFilter(label);
+                      setMenu(undefined);
+                    }}
+                    style={styles.menuRow}
+                  >
+                    <Text style={styles.menuText}>{label}</Text>
+                    {filter === label && (
+                      <Check size={20} color={colors.accent} />
+                    )}
+                  </Pressable>
+                ))
+              : [
+                  {
+                    label: "Mensagens salvas",
+                    icon: Bookmark,
+                    press: () => {
+                      setSaved(true);
+                    },
+                  },
+                  {
+                    label: "Atualizar conversas",
+                    icon: RefreshCw,
+                    press: refresh,
+                    disabled: conversations.isFetching,
+                  },
+                  {
+                    label: archived ? "Ver conversas ativas" : "Ver arquivadas",
+                    icon: Archive,
+                    press: () => {
+                      setArchived(!archived);
+                    },
+                  },
+                  { label: "Descobrir bots", icon: Compass, press: onDiscover },
+                  {
+                    label: "Nova conversa com Zoen",
+                    icon: Plus,
+                    press: onCreate,
+                  },
+                ].map(({ label, icon: Icon, press, disabled }) => (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="button"
+                    disabled={disabled}
+                    accessibilityState={{ disabled }}
+                    onPress={() => {
+                      setMenu(undefined);
+                      press();
+                    }}
+                    style={[styles.menuRow, disabled && styles.dimmed]}
+                  >
+                    <Icon size={21} color={colors.ink} />
+                    <Text style={styles.menuText}>{label}</Text>
+                  </Pressable>
+                ))}
+          </View>
+        </CompanionSheet>
+      )}
       {sync.pending && (
         <ActionButton quiet onPress={sync.apply}>
           Novas conversas · Atualizar
@@ -284,6 +357,9 @@ export function ConversationInbox({
         }
         style={styles.list}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={ConversationSeparator}
         initialNumToRender={12}
         windowSize={5}
         onEndReached={() => {
@@ -365,24 +441,18 @@ export function ConversationInbox({
           </View>
         }
       />
-      <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onDiscover}
-          style={styles.footerLink}
-        >
-          <Compass size={19} color={colors.muted} />
-          <Text style={styles.footerText}>Descobrir bots</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onCreate}
-          style={styles.footerLink}
-        >
-          <Plus size={19} color={colors.accent} />
-          <Text style={styles.footerText}>Nova conversa com Zoen</Text>
-        </Pressable>
-      </View>
+      {compact && (
+        <View style={styles.footer}>
+          {searchField}
+          <IconButton
+            icon={SquarePen}
+            label="Nova conversa"
+            onPress={() => {
+              setComposing(true);
+            }}
+          />
+        </View>
+      )}
       {creating && (
         <CreateRoom
           data={rooms}
@@ -423,6 +493,20 @@ export function ConversationInbox({
     </View>
   );
 }
+function ConversationSeparator() {
+  const colors = useColors();
+  return (
+    <View
+      style={{
+        marginLeft: 68,
+        marginRight: 10,
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: colors.line,
+      }}
+    />
+  );
+}
+
 function RoomRow({
   item,
   notifications,
@@ -435,26 +519,67 @@ function RoomRow({
   readonly onOpen: (id: string) => void;
 }) {
   const { room } = item;
+  const compact = useWindowDimensions().width < 720;
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const highlighted = selected && !compact;
   const time = item.activityAt > 0 ? conversationTime(item.activityAt) : null;
+  const unread =
+    notifications &&
+    (notifications.notificationCount > 0 || notifications.markedUnread);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: selected }}
+      accessibilityState={{ selected: highlighted }}
       onPress={() => {
         onOpen(room.id);
       }}
-      style={[styles.room, selected && styles.selected]}
+      style={({ pressed }) => [
+        styles.room,
+        highlighted && styles.selected,
+        pressed && !highlighted && styles.pressed,
+      ]}
     >
+      <View style={styles.unreadSpace}>
+        {unread && (
+          <View
+            accessible
+            accessibilityLabel={
+              notifications.notificationCount
+                ? `${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`
+                : "Marcada como não lida"
+            }
+            style={[styles.unread, highlighted && styles.selectedDot]}
+          />
+        )}
+      </View>
       <ConversationAvatar
         name={room.label}
         uri={room.avatarUri ?? undefined}
         group={room.kind === "group"}
       />
       <View style={styles.copy}>
-        <Text numberOfLines={1} style={styles.name}>
-          {room.label}
-        </Text>
-        <Text numberOfLines={1} style={styles.caption}>
+        <View style={styles.titleLine}>
+          <Text
+            numberOfLines={1}
+            style={[styles.name, highlighted && styles.selectedText]}
+          >
+            {room.label}
+          </Text>
+          {time && (
+            <Text
+              style={[styles.time, highlighted && styles.selectedText]}
+              accessibilityLabel={time.description}
+            >
+              {time.label}
+            </Text>
+          )}
+          {compact && <ChevronRight size={14} color={colors.muted} />}
+        </View>
+        <Text
+          numberOfLines={2}
+          style={[styles.caption, highlighted && styles.selectedText]}
+        >
           {item.preview ??
             (item.summaryState === "unavailable"
               ? "Prévia indisponível"
@@ -464,29 +589,6 @@ function RoomRow({
                   ? `@${room.username}`
                   : "Conversa direta")}
         </Text>
-      </View>
-      <View style={styles.rowMeta}>
-        {time && (
-          <Text style={styles.time} accessibilityLabel={time.description}>
-            {time.label}
-          </Text>
-        )}
-        {notifications &&
-          (notifications.notificationCount > 0 ||
-            notifications.markedUnread) && (
-            <Text
-              accessibilityLabel={
-                notifications.notificationCount
-                  ? `${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`
-                  : "Marcada como não lida"
-              }
-              style={styles.unread}
-            >
-              {notifications.notificationCount > 99
-                ? "99+"
-                : notifications.notificationCount || "•"}
-            </Text>
-          )}
       </View>
     </Pressable>
   );
@@ -503,6 +605,8 @@ function InboxEmpty({
   readonly people: boolean;
   readonly configured: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>
@@ -536,6 +640,8 @@ function InboxFeedback({
   readonly error: boolean;
   readonly onRetry: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
       {loading && (
@@ -562,6 +668,8 @@ function PinnedConversations({
 }: Pick<ComponentProps<typeof ConversationInbox>, "avatarUri" | "onOpen"> & {
   readonly chats: z.infer<typeof inboxPageSchema>["pinned"];
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
       {chats.length > 0 && (
@@ -595,103 +703,154 @@ function PinnedConversations({
   );
 }
 
-const styles = StyleSheet.create({
-  inbox: {
-    flex: 1,
-    minHeight: 0,
-    paddingTop: 20,
-    paddingHorizontal: 14,
-    backgroundColor: colors.surface,
-  },
-  heading: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  title: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 25,
-    fontWeight: "700",
-    letterSpacing: -0.7,
-  },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 12,
-    backgroundColor: "#f3f3f5",
-    paddingHorizontal: 12,
-    minHeight: 38,
-  },
-  input: {
-    flex: 1,
-    outlineWidth: 0,
-    color: colors.ink,
-    fontSize: 15,
-    paddingVertical: 8,
-  },
-  filters: { flexDirection: "row", gap: 6, paddingVertical: 15 },
-  filter: {
-    flex: 1,
-    minHeight: 34,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  activeFilter: { backgroundColor: "#e8effa" },
-  filterText: { fontSize: 13, color: colors.muted },
-  activeText: { color: colors.accent, fontWeight: "600" },
-  list: { flex: 1, minHeight: 0 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.ink,
-    marginTop: 12,
-  },
-  pins: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 16,
-    paddingBottom: 22,
-  },
-  pin: { width: "33.333%", alignItems: "center", gap: 7, paddingHorizontal: 5 },
-  pinName: { fontSize: 12, color: colors.ink, maxWidth: "100%" },
-  room: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 10,
-    minHeight: 76,
-    borderRadius: 13,
-  },
-  selected: { backgroundColor: "#e8f2ff" },
-  copy: { flex: 1, minWidth: 0, gap: 5 },
-  name: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  rowMeta: { alignItems: "flex-end", gap: 7 },
-  time: { color: colors.muted, fontSize: 11 },
-  unread: {
-    color: "#fff",
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    minWidth: 22,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    textAlign: "center",
-    fontSize: 12,
-  },
-  caption: { color: colors.muted, fontSize: 13, lineHeight: 20 },
-  empty: { padding: 18, gap: 9 },
-  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
-  feedback: { padding: 14, gap: 10 },
-  footer: {
-    gap: 4,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f1",
-  },
-  footerLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 40,
-    paddingHorizontal: 8,
-  },
-  footerText: { fontSize: 14, color: colors.ink },
-});
+const createStyles = (palette: ReturnType<typeof useColors>) =>
+  StyleSheet.create({
+    inbox: {
+      flex: 1,
+      minHeight: 0,
+      paddingTop: 8,
+      paddingHorizontal: 8,
+      backgroundColor: palette.sidebar,
+    },
+    mobileInbox: { backgroundColor: palette.canvas },
+    heading: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 48,
+      marginBottom: 8,
+    },
+    title: {
+      flex: 1,
+      fontFamily: systemFont,
+      color: palette.ink,
+      fontSize: 17,
+      fontWeight: "600",
+      paddingLeft: 4,
+    },
+    mobileTitle: { textAlign: "center", paddingLeft: 0 },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+      borderRadius: 22,
+      backgroundColor: palette.wash,
+      paddingHorizontal: 12,
+      minHeight: 36,
+      marginHorizontal: 6,
+      marginBottom: 10,
+    },
+    mobileSearch: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 44,
+      marginHorizontal: 0,
+      marginBottom: 0,
+    },
+    input: {
+      flex: 1,
+      minWidth: 0,
+      fontFamily: systemFont,
+      color: palette.ink,
+      fontSize: 16,
+      paddingVertical: 7,
+    },
+    list: { flex: 1, minHeight: 0 },
+    listContent: { paddingBottom: 64 },
+    sectionLabel: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      fontWeight: "500",
+      color: palette.muted,
+      marginTop: 8,
+      marginBottom: 8,
+      paddingHorizontal: 10,
+    },
+    pins: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      rowGap: 16,
+      paddingBottom: 18,
+    },
+    pin: {
+      width: "33.333%",
+      alignItems: "center",
+      gap: 7,
+      paddingHorizontal: 5,
+    },
+    pinName: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: palette.ink,
+      maxWidth: "100%",
+    },
+    room: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 12,
+      paddingRight: 12,
+      minHeight: 84,
+      borderRadius: 9,
+    },
+    selected: { backgroundColor: palette.selection },
+    pressed: { backgroundColor: palette.wash },
+    selectedText: { color: palette.selectedInk },
+    selectedDot: { backgroundColor: palette.selectedInk },
+    unreadSpace: { width: 8, alignItems: "center" },
+    unread: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: palette.accent,
+    },
+    copy: { flex: 1, minWidth: 0, gap: 3 },
+    titleLine: { flexDirection: "row", alignItems: "center", gap: 6 },
+    name: {
+      flex: 1,
+      minWidth: 0,
+      fontFamily: systemFont,
+      color: palette.ink,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    time: { fontFamily: systemFont, color: palette.muted, fontSize: 12 },
+    caption: {
+      fontFamily: systemFont,
+      color: palette.muted,
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    empty: { padding: 20, gap: 9 },
+    emptyTitle: {
+      fontFamily: systemFont,
+      color: palette.ink,
+      fontSize: 17,
+      fontWeight: "600",
+    },
+    feedback: { padding: 14, gap: 10 },
+    footer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingLeft: 52,
+      paddingRight: 4,
+      paddingTop: 8,
+      paddingBottom: 10,
+      backgroundColor: palette.canvas,
+    },
+    menu: { backgroundColor: palette.surface, gap: 2 },
+    menuRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      minHeight: 48,
+      paddingHorizontal: 12,
+    },
+    menuText: {
+      flex: 1,
+      fontFamily: systemFont,
+      fontSize: 17,
+      color: palette.ink,
+    },
+    dimmed: { opacity: 0.4 },
+  });

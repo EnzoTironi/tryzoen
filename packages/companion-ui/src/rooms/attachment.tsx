@@ -5,7 +5,7 @@ import { FileText, Image, Music, Video, Download } from "lucide-react-native";
 import type { z } from "zod";
 import type { RoomData, roomMessageSchema } from "./schema";
 import { AttachmentCard } from "../attachments/card";
-import { colors } from "../theme";
+import { useColors } from "../theme";
 import { ResourceCard } from "../cards/resource";
 
 export function RoomAttachment({
@@ -19,6 +19,7 @@ export function RoomAttachment({
   roomId: string;
   cacheScope: string;
 }) {
+  const colors = useColors();
   const [opened, setOpened] = useState(false);
   const file = useQuery({
     queryKey: ["matrix-media", cacheScope, roomId, item.id],

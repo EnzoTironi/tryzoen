@@ -1,4 +1,4 @@
-import { colors } from "./theme";
+import { useColors } from "./theme";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -80,6 +80,8 @@ export function SheetGrabber({
 }: {
   readonly handlers: ReturnType<typeof useSheetDrag>["handlers"];
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View
       {...handlers}
@@ -94,19 +96,21 @@ export function SheetGrabber({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  grabber: {
-    height: 44,
-    marginTop: -12,
-    paddingTop: 12,
-    width: "100%",
-    ...(Platform.OS === "web" ? { touchAction: "none" as const } : {}),
-  },
-  handle: {
-    width: 48,
-    height: 4,
-    borderRadius: 3,
-    backgroundColor: colors.line,
-    alignSelf: "center",
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    grabber: {
+      height: 44,
+      marginTop: -12,
+      paddingTop: 12,
+      width: "100%",
+      ...(Platform.OS === "web" ? { touchAction: "none" as const } : {}),
+    },
+    handle: {
+      width: 48,
+      height: 4,
+      borderRadius: 3,
+      backgroundColor: colors.line,
+      alignSelf: "center",
+    },
+  });
+}

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Markdown, { Renderer } from "react-native-marked";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 
 import { isSafeWebLink } from "./links";
 
@@ -34,13 +34,16 @@ export function AssistantMarkdown({
   text,
   allowImages = true,
   compact = false,
+  outgoing = false,
 }: {
   readonly text: string;
   /** Private documents can render their text without contacting image hosts. */
   readonly allowImages?: boolean;
   /** Message bubbles own their outer padding; documents keep block spacing. */
   readonly compact?: boolean;
+  readonly outgoing?: boolean;
 }) {
+  const colors = useColors();
   const renderer = useMemo(
     () => new AssistantRenderer(allowImages),
     [allowImages]
@@ -49,7 +52,13 @@ export function AssistantMarkdown({
     <Markdown
       value={text}
       renderer={renderer}
-      styles={compact ? messageStyles : undefined}
+      styles={{
+        ...(compact ? messageStyles : undefined),
+        text: { fontFamily: systemFont },
+        link: { fontFamily: systemFont, textDecorationLine: "underline" },
+        codespan: { color: colors.ink },
+        codeText: { color: colors.ink },
+      }}
       flatListProps={{
         scrollEnabled: false,
         style: { backgroundColor: "transparent" },
@@ -57,10 +66,10 @@ export function AssistantMarkdown({
       }}
       theme={{
         colors: {
-          text: colors.ink,
+          text: outgoing ? colors.selectedInk : colors.ink,
           code: colors.wash,
-          link: colors.accent,
-          border: colors.line,
+          link: outgoing ? colors.selectedInk : colors.accent,
+          border: outgoing ? colors.selectedInk : colors.line,
         },
       }}
     />

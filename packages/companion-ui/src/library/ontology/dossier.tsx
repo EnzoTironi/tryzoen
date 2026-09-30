@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -5,8 +6,8 @@ import type { OntologyReadResultSchema } from "./schema";
 import type { OntologyData } from "./collection";
 import { OntologyEvidence } from "./evidence";
 import { CompanionSheet } from "../../sheet";
-import { pageStyles } from "../../page";
-import { colors } from "../../theme";
+import { usePageStyles } from "../../page";
+import { useColors } from "../../theme";
 
 export function OntologyDossier({
   entity,
@@ -23,6 +24,9 @@ export function OntologyDossier({
   readonly onSelect: (id: string) => void;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const type = record.graph.types.find((item) => item.id === entity.type);
   const links = record.graph.links.filter(
     (link) => link.from === entity.id || link.to === entity.id
@@ -120,19 +124,21 @@ export function OntologyDossier({
   );
 }
 
-const styles = StyleSheet.create({
-  content: { gap: 18 },
-  card: {
-    gap: 10,
-    backgroundColor: colors.wash,
-    borderRadius: 20,
-    padding: 20,
-  },
-  connection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 44,
-  },
-  name: { flex: 1 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    content: { gap: 18 },
+    card: {
+      gap: 10,
+      backgroundColor: colors.wash,
+      borderRadius: 20,
+      padding: 20,
+    },
+    connection: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 44,
+    },
+    name: { flex: 1 },
+  });
+}

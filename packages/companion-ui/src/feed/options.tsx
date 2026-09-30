@@ -3,8 +3,8 @@ import type { z } from "zod";
 import { Text } from "react-native";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 import type { feedPostSchema } from "./schema";
 
 export function FeedOptions({
@@ -20,6 +20,8 @@ export function FeedOptions({
   readonly onDelete: () => void;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   const [confirm, setConfirm] = useState(false);
   return (
     <CompanionSheet

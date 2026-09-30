@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { MemoryCard } from "../cards/memory";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { LearnedNotesData } from "./notes";
 
 function localInstant(date: string, time: string) {
@@ -33,6 +33,7 @@ export function MemoryHistory({
   readonly load: LearnedNotesData["history"];
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [query, setQuery] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");

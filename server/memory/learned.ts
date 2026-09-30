@@ -1,3 +1,4 @@
+import { memoryNamespace, LearnedMemoryError } from "./namespace";
 import {
   query as dbQuery,
   transaction as withDatabaseTransaction,
@@ -21,73 +22,13 @@ import { FileMemory } from "./ai-memory/learned";
 import { FileMemoryError } from "./ai-memory/mutations";
 import { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
 export { LearnedMemoryWriteSchema } from "@zoen/companion-ui/memory";
-import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 import { memoryCorpusInitialized } from "@db/services/memory-corpora";
 
-const namespaceSchema = z.object({
-  id: z.uuid(),
-  enabled: z.boolean(),
-  scopeKey: z.nullable(z.string()),
-  pendingOperation: z.nullable(z.string()),
-  pendingHash: z.nullable(z.string()),
-});
 const snapshotSchema = z.object({
   enabled: z.boolean(),
   results: z.array(LearnedMemoryItemSchema),
 });
 
-export class LearnedMemoryError extends Error {
-  readonly _tag = "LearnedMemoryError";
-  declare readonly reason:
-    | "disabled"
-    | "invalid_input"
-    | "unavailable"
-    | "stale_recall";
-  constructor(input: {
-    readonly reason:
-      | "disabled"
-      | "invalid_input"
-      | "unavailable"
-      | "stale_recall";
-  }) {
-    super("LearnedMemoryError");
-    this.name = "LearnedMemoryError";
-    Object.assign(this, input);
-  }
-}
-
-export const memoryNamespace = async function (
-  actor: z.output<typeof WorkspaceActorSchema>,
-  scopeKey?: string
-) {
-  await requireWorkspaceAccess(actor);
-  await dbQuery(
-    sql`INSERT INTO workspace_memory_namespace (workspace_id, user_id) VALUES (${actor.workspaceId}, ${actor.userId}) ON CONFLICT DO NOTHING`
-  );
-  const rows =
-    await dbQuery(sql`SELECT namespace_id AS id, enabled, eve_scope_key AS "scopeKey",
-      pending_operation AS "pendingOperation", pending_hash AS "pendingHash" FROM workspace_memory_namespace
-      WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId} FOR UPDATE`);
-  const partition = await namespaceSchema.parseAsync(rows[0]);
-  if (scopeKey !== undefined) {
-    if (
-      !scopeKey ||
-      scopeKey.length > 1024 ||
-      (partition.scopeKey !== null && partition.scopeKey !== scopeKey)
-    )
-      throw new LearnedMemoryError({ reason: "invalid_input" });
-    if (partition.scopeKey === null)
-      await dbQuery(
-        sql`UPDATE workspace_memory_namespace SET eve_scope_key = ${scopeKey} WHERE namespace_id = ${partition.id}`
-      );
-  }
-  const capabilities = await readWorkspaceCapabilities(actor);
-  return {
-    ...partition,
-    workspaceEnabled: capabilities.enabled.includes("memory"),
-    enabled: partition.enabled && capabilities.enabled.includes("memory"),
-  };
-};
 export const LearnedMemory = {
   backup: async function (actor: z.output<typeof WorkspaceActorSchema>) {
     // Full history is a human export, never a delegated agent's memory read.

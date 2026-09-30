@@ -243,6 +243,7 @@ it("uses native Matrix thread relations and a stable transaction ID for sends", 
       msgtype: "m.text",
       "org.zoen.transaction_id": "deduplicated-operation",
       body: "Ready",
+      "m.mentions": { user_ids: [] },
       "m.relates_to": {
         rel_type: "m.thread",
         event_id: "$root",

@@ -253,6 +253,9 @@ export const reconcileMatrixRooms = async function () {
       SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
       JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
       WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id
+    ) AND NOT EXISTS (
+      SELECT 1 FROM workspace_agent_members a WHERE a.workspace_id = b.workspace_id
+        AND ('agent:' || a.id) = m.user_id AND a.revoked_at IS NULL
     )) LIMIT 50`);
   for (const member of stale) {
     await query(

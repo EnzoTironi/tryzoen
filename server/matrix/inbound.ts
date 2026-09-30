@@ -9,6 +9,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { matrixConfiguration, MatrixError, MatrixEventSchema } from "./client";
 import { ingestWhatsAppMatrixEvent } from "../workspaces/whatsapp";
 import { acceptMatrixNetworkEvent } from "./network-delivery";
+import { readMatrixText } from "./messages";
 const transactionSchema = z.object({
   events: z.array(MatrixEventSchema).max(1000),
 });
@@ -137,11 +138,13 @@ export const acceptMatrixTransaction = async function (
         JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = m.user_id
         WHERE m.binding_id = ${binding.id} AND m.state = 'joined' AND i.matrix_id = ${event.sender}`);
       if (!users[0]) continue;
-      // In groups only an explicit Zoen mention activates the agent.
-      if (!/(^|\s)@?zoen\b/i.test(event.content.body)) continue;
-      if (event.content.body.length > 8000) continue;
+      // Native mention metadata is the only group invocation authority.
+      if (!event.content["m.mentions"]?.user_ids?.includes(config.botId))
+        continue;
+      const message = readMatrixText(event.content).text;
+      if (!message.trim() || message.length > 8000) continue;
       await query(sql`INSERT INTO matrix_deliveries(event_id, binding_id, epoch, user_id, message)
-        VALUES (${event.event_id}, ${binding.id}, ${binding.epoch}, ${users[0].userId}, ${event.content.body}) ON CONFLICT DO NOTHING`);
+        VALUES (${event.event_id}, ${binding.id}, ${binding.epoch}, ${users[0].userId}, ${message}) ON CONFLICT DO NOTHING`);
       accepted.push(event.event_id);
     }
     await query(

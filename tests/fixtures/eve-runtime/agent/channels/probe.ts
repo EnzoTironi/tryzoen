@@ -23,6 +23,16 @@ export default defineChannel({
   context: deliveryContext,
   deliver: deliverOnce,
   routes: [
+    // Direct native admission is needed to observe and cancel an active first
+    // turn. The receipt route below waits for the next durable checkpoint.
+    POST("/probe/start", async (request, channel) => {
+      const input = message.parse(await request.json());
+      const session = await channel.from(input.address).send(input.message, {
+        auth: input.auth,
+        turnPolicy: "queue",
+      });
+      return Response.json({ sessionId: session.id });
+    }),
     POST("/probe/send", async (request, channel) => {
       const input = message.parse(await request.json());
       const session = await sendDurableMessage(

@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { Reply } from "lucide-react-native";
 import { useDoubleTapReaction } from "./double-tap";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 
 const MessageInteractionContext = createContext<
   | {
@@ -58,6 +58,8 @@ export function MessageInteraction({
   readonly outgoing: boolean;
   readonly disabled?: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const bubble = useRef<View>(null);
   const tap = useDoubleTapReaction(onQuickReact, reaction, disabled);
   const [offset] = useState(() => new Animated.Value(0));
@@ -302,23 +304,30 @@ function interactiveTarget(target: unknown) {
   );
 }
 
-const styles = StyleSheet.create({
-  quickStatus: { position: "absolute", right: 8, bottom: -4 },
-  error: { fontSize: 12, color: colors.danger, maxWidth: 260 },
-  root: { maxWidth: "100%", alignItems: "flex-start", position: "relative" },
-  outgoing: { alignItems: "flex-end" },
-  bubble: { maxWidth: "100%" },
-  selected: { borderRadius: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.12)" },
-  reply: {
-    position: "absolute",
-    left: 6,
-    top: "50%",
-    marginTop: -16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    quickStatus: { position: "absolute", right: 8, bottom: -4 },
+    error: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: colors.danger,
+      maxWidth: 260,
+    },
+    root: { maxWidth: "100%", alignItems: "flex-start", position: "relative" },
+    outgoing: { alignItems: "flex-end" },
+    bubble: { maxWidth: "100%" },
+    selected: { borderRadius: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.12)" },
+    reply: {
+      position: "absolute",
+      left: 6,
+      top: "50%",
+      marginTop: -16,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.wash,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });
+}

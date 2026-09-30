@@ -3,8 +3,11 @@ import { z } from "zod";
 import { defineDynamic, defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { workspaceOperationId } from "../../../agent/lib/workspace-operation";
-import { UsernameSchema } from "../../accounts/directory";
-import { searchWorkspaceBots } from "../../workspaces/bots";
+import {
+  discoverNetworkBots,
+  NetworkContactInputSchema,
+  requireNetworkDestination,
+} from "../../workspaces/network";
 import { workspaceActorFromPrincipal } from "../../workspaces/access";
 import {
   openMatrixConversation,
@@ -26,7 +29,7 @@ export default defineDynamic({
       return {
         "network-bots": defineTool({
           description:
-            "Find published bots in the active trusted network. Company membership or mutually accepted personal trust is required. Contact does not grant private files, memories, credentials or other networks.",
+            "Find published bots and their exact destination identity/revision in the active trusted network. Copy the chosen destination unchanged into network-contact; a username alone is insufficient. Company membership or mutually accepted personal trust is required. Contact does not grant private files, memories, credentials or other networks.",
           inputSchema: z
             .object({
               query: z.string().max(30),
@@ -37,44 +40,43 @@ export default defineDynamic({
               const actor = await workspaceActorFromPrincipal(
                 execution.session.auth.current ?? undefined
               );
-              return await searchWorkspaceBots(actor, input.query);
+              return await discoverNetworkBots(actor, input.query);
             }),
         }),
         "network-contact": defineTool({
           description:
-            "Ask another trusted person's or company's bot through Matrix and A2A, using this workspace's published bot identity. This sends the exact text to the named bot and requires approval. Share only content authorized for that recipient. Returns the result or a pending receipt; use network-result to check a pending receipt, never resend the question. The destination cannot recursively contact bots through this grant.",
-          inputSchema: z
-            .object({
-              username: UsernameSchema,
-              text: z
-                .string()
-                .min(1)
-                .refine(
-                  (value) => value === value.trim(),
-                  "Expected trimmed text"
-                )
-                .max(8000),
-            })
-            .strict(),
+            "Ask another trusted person's or company's bot through Matrix and A2A, using this workspace's published bot identity. First discover the recipient with network-bots and copy its exact destination identity/revision. This sends the exact text to that reviewed bot and requires approval. A changed destination requires fresh discovery and approval. Share only content authorized for that recipient. Returns the result or a pending receipt; use network-result to check a pending receipt, never resend the question. The destination cannot recursively contact bots through this grant.",
+          inputSchema: NetworkContactInputSchema,
           approval: always(),
           execute: (input, execution) =>
             withSignal(execution.abortSignal, async () => {
+              const approvedInput = NetworkContactInputSchema.parse(input);
               const actor = await workspaceActorFromPrincipal(
                 execution.session.auth.current ?? undefined
               );
+              await requireNetworkDestination(
+                actor,
+                approvedInput.username,
+                approvedInput.destination
+              );
               const room = await openMatrixConversation(
                 actor,
-                input.username,
-                true
+                approvedInput.username,
+                true,
+                approvedInput.destination
               );
-              const event = await sendMatrixConversation(actor, {
-                id: room.id,
-                text: input.text,
-                operationId: workspaceOperationId(
-                  execution.session.id,
-                  execution.callId
-                ),
-              });
+              const event = await sendMatrixConversation(
+                actor,
+                {
+                  id: room.id,
+                  text: approvedInput.text,
+                  operationId: workspaceOperationId(
+                    execution.session.id,
+                    execution.callId
+                  ),
+                },
+                approvedInput.destination
+              );
               return await awaitMatrixResult(actor, room.id, event.event_id);
             }),
         }),

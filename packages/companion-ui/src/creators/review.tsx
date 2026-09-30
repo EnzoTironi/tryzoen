@@ -5,8 +5,8 @@ import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 import {
   creatorPreviewReviewContentSchema,
   type creatorPreviewSchema,
@@ -42,6 +42,8 @@ export function CreatorPreviewReview({
   readonly data: Pick<CreatorStudioData, "reviewPreview">;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   const initial = preview.review?.content ?? {
     criteria: preview.evaluation?.case.criteria ?? "",
     notes: "",

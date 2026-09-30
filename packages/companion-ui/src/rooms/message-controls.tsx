@@ -1,13 +1,13 @@
+import { useMemo } from "react";
 import { ReportRoomMessage } from "./report-message";
 import { PinRoomMessage } from "./pins";
 import { RoomReactors } from "./reactors";
 import { SaveRoomMessage } from "./save-message";
 import type { ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { MessageCircle } from "lucide-react-native";
 import type { z } from "zod";
 import { MessageActions } from "../message-actions";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { EditRoomMessage } from "./edit-message";
 import { DeleteRoomMessage } from "./delete-message";
 import { ForwardRoomMessage } from "./forward-message";
@@ -34,17 +34,21 @@ export function RoomMessageControls({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
-      <RoomReactionSummary
-        reaction={item.redacted ? undefined : reaction}
-        onOpen={() => {
-          onAction("reactors");
-        }}
-      />
       <View style={[styles.actions, item.mine && styles.outgoing]}>
         {!item.redacted && (
           <MessageActions
+            reactionSummary={
+              <RoomReactionSummary
+                reaction={reaction}
+                onOpen={() => {
+                  onAction("reactors");
+                }}
+              />
+            }
             messageLink={messageLink?.(item.id)}
             onUnread={onUnread}
             onPin={() => {
@@ -105,16 +109,17 @@ export function RoomMessageControls({
             onReact={(emoji) => onReact(item.id, emoji)}
           />
         )}
-        <RoomThreadAction item={item} onThread={onThread} />
       </View>
     </>
   );
 }
 
-function RoomThreadAction({
+export function RoomThreadAction({
   item,
   onThread,
 }: Pick<ComponentProps<typeof RoomMessageControls>, "item" | "onThread">) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
       {onThread && item.replies > 0 && (
@@ -126,11 +131,8 @@ function RoomThreadAction({
           }}
           style={({ pressed }) => [styles.reply, pressed && styles.pressed]}
         >
-          <MessageCircle size={14} color={colors.accent} />
           <Text style={styles.replyText}>
-            {item.replies
-              ? `${item.replies} ${item.replies === 1 ? "resposta" : "respostas"}`
-              : "Thread"}
+            {item.replies} {item.replies === 1 ? "resposta" : "respostas"}
           </Text>
         </Pressable>
       )}
@@ -144,62 +146,83 @@ function RoomReactionSummary({
 }: Pick<ComponentProps<typeof RoomMessageControls>, "reaction"> & {
   readonly onOpen: () => void;
 }) {
-  const otherReactions = reaction?.reactions.filter(
-    (entry) => entry.emoji !== reaction.mine
-  );
-  if (!reaction || !otherReactions?.length) return null;
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  if (!reaction?.reactions.length) return null;
+  const count = reaction.reactions.reduce((sum, entry) => sum + entry.count, 0);
+  const label = reaction.reactions
+    .map(
+      (entry) =>
+        `${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`
+    )
+    .join(", ");
   return (
-    <View style={styles.reactions}>
-      {otherReactions.map((entry) => (
-        <Pressable
-          key={entry.emoji}
-          style={styles.reaction}
-          accessibilityRole="button"
-          accessibilityLabel={`Ver quem reagiu com ${entry.emoji}`}
-          onPress={onOpen}
-        >
-          <Text
-            accessibilityLabel={`${entry.emoji}: ${entry.count}${reaction.complete ? "" : " ou mais"} reações`}
-            style={styles.reactionText}
-          >
-            {entry.emoji} {entry.count}
-            {reaction.complete ? "" : "+"}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+    <Pressable
+      style={[styles.reaction, reaction.mine && styles.myReaction]}
+      hitSlop={{ top: 7, bottom: 7 }}
+      accessibilityRole="button"
+      accessibilityLabel={`Ver quem reagiu. ${label}`}
+      onPress={onOpen}
+    >
+      <Text
+        accessibilityLabel={label}
+        style={[styles.reactionText, reaction.mine && styles.myReactionText]}
+      >
+        {reaction.reactions
+          .slice(0, 2)
+          .map((entry) => entry.emoji)
+          .join("")}{" "}
+        {count}
+        {reaction.complete ? "" : "+"}
+      </Text>
+    </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  actions: {
-    position: "static",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 2,
-    maxWidth: "100%",
-  },
-  outgoing: { justifyContent: "flex-end" },
-  reactions: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
-  reaction: {
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  reactionText: { fontSize: 13, color: colors.ink },
-  reply: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 44,
-    paddingHorizontal: 10,
-    borderRadius: 22,
-  },
-  replyText: { color: colors.accent, fontSize: 12 },
-  pressed: { backgroundColor: colors.wash },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    actions: {
+      position: "static",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: 2,
+      maxWidth: "100%",
+    },
+    outgoing: { justifyContent: "flex-end" },
+    reaction: {
+      minWidth: 44,
+      minHeight: 30,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 18,
+      borderWidth: 2,
+      borderColor: colors.canvas,
+      backgroundColor: colors.incoming,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+    },
+    reactionText: { fontFamily: systemFont, fontSize: 15, color: colors.ink },
+    myReaction: { backgroundColor: colors.outgoing },
+    myReactionText: { color: colors.selectedInk },
+    reply: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      minHeight: 44,
+      minWidth: 44,
+      paddingHorizontal: 6,
+      paddingTop: 2,
+      borderRadius: 12,
+    },
+    replyText: {
+      fontFamily: systemFont,
+      color: colors.accent,
+      fontSize: 14,
+      lineHeight: 18,
+    },
+    pressed: { backgroundColor: colors.wash },
+  });
+}
 
 export function RoomMessageDialog({
   action,

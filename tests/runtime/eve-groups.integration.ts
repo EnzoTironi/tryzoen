@@ -15,7 +15,7 @@ import {
   reconcileMatrixRooms,
 } from "../../server/matrix/rooms";
 import { sendMatrixMessage } from "../../server/matrix/send";
-import { matrixRequest } from "../../server/matrix/client";
+import { matrixConfiguration, matrixRequest } from "../../server/matrix/client";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import { readNativeReceipt } from "../../server/messaging/native-receipts";
 
@@ -297,7 +297,7 @@ test("real group conversation executes workspace tools, retains shared context a
     const answerEvent = await sendMatrixMessage(guest, {
       id: room.id,
       operationId: randomUUID(),
-      text: "Zoen Friday",
+      text: "@Zoen Friday",
     });
     await waitForMatrixState(answerEvent.event_id, "completed");
     await waitForMatrixState(question.event_id, "completed");
@@ -576,7 +576,7 @@ test("group approvals require the original requester, reject denial and replay, 
       expect(
         messages.some(
           (message) =>
-            message.sender === "Zoen" && message.text.includes("Zoen aprovar")
+            message.sender === "Zoen" && message.text.includes("@Zoen aprovar")
         )
       ).toBe(true);
       // The event stream can park before the transport hook has posted its
@@ -613,7 +613,7 @@ test("group approvals require the original requester, reject denial and replay, 
       return { ...sent, sessionId: row.sessionId };
     };
     const denied = await pending();
-    const otherMember = await send(actor, "Zoen aprovar");
+    const otherMember = await send(actor, "@Zoen aprovar");
     await waitForMatrixState(otherMember.event_id, "completed");
     expect(
       (await server.settled(denied.sessionId)).filter(
@@ -623,7 +623,7 @@ test("group approvals require the original requester, reject denial and replay, 
     expect(
       await repository.history(actor, "knowledge/approved-group-action.md")
     ).toHaveLength(0);
-    const cancel = await send(guest, "Zoen cancelar");
+    const cancel = await send(guest, "@Zoen cancelar");
     await waitForMatrixState(cancel.event_id, "completed");
     await waitForMatrixState(denied.event_id, "completed");
     expect(
@@ -633,8 +633,8 @@ test("group approvals require the original requester, reject denial and replay, 
     const approved = await pending();
     const operationId: string = randomUUID();
     const [consent, concurrentConsent] = await Promise.all([
-      send(guest, "Zoen aprovar", operationId),
-      send(guest, "Zoen aprovar"),
+      send(guest, "@Zoen aprovar", operationId),
+      send(guest, "@Zoen aprovar"),
     ]);
     await waitForMatrixState(concurrentConsent.event_id, "completed");
     await waitForMatrixState(consent.event_id, "completed");
@@ -646,8 +646,8 @@ test("group approvals require the original requester, reject denial and replay, 
     expect(
       await repository.history(actor, "knowledge/approved-group-action.md")
     ).toHaveLength(1);
-    expect(await send(guest, "Zoen aprovar", operationId)).toEqual(consent);
-    const repeat = await send(guest, "Zoen aprovar");
+    expect(await send(guest, "@Zoen aprovar", operationId)).toEqual(consent);
+    const repeat = await send(guest, "@Zoen aprovar");
     await waitForMatrixState(repeat.event_id, "completed");
     expect(
       await repository.history(actor, "knowledge/approved-group-action.md")
@@ -655,7 +655,7 @@ test("group approvals require the original requester, reject denial and replay, 
 
     const revoked = await pending();
     await pending();
-    const ambiguous = await send(guest, "Zoen aprovar");
+    const ambiguous = await send(guest, "@Zoen aprovar");
     await waitForMatrixState(ambiguous.event_id, "completed");
     expect(
       await repository.history(actor, "knowledge/approved-group-action.md")
@@ -676,20 +676,22 @@ test("group approvals require the original requester, reject denial and replay, 
       sendMatrixMessage(guest, {
         id: room.id,
         operationId: randomUUID(),
-        text: "Zoen aprovar",
+        text: "@Zoen aprovar",
       })
     ).rejects.toThrow("WorkspaceAccessDenied");
     // Even a still-joined transport identity cannot bypass live workspace revocation.
-    const late = z
-      .object({ event_id: z.string() })
-      .parse(
-        await matrixRequest(
-          "PUT",
-          `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${randomUUID()}`,
-          { msgtype: "m.text", body: "Zoen aprovar" },
-          identity.matrixId
-        )
-      );
+    const late = z.object({ event_id: z.string() }).parse(
+      await matrixRequest(
+        "PUT",
+        `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${randomUUID()}`,
+        {
+          msgtype: "m.text",
+          body: "@Zoen aprovar",
+          "m.mentions": { user_ids: [(await matrixConfiguration()).botId] },
+        },
+        identity.matrixId
+      )
+    );
     await replayMatrixEvent(room.roomId, late.event_id);
     expect(
       await query(

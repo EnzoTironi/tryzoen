@@ -4,13 +4,14 @@ import type { z } from "zod";
 import type { creatorReleaseSchema } from "./schema";
 import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorReleaseEvidence({
   content,
   evidence,
 }: Pick<z.infer<typeof creatorReleaseSchema>, "content"> &
   Partial<Pick<z.infer<typeof creatorReleaseSchema>, "evidence">>) {
+  const pageStyles = usePageStyles();
   const [reading, setReading] = useState<{ title: string; text: string }>();
   return (
     <>

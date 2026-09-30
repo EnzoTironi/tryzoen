@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import {
+  useMemo,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -20,7 +26,7 @@ import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { ConversationAvatar } from "../chats/avatar";
 import { AssistantMarkdown } from "../markdown";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { RoomAttachment } from "./attachment";
 import type { RoomData, roomMessageSchema, roomSchema } from "./schema";
 
@@ -40,6 +46,8 @@ export function ForwardRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const flow = useMessageForward({ data, cacheScope, roomId, item });
   const { destination, send } = flow;
   const close = () => {
@@ -140,6 +148,8 @@ function ForwardReview({
 > & {
   readonly flow: ReturnType<typeof useMessageForward>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { preview, destination, send } = flow;
   return (
     <>
@@ -228,6 +238,8 @@ function ForwardDestinations({
   readonly roomId: string;
   readonly onSelect: (room: z.infer<typeof roomSchema>) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -351,42 +363,60 @@ function ForwardDestinations({
   );
 }
 
-const styles = StyleSheet.create({
-  confirmation: { gap: 20, alignItems: "center", paddingVertical: 32 },
-  destination: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 68,
-    padding: 10,
-    borderRadius: 16,
-  },
-  identity: { flex: 1, gap: 3, minWidth: 0 },
-  name: { fontSize: 16, fontWeight: "600", color: colors.ink },
-  detail: { fontSize: 13, lineHeight: 19, color: colors.muted },
-  error: { fontSize: 14, lineHeight: 20, color: colors.danger },
-  pressed: { backgroundColor: colors.wash },
-  preview: {
-    maxHeight: 200,
-    overflow: "hidden",
-    borderRadius: 22,
-    backgroundColor: colors.wash,
-  },
-  previewContent: { padding: 16, gap: 8 },
-  search: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    backgroundColor: colors.wash,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-  },
-  input: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 44,
-    color: colors.ink,
-    fontSize: 16,
-  },
-  list: { height: 300, flexGrow: 0 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    confirmation: { gap: 20, alignItems: "center", paddingVertical: 32 },
+    destination: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 68,
+      padding: 10,
+      borderRadius: 16,
+    },
+    identity: { flex: 1, gap: 3, minWidth: 0 },
+    name: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    detail: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.muted,
+    },
+    error: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.danger,
+    },
+    pressed: { backgroundColor: colors.wash },
+    preview: {
+      maxHeight: 200,
+      overflow: "hidden",
+      borderRadius: 22,
+      backgroundColor: colors.wash,
+    },
+    previewContent: { padding: 16, gap: 8 },
+    search: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      backgroundColor: colors.wash,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+    },
+    input: {
+      fontFamily: systemFont,
+      flex: 1,
+      minWidth: 0,
+      minHeight: 44,
+      color: colors.ink,
+      fontSize: 16,
+    },
+    list: { height: 300, flexGrow: 0 },
+  });
+}

@@ -7,6 +7,7 @@ import {
   GMAIL_UPDATE_ACTIONS,
   gmailSendSchema,
   readGmailThread,
+  renderGmailApproval,
   searchGmail,
   sendGmail,
   updateGmail,
@@ -55,10 +56,24 @@ export const gmailUpdate = defineTool({
 export const gmailSend = defineTool({
   approval: { request: always(), response: authorizeApprovalResponse },
   description:
-    "Send an email from the authenticated user's Gmail account. This requires user approval.",
-  inputSchema: gmailSendSchema.extend({
-    approvalMessage: approvalMessageSchema,
-  }),
+    "Send an email from the authenticated user's Gmail account. Native approval shows the exact validated To, Cc, Bcc, subject, body and reply/thread fields. approvalMessage is supplementary context. Shorten the proposed action if complete disclosure cannot fit; never omit material content. This requires user approval.",
+  inputSchema: gmailSendSchema
+    .extend({
+      approvalMessage: approvalMessageSchema.describe(
+        "Supplementary context for the exact email payload. It cannot replace or change the recipients, subject, full body or thread/reply fields shown by native approval."
+      ),
+    })
+    .superRefine((input, context) => {
+      try {
+        renderGmailApproval(input, input.approvalMessage);
+      } catch {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Complete email approval exceeds the presentation limit or contains invalid text. Propose a smaller email; do not omit content.",
+        });
+      }
+    }),
   async execute(input, ctx) {
     const sent = await sendGmail(ctx, input);
     return {

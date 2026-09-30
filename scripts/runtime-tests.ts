@@ -7,6 +7,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const command = process.argv[2] ?? "up";
 const compose = [
   "compose",
+  "--profile",
+  "semantic",
   "-p",
   "zoen-runtime-tests",
   "-f",
@@ -37,15 +39,18 @@ if (["--help", "-h", "help"].includes(command)) {
   pnpm test:runtime:reset     Delete this test project's volumes and recreate them
   pnpm test:runtime:down      Stop this test project, retaining its disposable volumes
 
-Requires Docker Compose and Node 24. Uses only loopback ports 15432 and 18008.
+Requires Docker Compose and Node 24. Uses loopback ports 15432, 18008, 18130 and 18131.
 The reset command deletes only the zoen-runtime-tests Compose project's data.`);
 } else if (command === "down") {
   run("docker", [...compose, "down"]);
 } else if (command === "up" || command === "reset") {
   if (command === "reset") run("docker", [...compose, "down", "--volumes"]);
+  run("pnpm", ["--filter", "@zoen/companion-ui", "build:ui"]);
+  run("pnpm", ["build:semantic"]);
   run("docker", [
     ...compose,
     "up",
+    "--build",
     "--detach",
     "--wait",
     "--wait-timeout",

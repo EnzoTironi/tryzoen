@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -6,7 +6,7 @@ import {
   Folder,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { fileTreeRows } from "./paths";
 
 export function FileTree({
@@ -20,6 +20,8 @@ export function FileTree({
   readonly descending: boolean;
   readonly onOpen: (path: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const rows = fileTreeRows(paths, expanded, query, descending);
   return (
@@ -92,31 +94,43 @@ export function FileTree({
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  name: { flex: 1, paddingLeft: 30 },
-  column: { color: colors.muted, fontSize: 13, width: 76 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  label: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minWidth: 0,
-    paddingRight: 12,
-  },
-  disclosure: { width: 14 },
-  title: { flex: 1, color: colors.ink, fontSize: 15 },
-  empty: { color: colors.muted, fontSize: 15, paddingVertical: 24 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    header: {
+      flexDirection: "row",
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    name: { flex: 1, paddingLeft: 30 },
+    column: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      width: 76,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 48,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    label: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minWidth: 0,
+      paddingRight: 12,
+    },
+    disclosure: { width: 14 },
+    title: { fontFamily: systemFont, flex: 1, color: colors.ink, fontSize: 15 },
+    empty: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 15,
+      paddingVertical: 24,
+    },
+  });
+}

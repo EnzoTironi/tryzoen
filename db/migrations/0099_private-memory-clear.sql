@@ -1,0 +1,1 @@
+ALTER TABLE "private_memory_operation" ALTER COLUMN "claim_id" DROP NOT NULL;

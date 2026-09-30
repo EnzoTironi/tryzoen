@@ -56,6 +56,8 @@ import {
   listPersonalNetwork,
 } from "../../server/workspaces/network";
 import { workspaceProcedure } from "./workspace-procedure";
+import { externalAgentsRouter } from "./agent-members";
+import { revokeExternalAgentMember } from "../../server/workspaces/agent-member-revocation";
 import {
   MatrixConversationInput,
   MatrixConversationSend,
@@ -70,6 +72,22 @@ const revisionFields = {
   operationId: z.uuid(),
 };
 export const workspaceAgentsRouter = {
+  members: {
+    ...externalAgentsRouter,
+    revoke: workspaceProcedure
+      .input(z.strictObject({ id: z.uuid() }))
+      .mutation(({ ctx, input, signal }) =>
+        withSignal(signal, async () => {
+          try {
+            return await revokeExternalAgentMember(ctx.actor, input.id);
+          } catch (cause) {
+            if (cause instanceof WorkspaceAccessDenied)
+              throw new TRPCError({ code: "FORBIDDEN", cause });
+            throw cause;
+          }
+        })
+      ),
+  },
   ontology: {
     read: workspaceProcedure
       .input(OntologyReadSchema.optional())

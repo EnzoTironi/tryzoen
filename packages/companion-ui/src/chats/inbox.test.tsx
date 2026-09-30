@@ -13,9 +13,18 @@ import { ConversationInbox } from "./inbox";
 import type { useInboxSync } from "./sync";
 import type { RoomData } from "../rooms/schema";
 
-vi.mock("react-native", () => import("react-native-web"));
+vi.mock("react-native", async () => ({
+  ...(await vi.importActual<typeof import("react-native")>("react-native-web")),
+  useWindowDimensions: () => ({
+    width: state.width,
+    height: 800,
+    scale: 1,
+    fontScale: 1,
+  }),
+}));
 vi.mock("lucide-react-native", () => import("lucide-react"));
 const state = vi.hoisted(() => ({
+  width: 390,
   failed: false,
   scope: "account-a",
   notifications: [] as z.infer<typeof inboxNotificationsSchema>,
@@ -159,6 +168,7 @@ function render() {
   );
 }
 beforeEach(() => {
+  state.width = 390;
   state.failed = false;
   state.scope = "account-a";
   state.notifications = [];
@@ -169,7 +179,7 @@ it("labels native counts as unread notifications with accessible highlights", ()
   ];
   const html = render();
   expect(html).toContain("105 notificações não lidas, 2 destaques");
-  expect(html).toContain("99+");
+  expect(html).not.toContain("99+");
   state.notifications = [
     { id: "other-room", notificationCount: 5, highlightCount: 0 },
   ];
@@ -185,7 +195,7 @@ it("preserves global server order across kinds and does not invent unread badges
   );
   expect(html).not.toContain("não lidas");
   expect(html).not.toContain("Carregar mais");
-  expect(html).toContain("Atualizar conversas");
+  expect(html).toContain("Opções das conversas");
 });
 it("hides cached previews when authorization or refresh fails", () => {
   state.failed = true;
@@ -210,3 +220,21 @@ it("scopes history to the current account and prevents repeated cursors", () => 
 });
 
 vi.mock("../rooms/saved", () => ({ SavedRoomMessages: () => null }));
+
+it("places mobile search and compose below the list, keeping filter options available", () => {
+  const html = render();
+  expect(html.indexOf("Buscar conversas")).toBeGreaterThan(
+    html.indexOf("Older agent")
+  );
+  expect(html.indexOf("Nova conversa")).toBeGreaterThan(
+    html.indexOf("Buscar conversas")
+  );
+  expect(html).toContain("Filtrar conversas");
+});
+it("keeps desktop search above the list", () => {
+  state.width = 1000;
+  const html = render();
+  expect(html.indexOf("Buscar conversas")).toBeLessThan(
+    html.indexOf("Recent agent")
+  );
+});

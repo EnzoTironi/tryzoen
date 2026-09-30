@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ComponentProps } from "react";
+import type { Pressable } from "react-native";
 import {
   InfiniteQueryObserver,
   QueryClient,
@@ -10,8 +12,26 @@ import { RoomConversation } from "./conversation";
 import { useRoomSync } from "./sync";
 import type { RoomData } from "./schema";
 
-vi.mock("react-native", () => import("react-native-web"));
+vi.mock("react-native", async () => {
+  const native =
+    await vi.importActual<typeof import("react-native")>("react-native-web");
+  return {
+    ...native,
+    Pressable: (props: ComponentProps<typeof Pressable>) => {
+      if (props.accessibilityHint) mocks.hints.push(props.accessibilityHint);
+      return <native.Pressable {...props} />;
+    },
+  };
+});
 vi.mock("lucide-react-native", () => import("lucide-react"));
+vi.mock("react-native-svg", () => ({
+  default: ({ children }: { children: React.ReactNode }) => (
+    <svg>{children}</svg>
+  ),
+  Path: ({ d, fill }: { d: string; fill: string }) => (
+    <path d={d} fill={fill} />
+  ),
+}));
 vi.mock("../markdown", () => ({
   AssistantMarkdown: ({ text }: { text: string }) => <p>{text}</p>,
 }));
@@ -28,6 +48,7 @@ vi.mock("./sync", () => ({
 const mocks = vi.hoisted(() => ({
   revoked: false,
   direct: false,
+  hints: [] as string[],
   options: undefined as Parameters<typeof useInfiniteQuery>[0] | undefined,
 }));
 vi.mock("@tanstack/react-query", async (original) => ({
@@ -127,6 +148,7 @@ const data: RoomData = {
 beforeEach(() => {
   mocks.revoked = false;
   mocks.direct = false;
+  mocks.hints = [];
   vi.mocked(useRoomSync).mockClear();
 });
 function render() {
@@ -160,7 +182,7 @@ it("hides cached messages and reactions once room authorization fails", () => {
 it("renders direct conversation identity without group or agent participation copy", () => {
   mocks.direct = true;
   const html = render();
-  expect(html).toContain("@ana · conversa direta");
+  expect(mocks.hints).toContain("@ana · conversa direta");
   expect(html).toContain('aria-label="Detalhes de Ana"');
   expect(html).toContain('aria-label="Ver perfil da conversa"');
   expect(html).toContain("Mensagem direta");

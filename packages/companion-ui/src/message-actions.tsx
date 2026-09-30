@@ -1,4 +1,11 @@
-import { lazy, Suspense, useState, type ComponentProps } from "react";
+import {
+  useMemo,
+  lazy,
+  Suspense,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   Copy,
@@ -16,7 +23,7 @@ import {
   Link,
   type LucideIcon,
 } from "lucide-react-native";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 import { useMessageInteraction } from "./conversation/interaction";
 
 const ReactionPicker = lazy(() => import("./reactions/picker"));
@@ -28,6 +35,7 @@ export function MessageActions({
   onReply,
   reaction,
   reactionCount,
+  reactionSummary,
   onReact,
   onDelete,
   onReport,
@@ -56,8 +64,11 @@ export function MessageActions({
   readonly onReply: () => void;
   readonly reaction?: string | null;
   readonly reactionCount?: number;
+  readonly reactionSummary?: ReactNode;
   readonly onReact?: (emoji: string | null) => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const interaction = useMessageInteraction();
   const [focused, setFocused] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -96,19 +107,23 @@ export function MessageActions({
       >
         <Ellipsis size={18} color={colors.muted} />
       </Pressable>
-      {reaction && onReact && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. ${onViewReactions ? "View reactions" : "Change or remove reaction"}`}
-          onPress={onViewReactions ?? open}
-          style={styles.reaction}
-        >
-          <Text style={styles.emoji}>{reaction}</Text>
-          {reactionCount !== undefined && (
-            <Text style={styles.count}>{reactionCount}</Text>
-          )}
-        </Pressable>
-      )}
+      <View style={styles.reactionDock}>
+        {reactionSummary ??
+          (reaction && onReact && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. ${onViewReactions ? "View reactions" : "Change or remove reaction"}`}
+              onPress={onViewReactions ?? open}
+              style={styles.reaction}
+              hitSlop={{ top: 7, bottom: 7 }}
+            >
+              <Text style={styles.emoji}>{reaction}</Text>
+              {reactionCount !== undefined && (
+                <Text style={styles.count}>{reactionCount}</Text>
+              )}
+            </Pressable>
+          ))}
+      </View>
       {anchor && (
         <Suspense fallback={null}>
           <ReactionPicker
@@ -246,6 +261,8 @@ function MessageMenuItem({
   readonly onPress: () => void;
   readonly destructive?: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Pressable
       accessibilityRole="button"
@@ -262,63 +279,77 @@ function MessageMenuItem({
     </Pressable>
   );
 }
-const styles = StyleSheet.create({
-  actions: {
-    position: "static",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  more: {
-    position: "absolute",
-    right: 4,
-    top: 4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(250,250,250,0.95)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-    boxShadow: "0 1px 5px rgba(0,0,0,0.06)",
-  },
-  outgoing: { backgroundColor: "rgba(220,234,255,0.97)" },
-  hidden: { opacity: 0 },
-  reaction: {
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 7,
-    height: 26,
-    borderRadius: 14,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 3,
-  },
-  emoji: { fontSize: 17 },
-  count: { color: colors.ink, fontSize: 12, fontWeight: "500" },
-  item: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  label: { color: colors.ink, fontSize: 15, lineHeight: 20 },
-  pressed: { backgroundColor: colors.wash },
-  group: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingVertical: 4,
-  },
-  divider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    marginTop: 4,
-    paddingTop: 4,
-  },
-  error: { fontSize: 13, color: colors.danger },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    actions: {
+      position: "static",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    more: {
+      position: "absolute",
+      right: 2,
+      bottom: -4,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 2,
+      boxShadow: "0 1px 5px rgba(0,0,0,0.06)",
+    },
+    outgoing: { backgroundColor: colors.incoming },
+    hidden: { opacity: 0 },
+    reactionDock: { position: "absolute", top: -18, right: -4, zIndex: 4 },
+    reaction: {
+      flexDirection: "row",
+      gap: 3,
+      paddingHorizontal: 7,
+      minHeight: 30,
+      borderRadius: 18,
+      borderWidth: 2,
+      borderColor: colors.canvas,
+      backgroundColor: colors.outgoing,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    emoji: { fontFamily: systemFont, fontSize: 17 },
+    count: {
+      fontFamily: systemFont,
+      color: colors.selectedInk,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    item: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+    },
+    label: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 16,
+      lineHeight: 22,
+    },
+    pressed: { backgroundColor: colors.wash },
+    group: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+      paddingVertical: 4,
+    },
+    divider: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+      marginTop: 4,
+      paddingTop: 4,
+    },
+    error: { fontFamily: systemFont, fontSize: 13, color: colors.danger },
+  });
+}

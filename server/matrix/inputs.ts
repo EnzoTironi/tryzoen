@@ -56,8 +56,8 @@ export async function publishMatrixInputs(
       .digest("hex");
     const instructions =
       request.kind === "tool-approval"
-        ? "\n\nSomente quem pediu pode decidir. Responda “Zoen aprovar” ou “Zoen cancelar”."
-        : "\n\nQuem fez o pedido pode responder mencionando Zoen e a opção escolhida.";
+        ? "\n\nSomente quem pediu pode decidir. Responda “@Zoen aprovar” ou “@Zoen cancelar”."
+        : "\n\nQuem fez o pedido pode responder mencionando @Zoen e a opção escolhida.";
     await matrixDeliveryActor(eventId);
     await matrixRequest(
       "PUT",

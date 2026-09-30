@@ -43,6 +43,8 @@ vi.mock("react", async (original) => ({
   useImperativeHandle: () => undefined,
 }));
 vi.mock("react-native", () => ({
+  Platform: { OS: "web" },
+  useColorScheme: () => "light",
   View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   ActivityIndicator: () => <span>Loading</span>,

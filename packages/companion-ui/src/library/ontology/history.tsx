@@ -9,7 +9,7 @@ import { localRecordedMinute, parseRecordedMinute } from "./time-input";
 import { OntologyVersions } from "./versions";
 import { CompanionSheet } from "../../sheet";
 import { ActionButton } from "../../button";
-import { pageStyles } from "../../page";
+import { usePageStyles } from "../../page";
 
 export function OntologyHistory({
   data,
@@ -22,6 +22,7 @@ export function OntologyHistory({
   readonly onApply: (value: z.output<typeof OntologyReadSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [revision, setRevision] = useState(view.revision);
   const [time, setTime] = useState(
     view.asOf ? localRecordedMinute(view.asOf) : ""

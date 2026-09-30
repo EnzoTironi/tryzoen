@@ -29,6 +29,11 @@ export const WorkspaceActorSchema = z.object({
   matrixIdentityId: z.optional(identifier),
 });
 
+export const AgentMemberPrincipalSchema = z.templateLiteral([
+  "agent:",
+  z.uuid(),
+]);
+
 export class WorkspaceAccessDenied extends Error {
   readonly _tag = "WorkspaceAccessDenied";
 
@@ -136,6 +141,16 @@ export async function requireWorkspaceMembership(scope: AccessScope) {
   return membership;
 }
 
+async function requireProtocolTask(
+  actor: z.output<typeof WorkspaceActorSchema>
+) {
+  if (!actor.protocolTaskId) return;
+  const tasks =
+    await query(sql`SELECT id FROM agent_protocol_tasks WHERE id = ${actor.protocolTaskId}
+    AND grant_id = ${actor.agentGrantId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING') FOR SHARE`);
+  if (tasks.length !== 1) throw new WorkspaceAccessDenied();
+}
+
 /** Call inside the transaction that reads or publishes protected data. */
 export const requireWorkspaceAccess = async function (
   input: z.output<typeof WorkspaceActorSchema>,
@@ -160,6 +175,37 @@ export const requireWorkspaceAccess = async function (
   )
     throw new WorkspaceAccessDenied();
 
+  if (actor.userId.startsWith("agent:")) {
+    if (
+      !AgentMemberPrincipalSchema.safeParse(actor.userId).success ||
+      !actor.agentGrantId ||
+      actor.groupBindingId ||
+      actor.groupEpoch ||
+      actor.scheduledRunLeaseToken
+    )
+      throw new WorkspaceAccessDenied();
+    const grants = await query<{
+      issued_by: string;
+      organization_id: string | null;
+    }>(sql`SELECT g.issued_by, w.organization_id FROM workspace_agent_grants g
+      JOIN workspace_agent_members m ON m.id = g.external_member_id
+      JOIN workspace_bots b ON b.id = g.bot_id
+      JOIN workspaces w ON w.id = b.workspace_id
+      WHERE g.id = ${actor.agentGrantId} AND ('agent:' || m.id) = ${actor.userId}
+        AND m.workspace_id = ${actor.workspaceId} AND b.workspace_id = m.workspace_id
+        AND m.revoked_at IS NULL AND g.revoked_at IS NULL AND g.expires_at > clock_timestamp()
+      FOR SHARE OF g, m, b, w`);
+    const grant = grants[0];
+    if (!grant) throw new WorkspaceAccessDenied();
+    // The issuer must still be entitled to delegate; its identity and role are never inherited.
+    const issuer = await requireWorkspaceMembership({
+      userId: grant.issued_by,
+      workspaceId: actor.workspaceId,
+    });
+    if (issuer.role === "member") throw new WorkspaceAccessDenied();
+    await requireProtocolTask(actor);
+    return { ...actor, role: "member", organizationId: grant.organization_id };
+  }
   const membership = await requireWorkspaceMembership(actor);
   if (manage && membership.role === "member") throw new WorkspaceAccessDenied();
   if (actor.agentGrantId) {
@@ -172,8 +218,8 @@ export const requireWorkspaceAccess = async function (
     }>(sql`SELECT g.id, g.requester_user_id, g.source_workspace_id, g.network_kind, g.network_id FROM workspace_agent_grants g
       JOIN workspace_bots b ON b.id = g.bot_id
       WHERE g.id = ${actor.agentGrantId} AND g.issued_by = ${actor.userId}
-        AND b.workspace_id = ${actor.workspaceId} AND g.revoked_at IS NULL
-        AND (g.requester_user_id IS NULL OR b.discoverable)
+        AND b.workspace_id = ${actor.workspaceId} AND g.external_member_id IS NULL AND g.revoked_at IS NULL
+        AND g.requester_user_id IS NOT NULL AND b.discoverable
         AND g.expires_at > clock_timestamp() FOR SHARE OF g, b`);
     const grant = grants[0];
     if (!grant || membership.role === "member")
@@ -186,12 +232,7 @@ export const requireWorkspaceAccess = async function (
         networkId: grant.network_id,
         destWorkspaceId: actor.workspaceId,
       });
-    if (actor.protocolTaskId) {
-      const tasks =
-        await query(sql`SELECT id FROM agent_protocol_tasks WHERE id = ${actor.protocolTaskId}
-          AND grant_id = ${actor.agentGrantId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING') FOR SHARE`);
-      if (tasks.length !== 1) throw new WorkspaceAccessDenied();
-    }
+    await requireProtocolTask(actor);
   } else if (actor.scheduledRunId) {
     if (!actor.scheduledRunLeaseToken) throw new WorkspaceAccessDenied();
     const runs = await query(sql`SELECT r.id FROM scheduled_agent_runs r
@@ -249,7 +290,15 @@ export const requireWorkspaceAccess = async function (
 export const workspaceActorFromPrincipal = async function (
   principal: SessionAuthContext | undefined
 ) {
-  if (principal?.principalType !== "user") throw new WorkspaceAccessDenied();
+  if (!principal) throw new WorkspaceAccessDenied();
+  const isAgent = AgentMemberPrincipalSchema.safeParse(
+    principal.principalId
+  ).success;
+  if (principal.principalType === "service") {
+    if (!isAgent || principal.authenticator !== "a2a")
+      throw new WorkspaceAccessDenied();
+  } else if (principal.principalType !== "user" || isAgent)
+    throw new WorkspaceAccessDenied();
   if (
     (principal.attributes.chatKind === "group" ||
       (isValid(z.string(), principal.attributes.conversationScope) &&

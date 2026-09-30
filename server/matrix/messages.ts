@@ -67,6 +67,7 @@ export function projectMatrixMessage(
     redacted ? {} : (replacement?.content["m.new_content"] ?? event.content)
   );
   const reply = redacted ? null : originalReply;
+  const sender = people.find((person) => person.id === event.sender);
   return {
     ...(redacted ? { redacted: true } : {}),
     ...(!redacted && event.content["org.zoen.forwarded"]
@@ -101,13 +102,9 @@ export function projectMatrixMessage(
       : null,
     id: event.event_id,
     text,
-    sender:
-      event.sender === botId
-        ? "Zoen"
-        : (people.find((person) => person.id === event.sender)?.name ??
-          event.sender),
+    sender: event.sender === botId ? "Zoen" : (sender?.name ?? event.sender),
     mine: event.sender === viewerId,
-    bot: event.sender === botId,
+    bot: event.sender === botId || sender?.bot === true,
     timestamp: event.origin_server_ts ?? 0,
     rootId:
       relation?.rel_type === "m.thread" ? (relation.event_id ?? null) : null,

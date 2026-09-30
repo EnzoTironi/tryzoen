@@ -5,7 +5,7 @@ import type { creatorDraftSchema, creatorPreviewSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPlaybookReview({
   preview,
@@ -18,6 +18,7 @@ export function CreatorPlaybookReview({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<z.infer<typeof creatorDraftSchema>>();
   const current = preview.revision === draft.revision && !draft.archivedAt;
   return (

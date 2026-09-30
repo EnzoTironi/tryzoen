@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CompanionPage, pageStyles } from "../page";
+import { CompanionPage, usePageStyles } from "../page";
 import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
 import { CompanionSheet } from "../sheet";
@@ -55,6 +55,7 @@ export function LearnedNotes({
   readonly data: LearnedNotesData;
   readonly cacheScope: string;
 }) {
+  const pageStyles = usePageStyles();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [relating, setRelating] = useState<string>();
   const memory = useQuery({

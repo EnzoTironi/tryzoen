@@ -69,7 +69,8 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-vi.mock("../page", () => ({ pageStyles: { copy: {} } }));
+vi.mock("../theme", () => ({ useColors: () => ({}), systemFont: undefined }));
+vi.mock("../page", () => ({ usePageStyles: () => ({ copy: {} }) }));
 vi.mock("../button", () => ({
   ActionButton: ({
     children,

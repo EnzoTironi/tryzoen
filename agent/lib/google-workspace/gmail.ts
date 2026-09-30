@@ -3,6 +3,7 @@ import { gmail, type gmail_v1 } from "@googleapis/gmail";
 import type { ToolContext } from "eve/tools";
 import { z } from "zod";
 import { googleApiErrorStatus, withGoogleAuth } from "./client";
+import { approvalMessageSchema } from "../approval-message";
 type GmailMessage = gmail_v1.Schema$Message;
 type GmailPart = gmail_v1.Schema$MessagePart;
 export const GMAIL_UPDATE_ACTIONS = [
@@ -20,15 +21,53 @@ const emailAddress = z
   .refine((value) => z.email().safeParse(value).success, {
     message: "Invalid email address",
   });
+const mailHeader = z
+  .string()
+  .min(1)
+  .max(998)
+  .refine(
+    (value) =>
+      value.isWellFormed() &&
+      Array.from(value).every(
+        (character) =>
+          character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127
+      ) &&
+      safeHeader(value) === value,
+    {
+      message:
+        "Mail headers must be well-formed, trimmed text without line breaks",
+    }
+  );
 export const gmailSendSchema = z.object({
   bcc: z.array(emailAddress).max(20).default([]),
-  body: z.string().min(1).max(100_000),
+  body: z
+    .string()
+    .min(1)
+    .max(100_000)
+    .refine(
+      (value) => value.isWellFormed(),
+      "Mail body must be well-formed text"
+    ),
   cc: z.array(emailAddress).max(20).default([]),
-  inReplyTo: z.string().max(998).optional(),
-  subject: z.string().min(1).max(998),
-  threadId: z.string().max(200).optional(),
+  inReplyTo: mailHeader.optional(),
+  subject: mailHeader,
+  threadId: z.string().min(1).max(200).optional(),
   to: z.array(emailAddress).min(1).max(20),
 });
+/** The native approval request owns this payload. Model prose is supplementary;
+ * never substitute it for the validated material fields or truncate disclosure. */
+export function renderGmailApproval(raw: unknown, summary?: unknown) {
+  const payload = gmailSendSchema.parse(raw);
+  const context =
+    summary === undefined ? "" : approvalMessageSchema.parse(summary);
+  return approvalMessageSchema.parse(
+    `Gmail email — exact payload\n${JSON.stringify(payload, null, 2)}` +
+      (context
+        ? `\n\nSupplementary context (does not change the payload):\n${context}`
+        : "")
+  );
+}
+
 export async function searchGmail(
   ctx: ToolContext,
   query: string,
@@ -165,6 +204,12 @@ export async function sendGmail(
   ctx: ToolContext,
   payload: z.infer<typeof gmailSendSchema>
 ) {
+  // Copy and validate before awaiting auth: later caller mutation cannot change
+  // the wire payload. Eve owns authorization of the stored native tool input.
+  payload = gmailSendSchema.parse(payload);
+  const payloadHash = createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex");
   const idempotencyKey = gmailSendIdempotencyKey(ctx);
   const messageId = gmailSendMessageId(ctx);
   const headers = [
@@ -178,6 +223,7 @@ export async function sendGmail(
     `Subject: ${safeHeader(payload.subject)}`,
     `Message-ID: ${messageId}`,
     `X-OpenInstinct-Idempotency-Key: ${idempotencyKey}`,
+    `X-Zoen-Payload-Sha256: ${payloadHash}`,
     ...(payload.inReplyTo
       ? [
           `In-Reply-To: ${safeHeader(payload.inReplyTo)}`,
@@ -196,6 +242,7 @@ export async function sendGmail(
     const existing = await findSentGmailByIdempotencyKey(
       client,
       idempotencyKey,
+      payloadHash,
       ctx.abortSignal
     );
     if (existing) return existing;
@@ -228,6 +275,7 @@ export async function sendGmail(
       const recovered = await findSentGmailByIdempotencyKey(
         client,
         idempotencyKey,
+        payloadHash,
         ctx.abortSignal
       );
       if (recovered) return recovered;
@@ -238,12 +286,13 @@ export async function sendGmail(
 async function findSentGmailByIdempotencyKey(
   client: ReturnType<typeof gmail>,
   idempotencyKey: string,
+  payloadHash: string,
   signal: AbortSignal
 ) {
   const listed = await client.users.messages.list(
     {
       maxResults: 1,
-      q: gmailSendIdempotencyQuery(idempotencyKey),
+      q: `in:sent ${gmailSendIdempotencyQuery(idempotencyKey)}`,
       userId: "me",
     },
     {
@@ -254,7 +303,11 @@ async function findSentGmailByIdempotencyKey(
   if (!id) return null;
   const { data } = await client.users.messages.get(
     {
-      format: "minimal",
+      format: "metadata",
+      metadataHeaders: [
+        "X-OpenInstinct-Idempotency-Key",
+        "X-Zoen-Payload-Sha256",
+      ],
       id,
       userId: "me",
     },
@@ -262,6 +315,23 @@ async function findSentGmailByIdempotencyKey(
       signal,
     }
   );
+  const exactHeader = (name: string, expected: string) => {
+    const values = data.payload?.headers?.filter(
+      (item) => item.name?.toLowerCase() === name.toLowerCase()
+    );
+    return values?.length === 1 && values[0]?.value === expected;
+  };
+  if (
+    data.id !== id ||
+    !data.labelIds?.includes("SENT") ||
+    !exactHeader("X-OpenInstinct-Idempotency-Key", idempotencyKey) ||
+    !exactHeader("X-Zoen-Payload-Sha256", payloadHash)
+  )
+    throw new Error(
+      "Gmail reconciliation receipt does not match this exact payload and operation."
+    );
+  // Searching before sending does not serialize concurrent attempts, and Gmail
+  // visibility may lag acceptance. This verifies receipt integrity, not once-only delivery.
   return data;
 }
 export function gmailUpdateLabels(action: GmailUpdateAction) {

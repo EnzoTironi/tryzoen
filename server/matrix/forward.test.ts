@@ -51,6 +51,7 @@ const original = {
   content: {
     msgtype: "m.text",
     body: "> <@private:test> Private quote\n\n**Shared text**",
+    "m.mentions": { user_ids: ["@bot:test", "@private:test"] },
     "m.relates_to": {
       rel_type: "m.thread",
       event_id: "$root",
