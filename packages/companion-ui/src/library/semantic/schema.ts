@@ -4,6 +4,11 @@ import { WorkspacePathSchema, GitRevisionSchema } from "../files-schema";
 export const SemanticIdentifierSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]{0,39}$/);
+export const SemanticColumnSchema = z.strictObject({
+  name: SemanticIdentifierSchema,
+  type: z.enum(["text", "numeric", "boolean", "date"]),
+});
+
 export const SemanticNumberSchema = z
   .number()
   .refine(

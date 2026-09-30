@@ -2,9 +2,9 @@ import { z } from "zod";
 import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import {
   SemanticArgumentsSchema,
+  SemanticColumnSchema,
   SemanticIdentifierSchema as name,
 } from "@zoen/companion-ui/semantic-query";
-import { SemanticColumnSchema } from "./snapshot";
 export const SemanticQuerySchema = z.strictObject({
   path: z.string().regex(/^knowledge\/queries\/[a-z][a-z0-9_-]{0,39}\.json$/),
   revision: GitRevisionSchema,
