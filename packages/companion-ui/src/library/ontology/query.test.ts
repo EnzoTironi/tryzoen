@@ -21,6 +21,7 @@ test("knowledge caches keep different principals, recorded versions and validity
     return {
       graph: emptyOntology,
       revision: input.revision ?? "b".repeat(40),
+      asOf: input.asOf ?? null,
       validOn: input.validOn ?? null,
       sourceCheckedAtRevision: "b".repeat(40),
       sources: [],
@@ -53,11 +54,14 @@ test("knowledge caches keep different principals, recorded versions and validity
       )
     ).toMatchObject({ validOn: "2026-10-01" });
     await cache.query(ontologyReadOptions(guest, view));
+    await cache.query(
+      ontologyReadOptions(owner, { asOf: "2026-09-01T00:00:00Z" })
+    );
     expect(await cache.query(ontologyReadOptions(owner, {}))).toMatchObject({
       revision: "b".repeat(40),
       validOn: null,
     });
-    expect(query).toHaveBeenCalledTimes(4);
+    expect(query).toHaveBeenCalledTimes(5);
   } finally {
     cache.clear();
   }

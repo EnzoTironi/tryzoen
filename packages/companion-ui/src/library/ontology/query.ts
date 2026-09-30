@@ -12,6 +12,7 @@ export function ontologyReadOptions(
       ...data.cacheKey,
       "read",
       view.revision ?? "current",
+      view.asOf ?? "latest",
       view.validOn ?? "all-dates",
     ],
     queryFn: () => data.read(view),

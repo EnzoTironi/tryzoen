@@ -49,12 +49,12 @@ export const readOntology = async function (
   const input = OntologyReadSchema.parse(raw);
   const access = await requireWorkspaceAccess(actor);
   const listing = await WorkspaceRepository.read(actor);
-  const selection = await WorkspaceRepository.selection(
-    actor,
-    [ontologyPath],
-    input.revision
-  );
-  if (!input.revision && listing.revision !== selection.revision)
+  const selection = await WorkspaceRepository.selection(actor, [ontologyPath], {
+    revision: input.revision,
+    asOf: input.asOf,
+  });
+  const historical = !!input.revision || !!input.asOf;
+  if (!historical && listing.revision !== selection.revision)
     throw new WorkspaceRepositoryError({ reason: "conflict" });
   const document = selection.documents[0];
   const original = document
@@ -64,7 +64,7 @@ export const readOntology = async function (
     : emptyOntology;
   const graph = input.validOn
     ? ontologyValidOn(original, input.validOn)
-    : input.revision
+    : historical
       ? { ...original, actions: [] }
       : original;
   const citations = ontologyCitations(graph);
@@ -78,11 +78,12 @@ export const readOntology = async function (
   return {
     graph,
     revision: selection.revision,
+    asOf: input.asOf ?? null,
     validOn: input.validOn ?? null,
     sourceCheckedAtRevision: current.revision,
     sources: ontologyPassageStates(graph, current.documents),
     mayManage:
-      !input.revision &&
+      !historical &&
       !input.validOn &&
       access.role !== "member" &&
       !!actor.authSessionId,

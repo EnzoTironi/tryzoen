@@ -347,5 +347,46 @@ only regenerable caches under this worktree were removed before the successful
 run. No user files or production records were removed.
 
 This is revision-based history for authored ontology, not historical replacement
-of the learned-memory engine. Timestamp `as_of` selection, private claims/sessions,
-complete memory replacement and safe dream candidates remain open.
+of the learned-memory engine. Timestamp selection is completed by the next step;
+private claims/sessions, complete memory replacement and safe dream candidates
+remain open.
+
+## K1 progress — recorded timestamp selection
+
+The existing native ontology read accepts `asOf`, an ISO timestamp with an explicit
+timezone, independently of the world-valid `validOn` date. Exact revision and
+timestamp selection are mutually exclusive in the single shared schema. A time
+before the workspace's first publication returns no records rather than today's
+facts. Timestamp and revision views are read-only, including one selecting the
+latest revision. Current source-passage status remains explicitly attributed to
+its own checked revision.
+
+The published bundle and selected receipt are captured in one PostgreSQL MVCC
+statement. A concurrent publisher cannot make the reader select a revision absent
+from that bundle. Publication stamps its receipt at the final database write,
+rather than transaction admission, and advances at least one microsecond past its
+parent even if the clock moves backwards. Durable decision retries reuse that
+receipt. No migration rewrite, alternate memory authority or historical backfill
+was added. The existing current read retains its one-statement capture without an
+extra history query.
+
+Isolated tests exercise the real native tool, both time dimensions, explicit
+unknown validity, exclusive interval ends, equivalent timezone offsets, an empty
+pre-publication view, principal isolation and membership revocation. The clock
+case checks late publication, replay and a controlled backwards-clock parent in
+its own disposable fixture. The shared TanStack key now also includes `asOf`.
+Required check passes all nine tasks, 284 files / 1,752 tests; the final repeat
+reuses the successful task cache. Thirteen isolated ontology/knowledge cases and
+the final two clock/read cases pass.
+
+The final build passes in 45.42s. Chrome verifies the current strict read adapter,
+switching to an older version and its valid date, and opening the cited dossier.
+After the local review services stopped, this verification uses a fresh named
+synthetic workspace in the isolated runtime database. The structural delta has
+three repeated-edit gates and no new complexity or duplication finding; those
+churn findings remain disclosed rather than suppressed.
+
+This supplies timestamp history for authored knowledge. Learned private claims,
+retained session replacement, semantic execution, dream candidates and measured
+capacity remain open. Akita is still the learned-memory runtime until K3 replaces
+that owner atomically.

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { GitRevisionSchema, knowledgePathSchema } from "../files-schema";
+import {
+  GitRevisionSchema,
+  knowledgePathSchema,
+  WorkspaceRecordedViewSchema,
+} from "../files-schema";
 
 const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const label = z.string().trim().min(1).max(120);
@@ -132,8 +136,7 @@ export const emptyOntology: z.output<typeof OntologySchema> = {
   ],
 };
 export const ontologyPath = "ontology/workspace.json";
-export const OntologyReadSchema = z.strictObject({
-  revision: GitRevisionSchema.optional(),
+export const OntologyReadSchema = WorkspaceRecordedViewSchema.safeExtend({
   validOn: z.iso.date().optional(),
 });
 export const OntologyActionSchema = z.object({
@@ -145,6 +148,7 @@ export const OntologyActionSchema = z.object({
 export const OntologyReadResultSchema = z.strictObject({
   graph: OntologySchema,
   revision: GitRevisionSchema.nullable(),
+  asOf: WorkspaceRecordedViewSchema.shape.asOf.unwrap().nullable(),
   validOn: z.iso.date().nullable(),
   sourceCheckedAtRevision: GitRevisionSchema.nullable(),
   sources: z.array(OntologySourceStateSchema).max(60),

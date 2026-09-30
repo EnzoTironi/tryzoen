@@ -2235,5 +2235,33 @@ only regenerable caches under this worktree were removed before the successful
 run. No user files or production records were removed.
 
 This is revision-based history for authored ontology, not historical replacement
-of the learned-memory engine. Timestamp `as_of` selection, private claims/sessions,
-complete memory replacement and safe dream candidates remain open.
+of the learned-memory engine. Timestamp selection is completed in wave 46;
+private claims/sessions, complete memory replacement and safe dream candidates
+remain open.
+
+## Wave 46 — native knowledge as of a recorded instant
+
+The canonical ontology read accepts a timezone-qualified `asOf` timestamp or an
+exact revision, independently of `validOn`. The native agent uses that same
+schema. Times before the first publication return an empty graph; historical
+views cannot manage records. Current evidence status identifies its separate
+checked revision. Cache keys separate principal, revision, timestamp and validity
+date. No compatibility reader or second source of truth was introduced.
+
+One database statement captures both Git bundle and selected receipt, preserving
+consistency during concurrent publication. Receipts use the final publication
+clock, monotonically after their parent, and successful retries retain the same
+time. Existing workspace grants and private/shared execution restrictions remain
+enforced. All callers changed with the repository selection contract.
+
+Thirteen isolated knowledge/ontology cases pass; the final two temporal cases
+also verify a simulated backwards-clock parent in their own disposable fixture.
+Required check passes nine tasks, 284 files / 1,752 tests; the final repeat reuses
+the successful task cache. This wave does not replace learned private memory,
+activate dreams, deploy production or reset production records.
+
+Final build passes in 45.42s. Chrome verifies the rebuilt strict client, older
+record names and evidence at the chosen world-valid date in a fresh synthetic
+runtime workspace. Three repeated-edit structural gates remain disclosed; no
+new complexity or duplication finding is reported. Visual evidence is attached
+to PR 155 through `gh --attach`.

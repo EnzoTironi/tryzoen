@@ -78,8 +78,8 @@ const tools = [
     path: "workspace_ontology_read",
     plugin: "ontology",
     description:
-      "Read published workspace entities, property claims, relationships and their exact file citations. Each claim has value, sources and validTime; null validTime means the dates are unknown. Pass revision for the known state at a published Git revision and validOn (ISO date) to exclude evidence outside its explicit world-valid interval; until is exclusive. Claims with unknown dates remain visible but must not be described as known-valid on that date. Historical projections are read-only. sources reports whether each cited passage still exists in today's authorized file, not whether the whole source is unchanged. File revision, world-valid dates and live-source freshness are separate. Access is rechecked on every read.",
-    input: "{ revision?: string, validOn?: string }",
+      "Read published workspace entities, property claims, relationships and their exact file citations. Each claim has value, sources and validTime; null validTime means the dates are unknown. Pass revision for a published Git revision, or asOf (ISO timestamp with timezone) for the last publication recorded at or before that instant. Never pass both. A time before the first publication returns an empty graph; it never falls back to current facts. Combine either view with validOn (ISO date) to exclude evidence outside its explicit world-valid interval; until is exclusive. Claims with unknown dates remain visible but must not be described as known-valid on that date. Historical projections are read-only. sources reports whether each cited passage still exists in today's authorized file, not whether the whole source is unchanged. File revision, world-valid dates and live-source freshness are separate. Access is rechecked on every read.",
+    input: "{ revision?: string, asOf?: string, validOn?: string }",
   },
   {
     path: "workspace_google_mail_search",

@@ -195,19 +195,15 @@ export async function readKnowledgeProposal(
   );
   // Reads use the captured head. A concurrent save cannot produce a mixed preview;
   // the publication's CAS still checks this exact head after the human decides.
-  const current = await WorkspaceRepository.selection(
-    actor,
-    paths,
-    stored.revision ?? undefined
-  );
+  const current = await WorkspaceRepository.selection(actor, paths, {
+    revision: stored.revision ?? undefined,
+  });
   const base =
     proposal.baseRevision === null
       ? null
-      : await WorkspaceRepository.selection(
-          actor,
-          paths,
-          proposal.baseRevision
-        );
+      : await WorkspaceRepository.selection(actor, paths, {
+          revision: proposal.baseRevision,
+        });
   const before = new Map(
     current.documents.map(({ path: filename, content }) => [filename, content])
   );

@@ -4,6 +4,7 @@ import {
   workspaceRevisionSchema,
   WorkspaceChangeSchema,
   WorkspacePublishSchema,
+  WorkspaceRecordedViewSchema,
 } from "@zoen/companion-ui/workspace-files";
 import {
   knowledgeProposalPathSchema,
@@ -106,6 +107,7 @@ export class WorkspaceRepositoryError extends Error {
 const repositorySchema = z.object({
   head: GitRevisionSchema,
   bundle: z.instanceof(Uint8Array),
+  recordedRevision: GitRevisionSchema.nullable(),
 });
 
 function unavailable(): never {
@@ -140,9 +142,17 @@ const visibleToGrant = (path: string, grants: readonly string[] | null) =>
     : grants.includes("files"));
 const sharedExecution = (actor: z.output<typeof WorkspaceActorSchema>) =>
   !!(actor.agentGrantId ?? actor.groupBindingId);
-const snapshot = async function (workspaceId: string) {
+const snapshot = async function (workspaceId: string, asOf?: string) {
+  // One statement captures the bundle and receipt under the same MVCC snapshot.
+  // A concurrent publisher cannot select a revision missing from this bundle.
+  const recorded = asOf
+    ? sql`(SELECT revision FROM workspace_revision
+        WHERE workspace_id = ${workspaceId} AND created_at <= ${asOf}::timestamptz
+        ORDER BY created_at DESC, revision DESC LIMIT 1)`
+    : sql`NULL`;
   const rows = await query(
-    sql`SELECT head_sha AS head, bundle FROM workspace_repository WHERE workspace_id = ${workspaceId}`
+    sql`SELECT head_sha AS head, bundle, ${recorded} AS "recordedRevision"
+      FROM workspace_repository WHERE workspace_id = ${workspaceId}`
   );
   return rows[0] ? await repositorySchema.parseAsync(rows[0]) : null;
 };
@@ -175,7 +185,7 @@ export async function workspaceCitationConflicts(
     const selected = await WorkspaceRepository.selection(
       actor,
       [...new Set(sources.map((source) => source.path))],
-      revision
+      { revision }
     );
     for (const source of sources) {
       if (
@@ -320,30 +330,32 @@ export const WorkspaceRepository = {
   selection: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
     paths: readonly string[],
-    revision?: string
+    view: z.output<typeof WorkspaceRecordedViewSchema> = {}
   ) {
     try {
       return await withDatabaseTransaction(async () => {
+        const input = WorkspaceRecordedViewSchema.parse(view);
         await requireWorkspaceAccess(actor);
         const grants = actor.agentGrantId
           ? await readAgentGrantCapabilities(actor)
           : null;
-        const stored = await snapshot(actor.workspaceId);
-        if (revision !== undefined && sharedExecution(actor))
+        const stored = await snapshot(actor.workspaceId, input.asOf);
+        if ((input.revision || input.asOf) && sharedExecution(actor))
           throw new WorkspaceAccessDenied();
         if (!stored) {
-          if (revision !== undefined)
+          if (input.revision !== undefined)
             throw new WorkspaceRepositoryError({ reason: "not_found" });
           return {
             revision: null,
             documents: [],
           };
         }
-        const sha =
-          revision === undefined
-            ? stored.head
-            : await GitRevisionSchema.parseAsync(revision);
-        if (revision !== undefined) {
+        if (input.asOf && stored.recordedRevision === null)
+          return { revision: null, documents: [] };
+        const sha = GitRevisionSchema.parse(
+          input.revision ?? stored.recordedRevision ?? stored.head
+        );
+        if (input.revision !== undefined) {
           const published =
             await query(sql`SELECT revision FROM workspace_revision
             WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
@@ -730,12 +742,14 @@ export const WorkspaceRepository = {
           });
         }
         await query(sql`INSERT INTO workspace_revision (workspace_id, revision, parent_revision, operation_id,
-            request_hash, paths, author_user_id, source, source_sha256)
+            request_hash, paths, author_user_id, source, source_sha256, created_at)
             VALUES (${actor.workspaceId}, ${candidate.revision}, ${input.expectedRevision}, ${input.operationId},
               ${hash}, ARRAY[${sql.join(
                 changes.map(({ path }) => sql`${path}`),
                 sql`, `
-              )}]::text[], ${actor.userId}, ${source.kind}, ${sourceSha})`);
+              )}]::text[], ${actor.userId}, ${source.kind}, ${sourceSha},
+              GREATEST(clock_timestamp(), (SELECT created_at + interval '1 microsecond' FROM workspace_revision
+                WHERE workspace_id = ${actor.workspaceId} AND revision = ${input.expectedRevision})))`);
         if (original !== null) {
           const totals = await query<{
             bytes: number;

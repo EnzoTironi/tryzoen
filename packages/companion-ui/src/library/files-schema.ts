@@ -7,6 +7,15 @@ export const WorkspacePathSchema = z
   )
   .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
 export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);
+export const WorkspaceRecordedViewSchema = z
+  .strictObject({
+    revision: GitRevisionSchema.optional(),
+    asOf: z.iso.datetime({ offset: true }).optional(),
+  })
+  .refine(
+    (view) => view.revision === undefined || view.asOf === undefined,
+    "Choose a recorded revision or an as-of time, not both"
+  );
 export const knowledgePathSchema = WorkspacePathSchema.refine((path) =>
   path.startsWith("knowledge/")
 );
