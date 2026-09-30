@@ -24,7 +24,7 @@ import {
 } from "./client";
 import { ensureMatrixIdentity } from "./identities";
 import { authorizedInboxRooms } from "./inbox";
-import { joinMatrixRoom, requireMatrixRoom } from "./rooms";
+import { requireJoinedMatrixRoom } from "./rooms";
 import { readRoomMessage, projectMatrixMessage } from "./messages";
 import { mapAsync } from "../operations/async";
 
@@ -152,7 +152,11 @@ export async function setSavedMatrixMessage(
     await query(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["matrix-saved", actor.userId])},0))`
     );
-    const viewer = await identity(actor);
+    const room = input.saved
+      ? await requireJoinedMatrixRoom(actor, input.id)
+      : undefined;
+    const viewer = input.saved ? room?.matrixId : await identity(actor);
+    if (!viewer) throw new WorkspaceAccessDenied();
     const saved = await readCollection(viewer);
     const currentRevision = revision(saved);
     const existing = saved.items.find(
@@ -171,7 +175,7 @@ export async function setSavedMatrixMessage(
         throw new Error(
           "Você pode salvar até 100 mensagens. Remova uma antes de salvar outra."
         );
-      const room = await joinMatrixRoom(actor, input.id);
+      if (!room) throw new WorkspaceAccessDenied();
       const event = await readRoomMessage(room, input.messageId);
       if (event.room_id !== room.roomId) throw new WorkspaceAccessDenied();
       items = [
@@ -185,7 +189,7 @@ export async function setSavedMatrixMessage(
         },
         ...items,
       ];
-      await requireMatrixRoom(actor, input.id);
+      await requireJoinedMatrixRoom(actor, input.id);
     } else items = items.filter((item) => item.key !== existing?.key);
     const next = collection.parse({ version: 1, items });
     await matrixRequest("PUT", path(viewer), next, viewer);
