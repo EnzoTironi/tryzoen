@@ -129,6 +129,22 @@ const dialect = new PgDialect();
 const putCalls = () =>
   mocks.request.mock.calls.filter(([method]) => method === "PUT");
 
+function egressAudienceRows(statement: Parameters<typeof query>[0]) {
+  const { sql: text, params } = dialect.sqlToQuery(statement);
+  expect(params).toEqual([
+    actor.groupBindingId,
+    "synthetic-organization",
+    actor.workspaceId,
+    actor.workspaceId,
+  ]);
+  expect(text).toContain("a.native_pending");
+  expect(text).toContain("NOT EXISTS (SELECT 1 FROM human_access");
+  expect(text).toContain("NOT EXISTS (SELECT 1 FROM agent_access");
+  // This fixture has one joined, non-pending human audience member. Its
+  // live authority is the same mutable state used by requester admission.
+  return requesterMember ? [] : [{ user_id: actor.userId }];
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   requesterMember = true;
@@ -158,20 +174,8 @@ beforeEach(() => {
       successfulAuthorityChecks++;
       return [{ id: actor.groupBindingId }];
     }
-    if (text.includes("WITH audience AS MATERIALIZED")) {
-      expect(params).toEqual([
-        actor.groupBindingId,
-        "synthetic-organization",
-        actor.workspaceId,
-        actor.workspaceId,
-      ]);
-      expect(text).toContain("a.native_pending");
-      expect(text).toContain("NOT EXISTS (SELECT 1 FROM human_access");
-      expect(text).toContain("NOT EXISTS (SELECT 1 FROM agent_access");
-      // This fixture has one joined, non-pending human audience member. Its
-      // live authority is the same mutable state used by requester admission.
-      return requesterMember ? [] : [{ user_id: actor.userId }];
-    }
+    if (text.includes("WITH audience AS MATERIALIZED"))
+      return egressAudienceRows(statement);
     if (text.includes('SELECT b.conversation_id AS "roomId"'))
       return [{ roomId }];
     if (text.includes("UPDATE matrix_deliveries SET session_id"))
