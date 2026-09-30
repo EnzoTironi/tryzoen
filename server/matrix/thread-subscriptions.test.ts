@@ -172,12 +172,14 @@ test.each(
           }
         : rootMessage
     );
-    mocks.request.mockImplementation(async (method, path) => {
-      if (path === "versions")
-        return { unstable_features: { "org.matrix.msc4306": true } };
-      if (method === "PUT") return {};
-      return { automatic: operation === "automatic write" };
-    });
+    mocks.request.mockImplementation(
+      async (method, path): ReturnType<typeof matrixRequest> => {
+        if (path === "versions")
+          return { unstable_features: { "org.matrix.msc4306": true } };
+        if (method === "PUT") return {};
+        return { automatic: operation === "automatic write" };
+      }
+    );
     const run =
       operation === "read"
         ? readThreadSubscription(actor, input)
@@ -366,12 +368,14 @@ test.each(["manual", "nested automatic"])(
           }
         : rootMessage
     );
-    mocks.request.mockImplementation(async (method, path) => {
-      if (path === "versions")
-        return { unstable_features: { "org.matrix.msc4306": true } };
-      if (method === "PUT") return {};
-      return { automatic };
-    });
+    mocks.request.mockImplementation(
+      async (method, path): ReturnType<typeof matrixRequest> => {
+        if (path === "versions")
+          return { unstable_features: { "org.matrix.msc4306": true } };
+        if (method === "PUT") return {};
+        return { automatic };
+      }
+    );
     const write = () =>
       setThreadSubscription(
         actor,

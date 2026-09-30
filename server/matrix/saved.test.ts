@@ -272,10 +272,16 @@ it.each(["group", "direct"] as const)(
         content: { msgtype: "m.text", body: "Selected private content" },
       })
       .mockResolvedValueOnce({})
-      .mockImplementationOnce(
-        async () =>
-          mocks.request.mock.calls.find(([method]) => method === "PUT")?.[2]
-      );
+      .mockImplementationOnce(async () => {
+        const published = mocks.request.mock.calls.find(
+          ([method]) => method === "PUT"
+        )?.[2];
+        if (published === undefined)
+          throw new Error(
+            "Expected the saved collection publication before verification."
+          );
+        return published;
+      });
     const result = await setSavedMatrixMessage(savedActor, {
       id,
       messageId: "$event",
