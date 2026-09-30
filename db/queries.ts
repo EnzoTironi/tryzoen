@@ -14,6 +14,14 @@ export class SqlError extends Error {
   }
 }
 
+export class TransactionBoundaryError extends Error {
+  readonly _tag = "TransactionBoundaryError";
+  constructor() {
+    super("A top-level transaction is required.");
+    this.name = "TransactionBoundaryError";
+  }
+}
+
 /** Bound parameters stay separate from SQL; nested calls share the active transaction. */
 export async function query<
   Row extends Record<string, unknown> = Record<string, unknown>,
@@ -35,9 +43,14 @@ export async function query<
 
 /** Nested transactions use PostgreSQL savepoints and restore the outer context. */
 export function transaction<Result>(
-  run: () => Promise<Result>
+  run: () => Promise<Result>,
+  options?: { readonly outermost: true }
 ): Promise<Result> {
-  return (transactions.getStore() ?? db).transaction((tx) =>
+  const active = transactions.getStore();
+  if (options?.outermost && active) {
+    return Promise.reject(new TransactionBoundaryError());
+  }
+  return (active ?? db).transaction((tx) =>
     transactions.run(tx, async () => {
       const result = await run();
       operationSignal().throwIfAborted();
