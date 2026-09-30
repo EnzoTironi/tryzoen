@@ -100,6 +100,115 @@ export function KnowledgeQueryCard({
   const count = result
     ? `${result.rows.length} ${result.rows.length === 1 ? "resultado" : "resultados"}`
     : "";
+  const resultRows = result && (
+    <View
+      role={compact ? "list" : "table"}
+      accessibilityLabel={`${count}, ${columns.length} ${compact ? "campos por resultado" : "colunas"}`}
+      style={compact ? undefined : { width: tableWidth }}
+    >
+      {!compact && (
+        <View // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
+          role="row"
+          style={styles.tableHeader}
+        >
+          {weights.map(({ column, weight, numeric }) => (
+            <View
+              key={column}
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
+              role="columnheader"
+              style={[
+                styles.cell,
+                { width: (tableWidth * weight) / totalWeight },
+              ]}
+            >
+              <Text style={[styles.columnTitle, numeric && styles.numeric]}>
+                {columnName(column)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {result.rows.slice(0, visible).map((row, index) => (
+        <View
+          key={JSON.stringify([index, row])}
+          role={compact ? "listitem" : "row"}
+          style={[
+            styles.row,
+            compact && styles.compactRow,
+            index % 2 === 1 && styles.alternateRow,
+          ]}
+        >
+          {weights.map(({ column, weight, numeric }) => {
+            const value = row[column];
+            const status =
+              column === "status" && typeof value === "string"
+                ? statusLabels.get(value)
+                : undefined;
+            return (
+              <View
+                key={column}
+                role={compact ? undefined : "cell"}
+                style={[
+                  styles.cell,
+                  compact
+                    ? styles.compactCell
+                    : { width: (tableWidth * weight) / totalWeight },
+                  compact && column === columns[0] && styles.primaryCell,
+                ]}
+              >
+                {compact && (
+                  <Text
+                    style={[
+                      styles.columnTitle,
+                      column !== columns[0] && styles.compactColumnTitle,
+                    ]}
+                  >
+                    {columnName(column)}
+                  </Text>
+                )}
+                {status ? (
+                  <View style={styles.status}>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        {
+                          backgroundColor:
+                            value === "in_progress"
+                              ? colors.accent
+                              : colors.muted,
+                        },
+                      ]}
+                    />
+                    <Text
+                      selectable
+                      accessibilityLabel={`${status} (${valueText(value)})`}
+                      style={styles.statusText}
+                    >
+                      {status}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text
+                    selectable
+                    style={[
+                      styles.value,
+                      !compact && numeric && styles.numeric,
+                      compact &&
+                        (column === columns[0]
+                          ? styles.primaryValue
+                          : styles.compactValue),
+                    ]}
+                  >
+                    {valueText(value)}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
   return (
     <>
       <Pressable
@@ -177,116 +286,19 @@ export function KnowledgeQueryCard({
               </View>
             ) : (
               <View style={styles.tableFrame}>
-                <ScrollView
-                  horizontal
-                  style={styles.tableScroll}
-                  accessibilityLabel="Tabela de resultados"
-                >
-                  <View
-                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
-                    role="table"
-                    accessibilityLabel={`${count}, ${columns.length} colunas`}
-                    style={{ width: tableWidth }}
+                {compact ? (
+                  resultRows
+                ) : (
+                  <ScrollView
+                    horizontal
+                    style={styles.tableScroll}
+                    accessibilityLabel="Tabela de resultados"
                   >
-                    <View // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
-                      role="row"
-                      style={styles.tableHeader}
-                    >
-                      {weights.map(({ column, weight, numeric }) => (
-                        <View
-                          key={column}
-                          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
-                          role="columnheader"
-                          style={[
-                            styles.cell,
-                            { width: (tableWidth * weight) / totalWeight },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.columnTitle,
-                              numeric && styles.numeric,
-                            ]}
-                          >
-                            {columnName(column)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                    {result.rows.slice(0, visible).map((row, index) => (
-                      <View
-                        key={JSON.stringify([index, row])}
-                        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
-                        role="row"
-                        style={[
-                          styles.row,
-                          index % 2 === 1 && styles.alternateRow,
-                        ]}
-                      >
-                        {weights.map(({ column, weight, numeric }) => {
-                          const value = row[column];
-                          const status =
-                            column === "status" && typeof value === "string"
-                              ? statusLabels.get(value)
-                              : undefined;
-                          return (
-                            <View
-                              key={column}
-                              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Native View must retain table semantics on RNWeb and Expo.
-                              role="cell"
-                              style={[
-                                styles.cell,
-                                { width: (tableWidth * weight) / totalWeight },
-                              ]}
-                            >
-                              {status ? (
-                                <View style={styles.status}>
-                                  <View
-                                    style={[
-                                      styles.statusDot,
-                                      {
-                                        backgroundColor:
-                                          value === "in_progress"
-                                            ? colors.accent
-                                            : colors.muted,
-                                      },
-                                    ]}
-                                  />
-                                  <Text
-                                    selectable
-                                    accessibilityLabel={`${status} (${valueText(value)})`}
-                                    style={styles.statusText}
-                                  >
-                                    {status}
-                                  </Text>
-                                </View>
-                              ) : (
-                                <Text
-                                  selectable
-                                  style={[
-                                    styles.value,
-                                    numeric && styles.numeric,
-                                  ]}
-                                >
-                                  {valueText(value)}
-                                </Text>
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
+                    {resultRows}
+                  </ScrollView>
+                )}
               </View>
             )}
-            {compact &&
-              tableWidth > availableWidth &&
-              result.rows.length > 0 && (
-                <Text style={styles.caption}>
-                  Deslize a tabela para ver todas as colunas.
-                </Text>
-              )}
             {result.rows.length > visible && (
               <Pressable
                 accessibilityRole="button"
@@ -531,6 +543,19 @@ function createStyles(colors: ReturnType<typeof useColors>) {
       borderColor: colors.line,
       minHeight: 44,
     },
+    compactRow: { flexDirection: "column", padding: 12, gap: 10 },
+    compactCell: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "flex-start",
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+      gap: 10,
+    },
+    primaryCell: { flexDirection: "column", alignItems: "stretch", gap: 3 },
+    compactColumnTitle: { width: "32%", flexShrink: 0 },
+    primaryValue: { fontSize: 16, lineHeight: 22, fontWeight: "500" },
+    compactValue: { flex: 1, minWidth: 0 },
     alternateRow: { backgroundColor: colors.sidebar },
     cell: {
       paddingHorizontal: 12,
