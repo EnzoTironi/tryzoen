@@ -284,7 +284,7 @@ export function Conversation({
         }}
         style={styles.composer}
       >
-        <View style={styles.column}>
+        <View pointerEvents="box-none" style={styles.column}>
           <Composer
             initialDraft={{
               text: staged?.text ?? initialDraft?.text ?? "",
