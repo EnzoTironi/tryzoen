@@ -11,7 +11,11 @@ import { z } from "zod";
 import { withGoogleAuth } from "@agent/lib/google-workspace/client";
 import { authorizeApprovalResponse } from "@agent/lib/approval-response";
 import { renderChannelInput } from "@agent/lib/channel-input";
-import { gmailSendSchema } from "@agent/lib/google-workspace/gmail";
+import {
+  gmailSendInputSchema,
+  gmailSendSchema,
+  renderApprovalDisclosure,
+} from "@zoen/companion-ui/approval";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import { gmailSend } from "../../server/tools/tools/gmail";
 
@@ -139,6 +143,24 @@ function context(): ToolContext {
 beforeEach(() => vi.clearAllMocks());
 
 describe("outgoing Gmail approval disclosure acceptance", () => {
+  test("native UI and authored Gmail tool share the same canonical input schema", () => {
+    expect(gmailSend.inputSchema).toBe(gmailSendInputSchema);
+    expect(gmailSendInputSchema.safeParse(input).success).toBe(true);
+    const disclosure = renderApprovalDisclosure("gmail-send", input);
+    expect(disclosure.kind).toBe("ready");
+    if (disclosure.kind !== "ready")
+      throw new Error("Valid native mail requires exact disclosure.");
+    expect(renderChannelInput(proposal())).toContain(disclosure.text);
+    const { approvalMessage: _summary, ...material } = input;
+    expect(gmailSendInputSchema.safeParse(material).success).toBe(false);
+    expect(renderApprovalDisclosure("gmail-send", material).kind).toBe(
+      "invalid"
+    );
+    expect(withGoogleAuth).not.toHaveBeenCalled();
+    expect(boundary.send).not.toHaveBeenCalled();
+    expect(boundary.query).not.toHaveBeenCalled();
+  });
+
   test("owner authorization and execution retain the real payload independently of supplementary wording", async () => {
     const request = proposal();
     const displayed = renderChannelInput(request);
@@ -223,6 +245,35 @@ describe("outgoing Gmail approval disclosure acceptance", () => {
           "The authored Gmail schema must validate complete disclosure."
         );
       expect(schema.safeParse(payload).success).toBe(false);
+      expect(withGoogleAuth).not.toHaveBeenCalled();
+      expect(boundary.list).not.toHaveBeenCalled();
+      expect(boundary.send).not.toHaveBeenCalled();
+      expect(boundary.query).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(
+    (["to", "cc", "bcc"] as const).flatMap((field) =>
+      [
+        "friendly@example.com\r\nBcc: injected@example.com",
+        "friendly@example.com\u0000hidden",
+        "friendly@example.com\t",
+        " friendly@example.com",
+        "friendly@example.com ",
+        "friendly@example.com\u007F",
+      ].map((recipient) => ({ field, recipient }))
+    )
+  )(
+    "rejects unsafe $field recipients before authentication or provider access: $recipient",
+    async ({ field, recipient }) => {
+      const payload = { ...input, [field]: [recipient] };
+      expect(gmailSendInputSchema.safeParse(payload).success).toBe(false);
+      expect(renderApprovalDisclosure("gmail-send", payload).kind).toBe(
+        "invalid"
+      );
+      await expect(
+        gmailSend.execute(payload, context())
+      ).rejects.toHaveProperty("name", "ZodError");
       expect(withGoogleAuth).not.toHaveBeenCalled();
       expect(boundary.list).not.toHaveBeenCalled();
       expect(boundary.send).not.toHaveBeenCalled();

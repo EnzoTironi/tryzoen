@@ -34,7 +34,8 @@ vi.mock("@agent/lib/google-workspace/client", () => ({
   googleApiErrorStatus: () => undefined,
 }));
 
-import { gmailSendSchema, sendGmail } from "@agent/lib/google-workspace/gmail";
+import { gmailSendSchema } from "@zoen/companion-ui/approval";
+import { sendGmail } from "@agent/lib/google-workspace/gmail";
 
 // These tests invoke the adapter with a synthetic stable call identity. They do
 // not imply that a client can replace an Eve stored approval input. The provider

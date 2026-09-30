@@ -7,6 +7,7 @@
  * The original username-only implementation sent A's payload to a rebound B;
  * these cases now require the reviewed identity/revision to survive every gate.
  */
+import { createHash } from "node:crypto";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,10 +35,12 @@ import type {
   ensureMatrixIdentity,
 } from "../../server/matrix/identities";
 import {
-  discoverNetworkBots,
   NetworkContactInputSchema,
-  openNetworkBot,
   renderNetworkApproval,
+} from "@zoen/companion-ui/approval";
+import {
+  discoverNetworkBots,
+  openNetworkBot,
 } from "../../server/workspaces/network";
 import { workspaceOperationId } from "../../agent/lib/workspace-operation";
 import network from "../../server/tools/tools/network";
@@ -465,6 +468,49 @@ describe("network approval binds its payload to the reviewed recipient", () => {
     ).rejects.toThrow("network recipient changed");
     expect(writes()).toEqual([]);
     expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it("rechecks the recipient after receipt creation and rejects a changed revision before transport", async () => {
+    const proposal = await capturedProposal();
+    const resolveQuery = mocks.query.getMockImplementation();
+    if (!resolveQuery)
+      throw new Error("The synthetic SQL resolver is required.");
+    mocks.query.mockClear().mockImplementation(async (statement) => {
+      const query = dialect.sqlToQuery(statement);
+      if (query.sql.includes("INSERT INTO matrix_agent_sends")) return [];
+      if (query.sql.includes("SELECT request_hash FROM matrix_agent_sends")) {
+        // Simulate a change between admission/receipt and the publication gate.
+        // This mocked ordering is not evidence of PostgreSQL lock semantics.
+        currentBot.updated_at = "1790769600000002";
+        return [
+          {
+            request_hash: createHash("sha256")
+              .update(proposal.text)
+              .digest("hex"),
+          },
+        ];
+      }
+      return resolveQuery(statement);
+    });
+    await expect(
+      matrix.sendMatrixConversation(
+        actor,
+        {
+          id: conversation.id,
+          operationId: workspaceOperationId(
+            execution.session.id,
+            execution.callId
+          ),
+          text: proposal.text,
+        },
+        proposal.destination
+      )
+    ).rejects.toThrow("network recipient changed");
+    const receipts = writes();
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toContain("INSERT INTO matrix_agent_sends");
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect(mocks.ensureBot).not.toHaveBeenCalled();
+    expect(mocks.ensureIdentity).not.toHaveBeenCalled();
   });
   it("requires a discovered destination and refuses undisplayable escaped text before approval", async () => {
     const proposal = await capturedProposal();

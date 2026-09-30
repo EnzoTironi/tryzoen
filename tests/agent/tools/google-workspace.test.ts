@@ -28,7 +28,7 @@ vi.mock("@agent/lib/google-workspace/calendar", async (importOriginal) => ({
 import { gmailSend, gmailUpdate } from "../../../server/tools/tools/gmail";
 import { calendarCreateEvent } from "../../../server/tools/tools/calendar";
 import { calendarEventSchema } from "@agent/lib/google-workspace/calendar";
-import { gmailSendSchema } from "@agent/lib/google-workspace/gmail";
+import { gmailSendSchema } from "@zoen/companion-ui/approval";
 
 afterEach(() => vi.clearAllMocks());
 
