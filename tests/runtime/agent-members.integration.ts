@@ -243,23 +243,23 @@ test("database fences prevent cross-workspace grants and immutable identity or g
   ).member;
   const grant = await fixture.grant(member, ["files"], "files");
   await expect(outside.grant(member, ["files"], "other")).rejects.toMatchObject(
-    { cause: { code: "23514" } }
+    { cause: { cause: { code: "23514" } } }
   );
   await expect(
     query(
       sql`UPDATE workspace_agent_members SET workspace_id = ${outside.actor.workspaceId} WHERE id = ${member.id}`
     )
-  ).rejects.toMatchObject({ cause: { code: "23514" } });
+  ).rejects.toMatchObject({ cause: { cause: { code: "23514" } } });
   await expect(
     query(
       sql`UPDATE workspace_agent_grants SET external_member_id = ${other.id} WHERE id = ${grant.id}`
     )
-  ).rejects.toMatchObject({ cause: { code: "23514" } });
+  ).rejects.toMatchObject({ cause: { cause: { code: "23514" } } });
   await expect(
     query(
       sql`UPDATE workspace_agent_grants SET bot_id = ${outside.bot.id} WHERE id = ${grant.id}`
     )
-  ).rejects.toMatchObject({ cause: { code: "23514" } });
+  ).rejects.toMatchObject({ cause: { cause: { code: "23514" } } });
   expect(
     (await authenticateAgentGrant(grant.bearer, fixture.bot.username)).actor
       .userId
@@ -552,12 +552,12 @@ test("member revocation atomically retires all its grants, room membership and w
     query(
       sql`UPDATE workspace_agent_members SET revoked_at = NULL WHERE id = ${member.id}`
     )
-  ).rejects.toMatchObject({ cause: { code: "23514" } });
+  ).rejects.toMatchObject({ cause: { cause: { code: "23514" } } });
   await expect(
     query(
       sql`UPDATE workspace_agent_grants SET revoked_at = NULL WHERE id = ${files.id}`
     )
-  ).rejects.toMatchObject({ cause: { code: "23514" } });
+  ).rejects.toMatchObject({ cause: { cause: { code: "23514" } } });
 });
 
 test("issuer offboarding fences delegated access without replacing the stable agent identity", async () => {
