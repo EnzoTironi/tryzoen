@@ -1,13 +1,21 @@
 import { z } from "zod";
 import { creatorPilotInviteSchema } from "../creators/schema";
 
-/** Presentation validation only. Eve owns approval and current authority. */
-export const approvalTextSchema = z
+// Unicode mode consumes valid surrogate pairs as one code point. Only lone
+// surrogates match this range, including on ES2022/native engines.
+const wellFormedText = z
   .string()
+  .refine(
+    (text) => !/[\uD800-\uDFFF]/u.test(text),
+    "Text must be well-formed Unicode."
+  );
+
+/** Presentation validation only. Eve owns approval and current authority. */
+export const approvalTextSchema = wellFormedText
   .min(1)
   .max(16_384)
   .refine(
-    (text) => text.trim().length > 0 && text.isWellFormed(),
+    (text) => text.trim().length > 0,
     "Approval details must be complete, non-empty, well-formed text."
   );
 
@@ -17,13 +25,11 @@ const emailAddress = z
     (value) => z.email().safeParse(value).success,
     "Invalid email address"
   );
-const mailHeader = z
-  .string()
+const mailHeader = wellFormedText
   .min(1)
   .max(998)
   .refine(
     (value) =>
-      value.isWellFormed() &&
       value === value.trim() &&
       Array.from(value).every(
         (character) =>
@@ -34,14 +40,7 @@ const mailHeader = z
 
 export const gmailSendSchema = z.object({
   bcc: z.array(emailAddress).max(20).default([]),
-  body: z
-    .string()
-    .min(1)
-    .max(100_000)
-    .refine(
-      (value) => value.isWellFormed(),
-      "Mail body must be well-formed text"
-    ),
+  body: wellFormedText.min(1).max(100_000),
   cc: z.array(emailAddress).max(20).default([]),
   inReplyTo: mailHeader.optional(),
   subject: mailHeader,
@@ -63,12 +62,11 @@ const networkContactPayloadSchema = z.strictObject({
   // People and bots use the same existing public handle rule.
   username: creatorPilotInviteSchema.shape.username,
   destination: NetworkDestinationSchema,
-  text: z
-    .string()
+  text: wellFormedText
     .min(1)
     .max(8000)
     .refine(
-      (value) => value === value.trim() && value.isWellFormed(),
+      (value) => value === value.trim(),
       "Expected trimmed, well-formed text"
     ),
 });
