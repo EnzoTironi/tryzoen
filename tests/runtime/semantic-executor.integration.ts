@@ -291,38 +291,56 @@ test("a huge computed value stays in the bounded capsule; the application surviv
   expect(before["memory.swap.max"]).toBe("0");
   const application = { pid: process.pid, rss: process.memoryUsage().rss };
   const started = performance.now();
-  await expect(
-    executeSemanticSnapshot({
+  // Allocate the computed array inside SQL before text/JSON decoding. A single
+  // large repeat also tests CPU-heavy conversion and can hit the deadline first.
+  let failure: unknown;
+  try {
+    await executeSemanticSnapshot({
       ...input,
       query: "huge",
       model:
-        "##! experimental.sql_functions\nsource: items is snapshot.table('public.items')\nquery: huge is items -> { select: value is sql_string('repeat(chr(120), 1000000000)') }",
+        "##! experimental.sql_functions\nsource: items is snapshot.table('public.items')\nquery: huge is items -> { select: value is sql_string('array_fill(0, ARRAY[160000000])::text') }",
       tables: [{ ...source, rows: [[1]] }],
-    })
-  ).rejects.toThrow("Semantic execution failed");
+    });
+  } catch (error) {
+    failure = error;
+  }
   const elapsedMs = performance.now() - started;
-  await expect
-    .poll(() => executeSemanticSnapshot(input), { timeout: 10_000 })
-    .toMatchObject({ rows: [{ total: 30 }] });
   const after = await capsuleMemory(container);
+  let recoveredResult: number | null = null;
+  try {
+    await expect
+      .poll(() => executeSemanticSnapshot(input), { timeout: 10_000 })
+      .toMatchObject({ rows: [{ total: 30 }] });
+    recoveredResult = 30;
+  } finally {
+    // Persist the counter and error before assertions so CI retains evidence
+    // when an OOM, deadline or recovery expectation fails.
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      "/tmp/zoen-semantic-memory-evidence.json",
+      JSON.stringify(
+        {
+          before,
+          after,
+          elapsedMs,
+          failure: failure instanceof Error ? failure.message : String(failure),
+          applicationBefore: application,
+          applicationAfter: {
+            pid: process.pid,
+            rss: process.memoryUsage().rss,
+          },
+          recoveredResult,
+        },
+        null,
+        2
+      )
+    );
+  }
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).toHaveProperty("message", "Semantic execution failed");
   expect(event(after["memory.events"], "oom_kill")).toBeGreaterThan(
     event(before["memory.events"], "oom_kill")
   );
   expect(process.pid).toBe(application.pid);
-  const { writeFile } = await import("node:fs/promises");
-  await writeFile(
-    "/tmp/zoen-semantic-memory-evidence.json",
-    JSON.stringify(
-      {
-        before,
-        after,
-        elapsedMs,
-        applicationBefore: application,
-        applicationAfter: { pid: process.pid, rss: process.memoryUsage().rss },
-        recoveredResult: 30,
-      },
-      null,
-      2
-    )
-  );
 }, 30_000);
