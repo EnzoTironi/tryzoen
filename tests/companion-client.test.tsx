@@ -1,4 +1,5 @@
 import type { ReactNode, ComponentProps } from "react";
+import type { useColorScheme } from "react-native";
 import type { NewConversation, RoomConversation } from "@zoen/companion-ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -9,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   conversation: undefined as ComponentProps<typeof NewConversation> | undefined,
   room: undefined as ComponentProps<typeof RoomConversation> | undefined,
   search: "space=team-test",
+}));
+vi.mock("react-native", () => ({
+  useColorScheme: vi.fn<typeof useColorScheme>().mockReturnValue("light"),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
