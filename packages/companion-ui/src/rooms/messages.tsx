@@ -167,6 +167,7 @@ export function RoomMessages({
         ref={list}
         data={newestFirst}
         inverted
+        keyboardShouldPersistTaps="handled"
         onViewableItemsChanged={onViewableItemsChanged}
         keyExtractor={(item) => item.id}
         style={styles.list}
