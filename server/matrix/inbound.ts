@@ -1,4 +1,5 @@
 import { readNativeGroupMembership } from "./membership";
+import { lockMatrixAdmission } from "./authority";
 import { projectMatrixActivity } from "./activity";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -76,6 +77,59 @@ export const acceptMatrixTransaction = async function (
     .digest("hex");
   const config = await matrixConfiguration();
   return await withDatabaseTransaction(async () => {
+    const rooms = [
+      ...new Set(
+        transaction.events.flatMap((event) =>
+          event.room_id ? [event.room_id] : []
+        )
+      ),
+    ].toSorted();
+    const locate = async () => {
+      if (!rooms.length) return { groups: [], network: [] };
+      const groups = await query<{
+        id: string;
+        workspaceId: string;
+        roomId: string;
+      }>(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId"
+        FROM workspace_group_bindings
+        WHERE channel = 'matrix' AND installation_id = ${config.serverName}
+          AND conversation_id = ANY(${rooms}::text[]) AND revoked_at IS NULL
+        ORDER BY id`);
+      const network = await query<{
+        id: string;
+        workspaceId: string;
+        destWorkspaceId: string;
+        grantId: string;
+        destBotId: string;
+        roomId: string;
+      }>(sql`SELECT c.id, c.workspace_id AS "workspaceId", b.workspace_id AS "destWorkspaceId",
+          c.grant_id AS "grantId", b.id AS "destBotId", c.room_id AS "roomId"
+        FROM matrix_agent_conversations c
+        JOIN workspace_agent_grants g ON g.id = c.grant_id
+        JOIN workspace_bots b ON b.id = g.bot_id
+        WHERE c.server_name = ${config.serverName} AND c.room_id = ANY(${rooms}::text[])
+          AND c.closed_at IS NULL ORDER BY c.id`);
+      return {
+        groups: groups.toSorted((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        network: network.toSorted((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+      };
+    };
+    // These raw mappings select fences only; they never grant membership or access.
+    const located = await locate();
+    await lockMatrixAdmission(
+      located.network.flatMap((conversation) => [
+        conversation.workspaceId,
+        conversation.destWorkspaceId,
+      ]),
+      located.groups.map((binding) => binding.id)
+    );
+    if (JSON.stringify(located) !== JSON.stringify(await locate()))
+      throw new MatrixError({ reason: "unavailable" });
+    // The whole batch's organization and room fences precede the server receipt lock.
     await query(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${config.serverName}, 6))`
     );
