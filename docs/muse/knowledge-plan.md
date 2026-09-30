@@ -390,3 +390,34 @@ This supplies timestamp history for authored knowledge. Learned private claims,
 retained session replacement, semantic execution, dream candidates and measured
 capacity remain open. Akita is still the learned-memory runtime until K3 replaces
 that owner atomically.
+
+## K1 progress — local recorded time in the shared Library
+
+The same shared history sheet/modal now accepts a local day and minute and sends
+a timezone-qualified `asOf` instant to the existing read owner. Selecting a Git
+version clears the time; entering a time clears the version. Invalid dates and
+nonexistent or repeated local times cannot fall back to current knowledge. The
+selected local time survives reopening, remains separate from the valid date,
+and appears in its dossier alongside the actual selected revision. A time before
+the first publication shows an explicit empty-history state.
+
+The next query still resolves before the view changes. Closing the history
+control while it resolves prevents its late result from changing the foreground
+view. History loading and version rows now belong to their own component, with
+the existing 50-version bound and stale-content denial unchanged. No new engine,
+picker dependency, schema alias or authoritative store was added.
+
+Validation: nine required check tasks pass, 285 files / 1,756 tests in 2m33.48s;
+the build passes in 35.225s. Four focused time cases verify local offset,
+roundtrip, invalid input, daylight-saving gaps and repeated hours including a
+30-minute clock change. Chrome verifies invalid-input denial, empty history,
+the recorded-time dossier, reopening and returning to current knowledge, plus
+the desktop modal and 390×844 mobile sheet. Images are attached to PR 155.
+The structural delta retains a repeated-edit gate and minor size observations;
+the new JSX component is also a call-graph indexing false positive, rather than
+unused code. No finding was suppressed. These controls remain text inputs, not
+physical-device qualification of a native calendar picker.
+
+K2 semantic execution, K3 complete private memory replacement, K4 dream review
+and capacity qualification remain open. This step completes the shared authored
+knowledge time-selection journey, not complete Muse or learned-memory parity.

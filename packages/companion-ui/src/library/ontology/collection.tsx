@@ -51,7 +51,7 @@ export function OntologyCollection({
           setHistoryOpen(true);
         }}
       >
-        {`${view.revision ? `Recorded version ${view.revision.slice(0, 8)}` : "Current knowledge"}${view.validOn ? ` · Valid on ${view.validOn}` : " · All dates"}`}
+        {`${view.asOf ? `Recorded by ${new Date(view.asOf).toLocaleString()}` : view.revision ? `Recorded version ${view.revision.slice(0, 8)}` : "Current knowledge"}${view.validOn ? ` · Valid on ${view.validOn}` : " · All dates"}`}
       </ActionButton>
       {historyOpen && (
         <OntologyHistory
@@ -85,9 +85,14 @@ export function OntologyCollection({
           Try again
         </ActionButton>
       )}
-      {graph && (
-        <OntologyRecords graph={graph} query={query} onOpen={setSelected} />
-      )}
+      {graph &&
+        (knowledge.data?.asOf && knowledge.data.revision === null ? (
+          <Text style={pageStyles.copy}>
+            Nothing had been published by this recorded time.
+          </Text>
+        ) : (
+          <OntologyRecords graph={graph} query={query} onOpen={setSelected} />
+        ))}
       {entity && knowledge.data && (
         <OntologyDossier
           key={entity.id}

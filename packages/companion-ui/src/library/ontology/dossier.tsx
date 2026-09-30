@@ -34,6 +34,11 @@ export function OntologyDossier({
           {type?.name ?? entity.type} · Recorded version{" "}
           {record.revision?.slice(0, 8) ?? "—"}
         </Text>
+        {record.asOf && (
+          <Text style={pageStyles.copy}>
+            Recorded by {new Date(record.asOf).toLocaleString()}.
+          </Text>
+        )}
         {record.validOn && (
           <Text style={pageStyles.copy}>
             Facts valid on {record.validOn}. Unknown validity remains visible.

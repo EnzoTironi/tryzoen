@@ -2265,3 +2265,22 @@ record names and evidence at the chosen world-valid date in a fresh synthetic
 runtime workspace. Three repeated-edit structural gates remain disclosed; no
 new complexity or duplication finding is reported. Visual evidence is attached
 to PR 155 through `gh --attach`.
+
+## Wave 47 — shared recorded-time selection
+
+The shared Library history sheet/modal accepts a local day and minute and sends
+the same native `asOf` contract. Choosing a version clears the time and typing a
+time clears the version; the independent valid date is preserved. Invalid,
+nonexistent and repeated local times are rejected instead of selecting current
+facts. The chosen instant and actual revision appear in the dossier. Empty
+pre-publication history is explicit. Closing a pending view prevents late
+navigation, and version loading retains its bounded, authorization-aware owner.
+
+All nine required checks pass, 285 files / 1,756 tests in 2m33.48s; build passes
+in 35.225s. Four local-time cases include offset/roundtrip and one-hour and
+30-minute daylight-saving changes. Chrome verifies invalid-input denial,
+empty history, a recorded dossier, reopening, return to current state, desktop
+modal and 390×844 mobile sheet. Evidence is attached to PR 155 with `gh --attach`.
+One repeated-edit structural gate and minor size findings remain disclosed; a
+new JSX component is indexed as dead despite its live render call. No production
+deployment, new dependency, private-memory replacement or capacity claim is made.
