@@ -2284,3 +2284,26 @@ modal and 390×844 mobile sheet. Evidence is attached to PR 155 with `gh --attac
 One repeated-edit structural gate and minor size findings remain disclosed; a
 new JSX component is indexed as dead despite its live render call. No production
 deployment, new dependency, private-memory replacement or capacity claim is made.
+
+## Wave 48 — historical definitions and native file reads
+
+Native knowledge discovery and canonical file reads share the recorded-view
+owner with ontology: exact revision or timezone-qualified `asOf`, never both.
+Historical routing follows paths at that revision, including files moved later.
+Paging pins the returned revision. Missing historical files explicitly report
+`exists: false`, and pre-publication history remains empty. Current file reads
+retain their ordinary missing-path errors. Agent instructions distinguish
+historical reference from active procedures or a reason to invent new routing.
+
+Fourteen isolated runtime cases pass, including actual native tools, moved files,
+pagination after a current edit, foreign revision denial, membership revocation
+and denial of every recorded view to external grants. App and infrastructure
+audits report no known vulnerabilities after correcting newly disclosed
+`brace-expansion` recursion/CPU issues with 2.1.7 and 5.0.12. No exclusions,
+production changes, new engine or second knowledge authority were introduced.
+K2 execution, K3 private-memory replacement and K4 safe dreams remain open.
+
+Final check: nine tasks, 285 files / 1,756 tests pass in 2m6.65s; build passes in
+1m24.881s. Four focused runtime cases pass after the type fixes and private
+file-reader extraction. Discovery size/complexity and two repeated-edit
+structural findings remain disclosed without suppression.

@@ -385,6 +385,24 @@ test("external agents only read shared current files and cannot export memory, h
     records: [],
     documents: [],
   });
+  for (const path of ["workspace_knowledge_discover", "workspace_files_read"]) {
+    for (const view of [
+      { revision: second.revision },
+      { asOf: "2030-01-01T00:00:00Z" },
+    ]) {
+      await expect(
+        invokeWorkspaceTool(external, {
+          path,
+          args: {
+            ...view,
+            ...(path === "workspace_files_read"
+              ? { path: "knowledge/shared.md" }
+              : {}),
+          },
+        })
+      ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
+    }
+  }
 });
 
 test("A2A messages are idempotent and tasks and contexts are private to their grant", async () => {

@@ -57,6 +57,12 @@ test("discovery loads published canonical files at one revision and retains reco
     ],
   });
   const execution = workspaceExecutionFor(guest);
+  const timestamps = await query<{ asOf: string }>(
+    sql`SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "asOf"
+      FROM workspace_revision WHERE workspace_id = ${actor.workspaceId} AND revision = ${initial.revision}`
+  );
+  const asOf = timestamps[0]?.asOf;
+  if (!asOf) throw new Error("Missing recorded publication time");
   const discovery = await callNativeTool(
     execution,
     "workspace_knowledge_discover",
@@ -110,12 +116,85 @@ test("discovery loads published canonical files at one revision and retains reco
     (await repository.read(actor, knowledgeRoutingPath, initial.revision))
       .content
   ).toBe(JSON.stringify(routing));
+  for (const view of [{ asOf }, { revision: initial.revision }]) {
+    expect(
+      await callNativeTool(execution, "workspace_knowledge_discover", {
+        ...view,
+        ids: [id],
+      })
+    ).toMatchObject({
+      revision: initial.revision,
+      records: [{ id, paths: [budgetPath] }],
+      documents: [{ path: budgetPath, content: definition }],
+    });
+    expect(
+      await callNativeTool(execution, "workspace_files_read", {
+        ...view,
+        path: budgetPath,
+      })
+    ).toMatchObject({
+      revision: initial.revision,
+      exists: true,
+      content: definition,
+      nextOffset: null,
+    });
+  }
+  const before = { asOf: "2000-01-01T00:00:00Z" };
+  expect(
+    await callNativeTool(execution, "workspace_knowledge_discover", {
+      ...before,
+      ids: [id],
+    })
+  ).toMatchObject({
+    revision: null,
+    purpose: null,
+    records: [],
+    documents: [],
+  });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", {
+      ...before,
+      path: budgetPath,
+    })
+  ).toMatchObject({ revision: null, exists: false, content: "" });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", {
+      asOf,
+      path: renamed,
+    })
+  ).toMatchObject({
+    revision: initial.revision,
+    exists: false,
+    content: "",
+  });
+  expect(
+    (await discoverKnowledge(personal, { asOf, ids: [id] })).records
+  ).toEqual([]);
+  await expect(
+    discoverKnowledge(personal, { revision: initial.revision })
+  ).rejects.toMatchObject({ reason: "not_found" });
+  await expect(
+    callNativeTool(execution, "workspace_files_read", {
+      path: budgetPath,
+      asOf,
+      revision: initial.revision,
+    })
+  ).rejects.toThrow(/Choose a recorded revision/);
   await query(
     sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${guest.userId}`
   );
   await expect(discoverKnowledge(guest, { ids: [id] })).rejects.toBeInstanceOf(
     WorkspaceAccessDenied
   );
+  await expect(
+    discoverKnowledge(guest, { asOf, ids: [id] })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    callNativeTool(execution, "workspace_files_read", {
+      asOf,
+      path: budgetPath,
+    })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });
 
 test("routing rejects invalid or missing references and discovery stays bounded without creating knowledge", async () => {
@@ -185,6 +264,24 @@ test("routing rejects invalid or missing references and discovery stays bounded 
     { path: projectPath, content: long.slice(0, 4000), nextOffset: 4000 },
   ]);
   expect((await repository.read(actor)).revision).toBe(initial.revision);
+  await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: initial.revision,
+    path: projectPath,
+    content: "A corrected current definition.",
+  });
+  expect(
+    await callNativeTool(workspaceExecutionFor(actor), "workspace_files_read", {
+      revision: loaded.revision,
+      path: projectPath,
+      offset: loaded.documents[0]?.nextOffset,
+    })
+  ).toMatchObject({
+    revision: initial.revision,
+    exists: true,
+    content: long.slice(4000),
+    nextOffset: null,
+  });
 });
 
 test("publishes an evidenced multi-file proposal once, with atomic history and no cross-workspace access", async () => {

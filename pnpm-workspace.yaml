@@ -48,6 +48,9 @@ overrides:
   "undici@>=6.0.0 <6.29.0": 6.29.0
   "undici@>=7.0.0 <7.30.0": 7.30.0
   "undici@>=8.0.0 <8.11.2": 8.11.2
+  "brace-expansion@>=2.0.0 <2.1.7": 2.1.7
+  # The vulnerable 4.x line is patched only in 5; its require export remains compatible.
+  "brace-expansion@>=4.0.0 <5.0.12": 5.0.12
   # Drizzle's legacy loader only uses transform; do not retain its vulnerable dev server.
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:

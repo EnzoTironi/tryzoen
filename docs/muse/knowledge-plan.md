@@ -421,3 +421,36 @@ physical-device qualification of a native calendar picker.
 K2 semantic execution, K3 complete private memory replacement, K4 dream review
 and capacity qualification remain open. This step completes the shared authored
 knowledge time-selection journey, not complete Muse or learned-memory parity.
+
+## K1 progress — historical canonical discovery and file reads
+
+The native discovery and file-reading tools now use the same recorded-view
+schema as ontology reads: exact revision or timezone-qualified `asOf`, never
+both. Discovery selects that revision's purpose, routing and canonical paths,
+so a later move does not erase the earlier definition. Follow-up reads and
+pagination can pin the returned revision even after a concurrent current edit.
+Historical missing files return `exists: false`; a time before the first
+publication returns no purpose, records or content instead of today's files.
+Historical files cannot activate procedures or grant access. Current missing
+paths still fail normally. External agent grants cannot request any recorded
+view, including an explicit current revision; revoked membership and foreign
+workspace revisions remain denied.
+
+Fourteen isolated runtime cases pass across discovery, publication time and
+agent grants. They exercise the actual native schema/executor, moved paths,
+revision-pinned pagination, empty history, account separation and revocation.
+The dependency audit exposed three newly published `brace-expansion` advisories
+in the previously green CI. The 2.x line uses patched 2.1.7; the affected 4.x
+line requires 5.0.12, whose CommonJS export and Node 20/22+ support fit the
+existing Node 24 toolchain. App and infrastructure audits now report no known
+vulnerabilities. No audit exclusion or approval bypass was added.
+
+This completes historical discovery for authored files; learned private memory,
+session replacement, semantic execution and dreams remain in K2–K4.
+
+Final validation: all nine required tasks pass (285 files / 1,756 tests,
+2m6.65s); build passes in 1m24.881s. The focused rerun after the type fixes and
+file-reader extraction passes four relevant runtime cases. The structural delta
+retains discovery complexity/size and two repeated-edit findings; the file-read
+behavior is now a private cohesive function rather than growing the dispatcher.
+No metric waiver, test timeout increase or audit suppression was used.

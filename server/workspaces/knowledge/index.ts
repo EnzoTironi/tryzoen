@@ -6,6 +6,7 @@ import {
   knowledgeRoutingPath,
   knowledgeRoutingSchema,
 } from "@zoen/companion-ui/knowledge";
+import { WorkspaceRecordedViewSchema } from "@zoen/companion-ui/workspace-files";
 import { z } from "zod";
 import { isValid, jsonString } from "@shared/validation";
 import {
@@ -41,7 +42,7 @@ function privateReview(actor: z.output<typeof WorkspaceActorSchema>) {
     throw new WorkspaceAccessDenied();
 }
 
-export const DiscoverKnowledgeSchema = z.strictObject({
+export const DiscoverKnowledgeSchema = WorkspaceRecordedViewSchema.safeExtend({
   query: z.string().trim().min(1).max(200).optional(),
   ids: z.array(z.uuid()).max(6).optional(),
 });
@@ -52,12 +53,20 @@ export async function discoverKnowledge(
   raw: z.output<typeof DiscoverKnowledgeSchema>
 ) {
   const input = DiscoverKnowledgeSchema.parse(raw);
-  const listing = await WorkspaceRepository.read(actor);
-  const roots = await WorkspaceRepository.selection(actor, [
-    "knowledge/purpose.md",
-    knowledgeRoutingPath,
-  ]);
-  if (roots.revision !== listing.revision)
+  const roots = await WorkspaceRepository.selection(
+    actor,
+    ["knowledge/purpose.md", knowledgeRoutingPath],
+    { revision: input.revision, asOf: input.asOf }
+  );
+  const historical = !!input.revision || !!input.asOf;
+  const listing = roots.revision
+    ? await WorkspaceRepository.read(
+        actor,
+        undefined,
+        historical ? roots.revision : undefined
+      )
+    : null;
+  if (roots.revision !== (listing?.revision ?? null))
     throw new WorkspaceRepositoryError({ reason: "conflict" });
   const routing = roots.documents.find(
     (document) => document.path === knowledgeRoutingPath
@@ -66,7 +75,7 @@ export async function discoverKnowledge(
     ? jsonString(knowledgeRoutingSchema)
         .parse(routing.content)
         .records.filter((record) =>
-          record.paths.every((path) => listing.files.includes(path))
+          record.paths.every((path) => listing?.files.includes(path))
         )
     : [];
   const terms = input.query?.toLocaleLowerCase().split(/\s+/u) ?? [];
@@ -92,7 +101,11 @@ export async function discoverKnowledge(
   const selected = records.filter((record) => input.ids?.includes(record.id));
   const paths = [...new Set(selected.flatMap((record) => record.paths))];
   const loaded = paths.length
-    ? await WorkspaceRepository.selection(actor, paths)
+    ? await WorkspaceRepository.selection(
+        actor,
+        paths,
+        historical ? { revision: roots.revision ?? undefined } : {}
+      )
     : { revision: roots.revision, documents: [] };
   if (loaded.revision !== roots.revision)
     throw new WorkspaceRepositoryError({ reason: "conflict" });
@@ -112,6 +125,7 @@ export async function discoverKnowledge(
   );
   return {
     revision: roots.revision,
+    asOf: input.asOf ?? null,
     purpose: purpose
       ? {
           path: purpose.path,
