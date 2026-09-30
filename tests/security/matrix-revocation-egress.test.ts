@@ -106,6 +106,7 @@ const publishers = [
   },
 ] as const;
 
+let receiptSessionId = sessionId;
 let requesterMember = true;
 let currentEpoch = originalEpoch;
 let successfulAuthorityChecks = 0;
@@ -116,6 +117,12 @@ const revocations = [
     name: "requester membership",
     revoke: () => {
       requesterMember = false;
+    },
+  },
+  {
+    name: "native receipt session",
+    revoke: () => {
+      receiptSessionId = "different-native-session";
     },
   },
   {
@@ -145,8 +152,24 @@ function egressAudienceRows(statement: Parameters<typeof query>[0]) {
   return requesterMember ? [] : [{ user_id: actor.userId }];
 }
 
+function nativeSessionRows(statement: Parameters<typeof query>[0]) {
+  const { sql: text, params } = dialect.sqlToQuery(statement);
+  expect(text).toContain("r.workspace_id");
+  expect(text).toContain("r.input_id = d.event_id");
+  expect(text).toContain("r.session_id");
+  expect(params).toEqual([
+    sessionId,
+    eventId,
+    sessionId,
+    actor.workspaceId,
+    sessionId,
+  ]);
+  return receiptSessionId === sessionId ? [{ event_id: eventId }] : [];
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
+  receiptSessionId = sessionId;
   requesterMember = true;
   currentEpoch = originalEpoch;
   successfulAuthorityChecks = 0;
@@ -160,6 +183,22 @@ beforeEach(() => {
   mocks.transaction.mockImplementation(async (run) => run());
   mocks.query.mockImplementation(async (statement) => {
     const { sql: text, params } = dialect.sqlToQuery(statement);
+    if (
+      text.includes(
+        'SELECT w.id AS "workspaceId", w.organization_id AS "organizationId"'
+      )
+    )
+      return [
+        {
+          workspaceId: actor.workspaceId,
+          organizationId: "synthetic-organization",
+        },
+      ];
+    if (text.includes("SELECT id FROM organizations"))
+      return [{ id: "synthetic-organization" }];
+    if (text.includes("pg_advisory_xact_lock")) return [];
+    if (text.includes("UPDATE matrix_deliveries d SET session_id"))
+      return nativeSessionRows(statement);
     if (text.includes('SELECT d.user_id AS "userId"')) return [{ ...actor }];
     if (text.includes("SELECT m.role, w.organization_id"))
       return requesterMember
@@ -174,6 +213,7 @@ beforeEach(() => {
       successfulAuthorityChecks++;
       return [{ id: actor.groupBindingId }];
     }
+    if (text.includes("SELECT 1 FROM matrix_erasure_departures")) return [];
     if (text.includes("WITH audience AS MATERIALIZED"))
       return egressAudienceRows(statement);
     if (text.includes('SELECT b.conversation_id AS "roomId"'))

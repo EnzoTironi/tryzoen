@@ -11,6 +11,8 @@ import type { ChannelReceiveContext } from "eve/channels";
 import {
   matrixDeliveryActor,
   matrixPrincipal,
+  matrixSessionActor,
+  requireMatrixInputNoticeEgress,
   requireMatrixEgress,
 } from "./authority";
 import { matrixRequest, MatrixEventSchema, MatrixError } from "./client";
@@ -80,11 +82,20 @@ export const deliverMatrixEvent = async function (
   } catch {
     throw new MatrixError({ reason: "unavailable" });
   }
-  // A fast native turn can settle before its continuation alias is visible.
-  // Bind that session without reopening an already completed delivery.
-  await query(sql`UPDATE matrix_deliveries SET session_id = ${session.id},
-    state = CASE WHEN state = 'pending' THEN 'dispatched' ELSE state END, updated_at = now()
-    WHERE event_id = ${eventId} AND (session_id IS NULL OR session_id = ${session.id})`);
+  await withDatabaseTransaction(async () => {
+    // A completed fast turn is acknowledged only through its already-bound
+    // session and exact receipt. This grants no new output authority.
+    const terminal = await query(sql`SELECT d.event_id FROM matrix_deliveries d
+      JOIN workspace_group_bindings b ON b.id = d.binding_id
+      WHERE d.event_id = ${eventId} AND d.state = 'completed' AND d.session_id = ${session.id}
+        AND EXISTS (SELECT 1 FROM native_delivery_receipts r
+          WHERE r.workspace_id = b.workspace_id AND r.input_id = d.event_id
+            AND r.session_id = ${session.id}) FOR SHARE OF d`);
+    if (terminal.length === 1) return;
+    await matrixSessionActor(eventId, session.id);
+    await query(sql`UPDATE matrix_deliveries SET state = 'dispatched', updated_at = now()
+      WHERE event_id = ${eventId} AND session_id = ${session.id} AND state = 'pending'`);
+  });
   return session;
 };
 
@@ -94,13 +105,17 @@ export const publishMatrixAnswer = async function (eventId: string) {
     const rows = await query<{
       roomId: string;
       output: string;
-    }>(sql`SELECT b.conversation_id AS "roomId", d.output
+      sessionId: string | null;
+    }>(sql`SELECT b.conversation_id AS "roomId", d.output, d.session_id AS "sessionId"
     FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id = d.binding_id
-    WHERE d.event_id = ${eventId} AND d.state = 'answer_ready'`);
+    WHERE d.event_id = ${eventId} AND d.state = 'answer_ready' FOR UPDATE OF d`);
     if (!rows[0]) return undefined;
+    const sessionId = rows[0].sessionId;
+    if (!sessionId) throw new WorkspaceAccessDenied();
+    await matrixSessionActor(eventId, sessionId);
     const transaction = `zoen_${createHash("sha256").update(eventId).digest("hex")}`;
     const relation = await matrixReplyRelation(rows[0].roomId, eventId);
-    await requireMatrixEgress(eventId);
+    await requireMatrixEgress(eventId, sessionId);
     await matrixRequest(
       "PUT",
       `rooms/${encodeURIComponent(rows[0].roomId)}/send/m.room.message/${transaction}`,
@@ -119,20 +134,64 @@ export const publishMatrixAnswer = async function (eventId: string) {
 
 export const finishMatrixEvent = async function (
   eventId: string,
+  sessionId: string,
   output: string
 ) {
-  await matrixDeliveryActor(eventId);
-
-  await query(sql`UPDATE matrix_deliveries SET output = ${output.slice(0, 32000)}, state = 'answer_ready', updated_at = now()
-    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched')`);
+  await withDatabaseTransaction(async () => {
+    await matrixSessionActor(eventId, sessionId);
+    await query(sql`UPDATE matrix_deliveries SET output = ${output.slice(0, 32000)}, state = 'answer_ready', updated_at = now()
+      WHERE event_id = ${eventId} AND session_id = ${sessionId} AND state IN ('pending', 'dispatched')`);
+  });
   await publishMatrixAnswer(eventId);
 };
 
 /** Native send_message already delivered its output; a terminal marker is not user content. */
-export async function completeMatrixEvent(eventId: string) {
-  await matrixDeliveryActor(eventId);
-  await query(sql`UPDATE matrix_deliveries SET state = 'completed', updated_at = now()
-    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched')`);
+export async function completeMatrixEvent(eventId: string, sessionId: string) {
+  await withDatabaseTransaction(async () => {
+    await matrixSessionActor(eventId, sessionId);
+    await query(sql`UPDATE matrix_deliveries SET state = 'completed', updated_at = now()
+      WHERE event_id = ${eventId} AND session_id = ${sessionId} AND state IN ('pending', 'dispatched')`);
+  });
+}
+
+const inputNoticeSchema = z.enum(["ambiguous", "resolved", "undelivered"]);
+const inputNotices: Record<z.output<typeof inputNoticeSchema>, string> = {
+  ambiguous:
+    "Não encontrei uma única solicitação pendente que corresponda à sua resposta neste grupo. Nenhuma ação foi autorizada.",
+  resolved:
+    "Esta solicitação já foi respondida. Nenhuma nova ação foi autorizada.",
+  undelivered:
+    "Não consegui confirmar a proposta entregue antes desta resposta. Nenhuma ação foi autorizada.",
+} as const;
+
+/** Fixed rejection notices for verified inbound responses that never entered
+ * a native session. This path cannot carry caller-supplied output. */
+export async function publishMatrixInputNotice(
+  eventId: string,
+  notice: z.input<typeof inputNoticeSchema>
+) {
+  const body = inputNotices[inputNoticeSchema.parse(notice)];
+  await withDatabaseTransaction(async () => {
+    await requireMatrixInputNoticeEgress(eventId);
+    const rows = await query<{
+      roomId: string;
+    }>(sql`SELECT b.conversation_id AS "roomId"
+      FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id = d.binding_id
+      WHERE d.event_id = ${eventId} AND d.session_id IS NULL
+        AND d.state IN ('pending', 'dispatched') FOR UPDATE OF d`);
+    const room = rows[0];
+    if (!room) throw new WorkspaceAccessDenied();
+    const relation = await matrixReplyRelation(room.roomId, eventId);
+    await requireMatrixInputNoticeEgress(eventId);
+    const transaction = `zoen_${createHash("sha256").update(eventId).digest("hex")}`;
+    await matrixRequest(
+      "PUT",
+      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${transaction}`,
+      { msgtype: "m.text", body, "m.relates_to": relation }
+    );
+    await query(sql`UPDATE matrix_deliveries SET state = 'completed', updated_at = now()
+      WHERE event_id = ${eventId} AND session_id IS NULL AND state IN ('pending', 'dispatched')`);
+  });
 }
 
 export const pendingMatrixEvents = async function () {

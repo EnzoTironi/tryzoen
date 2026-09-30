@@ -16,10 +16,11 @@ import { withNativeDeliveryLock } from "../messaging/native-receipts";
 import {
   matrixDeliveryActor,
   matrixPrincipal,
+  matrixSessionActor,
   requireMatrixEgress,
 } from "./authority";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
-import { finishMatrixEvent } from "./delivery";
+import { publishMatrixInputNotice } from "./delivery";
 
 /** Native Eve owns pending inputs. Matrix carries a delivered reference to them. */
 const deliveredInput = z.object({
@@ -38,7 +39,7 @@ export async function publishMatrixInputs(
   requests: readonly InputRequest[]
 ) {
   return transaction(async () => {
-    await matrixDeliveryActor(eventId);
+    await matrixSessionActor(eventId, sessionId);
     const rows = await query<{
       roomId: string;
     }>(sql`SELECT b.conversation_id AS "roomId" FROM matrix_deliveries d
@@ -47,7 +48,7 @@ export async function publishMatrixInputs(
     if (!room) return;
     const bound =
       await query(sql`UPDATE matrix_deliveries SET session_id = ${sessionId}, state = 'dispatched', updated_at = now()
-    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched') AND (session_id IS NULL OR session_id = ${sessionId}) RETURNING event_id`);
+    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched') AND session_id = ${sessionId} RETURNING event_id`);
     if (bound.length !== 1)
       throw new Error("Matrix input session does not match its delivery");
     for (const request of requests) {
@@ -64,7 +65,7 @@ export async function publishMatrixInputs(
           ? "\n\nSomente quem pediu pode decidir. Responda “@Zoen aprovar” ou “@Zoen cancelar”."
           : "\n\nQuem fez o pedido pode responder mencionando @Zoen e a opção escolhida.";
       const relation = await matrixReplyRelation(room.roomId, eventId);
-      await requireMatrixEgress(eventId);
+      await requireMatrixEgress(eventId, sessionId);
       await matrixRequest(
         "PUT",
         `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/zoen_input_${key}`,
@@ -142,10 +143,7 @@ export async function respondToMatrixInput(
     (!selected && !freeform) ||
     (selected && !request.options?.some((option) => option.id === selected))
   ) {
-    await finishMatrixEvent(
-      eventId,
-      "Não encontrei uma única solicitação pendente que corresponda à sua resposta neste grupo. Nenhuma ação foi autorizada."
-    );
+    await publishMatrixInputNotice(eventId, "ambiguous");
     return { handled: true as const };
   }
   return withNativeDeliveryLock(
@@ -159,10 +157,7 @@ export async function respondToMatrixInput(
             channelConsentRevision(input) === channelConsentRevision(request)
         )
       ) {
-        await finishMatrixEvent(
-          eventId,
-          "Esta solicitação já foi respondida. Nenhuma nova ação foi autorizada."
-        );
+        await publishMatrixInputNotice(eventId, "resolved");
         return { handled: true as const };
       }
       const context = z
@@ -186,13 +181,13 @@ export async function respondToMatrixInput(
         );
       });
       if (!delivered) {
-        await finishMatrixEvent(
-          eventId,
-          "Não consegui confirmar a proposta entregue antes desta resposta. Nenhuma ação foi autorizada."
-        );
+        await publishMatrixInputNotice(eventId, "undelivered");
         return { handled: true as const };
       }
-      const originalActor = await matrixDeliveryActor(match.candidate.eventId);
+      const originalActor = await matrixSessionActor(
+        match.candidate.eventId,
+        match.session.id
+      );
       await matrixDeliveryActor(eventId);
       if (
         originalActor.userId !== actor.userId ||
@@ -240,8 +235,8 @@ export async function respondToMatrixInput(
         console.warn("Accepted Matrix input awaits native resolution", {
           sessionId: match.session.id,
         });
-      await query(sql`UPDATE matrix_deliveries SET state = ${resolved ? "completed" : "dispatched"}, session_id = ${match.session.id}, updated_at = now()
-    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched')`);
+      await query(sql`UPDATE matrix_deliveries SET state = ${resolved ? "completed" : "dispatched"}, updated_at = now()
+    WHERE event_id = ${eventId} AND session_id IS NULL AND state IN ('pending', 'dispatched')`);
       return { handled: true as const, session: match.session };
     }
   );

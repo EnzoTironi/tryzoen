@@ -9,7 +9,7 @@ import {
   reactToMessageToolResultSchema,
   reactionTextFor,
 } from "@zoen/companion-ui/messages";
-import { matrixDeliveryActor, requireMatrixEgress } from "./authority";
+import { matrixSessionActor, requireMatrixEgress } from "./authority";
 import { matrixRequest, MatrixError } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
@@ -36,9 +36,10 @@ export async function publishMatrixToolResult(
       .string()
       .min(1)
       .parse(principal?.attributes.matrixEventId);
-    const actor = await matrixDeliveryActor(eventId);
+    const actor = await matrixSessionActor(eventId, context.session.id);
     if (
       principal?.authenticator !== "matrix" ||
+      principal.principalType !== "user" ||
       actor.userId !== principal.principalId ||
       actor.workspaceId !== principal.attributes.workspaceId
     )
@@ -46,7 +47,7 @@ export async function publishMatrixToolResult(
     const [room] = await query<{ roomId: string }>(sql`
       SELECT b.conversation_id AS "roomId" FROM matrix_deliveries d
       JOIN workspace_group_bindings b ON b.id = d.binding_id
-      WHERE d.event_id = ${eventId} AND (d.session_id IS NULL OR d.session_id = ${context.session.id})`);
+      WHERE d.event_id = ${eventId} AND d.session_id = ${context.session.id} FOR UPDATE OF d`);
     if (!room) throw new WorkspaceAccessDenied();
 
     if (message.success) {
@@ -63,7 +64,7 @@ export async function publishMatrixToolResult(
               .filter(Boolean)
               .join("\n");
       const relation = await matrixReplyRelation(room.roomId, eventId);
-      await requireMatrixEgress(eventId);
+      await requireMatrixEgress(eventId, context.session.id);
       await matrixRequest(
         "PUT",
         `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${transactionId(eventId, context.session.id, message.data.callId)}`,
@@ -76,7 +77,7 @@ export async function publishMatrixToolResult(
     } else if (reaction.success) {
       if (reaction.data.output.operation !== "add")
         throw new MatrixError({ reason: "forbidden" });
-      await requireMatrixEgress(eventId);
+      await requireMatrixEgress(eventId, context.session.id);
       await matrixRequest(
         "PUT",
         `rooms/${encodeURIComponent(room.roomId)}/send/m.reaction/${transactionId(eventId, context.session.id, reaction.data.callId)}`,

@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import {
@@ -106,14 +106,45 @@ export function matrixPrincipal(actor: z.output<typeof WorkspaceActorSchema>) {
   };
 }
 
-/** The native session and event must both belong to the currently authorized requester. */
+/** Eve's durable consumption receipt identifies the exact native session.
+ * A NULL delivery session never authorizes a callback by itself. Hold the
+ * delivery row through publication and recheck the receipt before every send.
+ */
 export async function matrixSessionActor(eventId: string, sessionId: string) {
+  if (!z.string().min(1).safeParse(sessionId).success)
+    throw new WorkspaceAccessDenied();
   const actor = await matrixDeliveryActor(eventId);
-  const rows = await query(
-    sql`SELECT event_id FROM matrix_deliveries WHERE event_id = ${eventId} AND session_id = ${sessionId}`
-  );
+  const rows =
+    await query(sql`UPDATE matrix_deliveries d SET session_id = ${sessionId}
+    WHERE d.event_id = ${eventId} AND d.state IN ('pending', 'dispatched', 'answer_ready')
+      AND (d.session_id IS NULL OR d.session_id = ${sessionId})
+      AND EXISTS (SELECT 1 FROM native_delivery_receipts r
+        WHERE r.workspace_id = ${actor.workspaceId} AND r.input_id = d.event_id
+          AND r.session_id = ${sessionId}) RETURNING d.event_id`);
   if (rows.length !== 1) throw new WorkspaceAccessDenied();
   return actor;
+}
+
+/** Native output requires an exact stored session receipt, without a bypass. */
+export async function requireMatrixEgress(eventId: string, sessionId: string) {
+  return requireSafeMatrixAudience(
+    await matrixSessionActor(eventId, sessionId)
+  );
+}
+
+/** Only the fixed pre-session input diagnostics use this path. They must have
+ * neither a native session nor a native consumption receipt. This function
+ * does not admit native output and remains subject to the same audience gate.
+ */
+export async function requireMatrixInputNoticeEgress(eventId: string) {
+  const actor = await matrixDeliveryActor(eventId);
+  const rows = await query(sql`SELECT d.event_id FROM matrix_deliveries d
+    WHERE d.event_id = ${eventId} AND d.session_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM native_delivery_receipts r
+        WHERE r.workspace_id = ${actor.workspaceId} AND r.input_id = d.event_id)
+    FOR UPDATE OF d`);
+  if (rows.length !== 1) throw new WorkspaceAccessDenied();
+  return requireSafeMatrixAudience(actor);
 }
 
 /** Call inside the transaction that emits the event. The captured room epoch
@@ -121,9 +152,15 @@ export async function matrixSessionActor(eventId: string, sessionId: string) {
  * A committed native departure remains unsafe until its exact state is verified;
  * current workspace/org and agent-member rows also fence recipient revocation.
  */
-export async function requireMatrixEgress(eventId: string) {
-  const actor = await matrixDeliveryActor(eventId);
+async function requireSafeMatrixAudience(
+  actor: Awaited<ReturnType<typeof matrixDeliveryActor>>
+) {
   if (!actor.groupBindingId) throw new WorkspaceAccessDenied();
+  // Identity deletion must not erase the uncertain native audience marker.
+  // Capture/reconciliation use the same organization and room admission fences.
+  const erased = await query(sql`SELECT 1 FROM matrix_erasure_departures
+    WHERE binding_id = ${actor.groupBindingId} LIMIT 1`);
+  if (erased.length) throw new WorkspaceAccessDenied();
   const unsafe = await query(sql`
     WITH audience AS MATERIALIZED (
       SELECT m.user_id, m.state, m.native_pending FROM matrix_room_members m
