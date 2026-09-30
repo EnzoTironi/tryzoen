@@ -9,6 +9,7 @@ import type { SheetSurface } from "../sheet";
 const controls = vi.hoisted(() => ({
   values: new Map<number, unknown>(),
   cursor: 0,
+  width: 1024,
   buttons: new Map<string, ComponentProps<typeof Pressable>>(),
 }));
 vi.mock("react", async (original) => ({
@@ -39,7 +40,7 @@ vi.mock("react", async (original) => ({
 vi.mock("react-native", async () => ({
   ...(await vi.importActual<typeof import("react-native")>("react-native-web")),
   useWindowDimensions: () => ({
-    width: 1024,
+    width: controls.width,
     height: 800,
     scale: 1,
     fontScale: 1,
@@ -123,6 +124,7 @@ beforeEach(() => {
   controls.values.clear();
   controls.buttons.clear();
   controls.cursor = 0;
+  controls.width = 1024;
 });
 
 test("keeps a verified calculation compact and leaves execution details closed", () => {
@@ -301,4 +303,129 @@ test("closes the result panel through its named action", () => {
   open();
   press("Fechar análise Total");
   expect(render()).not.toContain('role="table"');
+});
+
+test.each([320, 390, 719])(
+  "keeps every labeled value together in narrow result rows at %ipx",
+  (width) => {
+    controls.width = width;
+    const rows = [
+      {
+        task: "Prepare product captures",
+        owner: "Imani Brooks",
+        status: "in_progress",
+      },
+      { task: "Review story outline", owner: "Maya Chen", status: "in_review" },
+      { task: "Review captions", owner: "Theo Park", status: "in_review" },
+    ];
+    const query = { ...part, output: { ...part.output, rows } };
+    const original = JSON.stringify(query.output);
+    const markup = open(query);
+    expect(markup).toContain('role="list"');
+    expect(markup).toContain(
+      'aria-label="3 resultados, 3 campos por resultado"'
+    );
+    expect(markup).not.toContain('role="table"');
+    expect(markup).not.toContain("Tabela de resultados");
+    expect(markup).not.toContain("Deslize a tabela");
+    const items = markup.split('role="listitem"').slice(1);
+    expect(items).toHaveLength(3);
+    rows.forEach((row, index) => {
+      const item = items[index];
+      expect(item).toContain(row.task);
+      expect(item).toContain(row.owner);
+      expect(item).toContain("Tarefa");
+      expect(item).toContain("Responsável");
+      expect(item).toContain("Status");
+      expect(item).toContain(row.status);
+    });
+    expect(JSON.stringify(query.output)).toBe(original);
+  }
+);
+
+test("keeps the desktop table at the responsive boundary", () => {
+  controls.width = 720;
+  const markup = open();
+  expect(markup).toContain('role="table"');
+  expect(markup).toContain('role="columnheader"');
+  expect(markup).not.toContain('role="listitem"');
+});
+
+test("handles generic, wide and long values without dropping fields or inventing status semantics", () => {
+  controls.width = 320;
+  const row = {
+    reference_code: "unbroken".repeat(80),
+    amount: 1284.56,
+    enabled: false,
+    optional: null,
+    nested_details: { region: "Remote location", tags: ["one", "two"] },
+    arbitrary: "in_progress",
+    status: "custom_status",
+  };
+  const query = {
+    ...part,
+    output: {
+      ...part.output,
+      rows: [
+        row,
+        { reference_code: "Second", later_field: "Complete later value" },
+      ],
+    },
+  };
+  const markup = open(query);
+  for (const value of [
+    row.reference_code,
+    "1284.56",
+    "false",
+    "—",
+    "Remote location",
+    "in_progress",
+    "custom_status",
+    "Complete later value",
+  ]) {
+    expect(markup).toContain(value);
+  }
+  for (const label of [
+    "Reference code",
+    "Amount",
+    "Enabled",
+    "Optional",
+    "Nested details",
+    "Arbitrary",
+    "Status",
+    "Later field",
+  ]) {
+    expect(markup.split(label)).toHaveLength(3);
+  }
+  expect(markup).not.toContain("Em andamento");
+  press("Detalhes da execução");
+  expect(render(query)).toContain("Dados originais");
+  expect(query.output.rows[0]).toEqual(row);
+});
+
+test("preserves disclosure and pagination state when the same result changes between narrow and wide layouts", () => {
+  const rows = Array.from({ length: 24 }, (_, index) => ({
+    label: `Entry ${index}`,
+    amount: index,
+  }));
+  const query = { ...part, output: { ...part.output, rows } };
+  controls.width = 390;
+  open(query);
+  press("Fontes da análise");
+  press("Mostrar mais linhas");
+  expect(render(query)).toContain("Entry 23");
+  controls.width = 1280;
+  const wide = render(query);
+  expect(wide).toContain('role="table"');
+  expect(wide).toContain("Entry 23");
+  expect(controls.buttons.get("Fontes da análise")?.["aria-expanded"]).toBe(
+    true
+  );
+  controls.width = 390;
+  const narrow = render(query);
+  expect(narrow).toContain('role="list"');
+  expect(narrow).toContain("Entry 23");
+  expect(controls.buttons.get("Fontes da análise")?.["aria-expanded"]).toBe(
+    true
+  );
 });
