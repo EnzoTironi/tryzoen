@@ -72,9 +72,10 @@ vi.mock("../../agent/channels/a2a", () => ({ default: { routes: [] } }));
 
 // Import registers its authored callbacks without executing an Eve session.
 await import("../../agent/channels/matrix");
-const matrix = captured.definitions[0];
-if (!matrix)
+const capturedMatrix = captured.definitions[0];
+if (!capturedMatrix)
   throw new Error("The Matrix channel must register its authored definition.");
+const matrix = capturedMatrix;
 
 const fixture = {
   eventId: "$synthetic-native-event",
@@ -347,20 +348,22 @@ beforeEach(() => {
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.transaction.mockImplementation(async (run) => run());
   mocks.query.mockImplementation(async (statement) => queryRows(statement));
-  mocks.request.mockImplementation(async (method, path) => {
-    if (
-      method === "GET" &&
-      path.endsWith(`/event/${encodeURIComponent(fixture.eventId)}`)
-    )
-      return {
-        event_id: fixture.eventId,
-        type: "m.room.message",
-        sender: fixture.matrixId,
-        content: { body: "Synthetic input" },
-      };
-    if (method === "PUT") return { event_id: "$synthetic-output" };
-    throw new Error(`Unexpected synthetic transport: ${method} ${path}`);
-  });
+  mocks.request.mockImplementation(
+    async (method, path): ReturnType<typeof matrixRequest> => {
+      if (
+        method === "GET" &&
+        path.endsWith(`/event/${encodeURIComponent(fixture.eventId)}`)
+      )
+        return {
+          event_id: fixture.eventId,
+          type: "m.room.message",
+          sender: fixture.matrixId,
+          content: { body: "Synthetic input" },
+        };
+      if (method === "PUT") return { event_id: "$synthetic-output" };
+      throw new Error(`Unexpected synthetic transport: ${method} ${path}`);
+    }
+  );
 });
 afterEach(() => vi.unstubAllGlobals());
 
