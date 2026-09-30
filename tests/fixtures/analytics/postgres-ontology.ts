@@ -1,3 +1,5 @@
+import type { z } from "zod";
+import type { OntologySchema } from "@zoen/companion-ui/ontology";
 import { sourceBindingSchema } from "@zoen/companion-ui/workspace-sources";
 
 // Original fictional studio data. No vendor files, services or credentials.
@@ -114,9 +116,9 @@ export function studioProjectBinding(schemaFingerprint: string) {
     relation: studioProjectsRelation,
     schemaFingerprint,
     columns: [
-      { id: "id", source: "id", type: "numeric", nullable: false },
+      { id: "id", source: "id", type: "decimal", nullable: false },
       { id: "title", source: "title", type: "text", nullable: false },
-      { id: "budget", source: "budget", type: "numeric", nullable: false },
+      { id: "budget", source: "budget", type: "decimal", nullable: false },
       { id: "launch_day", source: "launch_day", type: "date", nullable: true },
       { id: "active", source: "active", type: "boolean", nullable: false },
     ],
@@ -135,3 +137,47 @@ export function studioProjectBinding(schemaFingerprint: string) {
     freshness: { refresh: "on_read", maxAgeSeconds: null, upstream: "unknown" },
   });
 }
+
+// Exact wire decimals map to string properties until ontology arithmetic has a
+// reviewed decimal type. This file definition grants no connection authority.
+export const studioOntology: z.output<typeof OntologySchema> = {
+  version: 1 as const,
+  types: [
+    {
+      id: "project",
+      name: "Studio project",
+      properties: [
+        { id: "name", name: "Name", type: "string" as const, required: true },
+        {
+          id: "planned_budget",
+          name: "Exact budget text",
+          type: "string" as const,
+          required: true,
+        },
+        {
+          id: "launch_day",
+          name: "Launch day",
+          type: "date" as const,
+          required: false,
+        },
+        {
+          id: "active",
+          name: "Active",
+          type: "boolean" as const,
+          required: true,
+        },
+      ],
+    },
+  ],
+  relations: [
+    {
+      id: "related_to",
+      name: "Related project",
+      from: "project",
+      to: "project",
+    },
+  ],
+  entities: [],
+  links: [],
+  actions: [],
+};

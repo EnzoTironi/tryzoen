@@ -89,3 +89,21 @@ test("read arguments share UTF-8 byte and well-formed text bounds with source ce
       false
     );
 });
+
+test("native integers and NUMERIC declare decimal string transport explicitly", () => {
+  expect(
+    binding.columns
+      .filter(({ id }) => id === "id" || id === "budget")
+      .map(({ type }) => type)
+  ).toEqual(["decimal", "decimal"]);
+  expect(
+    sourceBindingSchema.safeParse({
+      ...binding,
+      columns: binding.columns.map((column) =>
+        column.id === "budget"
+          ? Object.assign({}, column, { type: "numeric" })
+          : column
+      ),
+    }).success
+  ).toBe(false);
+});
