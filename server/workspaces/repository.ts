@@ -156,6 +156,37 @@ const snapshot = async function (workspaceId: string, asOf?: string) {
   );
   return rows[0] ? await repositorySchema.parseAsync(rows[0]) : null;
 };
+
+/** Resolve recorded views inside the caller's workspace-access transaction. */
+async function selectRecordedRepository(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  view: z.output<typeof WorkspaceRecordedViewSchema>
+) {
+  const input = WorkspaceRecordedViewSchema.parse(view);
+  await requireWorkspaceAccess(actor);
+  if ((input.revision || input.asOf) && sharedExecution(actor))
+    throw new WorkspaceAccessDenied();
+  const grants = actor.agentGrantId
+    ? await readAgentGrantCapabilities(actor)
+    : null;
+  const stored = await snapshot(actor.workspaceId, input.asOf);
+  if (input.revision !== undefined) {
+    const published = stored
+      ? await query(sql`SELECT revision FROM workspace_revision
+          WHERE workspace_id = ${actor.workspaceId} AND revision = ${input.revision}`)
+      : [];
+    if (!published.length)
+      throw new WorkspaceRepositoryError({ reason: "not_found" });
+  }
+  return {
+    revision:
+      input.revision ??
+      (input.asOf ? stored?.recordedRevision : stored?.head) ??
+      null,
+    bundle: stored?.bundle ?? null,
+    grants,
+  };
+}
 const replay = async function (
   workspaceId: string,
   operationId: string,
@@ -334,47 +365,25 @@ export const WorkspaceRepository = {
   ) {
     try {
       return await withDatabaseTransaction(async () => {
-        const input = WorkspaceRecordedViewSchema.parse(view);
-        await requireWorkspaceAccess(actor);
-        const grants = actor.agentGrantId
-          ? await readAgentGrantCapabilities(actor)
-          : null;
-        const stored = await snapshot(actor.workspaceId, input.asOf);
-        if ((input.revision || input.asOf) && sharedExecution(actor))
-          throw new WorkspaceAccessDenied();
-        if (!stored) {
-          if (input.revision !== undefined)
-            throw new WorkspaceRepositoryError({ reason: "not_found" });
-          return {
-            revision: null,
-            documents: [],
-          };
-        }
-        if (input.asOf && stored.recordedRevision === null)
+        const selected = await selectRecordedRepository(actor, view);
+        if (!selected.revision || !selected.bundle)
           return { revision: null, documents: [] };
-        const sha = GitRevisionSchema.parse(
-          input.revision ?? stored.recordedRevision ?? stored.head
+        const listing = await readWorkspaceGit(
+          selected.bundle,
+          selected.revision
         );
-        if (input.revision !== undefined) {
-          const published =
-            await query(sql`SELECT revision FROM workspace_revision
-            WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
-          if (!published.length)
-            throw new WorkspaceRepositoryError({ reason: "not_found" });
-        }
-        const listing = await readWorkspaceGit(stored.bundle, sha);
         const documents = await readWorkspaceGitSelection(
-          stored.bundle,
-          sha,
+          selected.bundle,
+          selected.revision,
           paths.filter(
             (path) =>
               listing.files.includes(path) &&
-              visibleToGrant(path, grants) &&
+              visibleToGrant(path, selected.grants) &&
               (!sharedExecution(actor) || visibleInSharedExecution(path))
           )
         );
         return {
-          revision: sha,
+          revision: selected.revision,
           documents,
         };
       });
@@ -387,28 +396,25 @@ export const WorkspaceRepository = {
   },
   search: async function (
     actor: z.output<typeof WorkspaceActorSchema>,
-    localQuery: string
+    localQuery: string,
+    view: z.output<typeof WorkspaceRecordedViewSchema> = {}
   ) {
     try {
       return await withDatabaseTransaction(async () => {
-        await requireWorkspaceAccess(actor);
-        const grants = actor.agentGrantId
-          ? await readAgentGrantCapabilities(actor)
-          : null;
-        const stored = await snapshot(actor.workspaceId);
-        if (!stored)
+        const selected = await selectRecordedRepository(actor, view);
+        if (!selected.revision || !selected.bundle)
           return {
             revision: null,
             matches: [],
           };
         return {
-          revision: stored.head,
+          revision: selected.revision,
           matches:
-            grants !== null && !grants.includes("files")
+            selected.grants !== null && !selected.grants.includes("files")
               ? []
               : await searchWorkspaceGit(
-                  stored.bundle,
-                  stored.head,
+                  selected.bundle,
+                  selected.revision,
                   localQuery
                 ),
         };

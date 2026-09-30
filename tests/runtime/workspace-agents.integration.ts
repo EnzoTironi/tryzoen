@@ -385,7 +385,27 @@ test("external agents only read shared current files and cannot export memory, h
     records: [],
     documents: [],
   });
-  for (const path of ["workspace_knowledge_discover", "workspace_files_read"]) {
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_files_list",
+      args: {},
+    })
+  ).toMatchObject({
+    revision: second.revision,
+    files: ["knowledge/shared.md"],
+  });
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_files_read",
+      args: { path: "knowledge/shared.md", offset: 8 },
+    })
+  ).toMatchObject({ revision: second.revision, exists: true, content: "one" });
+  for (const path of [
+    "workspace_knowledge_discover",
+    "workspace_files_list",
+    "workspace_files_read",
+    "workspace_files_search",
+  ]) {
     for (const view of [
       { revision: second.revision },
       { asOf: "2030-01-01T00:00:00Z" },
@@ -398,6 +418,7 @@ test("external agents only read shared current files and cannot export memory, h
             ...(path === "workspace_files_read"
               ? { path: "knowledge/shared.md" }
               : {}),
+            ...(path === "workspace_files_search" ? { query: "Version" } : {}),
           },
         })
       ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });

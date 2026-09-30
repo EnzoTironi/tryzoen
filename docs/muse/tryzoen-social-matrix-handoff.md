@@ -2307,3 +2307,26 @@ Final check: nine tasks, 285 files / 1,756 tests pass in 2m6.65s; build passes i
 1m24.881s. Four focused runtime cases pass after the type fixes and private
 file-reader extraction. Discovery size/complexity and two repeated-edit
 structural findings remain disclosed without suppression.
+
+## Wave 49 — recorded filesystem listing and search
+
+Native file listing and literal knowledge search now use the same revision or
+timezone-qualified `asOf` selector. Old trees include paths moved or removed
+later; search uses that exact bundle and retains the existing 3-lines/file,
+60-excerpt and 800-character bounds. Empty history, foreign revisions and
+revoked membership cannot return today's files. Profile/instruction files remain
+outside knowledge search. The repository has one private recorded-snapshot
+selector for document selection and search within their access transactions.
+
+Group/external agents retain current listing and paged reads. Instructions
+require comparing each page's returned revision and restarting if it changes;
+explicit recorded selectors remain denied even for the current head. Fourteen
+existing runtime cases pass. A new native listing/search case passes after
+repairing its fixture to use the existing separate profile publisher; it covers
+literal brackets, clipped excerpts, moves, empty history, isolation and
+revocation. No new authority, engine, migration or production reset was added.
+
+All nine required checks pass, 285 files / 1,756 tests in 1m2.063s; build passes
+in 24.032s. The final native file-view case passes in 7.33s. One repeated-edit
+dispatcher finding and a minor eight-line size increase remain disclosed;
+no new complexity or duplication finding is reported.

@@ -1,6 +1,6 @@
 # Knowledge and ontology — implementation contract
 
-Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The user also confirmed greenfield status: no launched product, production users or production data; no legacy-data conversion is required. This does not reopen creator marketplace work.
+Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The greenfield preference permits direct removal of obsolete interfaces and recreation of development/test corpora. The current repository policy treats hosted records as persistent from the 19 September rollout; this plan does not authorize production resets or deletion of existing accounts or corpora. This does not reopen creator marketplace work.
 
 ## Decisions
 
@@ -76,13 +76,13 @@ The retained filesystem needs atomic publication or a recoverable publication
 journal: fencing concurrent writers, crash recovery, source/projected revision
 checks, quotas, ownership placement and complete snapshot/restore. Do not replace
 the current atomic bundle transaction with unrelated filesystem and SQL writes.
-The project is greenfield. Replace the runtime owner and callers atomically,
+Replace the runtime owner and callers atomically,
 remove obsolete Akita APIs/configuration/storage contracts, and recreate affected
 development/test data where needed. No old-corpus converter, compatibility shim,
 legacy alias, dual reads/writes or backfill is planned. Changing applied migration
 history still requires resetting the affected local databases; consolidate a
-baseline only as an explicit coordinated change, not incidentally. Revisit data
-retention policy before the first production deployment.
+baseline only as an explicit coordinated change, not incidentally. Hosted
+records remain persistent under the repository's deployment policy.
 
 Unified memory acceptance: search/retrieval, relations, historical `as_of`,
 session-ingestion idempotency, source edits, deletion/tombstones, scope isolation,
@@ -454,3 +454,32 @@ file-reader extraction passes four relevant runtime cases. The structural delta
 retains discovery complexity/size and two repeated-edit findings; the file-read
 behavior is now a private cohesive function rather than growing the dispatcher.
 No metric waiver, test timeout increase or audit suppression was used.
+
+## K1 progress — recorded file listings and literal search
+
+Native file listing and knowledge search now accept the same recorded view as
+discovery, ontology and file reads. Listings resolve paths at the selected
+revision, including removed or moved files. Literal search runs against that
+bundle and reports the selected revision; it retains three matching lines per
+file, at most 60 excerpts, each bounded to 800 characters. Empty history returns
+no files or matches. Private profile/instruction paths remain outside knowledge
+search. Foreign revisions and revoked members cannot use either tool.
+
+Recorded snapshot selection and access checks have one private repository owner,
+shared by document selection and search inside their existing database
+transactions. No new cache, query engine, schema alias, filesystem authority or
+migration was introduced. Native tooling and instructions distinguish private
+revision-pinned pagination from current-only shared execution: a group/external
+agent checks each page's revision and restarts if it changes. Explicit recorded
+selectors remain denied, including the current head.
+
+Fourteen existing isolated runtime cases pass; the new native listing/search
+case passes after correcting its fixture to use the existing separate profile
+publisher. It verifies moved paths, literal brackets, clipping, pre-publication
+absence, account separation, foreign revisions, invalid selectors and revoked
+membership. Current-only external listing and paged reads remain operational.
+
+Final checks: all nine tasks pass, 285 files / 1,756 tests in 1m2.063s; the
+build passes in 24.032s. The final native file-view case passes in 7.33s.
+The structural delta retains a repeated-edit dispatcher finding and a minor
+eight-line size increase, without new complexity or duplication findings.
