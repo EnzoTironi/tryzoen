@@ -10,8 +10,26 @@ import { referenceResultsSchema } from "@zoen/companion-ui/references";
 import { useNetworkState } from "expo-network";
 import { onlineManager } from "@tanstack/react-query";
 import { rpc } from "./api";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -24,6 +42,8 @@ import {
   AttachmentProvider,
   LinkPreviewProvider,
   ComposerReferenceProvider,
+  CompanionOverlayProvider,
+  type CompanionOverlayProps,
   type CompanionSection,
   type MarkdownEditorProps,
 } from "@zoen/companion-ui";
@@ -38,14 +58,53 @@ import { MobileInbox, MobileRoom } from "./inbox";
 import { MobileSections } from "./sections";
 import { apiOrigin } from "./environment";
 import { MobileEditor } from "./editor";
-import type { ConversationDraft } from "@zoen/companion-ui/messages";
 import { pickAttachments, saveAttachment } from "./attachments";
+import {
+  subscribeAndroidBack,
+  subscribeContentLinks,
+} from "./navigation/native";
+import {
+  acceptsMobileStartupLink,
+  applyMobileLocation,
+  backMobileNavigation,
+  initialMobileNavigation,
+  mobileLinkDisposition,
+  mobileLinkForAccount,
+  mobileLinkMessage,
+  openMobileConversation,
+  parseMobileContentLink,
+  reconcileMobileLink,
+  type PendingMobileLink,
+} from "./navigation/routes";
 
 function renderMarkdownEditor(props: MarkdownEditorProps) {
   return <MobileEditor {...props} />;
 }
 
 const composerAdapter = { Input: renderComposerEditor };
+
+const NavigationOverlayContext = createContext<(() => () => void) | undefined>(
+  undefined
+);
+function NavigationOverlay(props: CompanionOverlayProps) {
+  const register = useContext(NavigationOverlayContext);
+  const compact = useWindowDimensions().width < 720;
+  useLayoutEffect(() => register?.(), [register]);
+  return (
+    <Modal
+      accessibilityLabel={props.title}
+      transparent
+      animationType={compact ? "slide" : "fade"}
+      onRequestClose={props.onClose}
+      onShow={props.focusOnOpen}
+    >
+      {props.children}
+    </Modal>
+  );
+}
+function renderNavigationOverlay(props: CompanionOverlayProps) {
+  return <NavigationOverlay {...props} />;
+}
 
 export function App() {
   const network = useNetworkState();
@@ -57,6 +116,85 @@ export function App() {
   const session = auth.useSession();
   const [error, setError] = useState<string>();
   const [signingIn, setSigningIn] = useState(false);
+  const [pendingLink, setPendingLink] = useState<PendingMobileLink>();
+  const pendingOwner = useRef<string | undefined>(undefined);
+  const startupAccount = useRef<string | undefined>(undefined);
+  const startupDeparted = useRef(false);
+  useLayoutEffect(() => {
+    if (session.isPending) return;
+    const id = session.data?.session.id;
+    if (startupAccount.current === undefined) startupAccount.current = id;
+    else if (startupAccount.current !== id) startupDeparted.current = true;
+    // Bind before passive work: a canceled effect may not rebind an old locator.
+    if (pendingLink && pendingOwner.current === undefined)
+      pendingOwner.current = id;
+  }, [session.isPending, session.data?.session.id, pendingLink]);
+  const receiveLink = useEffectEvent(
+    (url: string, source: "initial" | "event") => {
+      const id =
+        session.data?.session.id ??
+        (session.isPending && !startupDeparted.current
+          ? startupAccount.current
+          : undefined);
+      if (
+        source === "initial" &&
+        !acceptsMobileStartupLink(
+          startupAccount.current,
+          id,
+          startupDeparted.current
+        )
+      )
+        return false;
+      const result = parseMobileContentLink(url, apiOrigin);
+      if (result.kind === "ignored") return false;
+      pendingOwner.current = id;
+      setPendingLink({ result, accountSessionId: id });
+      return true;
+    }
+  );
+  const linkFailed = useEffectEvent(() => {
+    const id =
+      session.data?.session.id ??
+      (session.isPending && !startupDeparted.current
+        ? startupAccount.current
+        : undefined);
+    if (
+      acceptsMobileStartupLink(
+        startupAccount.current,
+        id,
+        startupDeparted.current
+      )
+    ) {
+      pendingOwner.current = id;
+      setPendingLink({ result: { kind: "invalid" }, accountSessionId: id });
+    }
+  });
+  useEffect(() => subscribeContentLinks(receiveLink, linkFailed), []);
+  const reconcileLink = useEffectEvent(
+    (expected: PendingMobileLink, id: string | undefined) => {
+      const bound =
+        expected.accountSessionId || !pendingOwner.current
+          ? expected
+          : { ...expected, accountSessionId: pendingOwner.current };
+      setPendingLink((current) =>
+        current === expected ? reconcileMobileLink(bound, id) : current
+      );
+    }
+  );
+  useEffect(() => {
+    if (session.isPending || !pendingLink) return undefined;
+    let active = true;
+    const id = session.data?.session.id;
+    queueMicrotask(() => {
+      if (active) reconcileLink(pendingLink, id);
+    });
+    return () => {
+      active = false;
+    };
+  }, [session.isPending, session.data?.session.id, pendingLink]);
+  const linkHandled = useCallback((handled: PendingMobileLink) => {
+    setPendingLink((current) => (current === handled ? undefined : current));
+  }, []);
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea}>
@@ -70,6 +208,13 @@ export function App() {
           <AccountCompanion
             key={session.data.session.id}
             sessionId={session.data.session.id}
+            pendingLink={
+              pendingLink &&
+              mobileLinkForAccount(pendingLink, session.data.session.id)
+                ? pendingLink
+                : undefined
+            }
+            onLinkHandled={linkHandled}
           />
         ) : (
           <View style={styles.center}>
@@ -115,9 +260,28 @@ export function App() {
   );
 }
 
-function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
+function AccountCompanion({
+  sessionId,
+  pendingLink,
+  onLinkHandled,
+}: {
+  readonly sessionId: string;
+  readonly pendingLink?: PendingMobileLink;
+  readonly onLinkHandled: (link: PendingMobileLink) => void;
+}) {
   const storage = useMemo(() => mobileMessageStorage(sessionId), [sessionId]);
   const startAudioRecording = useAudioRecording();
+  const openOverlays = useRef(0);
+  const [overlayVersion, setOverlayVersion] = useState(0);
+  const registerOverlay = useCallback(() => {
+    openOverlays.current += 1;
+    setOverlayVersion((version) => version + 1);
+    return () => {
+      openOverlays.current -= 1;
+      setOverlayVersion((version) => version + 1);
+    };
+  }, []);
+  const hasOpenOverlay = useCallback(() => openOverlays.current > 0, []);
   const [client] = useState(
     () =>
       new QueryClient({
@@ -132,7 +296,7 @@ function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
     },
     [client]
   );
-  return (
+  const content = (
     <QueryClientProvider client={client}>
       <GesturePreferenceProvider storage={gestureStorage}>
         <LocalMessagesProvider storage={storage}>
@@ -146,6 +310,11 @@ function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
                   startAudioRecording={startAudioRecording}
                 >
                   <MobileCompanion
+                    sessionId={sessionId}
+                    pendingLink={pendingLink}
+                    onLinkHandled={onLinkHandled}
+                    hasOpenOverlay={hasOpenOverlay}
+                    overlayVersion={overlayVersion}
                     onSignOut={async () => {
                       const result = await auth.signOut();
                       if (result.error)
@@ -163,31 +332,101 @@ function AccountCompanion({ sessionId }: { readonly sessionId: string }) {
       </GesturePreferenceProvider>
     </QueryClientProvider>
   );
+  return Platform.OS === "ios" || Platform.OS === "android" ? (
+    <NavigationOverlayContext value={registerOverlay}>
+      <CompanionOverlayProvider renderOverlay={renderNavigationOverlay}>
+        {content}
+      </CompanionOverlayProvider>
+    </NavigationOverlayContext>
+  ) : (
+    content
+  );
 }
 
 function MobileCompanion({
   onSignOut,
+  sessionId,
+  pendingLink,
+  onLinkHandled,
+  hasOpenOverlay,
+  overlayVersion,
 }: {
   readonly onSignOut: () => Promise<void>;
+  readonly sessionId: string;
+  readonly pendingLink?: PendingMobileLink;
+  readonly onLinkHandled: (link: PendingMobileLink) => void;
+  readonly hasOpenOverlay: () => boolean;
+  readonly overlayVersion: number;
 }) {
   const account = auth.useSession();
-  const [section, setSection] = useState<CompanionSection>("chat");
-  const [roomId, setRoomId] = useState<string>();
-  const [conversationOpen, setConversationOpen] = useState(false);
-  const [conversation, setConversation] = useState<{
-    id?: string;
-    draft?: ConversationDraft;
-    key: number;
-  }>({ key: 0 });
-  const openConversation = (id?: string, draft?: string) => {
-    setRoomId(undefined);
-    setConversationOpen(true);
-    setConversation((current) => ({
-      id,
-      draft: draft ? { text: draft, files: [] } : undefined,
-      key: current.key + 1,
+  const [navigation, setNavigation] = useState(initialMobileNavigation);
+  const { section, roomId, conversationOpen, conversation } = navigation;
+  const [linkError, setLinkError] = useState<string>();
+  const consumeLink = useEffectEvent((expected: PendingMobileLink) => {
+    if (!pendingLink || expected !== pendingLink) return;
+    if (account.isPending || account.data?.session.id !== sessionId) return;
+    const disposition = mobileLinkDisposition(
+      pendingLink,
+      sessionId,
+      hasOpenOverlay()
+    );
+    if (disposition === "defer") return;
+    if (disposition === "handle") {
+      setLinkError(mobileLinkMessage(pendingLink.result));
+      if (pendingLink.result.kind === "location") {
+        const location = pendingLink.result.location;
+        setNavigation((current) => applyMobileLocation(current, location));
+      }
+    }
+    onLinkHandled(pendingLink);
+  });
+  useEffect(() => {
+    if (
+      !pendingLink ||
+      account.isPending ||
+      account.data?.session.id !== sessionId
+    )
+      return undefined;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) consumeLink(pendingLink);
+    });
+    return () => {
+      active = false;
+    };
+  }, [
+    pendingLink,
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Overlay lifecycle wakes an externally delivered locator after commit.
+    overlayVersion,
+    account.isPending,
+    account.data?.session.id,
+    sessionId,
+  ]);
+  const goBack = useEffectEvent(() => {
+    const next = backMobileNavigation(navigation, hasOpenOverlay());
+    if (!next) return false;
+    setNavigation(next);
+    return true;
+  });
+  useEffect(() => subscribeAndroidBack(goBack), []);
+  const setSection = (next: CompanionSection) => {
+    setLinkError(undefined);
+    setNavigation((current) => ({ ...current, section: next }));
+  };
+  const setRoomId = (next: string) => {
+    setLinkError(undefined);
+    setNavigation((current) => ({
+      ...current,
+      roomId: next,
+      conversationOpen: true,
     }));
-    setSection("chat");
+  };
+  const showInbox = () => {
+    setNavigation((current) => ({ ...current, conversationOpen: false }));
+  };
+  const openConversation = (id?: string, draft?: string) => {
+    setLinkError(undefined);
+    setNavigation((current) => openMobileConversation(current, id, draft));
   };
   return (
     <LinkPreviewProvider
@@ -211,7 +450,7 @@ function MobileCompanion({
           section={section}
           conversationOpen={conversationOpen}
           onShowInbox={() => {
-            setConversationOpen(false);
+            showInbox();
           }}
           hideConversationHeader={Boolean(roomId)}
           avatarUri={`${apiOrigin}/marketing/zoen-avatar.webp`}
@@ -240,7 +479,6 @@ function MobileCompanion({
               }}
               onOpenRoom={(id) => {
                 setRoomId(id);
-                setConversationOpen(true);
               }}
               onDiscover={() => {
                 setSection("discover");
@@ -252,13 +490,18 @@ function MobileCompanion({
             openConversation();
           }}
         >
+          {linkError && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {linkError}
+            </Text>
+          )}
           {section === "chat" && roomId ? (
             <MobileRoom
               key={roomId}
               roomId={roomId}
               onOpenRoom={setRoomId}
               onBack={() => {
-                setConversationOpen(false);
+                showInbox();
               }}
             />
           ) : section === "chat" ? (
@@ -267,7 +510,14 @@ function MobileCompanion({
               sessionId={conversation.id}
               initialDraft={conversation.draft}
               onCreated={(id, draft) => {
-                setConversation((current) => ({ ...current, id, draft }));
+                setNavigation((current) =>
+                  current.conversation.key === conversation.key
+                    ? {
+                        ...current,
+                        conversation: { ...current.conversation, id, draft },
+                      }
+                    : current
+                );
               }}
             />
           ) : (

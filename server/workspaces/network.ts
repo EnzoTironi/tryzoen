@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { UsernameSchema } from "../accounts/directory";
-import { approvalMessageSchema } from "../../agent/lib/approval-message";
+import { NetworkDestinationSchema } from "@zoen/companion-ui/approval";
 import {
   A2AError,
   acceptProtocolTask,
@@ -14,7 +14,7 @@ import {
   personalNetworkId,
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
-  WorkspaceActorSchema,
+  type WorkspaceActorSchema,
 } from "./access";
 import { BotProfileSchema, searchWorkspaceBots } from "./bots";
 
@@ -50,52 +50,6 @@ const connectionSchema = z.object({
   botUsername: z.nullable(z.string()),
 });
 const conversationCapabilities = JSON.stringify(["conversation"]);
-
-/** The exact recipient version displayed by native approval, never a mutable handle alone. */
-export const NetworkDestinationSchema = z.strictObject({
-  botId: z.uuid(),
-  workspaceId: WorkspaceActorSchema.shape.workspaceId,
-  revision: z.string().regex(/^[a-f0-9]{64}$/u),
-});
-
-const networkContactPayloadSchema = z.strictObject({
-  username: UsernameSchema,
-  destination: NetworkDestinationSchema,
-  text: z
-    .string()
-    .min(1)
-    .max(8000)
-    .refine(
-      (value) => value === value.trim() && value.isWellFormed(),
-      "Expected trimmed, well-formed text"
-    ),
-});
-
-/** Supplementary prose cannot replace any recipient or payload field. */
-export function renderNetworkApproval(raw: unknown, supplementary?: unknown) {
-  const { approvalMessage: _supplementary, ...payload } = z
-    .record(z.string(), z.unknown())
-    .parse(raw);
-  const input = networkContactPayloadSchema.parse(payload);
-  return approvalMessageSchema.parse(
-    `Network contact — exact payload\n${JSON.stringify(input, null, 2)}` +
-      (supplementary === undefined
-        ? ""
-        : `\n\nSupplementary context (does not change the payload):\n${approvalMessageSchema.parse(supplementary)}`)
-  );
-}
-
-export const NetworkContactInputSchema = networkContactPayloadSchema.refine(
-  (input) => {
-    try {
-      renderNetworkApproval(input);
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  "The complete recipient and payload must fit the approval display. Use a smaller message; no content may be omitted."
-);
 
 const requirePersonalActor = async function (
   actor: z.output<typeof WorkspaceActorSchema>

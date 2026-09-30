@@ -5,8 +5,9 @@
  * before the production PUT. This exposes the missing post-read admission
  * fence; it does not exercise PostgreSQL locking, native Eve replay, homeserver
  * membership propagation, or prove cross-system revocation linearizability.
- * The four acceptance cases intentionally remain ordinary failing tests until
- * the owning publish paths reject this transition before payload egress.
+ * The four adverse schedules remain ordinary acceptance tests. The original
+ * failing run is preserved in /tmp/zoen-security-matrix-red-20260930.log;
+ * unknown SQL failures cannot stand in for a real denied-admission outcome.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -128,6 +129,22 @@ const dialect = new PgDialect();
 const putCalls = () =>
   mocks.request.mock.calls.filter(([method]) => method === "PUT");
 
+function egressAudienceRows(statement: Parameters<typeof query>[0]) {
+  const { sql: text, params } = dialect.sqlToQuery(statement);
+  expect(params).toEqual([
+    actor.groupBindingId,
+    "synthetic-organization",
+    actor.workspaceId,
+    actor.workspaceId,
+  ]);
+  expect(text).toContain("a.native_pending");
+  expect(text).toContain("NOT EXISTS (SELECT 1 FROM human_access");
+  expect(text).toContain("NOT EXISTS (SELECT 1 FROM agent_access");
+  // This fixture has one joined, non-pending human audience member. Its
+  // live authority is the same mutable state used by requester admission.
+  return requesterMember ? [] : [{ user_id: actor.userId }];
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   requesterMember = true;
@@ -157,6 +174,8 @@ beforeEach(() => {
       successfulAuthorityChecks++;
       return [{ id: actor.groupBindingId }];
     }
+    if (text.includes("WITH audience AS MATERIALIZED"))
+      return egressAudienceRows(statement);
     if (text.includes('SELECT b.conversation_id AS "roomId"'))
       return [{ roomId }];
     if (text.includes("UPDATE matrix_deliveries SET session_id"))
@@ -223,16 +242,17 @@ describe.each(publishers)("$name revocation admission", ({ body, publish }) => {
   );
 
   test.each(revocations)(
-    "acceptance: $name revoked during reply GET prevents provider PUT (expected red)",
+    "acceptance: $name revoked during reply GET prevents provider PUT",
     async ({ revoke }) => {
       afterReplyRead = () => {
         checksAtRevocation = successfulAuthorityChecks;
         revoke();
       };
-      // Fail-closed delivery may throw or return without sending. Preserve its
-      // outcome while checking the material egress boundary, not an error label.
-      await Promise.allSettled([publish()]);
-      expect(checksAtRevocation).toBeGreaterThanOrEqual(2);
+      await expect(publish()).rejects.toThrow(WorkspaceAccessDenied);
+      // The adverse transition still occurs after a successful authority read,
+      // inside the awaited provider GET and before the attempted PUT. Moving
+      // the final admission read after GET may reduce the earlier read count.
+      expect(checksAtRevocation).toBeGreaterThanOrEqual(1);
       expect(mocks.fetch).not.toHaveBeenCalled();
       expect(
         putCalls(),

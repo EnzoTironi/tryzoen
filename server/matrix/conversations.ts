@@ -1,3 +1,4 @@
+import type { NetworkDestinationSchema } from "@zoen/companion-ui/approval";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { withTimeout, mapAsync } from "../operations/async";
@@ -5,7 +6,6 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 
 import {
-  type NetworkDestinationSchema,
   openNetworkBot,
   requireNetworkDestination,
 } from "../workspaces/network";

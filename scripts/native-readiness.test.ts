@@ -188,3 +188,26 @@ test("malformed package metadata and missing installations are distinct and do n
   expect(report.desktop.status).toBe("unavailable");
   expect(report.nativeExecution.status).toBe("unknown");
 });
+
+test("extracted native adapter and application call sites remain static candidates", async () => {
+  await fixture(
+    "apps/mobile/src/app.tsx",
+    "subscribeAndroidBack(goBack); subscribeContentLinks(receive, fail);"
+  );
+  await fixture(
+    "apps/mobile/src/navigation/native.ts",
+    "BackHandler.addEventListener('hardwareBackPress', back); Linking.addEventListener('url', receive); Linking.getInitialURL();"
+  );
+  const report = await nativeReadiness(root);
+  for (const evidence of [
+    "Application back marker",
+    "Application URL marker",
+    "Native back adapter marker",
+    "Native URL adapter marker",
+  ]) {
+    expect(
+      report.candidates.find((entry) => entry.evidence.includes(evidence))
+    ).toMatchObject({ status: "unknown", markerFound: true });
+  }
+  expect(report.nativeExecution.status).toBe("unknown");
+});

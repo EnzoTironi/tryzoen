@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import { z } from "zod";
 import {
   LearnedClaimFileSchema,
-  LearnedClaimChangeSchema,
+  type LearnedClaimChangeSchema,
   LearnedClaimPublicationSchema,
   LearnedClaimOperationSchema,
   LearnedClaimReceiptSchema,

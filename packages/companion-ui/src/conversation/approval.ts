@@ -84,13 +84,27 @@ export function renderGmailApproval(raw: unknown, supplementary?: unknown) {
   return disclose("Gmail email", gmailSendSchema.parse(raw), supplementary);
 }
 
+export const gmailSendInputSchema = gmailSendSchema
+  .extend({
+    approvalMessage: approvalTextSchema.describe(
+      "Supplementary context for the exact email payload. It cannot replace or change the recipients, subject, full body or thread/reply fields shown by native approval."
+    ),
+  })
+  .refine((input) => {
+    try {
+      renderGmailApproval(input, input.approvalMessage);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Complete email approval exceeds the presentation limit or contains invalid text. Propose a smaller email; do not omit content.");
+
+/** Validates material fields only. The caller supplies supplementary context
+ * separately; native network input has no supplementary field. */
 export function renderNetworkApproval(raw: unknown, supplementary?: unknown) {
-  const { approvalMessage: _supplementary, ...payload } = z
-    .record(z.string(), z.unknown())
-    .parse(raw);
   return disclose(
     "Network contact",
-    networkContactPayloadSchema.parse(payload),
+    networkContactPayloadSchema.parse(raw),
     supplementary
   );
 }
@@ -113,11 +127,13 @@ export function renderApprovalDisclosure(toolName: string, input: unknown) {
   if (toolName !== "gmail-send" && toolName !== "network-contact")
     return { kind: "unsupported" } as const;
   try {
-    const payload = z.record(z.string(), z.unknown()).parse(input);
-    const text =
-      toolName === "gmail-send"
-        ? renderGmailApproval(payload, payload.approvalMessage)
-        : renderNetworkApproval(payload, payload.approvalMessage);
+    let text: string;
+    if (toolName === "gmail-send") {
+      const payload = gmailSendInputSchema.parse(input);
+      text = renderGmailApproval(payload, payload.approvalMessage);
+    } else {
+      text = renderNetworkApproval(NetworkContactInputSchema.parse(input));
+    }
     return { kind: "ready", text } as const;
   } catch {
     return {

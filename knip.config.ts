@@ -41,6 +41,8 @@ export default {
         "benchmarks/performance/run.ts",
         // Read-only platform prerequisite inventory, invoked independently of native builds.
         "scripts/native-readiness.ts",
+        // Manual CDP regression against the isolated shared conversation UI.
+        "tests/companion/composer-hit-targets.ts",
       ],
       ignoreDependencies: [
         // Next resolves React Native imports to this web renderer.

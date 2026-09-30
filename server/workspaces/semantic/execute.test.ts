@@ -19,6 +19,7 @@ vi.mock("../../../shared/environment/env", () => ({
   },
 }));
 import { executeSemanticSnapshot } from "./execute";
+import { semanticLimits } from "./snapshot";
 const input = {
   model: "model",
   query: "total",
@@ -114,4 +115,72 @@ test("aborting waits for cancellation acknowledgement before endpoint admission 
       { total: 30 },
     ]);
   });
+});
+
+// The cancellation acknowledgement has its own bounded deadline. It must not
+// reclassify a failure that already happened in the calculation itself.
+test.each([
+  [
+    "worker failure",
+    () => new Response(null, { status: 500 }),
+    "Semantic execution failed",
+  ],
+  [
+    "result byte limit",
+    () => new Response("x".repeat(65_537)),
+    "Semantic result exceeds its byte limit",
+  ],
+])(
+  "retains the original %s when the calculation deadline expires during cleanup",
+  async (_name, response, message) => {
+    const deadline = new AbortController();
+    const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((milliseconds) =>
+        milliseconds === semanticLimits.deadlineMs
+          ? deadline.signal
+          : originalTimeout(milliseconds)
+      );
+    state.fetch
+      .mockResolvedValueOnce(response())
+      .mockImplementationOnce(async () => {
+        deadline.abort(new Error("deadline passed during acknowledgement"));
+        return new Response(null, { status: 204 });
+      });
+    try {
+      await expect(executeSemanticSnapshot(input)).rejects.toThrow(message);
+      expect(state.fetch).toHaveBeenCalledTimes(2);
+      expect(state.fetch.mock.calls[1]?.[0]).toEqual(
+        new URL("http://127.0.0.1:18130/cancel")
+      );
+    } finally {
+      timeout.mockRestore();
+    }
+  }
+);
+
+test("preserves an execution deadline that was reached before cleanup", async () => {
+  const deadline = new AbortController();
+  const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const timeout = vi
+    .spyOn(AbortSignal, "timeout")
+    .mockImplementation((milliseconds) =>
+      milliseconds === semanticLimits.deadlineMs
+        ? deadline.signal
+        : originalTimeout(milliseconds)
+    );
+  state.fetch
+    .mockImplementationOnce(async () => {
+      deadline.abort(new Error("execution deadline"));
+      throw new Error("transport source details must stay opaque");
+    })
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  try {
+    await expect(executeSemanticSnapshot(input)).rejects.toThrow(
+      "Semantic execution deadline reached"
+    );
+  } finally {
+    timeout.mockRestore();
+  }
 });
