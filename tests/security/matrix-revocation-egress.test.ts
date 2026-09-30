@@ -163,27 +163,29 @@ beforeEach(() => {
       return [{ event_id: eventId }];
     throw new Error(`Unexpected SQL in mocked acceptance path: ${text}`);
   });
-  mocks.request.mockImplementation(async (method, path) => {
-    if (
-      method === "GET" &&
-      path ===
-        `rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`
-    ) {
-      afterReplyRead?.();
-      return {
-        event_id: eventId,
-        type: "m.room.message",
-        sender: actor.matrixIdentityId,
-        content: { body: "Synthetic original request" },
-      };
+  mocks.request.mockImplementation(
+    async (method, path): ReturnType<typeof matrixRequest> => {
+      if (
+        method === "GET" &&
+        path ===
+          `rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`
+      ) {
+        afterReplyRead?.();
+        return {
+          event_id: eventId,
+          type: "m.room.message",
+          sender: actor.matrixIdentityId,
+          content: { body: "Synthetic original request" },
+        };
+      }
+      if (
+        method === "PUT" &&
+        path.startsWith(`rooms/${encodeURIComponent(roomId)}/send/`)
+      )
+        return { event_id: "$synthetic-delivered" };
+      throw new Error(`Unexpected Matrix transport call: ${method} ${path}`);
     }
-    if (
-      method === "PUT" &&
-      path.startsWith(`rooms/${encodeURIComponent(roomId)}/send/`)
-    )
-      return { event_id: "$synthetic-delivered" };
-    throw new Error(`Unexpected Matrix transport call: ${method} ${path}`);
-  });
+  );
 });
 
 afterEach(() => {
