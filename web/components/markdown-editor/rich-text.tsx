@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { useColorScheme } from "react-native";
 import {
   Bold,
   Italic,
@@ -36,6 +37,7 @@ import {
 import styles from "./rich-text.module.css";
 
 export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
+  const colorScheme = useColorScheme();
   const editor = useRef<MarkdownEditorHandle>(null);
   const [document, setDocument] = useState({
     text: props.initialMarkdown,
@@ -115,7 +117,10 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
       >
         <MoreHorizontal />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        className={colorScheme === "dark" ? "dark" : undefined}
+      >
         {(
           [
             ["source", source ? "Visual editor" : "View Markdown source"],
