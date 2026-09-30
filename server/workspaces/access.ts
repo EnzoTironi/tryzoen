@@ -29,10 +29,7 @@ export const WorkspaceActorSchema = z.object({
   matrixIdentityId: z.optional(identifier),
 });
 
-export const AgentMemberPrincipalSchema = z.templateLiteral([
-  "agent:",
-  z.uuid(),
-]);
+const AgentMemberPrincipalSchema = z.templateLiteral(["agent:", z.uuid()]);
 
 export class WorkspaceAccessDenied extends Error {
   readonly _tag = "WorkspaceAccessDenied";
