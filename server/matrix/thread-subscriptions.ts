@@ -14,6 +14,7 @@ import { MatrixError, matrixRequest } from "./client";
 import { joinMatrixRoom, requireMatrixRoom } from "./rooms";
 import { readRoomMessage } from "./messages";
 import { TimeoutError, withTimeout } from "../operations/async";
+import { lockMatrixAdmission } from "./authority";
 
 const version = "unstable/io.element.msc4306";
 const subscription = z.object({ automatic: z.boolean() });
@@ -88,6 +89,7 @@ export async function setThreadSubscription(
   const input = threadSubscriptionWriteSchema.parse(raw);
   const write = () =>
     transaction(async () => {
+      await lockMatrixAdmission([actor.workspaceId], [input.id]);
       await query(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`matrix-thread-subscription:${actor.userId}:${input.id}:${input.rootId}`}, 0))`
       );
