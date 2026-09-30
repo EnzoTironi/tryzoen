@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
-import type { useColorScheme } from "react-native";
 import type {
   MarkdownEditorProps,
   MarkdownSourceEditor,
+  useDarkAppearance,
 } from "@zoen/companion-ui";
 import type { Button } from "@web/components/ui/button";
 import type {
@@ -22,13 +22,12 @@ import RichTextEditor from "@web/components/markdown-editor/rich-text";
 import { FileEditor } from "./file-editor";
 
 const controls = vi.hoisted(() => ({
-  scheme: vi.fn<typeof useColorScheme>().mockReturnValue("unspecified"),
+  darkAppearance: vi.fn<typeof useDarkAppearance>().mockReturnValue(false),
   buttons: [] as ComponentProps<typeof Button>[],
   editorProps: undefined as MarkdownEditorProps | undefined,
   writes: vi.fn<() => Promise<void>>(),
   invalidate: vi.fn<() => Promise<void>>(),
 }));
-vi.mock("react-native", () => ({ useColorScheme: controls.scheme }));
 vi.mock("next/dynamic", () => ({
   default: () => (props: MarkdownEditorProps) => {
     controls.editorProps = props;
@@ -79,6 +78,7 @@ vi.mock("@web/components/ui/dialog", () => ({
 }));
 vi.mock("./file-history", () => ({ FileHistory: () => null }));
 vi.mock("@zoen/companion-ui", () => ({
+  useDarkAppearance: controls.darkAppearance,
   MarkdownSourceEditor: (
     props: ComponentProps<typeof MarkdownSourceEditor>
   ) => {
@@ -118,7 +118,7 @@ const onError = vi.fn<(error: string) => void>();
 const onDirty = vi.fn<() => void>();
 
 beforeEach(() => {
-  controls.scheme.mockReturnValue("unspecified");
+  controls.darkAppearance.mockReturnValue(false);
   controls.buttons = [];
   controls.editorProps = undefined;
   vi.clearAllMocks();
@@ -127,7 +127,7 @@ beforeEach(() => {
 test.each(["light", "dark", "unspecified"] as const)(
   "uses the existing CSS palette on the file panel for %s appearance",
   (scheme) => {
-    controls.scheme.mockReturnValue(scheme);
+    controls.darkAppearance.mockReturnValue(scheme === "dark");
     const markup = renderToStaticMarkup(
       <FileEditor
         path="knowledge/launch-notes.md"
@@ -154,7 +154,7 @@ test.each(["light", "dark", "unspecified"] as const)(
 test.each(["light", "dark", "unspecified"] as const)(
   "themes the separately portaled document actions for %s appearance",
   (scheme) => {
-    controls.scheme.mockReturnValue(scheme);
+    controls.darkAppearance.mockReturnValue(scheme === "dark");
     const markup = renderToStaticMarkup(
       <RichTextEditor
         ref={null}
@@ -183,7 +183,7 @@ test.each(["light", "dark", "unspecified"] as const)(
 );
 
 test("preserves read-only historical content and disabled writes in dark appearance", () => {
-  controls.scheme.mockReturnValue("dark");
+  controls.darkAppearance.mockReturnValue(true);
   renderToStaticMarkup(
     <FileEditor
       path="knowledge/launch-notes.md"

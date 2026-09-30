@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import { useColorScheme } from "react-native";
 import {
   Bold,
   Italic,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   MarkdownSourceEditor,
+  useDarkAppearance,
   type MarkdownEditorProps,
   type MarkdownEditorHandle,
 } from "@zoen/companion-ui";
@@ -37,7 +37,7 @@ import {
 import styles from "./rich-text.module.css";
 
 export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
-  const colorScheme = useColorScheme();
+  const darkAppearance = useDarkAppearance();
   const editor = useRef<MarkdownEditorHandle>(null);
   const [document, setDocument] = useState({
     text: props.initialMarkdown,
@@ -119,7 +119,7 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className={colorScheme === "dark" ? "dark" : undefined}
+        className={darkAppearance ? "dark" : undefined}
       >
         {(
           [
