@@ -81,7 +81,7 @@ export function RoomConversation({
   );
   const [headerHeight, setHeaderHeight] = useState(compact ? 104 : 80);
   const [threadHeaderHeight, setThreadHeaderHeight] = useState(
-    compact ? 122 : 98
+    compact ? 104 : 80
   );
   const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
   const unread = useMarkRoomUnread(data, cacheScope, roomId, onBack);
@@ -300,6 +300,7 @@ export function RoomConversation({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Voltar à conversa ${room?.label ?? "Thread"}`}
+              accessibilityHint={`Thread de ${root.sender}`}
               onPress={() => {
                 setRoot(undefined);
               }}
@@ -317,9 +318,6 @@ export function RoomConversation({
                 </Text>
                 <ChevronRight size={12} color={colors.muted} />
               </View>
-              <Text numberOfLines={1} style={styles.caption}>
-                Thread · {root.sender}
-              </Text>
             </Pressable>
             <View style={styles.headerSide}>
               <View style={styles.headerControl}>
@@ -802,7 +800,7 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingVertical: compact ? 8 : 4,
     },
     headerSide: { width: 44, alignItems: "center" },
     headerControl: {

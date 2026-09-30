@@ -224,7 +224,7 @@ export function Composer({
     }
   }
   return (
-    <View style={styles.wrapper}>
+    <View pointerEvents="box-none" style={styles.wrapper}>
       {sheet.content}
       {attachments && (
         <AudioMessageRecorder
@@ -261,7 +261,7 @@ export function Composer({
         disabled={sending}
         onRemoveReply={onRemoveReply}
       />
-      <View style={styles.composer}>
+      <View pointerEvents="box-none" style={styles.composer}>
         {(Boolean(pick) || sheet.source) && (
           <Pressable
             accessibilityRole="button"
@@ -529,7 +529,7 @@ const createStyles = (palette: ReturnType<typeof useColors>, compact = true) =>
       color: palette.muted,
     },
     wrapper: { width: "100%", gap: 8, zIndex: 10 },
-    composer: { flexDirection: "row", alignItems: "center", gap: 8 },
+    composer: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
     add: {
       width: compact ? 44 : 32,
       height: compact ? 44 : 32,

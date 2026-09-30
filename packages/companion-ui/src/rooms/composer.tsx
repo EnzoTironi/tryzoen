@@ -29,7 +29,7 @@ export function RoomComposer({
   );
   const reply = disabled ? undefined : draft.reply;
   return (
-    <View style={styles.composer}>
+    <View pointerEvents="box-none" style={styles.composer}>
       {paused && visible && !disabled && (
         <Text accessibilityLiveRegion="polite" style={styles.connection}>
           Reconectando… Você pode continuar escrevendo.
@@ -79,7 +79,7 @@ export function RoomComposer({
 function createStyles(colors: ReturnType<typeof useColors>, compact = true) {
   return StyleSheet.create({
     composer: {
-      paddingHorizontal: compact ? 12 : 10,
+      paddingHorizontal: compact ? 24 : 10,
       paddingTop: 8,
       paddingBottom: compact ? 10 : 8,
     },
