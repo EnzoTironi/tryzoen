@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MatrixEventSchema } from "./client";
 import type { matrixRequest } from "./client";
@@ -16,20 +18,37 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@db/queries", () => ({
   transaction: async (operation: () => Promise<unknown>) => operation(),
-  query: async () => [
-    {
-      id: "@member:matrix.test",
-      roomId: "!room:matrix.test",
-      label: "Team room",
-      kind: "group",
-      workspaceId: "workspace",
-      epoch: "epoch",
-      matrixId: "@member:matrix.test",
-      name: "Member",
-      mine: true,
-      bot: false,
-    },
-  ],
+  query: async (statement: SQL) => {
+    const { sql } = new PgDialect().sqlToQuery(statement);
+    if (
+      sql.includes(
+        'SELECT w.id AS "workspaceId", w.organization_id AS "organizationId"'
+      )
+    )
+      return [{ workspaceId: "workspace", organizationId: "team" }];
+    if (sql.includes("SELECT id FROM organizations")) return [{ id: "team" }];
+    if (sql.includes("pg_advisory_xact_lock")) return [];
+    if (
+      sql.includes("SELECT id FROM workspace_group_bindings") &&
+      sql.includes("FOR UPDATE")
+    )
+      return [{ id: "binding" }];
+    return [
+      {
+        id: "@member:matrix.test",
+        roomId: "!room:matrix.test",
+        label: "Team room",
+        kind: "group",
+        workspaceId: "workspace",
+        epoch: "epoch",
+        matrixId: "@member:matrix.test",
+        state: "joined",
+        name: "Member",
+        mine: true,
+        bot: false,
+      },
+    ];
+  },
 }));
 vi.mock("../workspaces/access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../workspaces/access")>()),

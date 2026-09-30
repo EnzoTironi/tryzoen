@@ -10,6 +10,7 @@ import {
 } from "../workspaces/access";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
 import { ensureMatrixIdentity } from "./identities";
+import { lockMatrixAdmission } from "./authority";
 
 /** Exact current state, never a potentially delayed membership callback. */
 export async function readNativeGroupMembership(
@@ -43,9 +44,7 @@ export async function changeMatrixGroupMembership(
 ) {
   const input = roomMembershipChangeSchema.parse(raw);
   const target = await transaction(async () => {
-    await query(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.id}, 5))`
-    );
+    await lockMatrixAdmission([actor.workspaceId], [input.id]);
     const { binding, person } = await groupMembershipTarget(actor, input);
     const matrixId = await ensureMatrixIdentity(person);
     const current = await query<{
@@ -76,7 +75,7 @@ export async function changeMatrixGroupMembership(
     return person.userId;
   });
   if (input.action === "add") return { nativePending: false };
-  return { nativePending: !(await retireGroupMember(input.id, target)) };
+  return { nativePending: !(await retireMatrixGroupMember(input.id, target)) };
 }
 
 async function groupMembershipTarget(
@@ -132,12 +131,14 @@ export async function joinNativeGroup(roomId: string, matrixId: string) {
     throw new MatrixError({ reason: "conflict" });
 }
 
-async function retireGroupMember(bindingId: string, userId: string) {
+/** Clear the committed departure receipt only after exact native absence. */
+export async function retireMatrixGroupMember(
+  bindingId: string,
+  userId: string
+) {
   try {
     return await transaction(async () => {
-      await query(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${bindingId}, 5))`
-      );
+      await lockMatrixAdmission([], [bindingId]);
       const config = await matrixConfiguration();
       const rows = await query<{
         roomId: string;
@@ -174,8 +175,13 @@ async function retireGroupMember(bindingId: string, userId: string) {
     });
   } catch {
     // The committed flag is the retry receipt; never restore app access on transport failure.
-    await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
-      WHERE binding_id = ${bindingId} AND user_id = ${userId} AND native_pending AND state <> 'joined'`);
+    // Retry scheduling follows the same order. If it cannot be written, the
+    // already committed pending receipt still withholds room egress.
+    await transaction(async () => {
+      await lockMatrixAdmission([], [bindingId]);
+      await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
+        WHERE binding_id = ${bindingId} AND user_id = ${userId} AND native_pending AND state <> 'joined'`);
+    }).catch(() => undefined);
     console.warn("Group membership retirement remains pending");
     return false;
   }
@@ -190,6 +196,6 @@ export async function reconcileGroupDepartures() {
   const deadline = Date.now() + 30_000;
   for (const row of rows) {
     if (Date.now() >= deadline) break;
-    await retireGroupMember(row.bindingId, row.userId);
+    await retireMatrixGroupMember(row.bindingId, row.userId);
   }
 }
