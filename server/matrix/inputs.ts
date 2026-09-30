@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import type { ChannelReceiveContext, Session } from "eve/channels";
 import { parseInputResponses, type InputRequest } from "eve/client";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import {
   readChannelInputs,
   renderChannelInput,
@@ -13,7 +13,11 @@ import { channelConsentRevision } from "../../agent/lib/channel-consent";
 import type { DeliveryState } from "../../agent/lib/durable-delivery";
 import { operationSignal, withTimeout } from "../operations/async";
 import { withNativeDeliveryLock } from "../messaging/native-receipts";
-import { matrixDeliveryActor, matrixPrincipal } from "./authority";
+import {
+  matrixDeliveryActor,
+  matrixPrincipal,
+  requireMatrixEgress,
+} from "./authority";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
 import { finishMatrixEvent } from "./delivery";
 
@@ -33,43 +37,46 @@ export async function publishMatrixInputs(
   sessionId: string,
   requests: readonly InputRequest[]
 ) {
-  await matrixDeliveryActor(eventId);
-  const rows = await query<{
-    roomId: string;
-  }>(sql`SELECT b.conversation_id AS "roomId" FROM matrix_deliveries d
-    JOIN workspace_group_bindings b ON b.id = d.binding_id WHERE d.event_id = ${eventId}`);
-  const room = rows[0];
-  if (!room) return;
-  const bound =
-    await query(sql`UPDATE matrix_deliveries SET session_id = ${sessionId}, state = 'dispatched', updated_at = now()
-    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched') AND (session_id IS NULL OR session_id = ${sessionId}) RETURNING event_id`);
-  if (bound.length !== 1)
-    throw new Error("Matrix input session does not match its delivery");
-  for (const request of requests) {
-    const reference = {
-      eventId,
-      requestId: request.requestId,
-      revision: channelConsentRevision(request),
-    };
-    const key = createHash("sha256")
-      .update(`${sessionId}:${request.requestId}`)
-      .digest("hex");
-    const instructions =
-      request.kind === "tool-approval"
-        ? "\n\nSomente quem pediu pode decidir. Responda “@Zoen aprovar” ou “@Zoen cancelar”."
-        : "\n\nQuem fez o pedido pode responder mencionando @Zoen e a opção escolhida.";
+  return transaction(async () => {
     await matrixDeliveryActor(eventId);
-    await matrixRequest(
-      "PUT",
-      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/zoen_input_${key}`,
-      {
-        msgtype: "m.text",
-        body: renderChannelInput(request) + instructions,
-        "m.relates_to": await matrixReplyRelation(room.roomId, eventId),
-        "dev.zoen.input": reference,
-      }
-    );
-  }
+    const rows = await query<{
+      roomId: string;
+    }>(sql`SELECT b.conversation_id AS "roomId" FROM matrix_deliveries d
+    JOIN workspace_group_bindings b ON b.id = d.binding_id WHERE d.event_id = ${eventId}`);
+    const room = rows[0];
+    if (!room) return;
+    const bound =
+      await query(sql`UPDATE matrix_deliveries SET session_id = ${sessionId}, state = 'dispatched', updated_at = now()
+    WHERE event_id = ${eventId} AND state IN ('pending', 'dispatched') AND (session_id IS NULL OR session_id = ${sessionId}) RETURNING event_id`);
+    if (bound.length !== 1)
+      throw new Error("Matrix input session does not match its delivery");
+    for (const request of requests) {
+      const reference = {
+        eventId,
+        requestId: request.requestId,
+        revision: channelConsentRevision(request),
+      };
+      const key = createHash("sha256")
+        .update(`${sessionId}:${request.requestId}`)
+        .digest("hex");
+      const instructions =
+        request.kind === "tool-approval"
+          ? "\n\nSomente quem pediu pode decidir. Responda “@Zoen aprovar” ou “@Zoen cancelar”."
+          : "\n\nQuem fez o pedido pode responder mencionando @Zoen e a opção escolhida.";
+      const relation = await matrixReplyRelation(room.roomId, eventId);
+      await requireMatrixEgress(eventId);
+      await matrixRequest(
+        "PUT",
+        `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/zoen_input_${key}`,
+        {
+          msgtype: "m.text",
+          body: renderChannelInput(request) + instructions,
+          "m.relates_to": relation,
+          "dev.zoen.input": reference,
+        }
+      );
+    }
+  });
 }
 
 /** A named, exact decision can only answer one previously delivered request by its original sender. */

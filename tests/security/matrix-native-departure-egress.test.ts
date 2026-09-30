@@ -4,9 +4,11 @@
  * The fixture is a NEW event at the current epoch after local departure. It
  * models a failed native kick/leave: the departed user remains native joined.
  * Native room recipients below are a cross-system assumption, not a provider
- * integration proof. The observed fact is the source's room-message PUT while
- * local removed/left + native_pending exists. No DB, runtime or provider runs.
- * Acceptance assertions deliberately fail until room egress is fail closed.
+ * integration proof. No DB, runtime or provider runs. Acceptance uses the real
+ * authority helper and rejects unsafe delivery with WorkspaceAccessDenied.
+ * Historical pre-fix PUT/leak reproduction is preserved in
+ * /tmp/zoen-security-matrix-red-20260930.log (SHA-256
+ * fa87f861c53316d93a4dd8a088b5f974312e27d503fed04bbcad878d22f5b100).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -15,6 +17,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { matrixRequest } from "../../server/matrix/client";
 import { publishMatrixAnswer } from "../../server/matrix/delivery";
 import { publishMatrixToolResult } from "../../server/matrix/tool-results";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn<(statement: SQL) => Promise<Record<string, unknown>[]>>(),
@@ -110,6 +113,40 @@ const dialect = new PgDialect();
 function mockRows(statement: SQL) {
   const { sql: text, params } = dialect.sqlToQuery(statement);
   const sql = text.replace(/\s+/gu, " ").trim();
+  if (sql.startsWith("WITH audience AS MATERIALIZED (")) {
+    // Interpret the authored egress CTE at its SQL boundary, never replace the
+    // real requireMatrixEgress helper or return an unconditional safe audience.
+    expect(params).toEqual([
+      fixture.bindingId,
+      fixture.organizationId,
+      fixture.workspaceId,
+      fixture.workspaceId,
+    ]);
+    expect(sql).toContain(
+      "SELECT m.user_id, m.state, m.native_pending FROM matrix_room_members m WHERE m.binding_id = $1 FOR SHARE OF m"
+    );
+    expect(sql).toContain("o.organization_id = $2");
+    expect(sql).toContain("w.workspace_id = $3 FOR SHARE OF w, o");
+    expect(sql).toContain(
+      "m.workspace_id = $4 AND m.revoked_at IS NULL FOR SHARE OF m"
+    );
+    expect(sql).toContain(
+      "SELECT a.user_id FROM audience a WHERE a.native_pending"
+    );
+    expect(sql).toContain("a.state = 'joined'");
+    expect(sql).toContain(
+      "NOT EXISTS (SELECT 1 FROM human_access h WHERE h.user_id = a.user_id)"
+    );
+    expect(sql).toContain(
+      "NOT EXISTS (SELECT 1 FROM agent_access g WHERE g.user_id = a.user_id)"
+    );
+    const unsafe = [...localMembers].find(
+      ([userId, member]) =>
+        member.native_pending ||
+        (member.state === "joined" && userId !== fixture.requester)
+    );
+    return unsafe ? [{ user_id: unsafe[0] }] : [];
+  }
   if (sql.startsWith('SELECT d.user_id AS "userId"')) {
     expect(params).toContain(fixture.eventId);
     return [actor];
@@ -123,8 +160,8 @@ function mockRows(statement: SQL) {
     return [{ user_id: fixture.requester }];
   }
   if (sql.startsWith("SELECT b.id FROM workspace_group_bindings b")) {
-    // Real access.ts only checks the requester. It does not ask about the
-    // fixture's departed member or native_pending before admitting this send.
+    // The real workspace authority checks the requester; room-wide egress
+    // admission must also account for other members' pending departures.
     expect(params).toEqual([
       fixture.requester,
       fixture.requesterMatrixId,
@@ -217,29 +254,36 @@ describe.each(deliveryBoundaries)(
     });
 
     it.each(["removed", "left"] as const)(
-      "observed: publishes fresh output while another member is locally %s with native_pending",
+      "delivers fresh output after a locally %s member's native departure is confirmed",
+      async (state) => {
+        localMembers.set(fixture.departed, { state, native_pending: false });
+        nativeJoined.delete(fixture.departed);
+        await publish();
+        expect(actor.groupEpoch).toBe(fixture.epoch);
+        expect(actor.groupEpoch).not.toBe(fixture.previousEpoch);
+        expect(localMembers.get(fixture.departed)).toEqual({
+          state,
+          native_pending: false,
+        });
+        expect(mocks.request).toHaveBeenCalledTimes(1);
+        expect(nativeReceipts).toEqual([
+          { recipientId: fixture.requester, body: fixture.output },
+        ]);
+      }
+    );
+
+    it.each(["removed", "left"] as const)(
+      "acceptance: denies room output until a locally %s member's native departure is verified",
       async (state) => {
         pendingNativeDeparture(state);
-        await publish();
         expect(actor.groupEpoch).toBe(fixture.epoch);
         expect(actor.groupEpoch).not.toBe(fixture.previousEpoch);
         expect(localMembers.get(fixture.departed)).toEqual({
           state,
           native_pending: true,
         });
-        expect(mocks.request).toHaveBeenCalledTimes(1);
-        expect(nativeReceipts).toEqual([
-          { recipientId: fixture.requester, body: fixture.output },
-          { recipientId: fixture.departed, body: fixture.output },
-        ]);
-      }
-    );
-
-    it.each(["removed", "left"] as const)(
-      "acceptance: withholds room output until a locally %s member's native departure is verified (expected red)",
-      async (state) => {
-        pendingNativeDeparture(state);
-        await publish();
+        expect(nativeJoined.has(fixture.departed)).toBe(true);
+        await expect(publish()).rejects.toThrow(WorkspaceAccessDenied);
         expect(
           mocks.request,
           "A fresh authorized requester does not make a native room with a pending departed member safe for output."

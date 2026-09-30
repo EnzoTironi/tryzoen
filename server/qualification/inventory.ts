@@ -176,6 +176,11 @@ const rows: readonly QualificationRow[] = [
     "none",
     "tests/runtime/workspace-knowledge.integration.ts"
   ),
+  coordinator(
+    "workspace_knowledge_query",
+    "none",
+    "tests/runtime/eve-semantic.integration.ts"
+  ),
   coordinator("workspace_files_read", "none", files),
   coordinator("workspace_files_search", "none", files),
   coordinator(

@@ -1,3 +1,4 @@
+import { NetworkContactInputSchema } from "@zoen/companion-ui/approval";
 import { withSignal } from "../../operations/async";
 import { z } from "zod";
 import { defineDynamic, defineTool } from "eve/tools";
@@ -5,7 +6,6 @@ import { always } from "eve/tools/approval";
 import { workspaceOperationId } from "../../../agent/lib/workspace-operation";
 import {
   discoverNetworkBots,
-  NetworkContactInputSchema,
   requireNetworkDestination,
 } from "../../workspaces/network";
 import { workspaceActorFromPrincipal } from "../../workspaces/access";

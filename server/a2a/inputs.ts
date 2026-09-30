@@ -7,6 +7,7 @@ import {
   type InputRequest,
 } from "eve/client";
 import type { AttachSessionFn, ChannelDefinition } from "eve/channels";
+import type { SessionAuthContext } from "eve/context";
 import {
   deliverOnce,
   type deliveryContext,
@@ -199,8 +200,8 @@ export async function respondProtocolInput(
     { requestId: reference.requestId, text },
   ]);
   const access = await requireWorkspaceAccess(actor);
-  const auth = {
-    principalType: "user" as const,
+  const auth: SessionAuthContext = {
+    principalType: actor.userId.startsWith("agent:") ? "service" : "user",
     principalId: actor.userId,
     authenticator: "a2a",
     attributes: {
