@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { gmail, type gmail_v1 } from "@googleapis/gmail";
 import type { ToolContext } from "eve/tools";
-import { z } from "zod";
+import type { z } from "zod";
 import { googleApiErrorStatus, withGoogleAuth } from "./client";
-import { approvalMessageSchema } from "../approval-message";
+import { gmailSendSchema } from "@zoen/companion-ui/approval";
 type GmailMessage = gmail_v1.Schema$Message;
 type GmailPart = gmail_v1.Schema$MessagePart;
 export const GMAIL_UPDATE_ACTIONS = [
@@ -15,59 +15,6 @@ export const GMAIL_UPDATE_ACTIONS = [
   "unstar",
 ] as const;
 export type GmailUpdateAction = (typeof GMAIL_UPDATE_ACTIONS)[number];
-// Keep Zod's strict email check at execution without publishing its lookahead regex.
-const emailAddress = z
-  .string()
-  .refine((value) => z.email().safeParse(value).success, {
-    message: "Invalid email address",
-  });
-const mailHeader = z
-  .string()
-  .min(1)
-  .max(998)
-  .refine(
-    (value) =>
-      value.isWellFormed() &&
-      Array.from(value).every(
-        (character) =>
-          character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127
-      ) &&
-      safeHeader(value) === value,
-    {
-      message:
-        "Mail headers must be well-formed, trimmed text without line breaks",
-    }
-  );
-export const gmailSendSchema = z.object({
-  bcc: z.array(emailAddress).max(20).default([]),
-  body: z
-    .string()
-    .min(1)
-    .max(100_000)
-    .refine(
-      (value) => value.isWellFormed(),
-      "Mail body must be well-formed text"
-    ),
-  cc: z.array(emailAddress).max(20).default([]),
-  inReplyTo: mailHeader.optional(),
-  subject: mailHeader,
-  threadId: z.string().min(1).max(200).optional(),
-  to: z.array(emailAddress).min(1).max(20),
-});
-/** The native approval request owns this payload. Model prose is supplementary;
- * never substitute it for the validated material fields or truncate disclosure. */
-export function renderGmailApproval(raw: unknown, summary?: unknown) {
-  const payload = gmailSendSchema.parse(raw);
-  const context =
-    summary === undefined ? "" : approvalMessageSchema.parse(summary);
-  return approvalMessageSchema.parse(
-    `Gmail email — exact payload\n${JSON.stringify(payload, null, 2)}` +
-      (context
-        ? `\n\nSupplementary context (does not change the payload):\n${context}`
-        : "")
-  );
-}
-
 export async function searchGmail(
   ctx: ToolContext,
   query: string,
