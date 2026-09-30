@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GitRevisionSchema } from "./files-schema";
+import { GitRevisionSchema, sourceBindingPathSchema } from "./files-schema";
 import { OntologySchema } from "./ontology/schema";
 import { SemanticIdentifierSchema } from "./semantic/schema";
 
@@ -41,7 +41,7 @@ const ontologyKey = OntologySchema.shape.types.element.shape.id;
 const columnId = SemanticIdentifierSchema;
 export const postgresValueTypeSchema = z.enum([
   "text",
-  "numeric",
+  "decimal",
   "boolean",
   "date",
 ]);
@@ -88,9 +88,6 @@ export const postgresCatalogScopeSchema = z.strictObject({
     })
     .optional(),
 });
-export const sourceBindingPathSchema = z
-  .string()
-  .regex(/^knowledge\/sources\/[a-z][a-z0-9_-]{0,63}\.json$/);
 
 /** Authored mappings describe meaning. Repository/connection authority grants access. */
 export const sourceBindingSchema = z
@@ -173,7 +170,7 @@ export const sourceBindingSchema = z
       binding.filters.some(
         (filter) =>
           filter.operator !== "eq" &&
-          !["numeric", "date"].includes(
+          !["decimal", "date"].includes(
             binding.columns.find(({ id }) => id === filter.column)?.type ?? ""
           )
       )
@@ -197,8 +194,3 @@ export const postgresReadArgumentsSchema = z
     z.union([sourceTextSchema, z.boolean(), z.null()])
   )
   .refine((parameters) => Object.keys(parameters).length <= 6);
-
-/** Exact wire/parameter numerics remain strings, including trailing zeroes. */
-export const sourceNumericSchema = sourceTextSchema.regex(
-  /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/
-);
