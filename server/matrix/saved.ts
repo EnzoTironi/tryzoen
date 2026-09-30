@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
+import { lockMatrixAdmission } from "./authority";
 import {
   savedCleanupSchema,
   roomMediaReadSchema,
@@ -147,6 +148,7 @@ export async function setSavedMatrixMessage(
 ) {
   const input = saveMessageSchema.parse(raw);
   return transaction(async () => {
+    await lockMatrixAdmission([actor.workspaceId], [input.id]);
     await query(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["matrix-saved", actor.userId])},0))`
     );
