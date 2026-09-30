@@ -1,13 +1,5 @@
-import { z } from "zod";
+import { approvalTextSchema } from "@zoen/companion-ui/approval";
 
-export const approvalMessageSchema = z
-  .string()
-  .min(1)
-  .max(16_384)
-  .refine(
-    (message) => message.trim().length > 0 && message.isWellFormed(),
-    "Write a complete, non-empty proposal."
-  )
-  .describe(
-    "Write the proposal directly to the user in their language and the conversation's tone. Explain the exact action being proposed, including consequential recipients, dates, timezone and content. For an outgoing email, show its full subject and body. Ask for their decision naturally. The channel delivers this message when approval is pending: do not separately send the same proposal or claim the action already happened. Do not use commands, request codes or tool JSON. Never omit material details to fit the limit; use a smaller action if the complete proposal cannot fit."
-  );
+export const approvalMessageSchema = approvalTextSchema.describe(
+  "Write supplementary context directly to the user in their language and the conversation's tone. Explain why the action is proposed and ask for their decision naturally. The channel separately discloses the complete stored action, including its exact recipients, destination and content; this message cannot replace or change that payload. Do not separately send the proposal or claim the action already happened. Do not use commands, request codes or tool JSON. The complete disclosure must fit the limit; propose a smaller action if it cannot."
+);
