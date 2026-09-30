@@ -175,7 +175,7 @@ test.each(["manual", "nested automatic"])(
       );
     const result = automatic
       ? await transaction(async () => {
-          // The native send's outer transaction already owns this room fence.
+          // Synthetic nested composition retains the room fence; standalone send commits before autosubscribe.
           await lockMatrixAdmission([actor.workspaceId], [input.id]);
           return write();
         })
