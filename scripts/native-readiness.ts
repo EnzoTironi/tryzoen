@@ -294,16 +294,30 @@ export async function nativeReadiness(root: string) {
         sourceCandidate(
           repositoryRoot,
           "apps/mobile/src/app.tsx",
-          /BackHandler/u,
+          /BackHandler|subscribeAndroidBack\s*\(/u,
           "Application back marker found; navigation and draft protection remain unverified.",
           "No application back marker in app.tsx; shared overlay dismissal does not qualify app-level back navigation."
         ),
         sourceCandidate(
           repositoryRoot,
           "apps/mobile/src/app.tsx",
-          /getInitialURL|addEventListener\(\s*["']url/u,
+          /getInitialURL|subscribeContentLinks\s*\(|addEventListener\(\s*["']url/u,
           "Application URL marker found; cold/warm routing and account boundaries remain unverified.",
           "No application URL listener marker in app.tsx; inspect auth callbacks separately from content-link routing."
+        ),
+        sourceCandidate(
+          repositoryRoot,
+          "apps/mobile/src/navigation/native.ts",
+          /BackHandler\.addEventListener\(\s*["']hardwareBackPress/u,
+          "Native back adapter marker found; OS keyboard/modal behavior remains unverified.",
+          "No native back adapter marker found; application wiring alone does not qualify native navigation."
+        ),
+        sourceCandidate(
+          repositoryRoot,
+          "apps/mobile/src/navigation/native.ts",
+          /Linking\.getInitialURL|Linking\.addEventListener\(\s*["']url/u,
+          "Native URL adapter marker found; actual system delivery and account routing remain unverified.",
+          "No native URL adapter marker found; application wiring alone does not qualify content-link delivery."
         ),
         sourceCandidate(
           repositoryRoot,
