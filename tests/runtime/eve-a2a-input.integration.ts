@@ -17,6 +17,7 @@ import {
   revokeAgentGrant,
 } from "../../server/workspaces/bots";
 import { requireWorkspaceAccess } from "../../server/workspaces/access";
+import { registerExternalAgentMember } from "../../server/workspaces/agent-members";
 
 const directory = fileURLToPath(
   new URL("../fixtures/eve-a2a-input/", import.meta.url)
@@ -55,17 +56,22 @@ async function grants(workspace: Awaited<ReturnType<typeof workspaceFixture>>) {
     description: "Isolated test fixture",
     discoverable: false,
   });
+  const { member } = await registerExternalAgentMember(workspace.actor, {
+    operationId: randomUUID(),
+    username: "a2a_input_caller",
+    name: "Synthetic A2A input caller",
+  });
   // Fixed test-only bearer fixtures; never generate, rotate or use live credentials.
   const tokens = [`zoen_a2a_${"A".repeat(43)}`, `zoen_a2a_${"B".repeat(43)}`];
   const ids = [randomUUID(), randomUUID()];
   for (let index = 0; index < ids.length; index++)
-    await query(sql`INSERT INTO workspace_agent_grants(id, bot_id, issued_by, label, token_hash, capabilities, expires_at)
-    VALUES (${ids[index]}, ${bot.id}, ${workspace.actor.userId}, 'Synthetic fixed bearer', ${createHash(
+    await query(sql`INSERT INTO workspace_agent_grants(id, bot_id, issued_by, external_member_id, label, token_hash, capabilities, expires_at)
+    VALUES (${ids[index]}, ${bot.id}, ${workspace.actor.userId}, ${member.id}, 'Synthetic fixed bearer', ${createHash(
       "sha256"
     )
       .update(tokens[index] ?? "")
       .digest("hex")}, '["files"]'::jsonb, now() + interval '1 hour')`);
-  return { username: bot.username, ids, tokens };
+  return { username: bot.username, principal: member.principal, ids, tokens };
 }
 async function rpc(
   username: string,
@@ -175,6 +181,7 @@ test(
     await expect(
       requireWorkspaceAccess({
         ...workspace.actor,
+        userId: identity.principal,
         authSessionId: undefined,
         agentGrantId: identity.ids[0],
         protocolTaskId: input.task.id,
@@ -412,6 +419,7 @@ test(
         },
       }
     );
+    expect(response.body.error).toBeUndefined();
     const task = z
       .object({ task: taskSchema })
       .parse(response.body.result).task;

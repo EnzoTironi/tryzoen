@@ -121,12 +121,12 @@ const receipts = new Map<
 >();
 const dialect = new PgDialect();
 
-function fixture() {
+function fixture(principal = auth) {
   const channel = protocolInputContext(
     { receipts: {}, questions: { question: revision }, humanInput: false },
     {
       id: task.sessionId,
-      auth: { current: auth, initiator: auth },
+      auth: { current: principal, initiator: principal },
       continuation: {
         token: `a2a:${grantId}:${id}`,
         alias: vi.fn<(token: string) => void>(),
@@ -271,6 +271,26 @@ test("a question answer uses a native option, the fixed session and one durable 
     respondProtocolInput(actor, message("Monday"), f.attach)
   ).rejects.toMatchObject({ code: -32602 });
 });
+
+test.each([
+  ["user", actor.userId],
+  ["service", `agent:${randomUUID()}`],
+] as const)(
+  "%s question responses preserve their authenticated principal type",
+  async (principalType, userId) => {
+    const f = fixture({ ...auth, principalType, principalId: userId });
+    await respondProtocolInput({ ...actor, userId }, message(), f.attach);
+    expect(f.respond).toHaveBeenCalledTimes(1);
+    expect(f.respond.mock.calls[0]?.[0]).toEqual([
+      { requestId: "question", optionId: "friday" },
+    ]);
+    expect(f.respond.mock.calls[0]?.[1].auth).toMatchObject({
+      principalType,
+      principalId: userId,
+    });
+    expect(f.send).not.toHaveBeenCalled();
+  }
+);
 
 test.each([
   "stale",
