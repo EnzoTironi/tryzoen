@@ -30,6 +30,7 @@ import {
   roomReactionsPageSchema,
   roomReactionSummarySchema,
   roomSchema,
+  roomParticipationSchema,
   roomPageSchema,
   roomThreadPageSchema,
   type RoomData,
@@ -43,6 +44,11 @@ export function companionRoomData(
 ): RoomData {
   return {
     operationId,
+    async participate(input, signal) {
+      return roomParticipationSchema.parse(
+        await rpc.mutation("workspaces.rooms.participate", input, { signal })
+      );
+    },
     async readReceiptPreference(input, signal) {
       return readReceiptPreferenceSchema.parse(
         await rpc.query("workspaces.rooms.readReceiptPreference", input, {

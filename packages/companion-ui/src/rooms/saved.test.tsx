@@ -57,6 +57,7 @@ vi.mock("../button", () => ({
   },
 }));
 const data: RoomData = {
+  participate: vi.fn<RoomData["participate"]>(),
   pins: vi.fn<RoomData["pins"]>(),
   pin: vi.fn<RoomData["pin"]>(),
   reactors: vi.fn<RoomData["reactors"]>(),
