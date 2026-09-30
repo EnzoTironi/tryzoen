@@ -19,6 +19,7 @@ import {
   listMatrixRooms,
   reconcileMatrixRooms,
   requireMatrixRoom,
+  requireJoinedMatrixRoom,
 } from "./rooms";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
@@ -55,7 +56,6 @@ vi.mock("./identities", () => ({
   ensureMatrixIdentity: mocks.identity,
   registerVirtualUser: mocks.register,
 }));
-vi.mock("./direct", () => ({ findDirectRoom: async () => null }));
 
 const bindingId = "10000000-0000-4000-8000-000000000001";
 const actor = {
@@ -80,6 +80,12 @@ const trace: string[] = [];
 const statements: string[] = [];
 const dialect = new PgDialect();
 let requesterAuthorized = true;
+let sessionCurrent = true;
+let groupActive = true;
+let groupInstallation = "synthetic.invalid";
+let directPair = false;
+let directPairAuthorized = true;
+const identities = new Map<string, string>();
 let locatorChanges = false;
 let locatorReads = 0;
 let nativeState = "leave";
@@ -133,8 +139,61 @@ async function rows(statement: SQL) {
   }
   if (text.startsWith("SELECT user_id FROM organization_memberships"))
     return [{ user_id: actor.userId }];
-  if (text.startsWith("SELECT id FROM public.session"))
-    return [{ id: actor.authSessionId }];
+  if (text.startsWith("SELECT id FROM public.session")) {
+    trace.push("current-session");
+    expect(text).toContain('"expiresAt" > clock_timestamp() FOR SHARE');
+    expect(params).toEqual([actor.authSessionId, actor.userId]);
+    return sessionCurrent ? [{ id: actor.authSessionId }] : [];
+  }
+  if (text.startsWith('SELECT d.id, d.workspace_id AS "workspaceId"')) {
+    trace.push("direct-pair-share");
+    expect(text).toContain("FOR SHARE OF d, a, b, oa, ob");
+    expect(params).toEqual([
+      actor.userId,
+      bindingId,
+      actor.workspaceId,
+      "synthetic.invalid",
+      actor.userId,
+    ]);
+    return directPair && directPairAuthorized
+      ? [{ ...room, kind: "direct" }]
+      : [];
+  }
+  if (text.startsWith('SELECT b.id, b.workspace_id AS "workspaceId"')) {
+    trace.push("joined-room-share");
+    expect(rootTransactionDepth).toBeGreaterThan(0);
+    expect(text).toContain("m.state = 'joined' AND NOT m.native_pending");
+    expect(text).toContain("i.user_id = m.user_id");
+    expect(text).toContain("b.channel = 'matrix'");
+    expect(text).toContain("b.installation_id = $4 AND b.revoked_at IS NULL");
+    expect(text).toContain("FOR SHARE OF b, m, i");
+    expect(params).toEqual([
+      actor.userId,
+      bindingId,
+      actor.workspaceId,
+      "synthetic.invalid",
+    ]);
+    const member = members.get(actor.userId);
+    const matrixId = identities.get(actor.userId);
+    return groupActive &&
+      !directPair &&
+      groupInstallation === params[3] &&
+      member?.state === "joined" &&
+      !member.native_pending &&
+      matrixId
+      ? [{ ...room, matrixId }]
+      : [];
+  }
+  if (
+    text.startsWith('SELECT matrix_id AS "matrixId" FROM matrix_identities')
+  ) {
+    trace.push("identity-share");
+    expect(rootTransactionDepth).toBeGreaterThan(0);
+    expect(text).toContain("FOR SHARE");
+    expect(params).toEqual([actor.userId]);
+    const matrixId = identities.get(actor.userId);
+    return matrixId ? [{ matrixId }] : [];
+  }
   if (text.startsWith('SELECT w.user_id AS "userId", w.role'))
     return [{ userId: target, role: "member" }];
   if (
@@ -260,6 +319,13 @@ beforeEach(() => {
   trace.length = 0;
   statements.length = 0;
   requesterAuthorized = true;
+  sessionCurrent = true;
+  groupActive = true;
+  groupInstallation = "synthetic.invalid";
+  directPair = false;
+  directPairAuthorized = true;
+  identities.clear();
+  identities.set(actor.userId, nativeId(actor.userId));
   locatorChanges = false;
   locatorReads = 0;
   nativeState = "leave";
@@ -532,5 +598,166 @@ describe("exact native retirement receipts", () => {
       state: "joined",
       native_pending: false,
     });
+  });
+});
+
+describe("confirmed human room admission without enrollment", () => {
+  it("returns the durable joined identity while locking current authority and room/member/identity rows", async () => {
+    members.set(actor.userId, { state: "joined", native_pending: false });
+    await expect(requireJoinedMatrixRoom(actor, bindingId)).resolves.toEqual({
+      ...room,
+      matrixId: nativeId(actor.userId),
+    });
+    expectAdmissionBeforeAuthority();
+    expect(trace.indexOf("joined-room-share")).toBeGreaterThan(
+      trace.indexOf("current-session")
+    );
+    expect(trace.at(-1)).toBe("commit");
+    expect(mocks.identity).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect(trace).not.toContain("local-membership-write");
+    expect(trace).not.toContain("epoch-write");
+  });
+
+  it.each([
+    { label: "absent", member: undefined },
+    {
+      label: "pending join",
+      member: { state: "joined" as const, native_pending: true },
+    },
+    {
+      label: "removed",
+      member: { state: "removed" as const, native_pending: false },
+    },
+    {
+      label: "pending removal",
+      member: { state: "removed" as const, native_pending: true },
+    },
+    {
+      label: "left",
+      member: { state: "left" as const, native_pending: false },
+    },
+  ])(
+    "denies $label without registration, join or membership writes",
+    async ({ member }) => {
+      if (member) members.set(actor.userId, member);
+      await expect(requireJoinedMatrixRoom(actor, bindingId)).rejects.toThrow(
+        WorkspaceAccessDenied
+      );
+      expect(mocks.identity).not.toHaveBeenCalled();
+      expect(mocks.register).not.toHaveBeenCalled();
+      expect(mocks.request).not.toHaveBeenCalled();
+      expect(trace).not.toContain("local-membership-write");
+      expect(trace).not.toContain("epoch-write");
+    }
+  );
+
+  it.each([
+    "missing",
+    "other owner",
+    "other server",
+    "server suffix",
+    "malformed",
+  ])(
+    "denies a %s durable identity without synthesizing a handle",
+    async (variant) => {
+      members.set(actor.userId, { state: "joined", native_pending: false });
+      if (variant === "missing") identities.clear();
+      if (variant === "other owner") {
+        identities.clear();
+        identities.set(target, nativeId(actor.userId));
+      }
+      if (variant === "other server")
+        identities.set(actor.userId, "@member:other.invalid");
+      if (variant === "server suffix")
+        identities.set(actor.userId, "@member:other.invalid:synthetic.invalid");
+      if (variant === "malformed")
+        identities.set(actor.userId, "member:synthetic.invalid");
+      await expect(requireJoinedMatrixRoom(actor, bindingId)).rejects.toThrow(
+        WorkspaceAccessDenied
+      );
+      expect(mocks.identity).not.toHaveBeenCalled();
+      expect(mocks.register).not.toHaveBeenCalled();
+      expect(mocks.request).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    "closed binding",
+    "other installation",
+    "revoked workspace access",
+    "expired session",
+  ])("denies %s before native effects", async (variant) => {
+    members.set(actor.userId, { state: "joined", native_pending: false });
+    if (variant === "closed binding") groupActive = false;
+    if (variant === "other installation") groupInstallation = "other.invalid";
+    if (variant === "revoked workspace access") requesterAuthorized = false;
+    if (variant === "expired session") sessionCurrent = false;
+    await expect(requireJoinedMatrixRoom(actor, bindingId)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
+    expect(mocks.identity).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect(trace.includes("joined-room-share")).toBe(
+      requesterAuthorized && sessionCurrent
+    );
+  });
+
+  it.each([
+    { label: "missing session", identity: { authSessionId: undefined } },
+    { label: "group context", identity: { groupBindingId: bindingId } },
+    { label: "protocol context", identity: { protocolTaskId: bindingId } },
+  ])(
+    "denies $label instead of accepting delegated identity",
+    async ({ identity }) => {
+      members.set(actor.userId, { state: "joined", native_pending: false });
+      await expect(
+        requireJoinedMatrixRoom({ ...actor, ...identity }, bindingId)
+      ).rejects.toThrow(WorkspaceAccessDenied);
+      expect(trace).not.toContain("joined-room-share");
+      expect(mocks.identity).not.toHaveBeenCalled();
+      expect(mocks.register).not.toHaveBeenCalled();
+      expect(mocks.request).not.toHaveBeenCalled();
+    }
+  );
+
+  it("preserves real direct-pair authorization and locks its existing durable identity", async () => {
+    directPair = true;
+    await expect(requireJoinedMatrixRoom(actor, bindingId)).resolves.toEqual({
+      ...room,
+      kind: "direct",
+      matrixId: nativeId(actor.userId),
+    });
+    expect(trace).toContain("direct-pair-share");
+    expect(trace).toContain("identity-share");
+    expect(trace).not.toContain("joined-room-share");
+    expect(mocks.identity).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it("does not register a missing direct identity after pair authorization", async () => {
+    directPair = true;
+    identities.clear();
+    await expect(requireJoinedMatrixRoom(actor, bindingId)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
+    expect(trace).toContain("direct-pair-share");
+    expect(trace).toContain("identity-share");
+    expect(mocks.identity).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it("denies a person outside the direct pair despite workspace administrator access", async () => {
+    directPair = true;
+    directPairAuthorized = false;
+    await expect(requireJoinedMatrixRoom(actor, bindingId)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
+    expect(trace).not.toContain("identity-share");
+    expect(mocks.identity).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
   });
 });

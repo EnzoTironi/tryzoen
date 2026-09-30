@@ -51,6 +51,52 @@ export const requireMatrixRoom = async function (
   });
 };
 
+/** Confirmed human membership only. Call inside the protected read/write
+ * transaction so current authority and the exact room/identity remain locked.
+ * Admission never registers an identity or adds a native receiver.
+ */
+export const requireJoinedMatrixRoom = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  id: string
+) {
+  return await withDatabaseTransaction(async () => {
+    await lockMatrixAdmission([actor.workspaceId], [id]);
+    const access = await requireWorkspaceAccess(actor);
+    if (
+      !actor.authSessionId ||
+      actor.groupBindingId ||
+      actor.protocolTaskId ||
+      !access.organizationId
+    )
+      throw new WorkspaceAccessDenied();
+    const direct = await findDirectRoom(actor, id);
+    const config = await matrixConfiguration();
+    const rows = direct
+      ? await query(sql`SELECT matrix_id AS "matrixId" FROM matrix_identities
+          WHERE user_id = ${actor.userId} FOR SHARE`)
+      : await query(sql`SELECT b.id, b.workspace_id AS "workspaceId", b.conversation_id AS "roomId", b.label,
+          b.epoch, b.avatar_uri AS "avatarUri", b.avatar_revision AS "avatarRevision", 'group' AS kind,
+          i.matrix_id AS "matrixId" FROM workspace_group_bindings b
+          JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${actor.userId}
+            AND m.state = 'joined' AND NOT m.native_pending
+          JOIN matrix_identities i ON i.user_id = m.user_id
+          WHERE b.id = ${id} AND b.workspace_id = ${actor.workspaceId} AND b.channel = 'matrix'
+            AND b.installation_id = ${config.serverName} AND b.revoked_at IS NULL
+          FOR SHARE OF b, m, i`);
+    const identity = z.string().safeParse(rows[0]?.matrixId);
+    if (
+      rows.length !== 1 ||
+      !identity.success ||
+      /^@[^:\s]+:([^\s]+)$/u.exec(identity.data)?.[1] !== config.serverName
+    )
+      throw new WorkspaceAccessDenied();
+    return {
+      ...(direct ?? (await roomSchema.parseAsync(rows[0]))),
+      matrixId: identity.data,
+    };
+  });
+};
+
 export const listMatrixRooms = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
