@@ -41,6 +41,10 @@ export default {
         "benchmarks/performance/run.ts",
         // Read-only platform prerequisite inventory, invoked independently of native builds.
         "scripts/native-readiness.ts",
+        // Standalone private demo commands invoked directly through Node.
+        "scripts/demo/app.ts",
+        "scripts/demo/seed.ts",
+        "scripts/demo/stack.ts",
         // Manual CDP regression against the isolated shared conversation UI.
         "tests/companion/composer-hit-targets.ts",
       ],
