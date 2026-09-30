@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useColorScheme } from "react-native";
-import type { MarkdownEditorHandle } from "@zoen/companion-ui";
+import {
+  useDarkAppearance,
+  type MarkdownEditorHandle,
+} from "@zoen/companion-ui";
 import {
   XIcon,
   CheckIcon,
@@ -41,7 +43,7 @@ export function FileEditor({
   readonly onSaved: () => Promise<void>;
   readonly readOnly: boolean;
 }) {
-  const colorScheme = useColorScheme();
+  const darkAppearance = useDarkAppearance();
   const { t } = useI18n();
   const utils = api.useUtils();
   const [content, setContent] = useState(initial);
@@ -131,7 +133,7 @@ export function FileEditor({
         aria-describedby={undefined}
         className={cn(
           "fixed inset-0 flex h-dvh w-full max-w-none! translate-0 rounded-none bg-background p-0 ring-0",
-          colorScheme === "dark" && "dark"
+          darkAppearance && "dark"
         )}
       >
         <section className={documentStyles.surface}>

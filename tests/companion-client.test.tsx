@@ -1,6 +1,9 @@
 import type { ReactNode, ComponentProps } from "react";
-import type { useColorScheme } from "react-native";
-import type { NewConversation, RoomConversation } from "@zoen/companion-ui";
+import type {
+  NewConversation,
+  RoomConversation,
+  useDarkAppearance,
+} from "@zoen/companion-ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConnectedCompanion } from "@app/companion/connected";
@@ -10,9 +13,6 @@ const mocks = vi.hoisted(() => ({
   conversation: undefined as ComponentProps<typeof NewConversation> | undefined,
   room: undefined as ComponentProps<typeof RoomConversation> | undefined,
   search: "space=team-test",
-}));
-vi.mock("react-native", () => ({
-  useColorScheme: vi.fn<typeof useColorScheme>().mockReturnValue("light"),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
@@ -32,6 +32,7 @@ vi.mock("@trpc/client", async (importOriginal) => ({
   }),
 }));
 vi.mock("@zoen/companion-ui", async () => ({
+  useDarkAppearance: vi.fn<typeof useDarkAppearance>().mockReturnValue(false),
   parseRoomMessageLocation: (
     await import("../packages/companion-ui/src/rooms/links")
   ).parseRoomMessageLocation,
