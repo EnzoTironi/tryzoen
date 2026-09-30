@@ -27,6 +27,7 @@ import { setMatrixRoomAvatar } from "../../server/matrix/avatar";
 import { forwardMatrixMessage } from "../../server/matrix/forward";
 import { sendMatrixMessage } from "../../server/matrix/send";
 import { setThreadSubscription } from "../../server/matrix/thread-subscriptions";
+import { setSavedMatrixMessage } from "../../server/matrix/saved";
 
 function assertAllocatedDatabase() {
   for (const connection of [env.DATABASE_URL, env.DATABASE_URL_UNPOOLED]) {
@@ -653,49 +654,57 @@ function mockMessageProvider(
     string,
     Awaited<ReturnType<typeof matrixClient.matrixRequest>>
   >();
-  native.mockImplementation(async (method, path, body, userId, options) => {
-    if (beforeRequest) await beforeRequest(method, path);
-    if (path === "versions") {
-      assert.equal(options?.version, "");
-      return { unstable_features: { "org.matrix.msc4306": true } };
-    }
-    const parts = path.split("/");
-    assert.equal(parts[0], "rooms");
-    assert.ok(parts[1]);
-    const roomId = decodeURIComponent(parts[1]);
-    if (parts[2] === "send") {
-      assert.equal(method, "PUT");
-      assert.ok(body && userId);
-      const eventId = `$synthetic-copy-${randomUUID()}`;
-      messages.set(`${roomId}:${eventId}`, {
-        event_id: eventId,
-        room_id: roomId,
-        sender: userId,
-        type: "m.room.message",
-        content: body,
-      });
-      return { event_id: eventId };
-    }
-    if (parts[2] === "event") {
-      assert.equal(method, "GET");
-      assert.ok(parts[3] && userId);
-      const eventId = decodeURIComponent(parts[3]);
-      return (
-        messages.get(`${roomId}:${eventId}`) ?? {
+  native.mockImplementation(
+    async (
+      method,
+      path,
+      body,
+      userId,
+      options
+    ): ReturnType<typeof matrixClient.matrixRequest> => {
+      if (beforeRequest) await beforeRequest(method, path);
+      if (path === "versions") {
+        assert.equal(options?.version, "");
+        return { unstable_features: { "org.matrix.msc4306": true } };
+      }
+      const parts = path.split("/");
+      assert.equal(parts[0], "rooms");
+      assert.ok(parts[1]);
+      const roomId = decodeURIComponent(parts[1]);
+      if (parts[2] === "send") {
+        assert.equal(method, "PUT");
+        assert.ok(body && userId);
+        const eventId = `$synthetic-copy-${randomUUID()}`;
+        messages.set(`${roomId}:${eventId}`, {
           event_id: eventId,
           room_id: roomId,
           sender: userId,
           type: "m.room.message",
-          content: { msgtype: "m.text", body: "Synthetic root" },
-        }
-      );
+          content: body,
+        });
+        return { event_id: eventId };
+      }
+      if (parts[2] === "event") {
+        assert.equal(method, "GET");
+        assert.ok(parts[3] && userId);
+        const eventId = decodeURIComponent(parts[3]);
+        return (
+          messages.get(`${roomId}:${eventId}`) ?? {
+            event_id: eventId,
+            room_id: roomId,
+            sender: userId,
+            type: "m.room.message",
+            content: { msgtype: "m.text", body: "Synthetic root" },
+          }
+        );
+      }
+      assert.equal(parts[2], "thread");
+      assert.equal(parts[4], "subscription");
+      assert.equal(options?.version, "unstable/io.element.msc4306");
+      assert.ok(["GET", "PUT", "DELETE"].includes(method));
+      return method === "GET" ? { automatic: false } : {};
     }
-    assert.equal(parts[2], "thread");
-    assert.equal(parts[4], "subscription");
-    assert.equal(options?.version, "unstable/io.element.msc4306");
-    assert.ok(["GET", "PUT", "DELETE"].includes(method));
-    return method === "GET" ? { automatic: false } : {};
-  });
+  );
   return native;
 }
 
@@ -944,3 +953,109 @@ test("standalone actual threaded send and manual subscription serialize without 
     await Promise.all([send, manual.done]);
   }
 });
+
+function mockSavedProvider(beforeRead?: () => Promise<void>) {
+  const native = mockMessageProvider();
+  const readMessage = native.getMockImplementation();
+  assert.ok(readMessage);
+  let saved: Awaited<ReturnType<typeof matrixClient.matrixRequest>> = {
+    version: 1,
+    items: [],
+  };
+  native.mockImplementation(
+    async (...args): ReturnType<typeof matrixClient.matrixRequest> => {
+      const [method, path, body, userId, options] = args;
+      if (!path.endsWith("/account_data/org.zoen.saved_messages"))
+        return readMessage(...args);
+      assert.ok(userId);
+      assert.equal(
+        path,
+        `user/${encodeURIComponent(userId)}/account_data/org.zoen.saved_messages`
+      );
+      if (method === "PUT") {
+        assert.ok(body);
+        saved = body;
+        return {};
+      }
+      assert.equal(method, "GET");
+      assert.equal(options?.maxResponseBytes, 262144);
+      if (beforeRead) await beforeRead();
+      return saved;
+    }
+  );
+  return native;
+}
+
+// The other participant models only org UPDATE -> member UPDATE entry order.
+// Its unchanged-role write is not account erasure or membership revocation.
+test.each(["saved", "mutation"] as const)(
+  "actual saved-message writer and simulated organization/member entry: %s wins",
+  async (winner) => {
+    await using fixture = await matrixFixture();
+    await using observation = await observer();
+    const firstHeld = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    let paused = false;
+    const native = mockSavedProvider(async () => {
+      if (winner !== "saved" || paused) return;
+      paused = true;
+      firstHeld.resolve();
+      await releaseFirst.promise;
+    });
+    const writer = participant(async () => {
+      const result = await setSavedMatrixMessage(fixture.workspace.actor, {
+        id: fixture.bindingId,
+        messageId: "$synthetic-saved-message",
+        saved: true,
+        expectedRevision: createHash("sha256")
+          .update(JSON.stringify({ version: 1, items: [] }))
+          .digest("hex"),
+      });
+      assert.equal(result.status, "saved");
+    });
+    const mutation = participant(async () => {
+      await lockMatrixAdmission(
+        [fixture.workspace.actor.workspaceId],
+        [],
+        "update"
+      );
+      if (winner === "mutation") {
+        firstHeld.resolve();
+        await releaseFirst.promise;
+      }
+      const rows = await query(sql`UPDATE workspace_memberships SET role = role
+      WHERE workspace_id = ${fixture.workspace.actor.workspaceId}
+        AND user_id = ${fixture.workspace.actor.userId} RETURNING user_id`);
+      assert.equal(rows.length, 1);
+    });
+    const first = winner === "saved" ? writer : mutation;
+    const second = winner === "saved" ? mutation : writer;
+    try {
+      const [firstPid, secondPid] = await bounded(
+        Promise.all([first.pid, second.pid])
+      );
+      first.start();
+      void first.done.then((result) => {
+        if (!result.ok) firstHeld.reject(result.error);
+      });
+      await bounded(firstHeld.promise);
+      second.start();
+      await blockedBy(observation.client, secondPid, firstPid);
+      releaseFirst.resolve();
+      const results = await bounded(Promise.all([writer.done, mutation.done]));
+      expect(results.every((result) => result.ok)).toBe(true);
+      expect(
+        native.mock.calls.filter(
+          ([method, path]) =>
+            method === "PUT" &&
+            path.endsWith("/account_data/org.zoen.saved_messages")
+        )
+      ).toHaveLength(1);
+    } finally {
+      releaseFirst.resolve();
+      writer.start();
+      mutation.start();
+      await Promise.all([writer.done, mutation.done]);
+    }
+  }
+);
