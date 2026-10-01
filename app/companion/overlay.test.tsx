@@ -112,7 +112,16 @@ it("keeps imperative initial focus under Base UI's opening lifecycle", () => {
   expect(initialFocus("keyboard")).toBe(false);
   expect(focusOnOpen).toHaveBeenCalledOnce();
 });
-it("uses the primitive's default focus handling when no callback is supplied", () => {
-  render();
-  expect(state.popup?.initialFocus).toBeUndefined();
-});
+it.each(["keyboard", "touch"] as const)(
+  "uses the local popup focus seam for %s without overriding return focus",
+  (interaction) => {
+    render();
+    const initialFocus = state.popup?.initialFocus;
+    if (typeof initialFocus !== "function")
+      throw new Error("The popup focus callback was lost");
+    expect(state.popup?.ref).toMatchObject({ current: null });
+    // The primitive owns when this runs; SSR leaves the DOM ref unattached.
+    expect(initialFocus(interaction)).toBe(false);
+    expect(state.popup?.finalFocus).toBeUndefined();
+  }
+);

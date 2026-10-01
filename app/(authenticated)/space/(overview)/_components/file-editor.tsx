@@ -52,6 +52,7 @@ export function FileEditor({
     generation: 0,
   });
   const editor = useRef<MarkdownEditorHandle>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const [editorError, setEditorError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [savedContent, setSavedContent] = useState(initial);
@@ -129,6 +130,13 @@ export function FileEditor({
       }}
     >
       <DialogContent
+        ref={popup}
+        initialFocus={() => {
+          const element = popup.current;
+          if (element && !element.contains(element.ownerDocument.activeElement))
+            element.focus({ preventScroll: true });
+          return false;
+        }}
         showCloseButton={false}
         animated={false}
         aria-describedby={undefined}

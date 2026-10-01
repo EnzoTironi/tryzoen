@@ -245,7 +245,12 @@ test.each([
       showCloseButton: false,
     });
     expect(controls.popup?.["aria-describedby"]).toBeUndefined();
-    expect(controls.popup?.initialFocus).toBeUndefined();
+    const initialFocus = controls.popup?.initialFocus;
+    if (typeof initialFocus !== "function")
+      throw new Error("The editor popup focus callback was lost");
+    expect(controls.popup?.ref).toMatchObject({ current: null });
+    expect(initialFocus("keyboard")).toBe(false);
+    expect(initialFocus("touch")).toBe(false);
     expect(controls.popup?.finalFocus).toBeUndefined();
     expect(markup).toContain(path.split("/").at(-1));
     expect(markup).toContain("Conteúdo do arquivo");
