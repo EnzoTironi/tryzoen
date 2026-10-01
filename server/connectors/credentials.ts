@@ -1,8 +1,14 @@
+import { createHmac } from "node:crypto";
+import { getInstallationSecrets } from "@db/services/installation-secrets";
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { getAuth } from "@db/services/auth";
-import { ConnectorCredentialSchema, ConnectorError } from "./definition";
+import {
+  ConnectorCredentialSchema,
+  ConnectorError,
+  type ConnectorInput,
+} from "./definition";
 
 const CredentialScope = z.strictObject({
   workspaceId: z.string().min(1).max(256),
@@ -86,4 +92,29 @@ export function redactConnectorCredential(
       "[redacted]"
     );
   return serialized;
+}
+
+/** A database fingerprint must not allow offline guesses of a stored password.
+ * Reuse the existing installation key; scope and domain prevent transplanting
+ * a request digest. Restore must preserve that key; rotation requires reconnect.
+ */
+export async function connectorRequestFingerprint(
+  scope: { workspaceId: string; userId: string },
+  input: z.output<typeof ConnectorInput>
+) {
+  try {
+    const { secretEncryptionKey } = await getInstallationSecrets();
+    return createHmac("sha256", Buffer.from(secretEncryptionKey, "base64"))
+      .update(
+        JSON.stringify([
+          "zoen:tool-connector:request:v1",
+          scope.workspaceId,
+          scope.userId,
+          input,
+        ])
+      )
+      .digest("hex");
+  } catch {
+    throw new ConnectorError({ reason: "unavailable" });
+  }
 }

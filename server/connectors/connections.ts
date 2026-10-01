@@ -2,7 +2,7 @@ import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { mapAsync } from "../operations/async";
 import { z } from "zod";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   requireWorkspaceAccess,
@@ -25,13 +25,11 @@ import { connectorEndpoint } from "./public-fetch";
 import { importOpenApi } from "./openapi";
 import { importMcp } from "./mcp";
 import {
+  connectorRequestFingerprint,
   openConnectorCredential,
   sealConnectorCredential,
   redactConnectorCredential,
 } from "./credentials";
-
-const fingerprint = (input: z.output<typeof ConnectorInput>) =>
-  createHash("sha256").update(JSON.stringify(input)).digest("hex");
 
 export const listToolConnections = async function (
   actor: z.output<typeof WorkspaceActorSchema>
@@ -149,7 +147,7 @@ export const connectTools = async function (
         throw new ConnectorError({ reason: "invalid" });
       }
     );
-  const hash = fingerprint(input);
+  const hash = await connectorRequestFingerprint(actor, input);
   const existing =
     await query(sql`SELECT id FROM tool_connections WHERE id = ${input.id} AND workspace_id = ${actor.workspaceId}
     AND connected_by = ${actor.userId} AND request_hash = ${hash} AND revoked_at IS NULL`);

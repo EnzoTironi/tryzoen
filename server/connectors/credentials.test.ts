@@ -1,6 +1,8 @@
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+import { createHash, createHmac } from "node:crypto";
 import { symmetricEncrypt } from "better-auth/crypto";
 import {
+  connectorRequestFingerprint,
   redactConnectorCredential,
   sealConnectorCredential,
   openConnectorCredential,
@@ -111,4 +113,101 @@ test("rejects malformed ciphertext without returning secret material", async () 
   await expect(
     openConnectorCredential(scope, "postgres", "not-encrypted")
   ).rejects.toMatchObject({ reason: "unavailable" });
+});
+
+const installation = vi.hoisted(() => ({
+  read: vi.fn<() => Promise<{ secretEncryptionKey: string }>>(),
+}));
+vi.mock("@db/services/installation-secrets", () => ({
+  getInstallationSecrets: installation.read,
+}));
+const fingerprintKey = Buffer.alloc(32, 1).toString("base64");
+const requestScope = {
+  workspaceId: scope.workspaceId,
+  userId: "better-auth:alice",
+};
+const request = {
+  id: scope.id,
+  name: "Studio",
+  kind: "postgres" as const,
+  configuration: {
+    host: "db.example.com",
+    port: 5432,
+    database: "studio",
+    tls: "verify-full" as const,
+  },
+  credential: postgresCredential.value,
+  share: "owner" as const,
+};
+beforeEach(() => {
+  installation.read
+    .mockReset()
+    .mockResolvedValue({ secretEncryptionKey: fingerprintKey });
+});
+test("retry fingerprint uses the existing key and explicit request domain, never plain password SHA256", async () => {
+  const fingerprint = await connectorRequestFingerprint(requestScope, request);
+  expect(fingerprint).toBe(
+    createHmac("sha256", Buffer.from(fingerprintKey, "base64"))
+      .update(
+        JSON.stringify([
+          "zoen:tool-connector:request:v1",
+          requestScope.workspaceId,
+          requestScope.userId,
+          request,
+        ])
+      )
+      .digest("hex")
+  );
+  expect(fingerprint).not.toBe(
+    createHash("sha256").update(JSON.stringify(request)).digest("hex")
+  );
+  expect(fingerprint).not.toContain(request.credential.password);
+  expect(await connectorRequestFingerprint(requestScope, request)).toBe(
+    fingerprint
+  );
+});
+test.each([
+  { ...requestScope, workspaceId: "company-studio" },
+  { ...requestScope, userId: "better-auth:bob" },
+])("fingerprint binds exact workspace and actor %#", async (target) => {
+  expect(await connectorRequestFingerprint(target, request)).not.toBe(
+    await connectorRequestFingerprint(requestScope, request)
+  );
+});
+test.each([
+  {
+    ...request,
+    credential: { ...request.credential, password: "another-synthetic-secret" },
+  },
+  {
+    ...request,
+    credential: { ...request.credential, username: "other-reader" },
+  },
+  {
+    ...request,
+    configuration: { ...request.configuration, database: "other" },
+  },
+  { ...request, share: "workspace" as const },
+])(
+  "fingerprint binds credential and exact submitted configuration %#",
+  async (changed) => {
+    expect(await connectorRequestFingerprint(requestScope, changed)).not.toBe(
+      await connectorRequestFingerprint(requestScope, request)
+    );
+  }
+);
+test("different installation key cannot reproduce the same password verifier", async () => {
+  const first = await connectorRequestFingerprint(requestScope, request);
+  installation.read.mockResolvedValue({
+    secretEncryptionKey: Buffer.alloc(32, 2).toString("base64"),
+  });
+  expect(await connectorRequestFingerprint(requestScope, request)).not.toBe(
+    first
+  );
+});
+test("key lookup failure fails closed without leaking key error/credential material", async () => {
+  installation.read.mockRejectedValue(new Error(request.credential.password));
+  await expect(
+    connectorRequestFingerprint(requestScope, request)
+  ).rejects.toMatchObject({ reason: "unavailable", message: "ConnectorError" });
 });
