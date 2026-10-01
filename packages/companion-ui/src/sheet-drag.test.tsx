@@ -4,12 +4,14 @@ import type {
   PanResponderGestureState,
   GestureResponderEvent,
 } from "react-native";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { useSheetDrag } from "./sheet-drag";
 
 const state = vi.hoisted(() => ({
   callbacks: {} as PanResponderCallbacks,
   reset: vi.fn<() => void>(),
+  set: vi.fn<(value: number) => void>(),
+  reduced: false,
 }));
 vi.mock("react-native", () => ({
   Platform: { OS: "web" },
@@ -23,12 +25,25 @@ vi.mock("react-native", () => ({
   },
   Animated: {
     Value: class {
-      setValue = vi.fn<(value: number) => void>();
+      setValue = state.set;
       stopAnimation = vi.fn<() => void>();
     },
     spring: () => ({ start: state.reset }),
   },
 }));
+vi.mock("./theme", async (original) => ({
+  ...(await original<typeof import("./theme")>()),
+  useAccessibilityPreferences: () => ({
+    reduceMotion: state.reduced,
+    reduceTransparency: false,
+    increasedContrast: false,
+    forcedColors: false,
+  }),
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.reduced = false;
+});
 function mount(enabled: boolean) {
   const close = vi.fn<() => void>();
   function Probe() {
@@ -81,4 +96,18 @@ it("dismisses deliberate distance or velocity but restores short and cancelled d
   state.callbacks.onPanResponderRelease?.(event, motion(30, 0, 1));
   expect(close).toHaveBeenCalledTimes(2);
   expect(state.reset).toHaveBeenCalled();
+});
+
+it("keeps direct drag tracking but resets immediately when motion is reduced", () => {
+  state.reduced = true;
+  const close = mount(true);
+  state.callbacks.onPanResponderMove?.(event, motion(35));
+  expect(state.set).toHaveBeenCalledWith(35);
+  state.callbacks.onPanResponderRelease?.(event, motion(35));
+  expect(close).not.toHaveBeenCalled();
+  expect(state.set).toHaveBeenLastCalledWith(0);
+  state.callbacks.onPanResponderRelease?.(event, motion(90));
+  expect(close).toHaveBeenCalledOnce();
+  expect(state.set).toHaveBeenLastCalledWith(0);
+  expect(state.reset).not.toHaveBeenCalled();
 });

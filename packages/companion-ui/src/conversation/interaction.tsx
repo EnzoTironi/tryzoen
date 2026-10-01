@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,7 +12,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  AccessibilityInfo,
   Animated,
   PanResponder,
   Platform,
@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { Reply } from "lucide-react-native";
 import { useDoubleTapReaction } from "./double-tap";
-import { systemFont, useColors } from "../theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "../theme";
 
 const MessageInteractionContext = createContext<
   | {
@@ -65,7 +65,11 @@ export function MessageInteraction({
   const [offset] = useState(() => new Animated.Value(0));
   const reply = useRef(onReply);
   const inactive = useRef(disabled);
-  const motion = useRef(false);
+  const { reduceMotion } = useAccessibilityPreferences();
+  const motion = useRef(reduceMotion);
+  useLayoutEffect(() => {
+    motion.current = reduceMotion;
+  }, [reduceMotion]);
   const held = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const origin = useRef<{ x: number; y: number } | undefined>(undefined);
   const suppressClick = useRef(false);
@@ -75,24 +79,13 @@ export function MessageInteraction({
     reply.current = onReply;
     inactive.current = disabled;
   }, [onReply, disabled]);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (active) motion.current = value;
-    });
-    const listener = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      (value) => {
-        motion.current = value;
-      }
-    );
-    return () => {
-      active = false;
-      listener.remove();
+  useEffect(
+    () => () => {
       clearTimeout(held.current);
       offset.stopAnimation();
-    };
-  }, [offset]);
+    },
+    [offset]
+  );
   const open = useCallback(() => {
     if (inactive.current) return;
     bubble.current?.measureInWindow((x, y, width, height) => {
