@@ -43,6 +43,7 @@ import {
   LinkPreviewProvider,
   ComposerReferenceProvider,
   CompanionOverlayProvider,
+  useAccessibilityPreferences,
   type CompanionOverlayProps,
   type CompanionSection,
   type MarkdownEditorProps,
@@ -89,12 +90,13 @@ const NavigationOverlayContext = createContext<(() => () => void) | undefined>(
 function NavigationOverlay(props: CompanionOverlayProps) {
   const register = useContext(NavigationOverlayContext);
   const compact = useWindowDimensions().width < 720;
+  const { reduceMotion } = useAccessibilityPreferences();
   useLayoutEffect(() => register?.(), [register]);
   return (
     <Modal
       accessibilityLabel={props.title}
       transparent
-      animationType={compact ? "slide" : "fade"}
+      animationType={reduceMotion ? "none" : compact ? "slide" : "fade"}
       onRequestClose={props.onClose}
       onShow={props.focusOnOpen}
     >

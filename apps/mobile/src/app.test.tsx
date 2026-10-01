@@ -51,12 +51,19 @@ const state = vi.hoisted(() => ({
   microtasks: [] as (() => void)[],
   dirty: true,
   platform: "android",
+  width: 390,
+  reduceMotion: false,
   accountId: "account-a" as string | undefined,
   pending: false,
   overlays: [] as string[],
   keepEditing: false,
   closed: [] as string[],
   modals: new Map<string, ModalProps>(),
+  overlayOwners: new Map<
+    string,
+    import("@zoen/companion-ui").CompanionOverlayProps["onClose"]
+  >(),
+  overlayFocus: vi.fn<() => void>(),
   alerts: [] as ReactNode[],
   shell: undefined as ShellProps | undefined,
   conversation: undefined as
@@ -201,7 +208,7 @@ vi.mock("react-native", () => ({
     },
   },
   StyleSheet: { create: (value: unknown) => value },
-  useWindowDimensions: () => ({ width: 390, height: 800 }),
+  useWindowDimensions: () => ({ width: state.width, height: 800 }),
   ActivityIndicator: () => null,
   View: ({ children }: { children: ReactNode }) => children,
   Text: ({
@@ -271,18 +278,27 @@ vi.mock("@zoen/companion-ui", async () => {
   const children = renderChildren;
   function OverlayFixture({ id }: { id: string }) {
     const render = react.useContext(Overlay);
+    const onClose = () => {
+      state.closed.push(id);
+      if (state.keepEditing) return;
+      state.overlays = state.overlays.filter((overlay) => overlay !== id);
+      state.dirty = true;
+    };
+    state.overlayOwners.set(id, onClose);
     return render({
       title: id,
       children: id,
-      onClose: () => {
-        state.closed.push(id);
-        if (state.keepEditing) return;
-        state.overlays = state.overlays.filter((overlay) => overlay !== id);
-        state.dirty = true;
-      },
+      onClose,
+      focusOnOpen: state.overlayFocus,
     });
   }
   return {
+    useAccessibilityPreferences: () => ({
+      reduceMotion: state.reduceMotion,
+      reduceTransparency: false,
+      increasedContrast: false,
+      forcedColors: false,
+    }),
     ActionButton: children,
     GesturePreferenceProvider: children,
     MarkdownEditorProvider: children,
@@ -501,12 +517,15 @@ beforeEach(() => {
   state.current = undefined;
   state.dirty = true;
   state.platform = "android";
+  state.width = 390;
+  state.reduceMotion = false;
   state.accountId = "account-a";
   state.pending = false;
   state.overlays = [];
   state.closed = [];
   state.keepEditing = false;
   state.modals.clear();
+  state.overlayOwners.clear();
   state.alerts = [];
   state.shell = undefined;
   state.conversation = undefined;
@@ -736,4 +755,73 @@ test("iOS preserves native Modal settings without registering Android Back", () 
   expect(state.back).toBeUndefined();
   expect(state.modals.get("editor")?.transparent).toBe(true);
   expect(state.modals.get("editor")?.animationType).toBe("slide");
+});
+
+test.each([
+  { platform: "ios", width: 390, ordinary: "slide" },
+  { platform: "ios", width: 1024, ordinary: "fade" },
+  { platform: "android", width: 390, ordinary: "slide" },
+  { platform: "android", width: 1024, ordinary: "fade" },
+])(
+  "$platform at $width respects Reduce Motion while preserving the Modal owner",
+  ({ platform, width, ordinary }) => {
+    state.platform = platform;
+    state.width = width;
+    state.reduceMotion = true;
+    state.overlays = ["editor"];
+    flush();
+    expect(state.modals.get("editor")?.animationType).toBe("none");
+    expect(state.modals.get("editor")?.transparent).toBe(true);
+    expect(state.modals.get("editor")?.onShow).toBe(state.overlayFocus);
+    expect(state.modals.get("editor")?.onRequestClose).toBe(
+      state.overlayOwners.get("editor")
+    );
+    expect(state.closed).toEqual([]);
+    state.reduceMotion = false;
+    state.dirty = true;
+    flush();
+    expect(state.modals.get("editor")?.animationType).toBe(ordinary);
+    expect(state.modals.get("editor")?.transparent).toBe(true);
+    expect(state.modals.get("editor")?.onShow).toBe(state.overlayFocus);
+    expect(state.modals.get("editor")?.onRequestClose).toBe(
+      state.overlayOwners.get("editor")
+    );
+  }
+);
+
+test("a Reduce Motion change retains a dirty overlay, deferred links and keyboard-first Android Back", () => {
+  state.overlays = ["dirty-editor"];
+  state.keepEditing = true;
+  flush();
+  link("first");
+  flush();
+  link("latest");
+  flush();
+  state.reduceMotion = true;
+  state.dirty = true;
+  flush();
+  expect(state.modals.get("dirty-editor")?.animationType).toBe("none");
+  expect(state.closed).toEqual([]);
+  expect(state.conversation?.props.sessionId).toBeUndefined();
+  state.keyboardVisible = true;
+  expect(state.back?.({ type: "hardwareBackPress", timeStamp: 0 })).toBe(true);
+  expect(state.dismiss).toHaveBeenCalledExactlyOnceWith();
+  expect(state.closed).toEqual([]);
+  state.keyboardVisible = false;
+  expect(state.back?.({ type: "hardwareBackPress", timeStamp: 0 })).toBe(true);
+  expect(state.closed).toEqual([]);
+  requestClose("dirty-editor");
+  flush();
+  expect(state.closed).toEqual(["dirty-editor"]);
+  expect(state.conversation?.props.sessionId).toBeUndefined();
+  state.reduceMotion = false;
+  state.dirty = true;
+  flush();
+  expect(state.modals.get("dirty-editor")?.animationType).toBe("slide");
+  expect(state.conversation?.props.sessionId).toBeUndefined();
+  state.keepEditing = false;
+  requestClose("dirty-editor");
+  flush();
+  expect(state.conversation?.props.sessionId).toBe("latest");
+  expect(state.renderedSessions).not.toContain("first");
 });
