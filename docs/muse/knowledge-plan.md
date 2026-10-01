@@ -722,3 +722,23 @@ Trusted payer resolution, durable once-only admission/settlement, bounded TLS
 transport and post-read authorization/provenance remain required before any
 live warehouse read. Synthetic schema/crypto/mocked-boundary tests and local
 PGlite CHECK tests do not qualify that remaining journey or native platforms.
+
+The workspace billing subject resolver reuses the existing app session and
+workspace/organization authorization inside the public database transaction.
+Personal subjects retain the exact raw authenticated user ID; company subjects
+use the verified organization, including a member actor, with no member/issuer
+fallback. This resolves identity only. Entitlements, physical installation
+limits and durable once-only reservation/settlement remain separate required
+admission gates; the billing UI's Free-on-query-error behavior is not suitable
+for protected live reads.
+
+Local registry qualification covers 83 synthetic schema/crypto/caller tests and
+17 authorization-SQL payer tests. An initial eleven-case serial run on isolated PostgreSQL
+15443 covers personal/team registry and payer behavior plus existing MCP/OpenAPI
+import/dispatch/revocation regressions. The existing migration owner verified
+the source prefix and applied additive 0102/0103 (104 app, 20 workflow entries).
+No warehouse connection, model turn, charge or global erasure drain was used.
+The subsequent static cleanup moves the private-channel assertions into a
+separate test, without changing production code; that final twelve-case runtime
+layout awaits a fresh exclusive lease. These checks do not establish live
+analytics, durable quota enforcement or aggregate/native approval qualification.
