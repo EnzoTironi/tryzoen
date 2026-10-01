@@ -36,7 +36,7 @@ const globalV6 = new BlockList();
 globalV6.addSubnet("2000::", 3, "ipv6");
 const requestError = () => new Error("Connector request failed.");
 
-function publicAddress(address: string) {
+export function publicAddress(address: string) {
   const family = isIP(address);
   if (family === 4) return !denied.check(address, "ipv4");
   return (
