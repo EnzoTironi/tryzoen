@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+  postgresEndpointSchema,
   postgresIdentifierSchema,
   postgresReadArgumentsSchema,
   publishedSourceBindingSchema,
@@ -107,3 +108,129 @@ test("native integers and NUMERIC declare decimal string transport explicitly", 
     }).success
   ).toBe(false);
 });
+
+const endpoint = {
+  host: "warehouse.example.com",
+  port: 5432,
+  database: "studio",
+  tls: "verify-full" as const,
+};
+
+test.each([
+  ["Warehouse.Example.COM", "warehouse.example.com"],
+  ["xn--bcher-kva.example", "xn--bcher-kva.example"],
+  ["8.8.8.8", "8.8.8.8"],
+  ["2001:4860:4860::8888", "2001:4860:4860::8888"],
+  ["2001:4860:ABCD::1", "2001:4860:abcd::1"],
+])("credential-free endpoints canonicalize %s", (host, expected) => {
+  expect(postgresEndpointSchema.parse({ ...endpoint, host })).toEqual({
+    ...endpoint,
+    host: expected,
+  });
+});
+
+test.each([
+  "",
+  "localhost",
+  "/var/run/postgresql",
+  "warehouse.example.com.",
+  " warehouse.example.com",
+  "warehouse.example.com\n",
+  "postgres://user:secret@warehouse.example.com/studio",
+  "user@warehouse.example.com",
+  "warehouse.example.com:5432",
+  "warehouse.example.com/",
+  "warehouse.example.com,other.example.com",
+  "warehouse.example.com?sslmode=disable",
+  "warehouse.example.com#fragment",
+  "warehouse_1.example.com",
+  "-warehouse.example.com",
+  "warehouse-.example.com",
+  "a".repeat(64) + ".example.com",
+  "a.".repeat(127) + "example.com",
+  "bücher.example",
+  "2130706433",
+  "127.1",
+  "0177.0.0.1",
+  "0x7f000001",
+  "0x7f.0.0.1",
+  "[2001:4860:4860::8888]",
+  "fe80::1%en0",
+  "warehouse.example.com\0",
+  "\ud800.example.com",
+])("rejects ambiguous host syntax %j before runtime resolution", (host) => {
+  expect(postgresEndpointSchema.safeParse({ ...endpoint, host }).success).toBe(
+    false
+  );
+});
+
+test("endpoint syntax never implies public reachability or connection authority", () => {
+  for (const host of [
+    "127.0.0.1",
+    "10.0.0.1",
+    "::1",
+    "::ffff:127.0.0.1",
+    "private.example.com",
+  ])
+    expect(postgresEndpointSchema.parse({ ...endpoint, host }).host).toBe(host);
+});
+
+test.each([0, -1, 65_536, 5432.5, "5432", null, undefined])(
+  "requires an explicit integer port: %j",
+  (port) => {
+    expect(
+      postgresEndpointSchema.safeParse({ ...endpoint, port }).success
+    ).toBe(false);
+  }
+);
+
+test("endpoint database uses the same byte-bounded identifier contract", () => {
+  expect(
+    postgresEndpointSchema.parse({ ...endpoint, database: 'Studio "data"' })
+      .database
+  ).toBe('Studio "data"');
+  for (const database of ["", "é".repeat(32), "bad\0name", "\ud800"])
+    expect(
+      postgresEndpointSchema.safeParse({ ...endpoint, database }).success
+    ).toBe(false);
+  expect(
+    postgresEndpointSchema.parse({
+      ...endpoint,
+      database: "é".repeat(31),
+      port: 65_535,
+    }).port
+  ).toBe(65_535);
+});
+
+test.each([
+  "disable",
+  "require",
+  "verify-ca",
+  false,
+  undefined,
+  { rejectUnauthorized: false },
+])("does not allow weaker TLS policy: %j", (tls) => {
+  expect(postgresEndpointSchema.safeParse({ ...endpoint, tls }).success).toBe(
+    false
+  );
+});
+
+test.each([
+  "user",
+  "password",
+  "connectionString",
+  "ssl",
+  "options",
+  "stream",
+  "credentials",
+  "grants",
+  "approved",
+])(
+  "endpoint metadata cannot carry secrets, driver escapes or grants: %s",
+  (key) => {
+    expect(
+      postgresEndpointSchema.safeParse({ ...endpoint, [key]: "untrusted" })
+        .success
+    ).toBe(false);
+  }
+);

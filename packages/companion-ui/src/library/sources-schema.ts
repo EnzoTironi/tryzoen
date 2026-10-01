@@ -35,6 +35,33 @@ export const postgresIdentifierSchema = z
       new TextEncoder().encode(value).byteLength <= 63,
     "Use a well-formed PostgreSQL identifier of at most 63 UTF-8 bytes"
   );
+// Endpoint syntax is not a connection grant or a public-address check.
+// Keep secrets and driver options in the trusted connection runtime.
+export const postgresEndpointSchema = z.strictObject({
+  host: z
+    .union([
+      z
+        .hostname()
+        .refine(
+          (host) =>
+            host.includes(".") &&
+            !host.endsWith(".") &&
+            /[a-z]/iu.test(host.split(".").at(-1) ?? ""),
+          "Use a fully qualified ASCII hostname or a canonical IP address"
+        ),
+      z.ipv4(),
+      z.ipv6(),
+    ])
+    .refine(
+      (host) => !/[^a-z0-9.:-]/iu.test(host),
+      "Use ASCII host syntax without whitespace"
+    )
+    .transform((host) => host.toLowerCase()),
+  port: z.number().int().min(1).max(65_535),
+  database: postgresIdentifierSchema,
+  tls: z.literal("verify-full"),
+});
+
 const oid = z.number().int().min(1).max(4_294_967_295);
 const fingerprint = z.string().regex(/^[a-f0-9]{64}$/);
 const ontologyKey = OntologySchema.shape.types.element.shape.id;
