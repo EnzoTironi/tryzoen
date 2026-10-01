@@ -240,5 +240,9 @@ export const LearnedClaimRecallSchema = z
   .refine(
     (recall) =>
       recall.automaticEnabled === (recall.enabled && recall.workspaceEnabled),
-    "Automatic memory requires personal preference and workspace capability"
-  );
+  "Automatic memory requires personal preference and workspace capability"
+).refine(
+  (recall) => (recall.revision !== null || (recall.matches.length === 0 && !recall.hasMore)) &&
+    (recall.automaticEnabled || (recall.matches.length === 0 && !recall.hasMore)),
+  "Recall matches require a published snapshot"
+);
