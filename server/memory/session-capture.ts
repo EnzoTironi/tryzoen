@@ -60,13 +60,14 @@ export async function captureSessionSource(
 
 /** The outer locks survive a failed batch's savepoint rollback. */
 async function deliverNamespace(root: string, visited: readonly string[]) {
-  return transaction(async () => {
-    const [head] = await query<
-      Pick<
-        typeof memorySessionSources.$inferSelect,
-        "namespaceId" | "eventId" | "deliveryFailures"
-      >
-    >(sql`
+  return transaction(
+    async () => {
+      const [head] = await query<
+        Pick<
+          typeof memorySessionSources.$inferSelect,
+          "namespaceId" | "eventId" | "deliveryFailures"
+        >
+      >(sql`
       SELECT s.namespace_id AS "namespaceId", s.event_id AS "eventId", s.delivery_failures AS "deliveryFailures"
       FROM memory_session_sources s JOIN workspace_memory_namespace n ON n.namespace_id = s.namespace_id
       JOIN workspace_memberships m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
@@ -86,32 +87,39 @@ async function deliverNamespace(root: string, visited: readonly string[]) {
           FOR SHARE SKIP LOCKED))
       ORDER BY s.available_at, s.capture_sequence LIMIT 1
       FOR SHARE OF w, m SKIP LOCKED FOR UPDATE OF n, s SKIP LOCKED`);
-    if (!head) return null;
-    let stored: number;
-    try {
-      stored = await transaction(() =>
-        deliverNamespaceBatch(root, head.namespaceId)
-      );
-    } catch (error) {
-      const delaySeconds = Math.min(
-        3600,
-        60 * 2 ** Math.min(head.deliveryFailures, 6)
-      );
-      await query(sql`UPDATE memory_session_sources
+      if (!head) return null;
+      let stored: number;
+      try {
+        stored = await transaction(() =>
+          deliverNamespaceBatch(root, head.namespaceId)
+        );
+      } catch (error) {
+        const delaySeconds = Math.min(
+          3600,
+          60 * 2 ** Math.min(head.deliveryFailures, 6)
+        );
+        await query(sql`UPDATE memory_session_sources
         SET available_at = statement_timestamp() + ${delaySeconds} * interval '1 second'
         WHERE namespace_id = ${head.namespaceId} AND stored_at IS NULL`);
-      await query(sql`UPDATE memory_session_sources
+        await query(sql`UPDATE memory_session_sources
         SET delivery_failures = delivery_failures + 1, last_failed_at = clock_timestamp()
         WHERE namespace_id = ${head.namespaceId} AND event_id = ${head.eventId}`);
-      return { namespaceId: head.namespaceId, stored: 0, failed: true, error };
-    }
-    // At most 1,000 pending records exist per namespace. Moving the remaining
-    // batch behind other waiting accounts prevents one account monopolizing
-    // every schedule tick, without building a second queue or index service.
-    await query(sql`UPDATE memory_session_sources SET available_at = statement_timestamp()
+        return {
+          namespaceId: head.namespaceId,
+          stored: 0,
+          failed: true,
+          error,
+        };
+      }
+      // At most 1,000 pending records exist per namespace. Moving the remaining
+      // batch behind other waiting accounts prevents one account monopolizing
+      // every schedule tick, without building a second queue or index service.
+      await query(sql`UPDATE memory_session_sources SET available_at = statement_timestamp()
       WHERE namespace_id = ${head.namespaceId} AND stored_at IS NULL`);
-    return { namespaceId: head.namespaceId, stored, failed: false };
-  });
+      return { namespaceId: head.namespaceId, stored, failed: false };
+    },
+    { outermost: true }
+  );
 }
 
 async function deliverNamespaceBatch(root: string, namespaceId: string) {
