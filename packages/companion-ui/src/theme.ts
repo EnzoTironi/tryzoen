@@ -32,8 +32,12 @@ const darkColors: typeof lightColors = {
   incoming: "#262628",
 };
 
+export function useDarkAppearance() {
+  return useColorScheme() === "dark";
+}
+
 export function useColors() {
-  return useColorScheme() === "dark" ? darkColors : lightColors;
+  return useDarkAppearance() ? darkColors : lightColors;
 }
 
 // Native text already uses the platform font; web must not inherit a brand font.

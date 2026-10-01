@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { MarkdownEditorHandle } from "@zoen/companion-ui";
+import {
+  useDarkAppearance,
+  type MarkdownEditorHandle,
+} from "@zoen/companion-ui";
 import {
   XIcon,
   CheckIcon,
@@ -13,6 +16,7 @@ import {
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
+import { cn } from "@web/components/class-names";
 import { Textarea } from "@web/components/ui/textarea";
 import styles from "../../space.module.css";
 import documentStyles from "./file-editor.module.css";
@@ -39,6 +43,7 @@ export function FileEditor({
   readonly onSaved: () => Promise<void>;
   readonly readOnly: boolean;
 }) {
+  const darkAppearance = useDarkAppearance();
   const { t } = useI18n();
   const utils = api.useUtils();
   const [content, setContent] = useState(initial);
@@ -126,7 +131,10 @@ export function FileEditor({
         showCloseButton={false}
         animated={false}
         aria-describedby={undefined}
-        className="fixed inset-0 flex h-dvh w-full max-w-none! translate-0 rounded-none bg-background p-0 ring-0"
+        className={cn(
+          "fixed inset-0 flex h-dvh w-full max-w-none! translate-0 rounded-none bg-background p-0 ring-0",
+          darkAppearance && "dark"
+        )}
       >
         <section className={documentStyles.surface}>
           <div className={documentStyles.header}>
