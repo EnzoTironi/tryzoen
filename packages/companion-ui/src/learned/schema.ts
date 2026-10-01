@@ -59,52 +59,76 @@ export const LearnedClaimSearchSchema = z
   })
   .refine(effectivePreference, "Invalid effective memory preference")
   .refine(
-    (value) => (value.revision === null) === (value.recordedAt === null) &&
-      (value.revision !== null || (value.matches.length === 0 && !value.hasMore)) &&
-      value.matches.every((match) => value.recordedAt !== null && match.claim.recordedAt <= value.recordedAt),
+    (value) =>
+      (value.revision === null) === (value.recordedAt === null) &&
+      (value.revision !== null ||
+        (value.matches.length === 0 && !value.hasMore)) &&
+      value.matches.every(
+        (match) =>
+          value.recordedAt !== null &&
+          match.claim.recordedAt <= value.recordedAt
+      ),
     "Search results must belong to a recorded snapshot"
   );
 export const LearnedClaimHistoryInputSchema = z.strictObject({
   claimId: z.uuid(),
 });
-export const LearnedClaimHistorySchema = z.strictObject({
-  revision: GitRevisionSchema.nullable(),
-  versions: z.array(LearnedClaimVersionSchema).max(10_000),
-}).refine(
-  (value) => value.revision !== null || value.versions.length === 0,
-  "Claim history requires a published head"
-);
+export const LearnedClaimHistorySchema = z
+  .strictObject({
+    revision: GitRevisionSchema.nullable(),
+    versions: z.array(LearnedClaimVersionSchema).max(10_000),
+  })
+  .refine(
+    (value) => value.revision !== null || value.versions.length === 0,
+    "Claim history requires a published head"
+  );
 const matchesReceipt = (
   claim: z.infer<typeof LearnedClaimVersionSchema>,
   receipt: z.infer<typeof LearnedClaimReceiptSchema>
-) => claim.revision === receipt.revision && claim.operationId === receipt.operationId &&
+) =>
+  claim.revision === receipt.revision &&
+  claim.operationId === receipt.operationId &&
   claim.file.scope.userId === receipt.scope.userId &&
   claim.file.scope.workspaceId === receipt.scope.workspaceId &&
   claim.authorUserId === receipt.scope.userId;
 
-export const LearnedClaimChangeResultSchema = z.union([
-  z.strictObject({
-    applied: z.literal(false),
-    receipt: LearnedClaimReceiptSchema,
-  }),
-  z.strictObject({
-    applied: z.literal(true),
-    receipt: LearnedClaimReceiptSchema,
-    claim: LearnedClaimVersionSchema,
-  }),
-  z.strictObject({
-    applied: z.literal(true),
-    receipt: LearnedClaimReceiptSchema,
-    cleared: z.array(LearnedClaimVersionSchema).max(learnedClaimLimits.claims),
-  }),
-]).refine((value) => {
-  if (!value.applied) return true;
-  if ("claim" in value)
-    return value.receipt.claimId === value.claim.file.id && matchesReceipt(value.claim, value.receipt);
-  return value.receipt.claimId === null &&
-    new Set(value.cleared.map((claim) => claim.file.id)).size === value.cleared.length &&
-    value.cleared.every((claim) => claim.file.state.kind === "tombstone" && matchesReceipt(claim, value.receipt));
-}, "Applied changes must agree with their publication receipt");
+export const LearnedClaimChangeResultSchema = z
+  .union([
+    z.strictObject({
+      applied: z.literal(false),
+      receipt: LearnedClaimReceiptSchema,
+    }),
+    z.strictObject({
+      applied: z.literal(true),
+      receipt: LearnedClaimReceiptSchema,
+      claim: LearnedClaimVersionSchema,
+    }),
+    z.strictObject({
+      applied: z.literal(true),
+      receipt: LearnedClaimReceiptSchema,
+      cleared: z
+        .array(LearnedClaimVersionSchema)
+        .max(learnedClaimLimits.claims),
+    }),
+  ])
+  .refine((value) => {
+    if (!value.applied) return true;
+    if ("claim" in value)
+      return (
+        value.receipt.claimId === value.claim.file.id &&
+        matchesReceipt(value.claim, value.receipt)
+      );
+    return (
+      value.receipt.claimId === null &&
+      new Set(value.cleared.map((claim) => claim.file.id)).size ===
+        value.cleared.length &&
+      value.cleared.every(
+        (claim) =>
+          claim.file.state.kind === "tombstone" &&
+          matchesReceipt(claim, value.receipt)
+      )
+    );
+  }, "Applied changes must agree with their publication receipt");
 export const LearnedClaimSetEnabledInputSchema = z.strictObject({
   operationId: LearnedClaimOperationIdSchema,
   expectedPreferenceRevision: z.uuid(),
