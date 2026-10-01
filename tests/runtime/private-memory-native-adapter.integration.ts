@@ -12,7 +12,10 @@ import { env } from "@shared/environment/env";
 import { claimSession } from "@db/services/sessions";
 import learned from "../../agent/memory/learned";
 import { PrivateMemoryRepository } from "../../server/memory/repository";
-import { LearnedClaimReceiptSchema } from "@zoen/companion-ui/memory";
+import {
+  LearnedClaimReceiptSchema,
+  LearnedClaimSearchSchema,
+} from "@zoen/companion-ui/memory";
 import {
   captureSessionSource,
   drainSessionSources,
@@ -54,6 +57,9 @@ const changeResult = z.object({
   result: z.object({
     applied: z.boolean(),
     receipt: LearnedClaimReceiptSchema,
+  }),
+  current: z.object({
+    messages: z.array(z.object({ id: z.string(), content: z.string() })),
   }),
 });
 
@@ -130,14 +136,16 @@ for (const scope of ["personal", "company"] as const) {
       if (!first.applied || first.receipt.claimId === null)
         throw new Error("Expected new claim");
       const claimId = first.receipt.claimId;
-      const correction = await tools.change_memory.execute(
-        {
-          action: "correct",
-          claimId,
-          expectedRevision: first.receipt.revision,
-          body: body("Cedar reports are monthly"),
-        },
-        { ...context, callId: randomUUID() }
+      const correction = changeResult.parse(
+        await tools.change_memory.execute(
+          {
+            action: "correct",
+            claimId,
+            expectedRevision: first.receipt.revision,
+            body: body("Cedar reports are monthly"),
+          },
+          { ...context, callId: randomUUID() }
+        )
       );
       expect(JSON.stringify(correction.current)).toContain(
         "Cedar reports are monthly"
@@ -145,9 +153,11 @@ for (const scope of ["personal", "company"] as const) {
       expect(JSON.stringify(correction.current)).not.toContain(
         "Cedar reports are weekly"
       );
-      const corrected = changeResult.parse(correction).result;
-      const replay = await tools.change_memory.execute(initial, context);
-      expect(changeResult.parse(replay).result).toEqual({
+      const corrected = correction.result;
+      const replay = changeResult.parse(
+        await tools.change_memory.execute(initial, context)
+      );
+      expect(replay.result).toEqual({
         applied: false,
         receipt: first.receipt,
       });
@@ -157,13 +167,15 @@ for (const scope of ["personal", "company"] as const) {
       const snapshot = await PrivateMemoryRepository.read(actor);
       expect(snapshot.snapshot.claims).toHaveLength(1);
       expect(snapshot.snapshot.claims[0]?.file.id).toBe(claimId);
-      const forgotten = await tools.change_memory.execute(
-        {
-          action: "tombstone",
-          claimId,
-          expectedRevision: corrected.receipt.revision,
-        },
-        { ...context, callId: randomUUID() }
+      const forgotten = changeResult.parse(
+        await tools.change_memory.execute(
+          {
+            action: "tombstone",
+            claimId,
+            expectedRevision: corrected.receipt.revision,
+          },
+          { ...context, callId: randomUUID() }
+        )
       );
       expect(JSON.stringify(forgotten.current)).not.toContain(
         "Cedar reports are monthly"
@@ -177,9 +189,11 @@ for (const scope of ["personal", "company"] as const) {
         operationId: randomUUID(),
       });
       expect(JSON.stringify(next)).not.toContain("Cedar reports are monthly");
-      const audit = await tools.search_memory.execute(
-        { query: "Cedar", view: { revision: first.receipt.revision } },
-        context
+      const audit = LearnedClaimSearchSchema.parse(
+        await tools.search_memory.execute(
+          { query: "Cedar", view: { revision: first.receipt.revision } },
+          context
+        )
       );
       expect(audit.matches[0]?.claim.revision).toBe(first.receipt.revision);
       expect(audit.matches[0]?.claim.file.state).toEqual({
@@ -310,16 +324,18 @@ test("paused automatic memory permits explicit review but injects no facts after
       args: { query: "Cedar" },
     });
     expect(JSON.stringify(review)).toContain("Cedar reports are weekly");
-    if (!publication.applied || !("claim" in publication))
+    if (!publication.applied || publication.receipt.claimId === null)
       throw new Error("Expected new claim");
-    const changed = await tools.change_memory.execute(
-      {
-        action: "correct",
-        claimId: publication.claim.file.id,
-        expectedRevision: publication.receipt.revision,
-        body: body("Cedar reports are monthly"),
-      },
-      context
+    const changed = changeResult.parse(
+      await tools.change_memory.execute(
+        {
+          action: "correct",
+          claimId: publication.receipt.claimId,
+          expectedRevision: publication.receipt.revision,
+          body: body("Cedar reports are monthly"),
+        },
+        context
+      )
     );
     expect(JSON.stringify(changed.current)).toContain("paused");
     expect(JSON.stringify(changed.current)).not.toContain(
@@ -329,16 +345,17 @@ test("paused automatic memory permits explicit review but injects no facts after
     await expect(
       tools.search_memory.execute({ query: "Cedar" }, wrong)
     ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
-    for (const attributes of [
+    const blockedAttributes: readonly Readonly<Record<string, string>>[] = [
       { chatKind: "group" },
       { conversationScope: " group:telegram:test:room" },
       { agentGrantId: randomUUID() },
       { scheduledRunId: randomUUID() },
       { protocolTaskId: randomUUID() },
-    ]) {
+    ];
+    for (const attributes of blockedAttributes) {
       const principal = context.session.auth.current;
       expect(
-        await learned.scope({
+        learned.scope({
           abortSignal: context.abortSignal,
           channel: {},
           session: {
