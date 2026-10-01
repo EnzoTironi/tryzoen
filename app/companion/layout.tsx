@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { notFound } from "next/navigation";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { requireRequestScope } from "@web/auth/request-scope";
 import { TRPCProvider } from "@web/trpc/client";
 
@@ -8,6 +10,9 @@ export default async function CompanionLayout({
 }: {
   children: ReactNode;
 }) {
-  const scope = await requireRequestScope();
+  const scope = await requireRequestScope().catch((cause: unknown) => {
+    if (cause instanceof WorkspaceAccessDenied) notFound();
+    throw cause;
+  });
   return <TRPCProvider key={scope.userId}>{children}</TRPCProvider>;
 }
