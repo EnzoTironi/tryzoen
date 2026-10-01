@@ -390,7 +390,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     preview: {
       height: 190,
-      backgroundColor: "#f4f5f7",
+      backgroundColor: colors.wash,
       padding: 24,
       justifyContent: "center",
       alignItems: "center",

@@ -3,17 +3,50 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CompanionShell } from "./shell";
 
-const state = vi.hoisted(() => ({ width: 1000, dark: false }));
-vi.mock("react-native", async () => ({
-  ...(await vi.importActual<typeof import("react-native")>("react-native-web")),
-  useWindowDimensions: () => ({
-    width: state.width,
-    height: 800,
-    scale: 1,
-    fontScale: 1,
-  }),
-  useColorScheme: () => (state.dark ? "dark" : "light"),
+const state = vi.hoisted(() => ({
+  width: 1000,
+  dark: false,
+  labelColor: "",
+  selectedFill: "",
 }));
+vi.mock("react-native", async () => {
+  const native =
+    await vi.importActual<typeof import("react-native")>("react-native-web");
+  return {
+    ...native,
+    useWindowDimensions: () => ({
+      width: state.width,
+      height: 800,
+      scale: 1,
+      fontScale: 1,
+    }),
+    useColorScheme: () => (state.dark ? "dark" : "light"),
+    Text: (props: ComponentProps<typeof import("react-native").Text>) => {
+      const style = native.StyleSheet.flatten(props.style);
+      if (
+        props.children === "Conversas" &&
+        style.fontSize === 10 &&
+        typeof style.color === "string"
+      )
+        state.labelColor = style.color;
+      return <native.Text {...props} />;
+    },
+    Pressable: (
+      props: ComponentProps<typeof import("react-native").Pressable>
+    ) => {
+      if (props.accessibilityLabel === "Conversas") {
+        const style = native.StyleSheet.flatten(
+          typeof props.style === "function"
+            ? props.style({ pressed: false })
+            : props.style
+        );
+        if (typeof style.backgroundColor === "string")
+          state.selectedFill = style.backgroundColor;
+      }
+      return <native.Pressable {...props} />;
+    },
+  };
+});
 vi.mock("lucide-react-native", () => import("lucide-react"));
 vi.mock("./conversation", async () => ({
   ConversationChrome: (await import("react")).createContext({
@@ -49,6 +82,8 @@ function render(
 beforeEach(() => {
   state.width = 1000;
   state.dark = false;
+  state.labelColor = "";
+  state.selectedFill = "";
 });
 it("exposes real desktop destinations alongside the two messaging panes", () => {
   const html = render();
@@ -105,3 +140,35 @@ it("shows primary destinations on mobile top-level screens, including an open co
     expect(html).not.toContain('data-testid="global-navigation"');
   }
 });
+
+function linear(value: number) {
+  const channel = value / 255;
+  return channel <= 0.04045
+    ? channel / 12.92
+    : ((channel + 0.055) / 1.055) ** 2.4;
+}
+function luminance(color: string) {
+  if (!/^#[\da-f]{6}$/iu.test(color))
+    throw new Error(`Invalid color: ${color}`);
+  const packed = Number.parseInt(color.slice(1), 16);
+  return (
+    linear((packed >> 16) & 255) * 0.2126 +
+    linear((packed >> 8) & 255) * 0.7152 +
+    linear(packed & 255) * 0.0722
+  );
+}
+
+it.each([false, true])(
+  "keeps the selected mobile label readable in dark appearance %s",
+  (dark) => {
+    state.width = 390;
+    state.dark = dark;
+    const markup = render(false);
+    const values = [luminance(state.labelColor), luminance(state.selectedFill)];
+    expect(
+      (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05)
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain('aria-label="Conversas"');
+  }
+);

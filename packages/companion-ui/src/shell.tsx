@@ -556,7 +556,7 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       color: palette.ink,
     },
     navigationSelected: { backgroundColor: palette.wash },
-    navigationSelectedLabel: { color: palette.accent, fontWeight: "600" },
+    navigationSelectedLabel: { color: palette.ink, fontWeight: "600" },
     navigationPressed: { opacity: 0.65 },
     bottomNavigation: {
       flexDirection: "row",
