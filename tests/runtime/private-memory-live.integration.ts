@@ -46,9 +46,62 @@ test("fresh enrollment owns an explicit empty repository; deleted authoritative 
     () => PrivateMemoryRepository.read(actor),
     () => PrivateMemoryRepository.search(actor, { query: "Cedar" }),
     () => PrivateMemoryRepository.rebuildOperations(actor),
+    () =>
+      PrivateMemoryRepository.change(
+        actor,
+        assertion("Cedar cannot recreate lost authority")
+      ),
   ])
     await expect(run()).rejects.toMatchObject({ reason: "unavailable" });
+  expect(
+    await query(
+      sql`SELECT namespace_id FROM private_memory_repository WHERE namespace_id=${namespace.id}`
+    )
+  ).toEqual([]);
 });
+
+test.each([false, true])(
+  "loss of published repository authority denies null-head writes and restore when derived index loss is %s",
+  async (loseIndex) => {
+    await using fixture = await privateMemoryFixture();
+    const actor = fixture.personal;
+    await PrivateMemoryRepository.change(
+      actor,
+      assertion("Cedar has retained publication history")
+    );
+    const archive = await PrivateMemoryRepository.backup(actor);
+    const namespace = await fixture.namespace(actor);
+    await query(
+      sql`DELETE FROM private_memory_repository WHERE namespace_id=${namespace.id}`
+    );
+    if (loseIndex)
+      await query(
+        sql`DELETE FROM private_memory_operation WHERE namespace_id=${namespace.id}`
+      );
+    await expect(
+      PrivateMemoryRepository.change(
+        actor,
+        assertion("Fresh assertion must not replace lost history")
+      )
+    ).rejects.toMatchObject({ reason: "unavailable" });
+    await expect(
+      PrivateMemoryRepository.restore(actor, {
+        expectedRevision: null,
+        archive,
+      })
+    ).rejects.toMatchObject({ reason: "unavailable" });
+    expect(
+      await query(
+        sql`SELECT namespace_id FROM private_memory_repository WHERE namespace_id=${namespace.id}`
+      )
+    ).toEqual([]);
+    expect(
+      await query(
+        sql`SELECT operation_id FROM private_memory_operation WHERE namespace_id=${namespace.id}`
+      )
+    ).toHaveLength(loseIndex ? 0 : 1);
+  }
+);
 
 test("SQL consent CAS and stable replay cannot re-enable learning after a newer pause", async () => {
   await using fixture = await privateMemoryFixture();

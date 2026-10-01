@@ -377,9 +377,6 @@ function restoreArchive(
           archive.sources
         );
       if (identical) return { applied: false as const, revision: current.head };
-      await query(
-        sql`INSERT INTO private_memory_repository (namespace_id) VALUES (${owner.namespace.id}) ON CONFLICT DO NOTHING`
-      );
       const written =
         await query(sql`UPDATE private_memory_repository SET head_sha = ${archive.revision},bundle = ${archive.bundle},
         recorded_at = ${restored.snapshot.recordedAt}::timestamptz
@@ -629,9 +626,6 @@ export const PrivateMemoryRepository = {
       const owner = await privateScope(actor);
       if (!owner.namespace.automaticEnabled && change.action === "assert")
         throw new PrivateMemoryError("disabled");
-      await query(
-        sql`INSERT INTO private_memory_repository (namespace_id) VALUES (${owner.namespace.id}) ON CONFLICT DO NOTHING`
-      );
       const repository = await stored(owner.namespace.id);
       // Replay is resolved from canonical commit metadata before the CAS check.
       const result = await publishPrivateMemoryGit({
