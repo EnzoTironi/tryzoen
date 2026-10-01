@@ -122,19 +122,23 @@ test("top-level empty work returns without filesystem or acknowledgement effects
   expect(selected[0]?.params).toEqual([]);
 });
 
-test("success erases first, then locks its owner and acknowledges only its exact namespace and pending file-memory ledger", async () => {
+test("success proves namespace absence before files, then acknowledges only its exact receipt and pending ledger", async () => {
   candidate();
   await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
   expect(boundary.erase).toHaveBeenCalledExactlyOnceWith(root, namespaceA);
   expect(boundary.outer).toHaveBeenCalledTimes(2);
   expect(boundary.savepoint).toHaveBeenCalledTimes(1);
   const [eraseOrder] = boundary.erase.mock.invocationCallOrder;
-  const [acknowledgementOrder] =
-    boundary.savepointExecute.mock.invocationCallOrder;
+  const acknowledgementOrder =
+    boundary.savepointExecute.mock.invocationCallOrder[1];
   if (eraseOrder === undefined || acknowledgementOrder === undefined)
     throw new Error("Expected both filesystem completion and acknowledgement");
   expect(eraseOrder).toBeLessThan(acknowledgementOrder);
   expect(statements(boundary.savepointExecute)).toEqual([
+    {
+      sql: 'SELECT user_id AS "userId" FROM workspace_memory_namespace WHERE namespace_id=$1 FOR UPDATE NOWAIT',
+      params: [namespaceA],
+    },
     {
       sql: "SELECT id FROM account_deletion_requests WHERE user_id=$1 FOR UPDATE",
       params: [owner],
@@ -157,6 +161,10 @@ test("an ownerless receipt clears only the exact namespace without touching acco
   await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
   expect(boundary.erase).toHaveBeenCalledExactlyOnceWith(root, namespaceB);
   expect(statements(boundary.savepointExecute)).toEqual([
+    {
+      sql: 'SELECT user_id AS "userId" FROM workspace_memory_namespace WHERE namespace_id=$1 FOR UPDATE NOWAIT',
+      params: [namespaceB],
+    },
     {
       sql: "DELETE FROM workspace_memory_erasure WHERE namespace_id=$1",
       params: [namespaceB],
@@ -193,7 +201,10 @@ test.each([
       errors: [failure],
     });
     expect(boundary.rollback).toHaveBeenCalledTimes(1);
-    expect(boundary.savepointExecute).not.toHaveBeenCalled();
+    expect(boundary.savepointExecute).toHaveBeenCalledTimes(1);
+    expect(statements(boundary.savepointExecute)[0]?.sql).toContain(
+      "FOR UPDATE NOWAIT"
+    );
     expect(statements(boundary.execute)[1]).toEqual({
       sql: "UPDATE workspace_memory_erasure SET erasure_failures=erasure_failures+1, last_failed_at=clock_timestamp(), available_at=clock_timestamp()+$1 * interval '1 second' WHERE namespace_id=$2",
       params: [seconds, namespaceA],
@@ -219,6 +230,8 @@ test("a failed receipt backs off independently while another account's receipt s
   expect(
     statements(boundary.savepointExecute).map((statement) => statement.params)
   ).toEqual([
+    [namespaceA],
+    [namespaceB],
     ["better-auth:synthetic-healthy-owner"],
     [namespaceB],
     [
@@ -231,6 +244,7 @@ test("a failed receipt backs off independently while another account's receipt s
 test("an acknowledgement failure rolls back the savepoint and retains a retry even after filesystem completion", async () => {
   candidate();
   boundary.savepointExecute
+    .mockResolvedValueOnce({ rows: [] })
     .mockResolvedValueOnce({ rows: [] })
     .mockResolvedValueOnce({ rows: [] })
     .mockRejectedValueOnce(
@@ -258,4 +272,136 @@ test("one drain keeps the existing five-receipt bound", async () => {
   expect(boundary.outer).toHaveBeenCalledTimes(5);
   expect(boundary.erase).toHaveBeenCalledTimes(5);
   expect(boundary.execute).toHaveBeenCalledTimes(5);
+});
+
+test("a restored generation is retired after files and before the receipt, with an exact owner-bound delete", async () => {
+  candidate();
+  boundary.savepointExecute
+    .mockResolvedValueOnce({ rows: [{ userId: owner }] })
+    .mockResolvedValueOnce({ rows: [{ namespace_id: namespaceA }] });
+  await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
+  const issued = statements(boundary.savepointExecute);
+  expect(issued[0]?.sql).toContain("FOR UPDATE NOWAIT");
+  expect(issued[1]).toEqual({
+    sql: "DELETE FROM workspace_memory_namespace WHERE namespace_id=$1 AND user_id=$2 RETURNING namespace_id",
+    params: [namespaceA, owner],
+  });
+  expect(issued[3]?.sql).toBe(
+    "DELETE FROM workspace_memory_erasure WHERE namespace_id=$1"
+  );
+  const calls = boundary.savepointExecute.mock.invocationCallOrder;
+  const eraseOrder = boundary.erase.mock.invocationCallOrder[0];
+  expect(calls[0]).toBeLessThan(eraseOrder ?? 0);
+  expect(eraseOrder).toBeLessThan(calls[1] ?? 0);
+  // No workspace/user-wide retirement can remove a newer generation B.
+  expect(issued.some(({ params }) => params.includes(namespaceB))).toBe(false);
+});
+
+test.each([null, "better-auth:another-owner"])(
+  "an existing generation with an unproven receipt owner (%s) keeps its obligation before filesystem effects",
+  async (receiptOwner) => {
+    candidate(namespaceA, receiptOwner);
+    boundary.savepointExecute.mockResolvedValueOnce({
+      rows: [{ userId: owner }],
+    });
+    await expect(drainMemoryErasures()).rejects.toMatchObject({
+      errors: [expect.objectContaining({ reason: "unavailable" })],
+    });
+    expect(boundary.erase).not.toHaveBeenCalled();
+    expect(boundary.savepointExecute).toHaveBeenCalledTimes(1);
+    expect(boundary.rollback).toHaveBeenCalledTimes(1);
+    expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+  }
+);
+
+test("namespace lock contention is a retry, never apparent absence or permission to erase", async () => {
+  candidate();
+  boundary.savepointExecute.mockRejectedValueOnce(
+    Object.assign(new Error("Synthetic namespace lock contention"), {
+      code: "55P03",
+    })
+  );
+  await expect(drainMemoryErasures()).rejects.toMatchObject({
+    errors: [expect.any(SqlError)],
+  });
+  expect(boundary.erase).not.toHaveBeenCalled();
+  expect(boundary.savepointExecute).toHaveBeenCalledTimes(1);
+  expect(boundary.rollback).toHaveBeenCalledTimes(1);
+  expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+});
+
+test.each(["error", "missing"] as const)(
+  "failed retirement (%s) cannot acknowledge restored content after filesystem completion",
+  async (failure) => {
+    candidate();
+    boundary.savepointExecute.mockResolvedValueOnce({
+      rows: [{ userId: owner }],
+    });
+    if (failure === "error")
+      boundary.savepointExecute.mockRejectedValueOnce(
+        new Error("Synthetic retirement failure")
+      );
+    else boundary.savepointExecute.mockResolvedValueOnce({ rows: [] });
+    await expect(drainMemoryErasures()).rejects.toBeInstanceOf(AggregateError);
+    expect(boundary.erase).toHaveBeenCalledExactlyOnceWith(root, namespaceA);
+    expect(boundary.rollback).toHaveBeenCalledTimes(1);
+    expect(statements(boundary.savepointExecute)).toHaveLength(2);
+    expect(
+      statements(boundary.savepointExecute).some(({ sql }) =>
+        sql.includes("DELETE FROM workspace_memory_erasure")
+      )
+    ).toBe(false);
+    expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+  }
+);
+
+test("a restored generation remains unacknowledged when its filesystem erase fails", async () => {
+  candidate();
+  boundary.savepointExecute.mockResolvedValueOnce({
+    rows: [{ userId: owner }],
+  });
+  boundary.erase.mockRejectedValueOnce(
+    new Error("Synthetic restored-files failure")
+  );
+  await expect(drainMemoryErasures()).rejects.toBeInstanceOf(AggregateError);
+  expect(boundary.savepointExecute).toHaveBeenCalledTimes(1);
+  expect(boundary.rollback).toHaveBeenCalledTimes(1);
+  expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+});
+
+test("acknowledgement failure after retirement rolls back the generation and retains its obligation for exact retry", async () => {
+  candidate();
+  boundary.savepointExecute
+    .mockResolvedValueOnce({ rows: [{ userId: owner }] })
+    .mockResolvedValueOnce({ rows: [{ namespace_id: namespaceA }] })
+    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: [] })
+    .mockRejectedValueOnce(
+      new Error("Synthetic post-retirement ledger failure")
+    );
+  await expect(drainMemoryErasures()).rejects.toMatchObject({
+    errors: [expect.any(SqlError)],
+  });
+  expect(boundary.rollback).toHaveBeenCalledTimes(1);
+  expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+  candidate();
+  boundary.savepointExecute
+    .mockResolvedValueOnce({ rows: [{ userId: owner }] })
+    .mockResolvedValueOnce({ rows: [{ namespace_id: namespaceA }] });
+  await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
+  expect(boundary.erase).toHaveBeenCalledTimes(2);
+  expect(
+    statements(boundary.savepointExecute).filter(({ sql }) =>
+      sql.startsWith("DELETE FROM workspace_memory_namespace")
+    )
+  ).toEqual([
+    {
+      sql: "DELETE FROM workspace_memory_namespace WHERE namespace_id=$1 AND user_id=$2 RETURNING namespace_id",
+      params: [namespaceA, owner],
+    },
+    {
+      sql: "DELETE FROM workspace_memory_namespace WHERE namespace_id=$1 AND user_id=$2 RETURNING namespace_id",
+      params: [namespaceA, owner],
+    },
+  ]);
 });

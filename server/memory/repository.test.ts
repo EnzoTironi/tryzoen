@@ -606,3 +606,22 @@ test("v2 source count and total bytes are rejected before parsing individual arc
   ).toBe(false);
   expect(parsed).not.toHaveBeenCalled();
 });
+
+test("an authenticated archive from a retired namespace cannot restore into a fresh generation of the same owner and workspace", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  const current = await owners.namespace(actor);
+  owners.namespace.mockResolvedValue({
+    ...current,
+    id: "10000000-0000-4000-8000-000000000099",
+  });
+  vi.clearAllMocks();
+  await expect(
+    PrivateMemoryRepository.restore(actor, {
+      expectedRevision: null,
+      archive,
+    })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  expect(owners.restore).not.toHaveBeenCalled();
+  expect(owners.selection).not.toHaveBeenCalled();
+  expect(owners.session).not.toHaveBeenCalled();
+});

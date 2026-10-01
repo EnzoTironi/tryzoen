@@ -692,11 +692,19 @@ The private repository now checks the exact namespace's pending erasure before
 read, recall, change, history or index rebuild, including claims without citations.
 The namespace lock fences ordinary deletion; the receipt presence read adds no
 worker lock or due-time filter. Backup/restore retain their explicit checks. This
-withholds a recovered namespace while its erasure marker remains; it does not
-establish safety after that marker is acknowledged or after completed erasure and
-a database rewind. The erasure worker currently clears namespace files and the
-receipt, not a restored private Git bundle. Coordinated recovery must preserve the
-non-restored deletion journal before the active-consumer cutover can be qualified.
+withholds a recovered namespace while its erasure marker remains. Before filesystem
+work, the erasure worker locks any restored exact namespace generation with
+`FOR UPDATE NOWAIT` and requires its known receipt owner to match. Contention or
+unproven ownership retains the obligation without filesystem effects. After file
+erasure, it retires only that generation; existing foreign-key cascades remove its
+private Git bundle, operation receipts, recalls and pending source outbox before
+acknowledging the erasure. A new generation for the same workspace/user is not a
+delete target, and an archive from the retired generation cannot restore into it.
+Synthetic tests verify the SQL, owner checks and savepoint retry ordering; real
+PostgreSQL cascade/concurrency and restore acceptance still require qualification.
+This does not establish safety after completed erasure followed by a whole-database
+rewind that loses the retained deletion journal. Coordinated recovery must preserve
+that non-restored journal before the active-consumer cutover can be qualified.
 
 ## PostgreSQL registry boundary — 1 October 2026
 

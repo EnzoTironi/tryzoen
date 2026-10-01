@@ -1,6 +1,9 @@
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
-import type { workspaceMemoryErasures } from "@db/schema/learned-memory";
+import type {
+  workspaceMemoryErasures,
+  workspaceMemoryNamespaces,
+} from "@db/schema/learned-memory";
 import { FileMemoryError } from "./ai-memory/mutations";
 import { env } from "@shared/environment/env";
 import { eraseSessionSources } from "./session-files";
@@ -24,7 +27,24 @@ async function eraseNextReceipt() {
         await transaction(async () => {
           if (!env.ZOEN_SESSION_ARCHIVE_DIR)
             throw new FileMemoryError("unconfigured");
+          // Recovery can restore a retired generation beside its erasure receipt.
+          // A busy generation must retry; skipping its lock cannot prove absence.
+          const [restored] = await query<
+            Pick<typeof workspaceMemoryNamespaces.$inferSelect, "userId">
+          >(sql`SELECT user_id AS "userId" FROM workspace_memory_namespace
+            WHERE namespace_id=${namespaceId} FOR UPDATE NOWAIT`);
+          if (restored && (!ownerUserId || restored.userId !== ownerUserId))
+            throw new FileMemoryError("unavailable");
           await eraseSessionSources(env.ZOEN_SESSION_ARCHIVE_DIR, namespaceId);
+          if (restored) {
+            // Cascades retire this generation's Git, recalls and source outbox.
+            // Its delete trigger preserves our already-locked receipt.
+            const retired = await query(
+              sql`DELETE FROM workspace_memory_namespace WHERE namespace_id=${namespaceId}
+                AND user_id=${ownerUserId} RETURNING namespace_id`
+            );
+            if (retired.length !== 1) throw new FileMemoryError("unavailable");
+          }
           // Concurrent workers may erase different namespaces of one account.
           // Serialize acknowledgement, then use a fresh statement snapshot below.
           if (ownerUserId)
