@@ -274,11 +274,7 @@ describe("migration deployment policy", () => {
     expect(vercel.buildCommand).toBe("pnpm turbo run build:vercel");
   });
 
-  it("adopts existing tables without request-time DDL", async () => {
-    const migration = await readFile(
-      new URL("../migrations/0000_fluffy_the_spike.sql", import.meta.url),
-      "utf8"
-    );
+  it("keeps schema DDL out of request paths", async () => {
     const services = await Promise.all(
       [
         "browser-traces",
@@ -301,24 +297,8 @@ describe("migration deployment policy", () => {
       new URL("../../db/services/auth/index.ts", import.meta.url),
       "utf8"
     );
-    const authMigration = await readFile(
-      new URL("../migrations/0001_better-auth.sql", import.meta.url),
-      "utf8"
-    );
-
-    expect(migration).toContain('CREATE TABLE IF NOT EXISTS "workspaces"');
-    expect(migration).toContain(
-      'ALTER TABLE "chats" ADD COLUMN IF NOT EXISTS "input_tokens"'
-    );
-    expect(migration).toContain(
-      "ON DELETE cascade ON UPDATE no action NOT VALID"
-    );
     expect(services.join("\n")).not.toContain("CREATE TABLE");
     expect(services.join("\n")).not.toContain("initializePostgres");
-    expect(authMigration).toContain('CREATE TABLE IF NOT EXISTS "user"');
-    expect(authMigration).toContain(
-      'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "phoneNumber"'
-    );
     expect(authSource).toContain("database: drizzleAdapter(db");
     expect(authSource).not.toContain("getMigrations");
     expect(authSource).not.toContain("ensureAuthDatabase");

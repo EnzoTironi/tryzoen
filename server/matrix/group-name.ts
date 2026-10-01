@@ -5,6 +5,7 @@ import { roomCreateSchema, roomRenameSchema } from "@zoen/companion-ui/rooms";
 import type { WorkspaceActorSchema } from "../workspaces/access";
 import { MatrixError, matrixRequest } from "./client";
 import { requireMatrixRoom } from "./rooms";
+import { lockMatrixAdmission } from "./authority";
 
 /** Preserve the existing admin boundary and native room identity while changing its name. */
 export function renameMatrixRoom(
@@ -13,10 +14,7 @@ export function renameMatrixRoom(
 ) {
   const input = roomRenameSchema.parse(raw);
   return transaction(async () => {
-    // Use the membership lock too: both operations update this binding.
-    await query(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.id}, 5))`
-    );
+    await lockMatrixAdmission([actor.workspaceId], [input.id]);
     const room = await requireMatrixRoom(actor, input.id, true);
     if (room.label === input.name) return { status: "saved" as const, room };
     if (room.label !== input.expectedName)

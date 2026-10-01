@@ -29,7 +29,7 @@ import {
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
 import { ConversationChrome } from "./conversation";
-import { systemFont, useColors } from "./theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "./theme";
 import { AgentPanel, type AgentPanelTab } from "./agent-panel";
 import { ConversationNavigation } from "./chats/navigation";
 import { CompanionVisibility } from "./visibility";
@@ -415,7 +415,19 @@ function CompanionHeader({
   readonly onOpenMenu: () => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const preferences = useAccessibilityPreferences();
+  const increasedContrast =
+    preferences.increasedContrast || preferences.forcedColors;
+  const opaque =
+    preferences.reduceTransparency ||
+    increasedContrast ||
+    Platform.OS !== "web" ||
+    typeof CSS === "undefined" ||
+    !CSS.supports("backdrop-filter", "blur(1px)");
+  const styles = useMemo(
+    () => createStyles(colors, opaque, increasedContrast),
+    [colors, opaque, increasedContrast]
+  );
   return (
     <View
       testID="conversation-header"
@@ -463,7 +475,7 @@ function CompanionHeader({
           >
             {agentName}
           </Text>
-          {onOpenAgent && <ChevronRight size={12} color={colors.muted} />}
+          {onOpenAgent && <ChevronRight size={12} color={colors.ink} />}
         </View>
       </Pressable>
       <View pointerEvents="box-none" style={styles.headerSide}>
@@ -481,7 +493,11 @@ function CompanionHeader({
   );
 }
 
-const createStyles = (palette: ReturnType<typeof useColors>) =>
+const createStyles = (
+  palette: ReturnType<typeof useColors>,
+  opaque = true,
+  increasedContrast = false
+) =>
   StyleSheet.create({
     shell: { flex: 1, minHeight: 0, backgroundColor: palette.sidebar },
     layout: { flex: 1, flexDirection: "row", minWidth: 0, minHeight: 0 },
@@ -556,7 +572,7 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       color: palette.ink,
     },
     navigationSelected: { backgroundColor: palette.wash },
-    navigationSelectedLabel: { color: palette.accent, fontWeight: "600" },
+    navigationSelectedLabel: { color: palette.ink, fontWeight: "600" },
     navigationPressed: { opacity: 0.65 },
     bottomNavigation: {
       flexDirection: "row",
@@ -594,12 +610,16 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
     headerSide: { width: 44, alignItems: "center" },
     headerControl: {
       borderRadius: 22,
-      backgroundColor: `${palette.surface}b8`,
+      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${palette.line}70`,
+      borderColor: increasedContrast
+        ? palette.ink
+        : opaque
+          ? palette.line
+          : `${palette.line}70`,
       boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
     },
     identity: {
@@ -620,10 +640,14 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       paddingVertical: 3,
       borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${palette.line}70`,
-      backgroundColor: `${palette.surface}b8`,
+      borderColor: increasedContrast
+        ? palette.ink
+        : opaque
+          ? palette.line
+          : `${palette.line}70`,
+      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
     },
     title: {

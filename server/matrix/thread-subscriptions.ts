@@ -11,9 +11,10 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { MatrixError, matrixRequest } from "./client";
-import { joinMatrixRoom, requireMatrixRoom } from "./rooms";
+import { requireJoinedMatrixRoom } from "./rooms";
 import { readRoomMessage } from "./messages";
 import { TimeoutError, withTimeout } from "../operations/async";
+import { lockMatrixAdmission } from "./authority";
 
 const version = "unstable/io.element.msc4306";
 const subscription = z.object({ automatic: z.boolean() });
@@ -29,7 +30,7 @@ async function subscriptionTarget(
 ) {
   if (!actor.authSessionId || actor.groupBindingId || actor.protocolTaskId)
     throw new WorkspaceAccessDenied();
-  const room = await joinMatrixRoom(actor, input.id);
+  const room = await requireJoinedMatrixRoom(actor, input.id);
   const root = await readRoomMessage(room, input.rootId, true);
   if (root.content["m.relates_to"]?.rel_type === "m.thread")
     throw new WorkspaceAccessDenied();
@@ -40,7 +41,7 @@ async function subscriptionTarget(
         maxResponseBytes: 16_384,
       })
     ).unstable_features?.["org.matrix.msc4306"] === true;
-  await requireMatrixRoom(actor, input.id);
+  await requireJoinedMatrixRoom(actor, input.id);
   return {
     room,
     matrixId: room.matrixId,
@@ -76,7 +77,7 @@ export async function readThreadSubscription(
   const input = threadSubscriptionReadSchema.parse(raw);
   const target = await subscriptionTarget(actor, input);
   const result = await readSubscription(target);
-  await requireMatrixRoom(actor, input.id);
+  await requireJoinedMatrixRoom(actor, input.id);
   return result;
 }
 
@@ -88,6 +89,7 @@ export async function setThreadSubscription(
   const input = threadSubscriptionWriteSchema.parse(raw);
   const write = () =>
     transaction(async () => {
+      await lockMatrixAdmission([actor.workspaceId], [input.id]);
       await query(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`matrix-thread-subscription:${actor.userId}:${input.id}:${input.rootId}`}, 0))`
       );
@@ -129,7 +131,7 @@ export async function setThreadSubscription(
           throw error;
       }
       const result = await readSubscription(target);
-      await requireMatrixRoom(actor, input.id);
+      await requireJoinedMatrixRoom(actor, input.id);
       return result;
     });
   try {

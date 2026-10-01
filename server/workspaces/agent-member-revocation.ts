@@ -1,6 +1,7 @@
 import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { lockMatrixAdmission, lockMatrixRoomFences } from "../matrix/authority";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -14,8 +15,19 @@ export async function revokeExternalAgentMember(
 ) {
   const memberId = z.uuid().parse(id);
   return transaction(async () => {
+    await lockMatrixAdmission([actor.workspaceId], [], "update");
     await requireWorkspaceAccess(actor, true);
     if (!actor.authSessionId) throw new WorkspaceAccessDenied();
+    // Admission excludes concurrent joins while the complete affected room set
+    // is captured. Fence every room before taking the agent member write lock.
+    const bindings = await query<{
+      id: string;
+    }>(sql`SELECT b.id FROM workspace_group_bindings b
+      WHERE b.workspace_id = ${actor.workspaceId} AND EXISTS (
+        SELECT 1 FROM matrix_room_members m WHERE m.binding_id = b.id
+          AND m.user_id = ${"agent:" + memberId} AND m.state = 'joined'
+      ) ORDER BY b.id`);
+    await lockMatrixRoomFences(bindings.map((binding) => binding.id));
     const members =
       await query(sql`UPDATE workspace_agent_members SET revoked_at = COALESCE(revoked_at, clock_timestamp())
       WHERE id = ${memberId} AND workspace_id = ${actor.workspaceId} RETURNING id`);

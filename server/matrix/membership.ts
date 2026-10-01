@@ -1,7 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { query, transaction } from "@db/queries";
+import { query, transaction, TransactionBoundaryError } from "@db/queries";
+import {
+  operationDeadline,
+  operationSignal,
+  TimeoutError,
+  withDeadline,
+} from "../operations/async";
+import {
+  validateMatrixDeadline,
+  validateMatrixLimit,
+  withMatrixTransaction,
+} from "./deadline";
 import { roomMembershipChangeSchema } from "@zoen/companion-ui/rooms";
 import {
   requireWorkspaceAccess,
@@ -10,29 +21,33 @@ import {
 } from "../workspaces/access";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
 import { ensureMatrixIdentity } from "./identities";
+import { lockMatrixAdmission } from "./authority";
 
 /** Exact current state, never a potentially delayed membership callback. */
 export async function readNativeGroupMembership(
   roomId: string,
   matrixId: string
 ) {
+  operationSignal().throwIfAborted();
   try {
+    const response = await matrixRequest(
+      "GET",
+      `rooms/${encodeURIComponent(roomId)}/state/m.room.member/${encodeURIComponent(matrixId)}`,
+      undefined,
+      undefined,
+      { maxResponseBytes: 8192 }
+    );
+    operationSignal().throwIfAborted();
     return z
       .object({
         membership: z.enum(["join", "invite", "leave", "ban", "knock"]),
       })
-      .parse(
-        await matrixRequest(
-          "GET",
-          `rooms/${encodeURIComponent(roomId)}/state/m.room.member/${encodeURIComponent(matrixId)}`,
-          undefined,
-          undefined,
-          { maxResponseBytes: 8192 }
-        )
-      ).membership;
+      .parse(response).membership;
   } catch (error) {
-    if (error instanceof MatrixError && error.reason === "not-found")
+    if (error instanceof MatrixError && error.reason === "not-found") {
+      operationSignal().throwIfAborted();
       return null;
+    }
     throw error;
   }
 }
@@ -43,9 +58,7 @@ export async function changeMatrixGroupMembership(
 ) {
   const input = roomMembershipChangeSchema.parse(raw);
   const target = await transaction(async () => {
-    await query(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.id}, 5))`
-    );
+    await lockMatrixAdmission([actor.workspaceId], [input.id]);
     const { binding, person } = await groupMembershipTarget(actor, input);
     const matrixId = await ensureMatrixIdentity(person);
     const current = await query<{
@@ -76,7 +89,7 @@ export async function changeMatrixGroupMembership(
     return person.userId;
   });
   if (input.action === "add") return { nativePending: false };
-  return { nativePending: !(await retireGroupMember(input.id, target)) };
+  return { nativePending: !(await retireMatrixGroupMember(input.id, target)) };
 }
 
 async function groupMembershipTarget(
@@ -119,9 +132,11 @@ export async function joinNativeGroup(roomId: string, matrixId: string) {
   const native = await readNativeGroupMembership(roomId, matrixId);
   if (native === "join") return;
   if (native === "ban") throw new MatrixError({ reason: "conflict" });
+  operationSignal().throwIfAborted();
   await matrixRequest("POST", `rooms/${encodeURIComponent(roomId)}/invite`, {
     user_id: matrixId,
   });
+  operationSignal().throwIfAborted();
   await matrixRequest(
     "POST",
     `join/${encodeURIComponent(roomId)}`,
@@ -132,64 +147,129 @@ export async function joinNativeGroup(roomId: string, matrixId: string) {
     throw new MatrixError({ reason: "conflict" });
 }
 
-async function retireGroupMember(bindingId: string, userId: string) {
+/** Clear the committed departure receipt only after exact native absence. */
+export async function retireMatrixGroupMember(
+  bindingId: string,
+  userId: string
+) {
+  const deadlineMs = operationDeadline();
+  const retire = async () => {
+    operationSignal().throwIfAborted();
+    await lockMatrixAdmission([], [bindingId]);
+    operationSignal().throwIfAborted();
+    const config = await matrixConfiguration();
+    operationSignal().throwIfAborted();
+    const rows = await query<{
+      roomId: string;
+      matrixId: string;
+      state: string;
+    }>(sql`SELECT b.conversation_id AS "roomId", i.matrix_id AS "matrixId", m.state
+      FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
+      JOIN matrix_identities i ON i.user_id = m.user_id
+      WHERE m.binding_id = ${bindingId} AND m.user_id = ${userId} AND m.native_pending
+        AND m.state <> 'joined' AND m.native_retry_at <= now() AND b.installation_id = ${config.serverName} AND b.channel = 'matrix' FOR UPDATE OF b, m`);
+    operationSignal().throwIfAborted();
+    const row = rows[0];
+    if (!row) return true;
+    const native = await readNativeGroupMembership(row.roomId, row.matrixId);
+    operationSignal().throwIfAborted();
+    if (native === "join" || native === "invite" || native === "knock") {
+      await matrixRequest(
+        "POST",
+        `rooms/${encodeURIComponent(row.roomId)}/${row.state === "left" ? "leave" : "kick"}`,
+        row.state === "left"
+          ? {}
+          : { user_id: row.matrixId, reason: "Removed from group" },
+        row.state === "left" ? row.matrixId : undefined
+      );
+      operationSignal().throwIfAborted();
+    }
+    const verified = await readNativeGroupMembership(row.roomId, row.matrixId);
+    operationSignal().throwIfAborted();
+    if (verified && verified !== "leave" && verified !== "ban")
+      throw new MatrixError({ reason: "conflict" });
+    await query(
+      sql`UPDATE matrix_room_members SET native_pending = false WHERE binding_id = ${bindingId} AND user_id = ${userId}`
+    );
+    operationSignal().throwIfAborted();
+    return true;
+  };
   try {
-    return await transaction(async () => {
-      await query(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${bindingId}, 5))`
-      );
-      const config = await matrixConfiguration();
-      const rows = await query<{
-        roomId: string;
-        matrixId: string;
-        state: string;
-      }>(sql`SELECT b.conversation_id AS "roomId", i.matrix_id AS "matrixId", m.state
-        FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
-        JOIN matrix_identities i ON i.user_id = m.user_id
-        WHERE m.binding_id = ${bindingId} AND m.user_id = ${userId} AND m.native_pending
-          AND m.state <> 'joined' AND m.native_retry_at <= now() AND b.installation_id = ${config.serverName} AND b.channel = 'matrix' FOR UPDATE OF b, m`);
-      const row = rows[0];
-      if (!row) return true;
-      const native = await readNativeGroupMembership(row.roomId, row.matrixId);
-      if (native === "join" || native === "invite" || native === "knock") {
-        await matrixRequest(
-          "POST",
-          `rooms/${encodeURIComponent(row.roomId)}/${row.state === "left" ? "leave" : "kick"}`,
-          row.state === "left"
-            ? {}
-            : { user_id: row.matrixId, reason: "Removed from group" },
-          row.state === "left" ? row.matrixId : undefined
-        );
-      }
-      const verified = await readNativeGroupMembership(
-        row.roomId,
-        row.matrixId
-      );
-      if (verified && verified !== "leave" && verified !== "ban")
-        throw new MatrixError({ reason: "conflict" });
-      await query(
-        sql`UPDATE matrix_room_members SET native_pending = false WHERE binding_id = ${bindingId} AND user_id = ${userId}`
-      );
-      return true;
-    });
-  } catch {
-    // The committed flag is the retry receipt; never restore app access on transport failure.
-    await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
-      WHERE binding_id = ${bindingId} AND user_id = ${userId} AND native_pending AND state <> 'joined'`);
+    return await (deadlineMs === undefined
+      ? transaction(retire)
+      : withMatrixTransaction(deadlineMs, retire));
+  } catch (error) {
+    if (
+      error instanceof TransactionBoundaryError ||
+      error instanceof WorkspaceAccessDenied ||
+      error instanceof RangeError
+    )
+      throw error;
+    operationSignal().throwIfAborted();
+    // The committed receipt withholds access. Schedule retries only while the
+    // same inherited budget remains active; never replace it with a new window.
+    const retry = async () => {
+      operationSignal().throwIfAborted();
+      await lockMatrixAdmission([], [bindingId]);
+      operationSignal().throwIfAborted();
+      await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
+        WHERE binding_id = ${bindingId} AND user_id = ${userId} AND native_pending AND state <> 'joined'`);
+      operationSignal().throwIfAborted();
+    };
+    try {
+      await (deadlineMs === undefined
+        ? transaction(retry)
+        : withMatrixTransaction(deadlineMs, retry));
+    } catch (retryError) {
+      if (
+        retryError instanceof TransactionBoundaryError ||
+        retryError instanceof WorkspaceAccessDenied ||
+        retryError instanceof RangeError
+      )
+        throw retryError;
+      operationSignal().throwIfAborted();
+    }
     console.warn("Group membership retirement remains pending");
     return false;
   }
 }
 
-export async function reconcileGroupDepartures() {
-  const rows = await query<{
-    bindingId: string;
-    userId: string;
-  }>(sql`SELECT binding_id AS "bindingId", user_id AS "userId"
-    FROM matrix_room_members WHERE native_pending AND state <> 'joined' AND native_retry_at <= now() ORDER BY native_retry_at, binding_id, user_id LIMIT 10`);
-  const deadline = Date.now() + 30_000;
-  for (const row of rows) {
-    if (Date.now() >= deadline) break;
-    await retireGroupMember(row.bindingId, row.userId);
+export async function reconcileGroupDepartures(
+  deadlineMs: number,
+  limit: number
+): Promise<number> {
+  validateMatrixDeadline(deadlineMs);
+  validateMatrixLimit(limit, 10);
+  operationSignal().throwIfAborted();
+  if (limit === 0 || Date.now() >= deadlineMs) return 0;
+  let attempted = 0;
+  try {
+    return await withDeadline(async () => {
+      const rows = await withMatrixTransaction(deadlineMs, async () => {
+        operationSignal().throwIfAborted();
+        const candidates =
+          await query(sql`SELECT binding_id AS "bindingId", user_id AS "userId"
+          FROM matrix_room_members WHERE native_pending AND state <> 'joined' AND native_retry_at <= now()
+          ORDER BY native_retry_at, binding_id, user_id LIMIT ${limit}`);
+        operationSignal().throwIfAborted();
+        return z
+          .array(z.object({ bindingId: z.string(), userId: z.string() }))
+          .max(limit)
+          .parse(candidates);
+      });
+      for (const row of rows) {
+        operationSignal().throwIfAborted();
+        attempted++;
+        await retireMatrixGroupMember(row.bindingId, row.userId);
+        operationSignal().throwIfAborted();
+      }
+      return attempted;
+    }, deadlineMs);
+  } catch (error) {
+    if (error instanceof TimeoutError) {
+      operationSignal().throwIfAborted();
+      if (Date.now() >= deadlineMs) return attempted;
+    }
+    throw error;
   }
 }

@@ -113,6 +113,7 @@ const dialect = new PgDialect();
 function mockRows(statement: SQL) {
   const { sql: text, params } = dialect.sqlToQuery(statement);
   const sql = text.replace(/\s+/gu, " ").trim();
+  if (sql.startsWith("SELECT 1 FROM matrix_erasure_departures")) return [];
   if (sql.startsWith("WITH audience AS MATERIALIZED (")) {
     // Interpret the authored egress CTE at its SQL boundary, never replace the
     // real requireMatrixEgress helper or return an unconditional safe audience.
@@ -147,6 +148,35 @@ function mockRows(statement: SQL) {
     );
     return unsafe ? [{ user_id: unsafe[0] }] : [];
   }
+  if (
+    sql.startsWith(
+      'SELECT w.id AS "workspaceId", w.organization_id AS "organizationId"'
+    )
+  )
+    return [
+      {
+        workspaceId: fixture.workspaceId,
+        organizationId: fixture.organizationId,
+      },
+    ];
+  if (sql.startsWith("SELECT id FROM organizations"))
+    return [{ id: fixture.organizationId }];
+  if (sql.startsWith("SELECT pg_advisory_xact_lock")) return [];
+  if (sql.startsWith("UPDATE matrix_deliveries d SET session_id")) {
+    expect(sql).toContain("r.workspace_id");
+    expect(sql).toContain("r.input_id = d.event_id");
+    expect(sql).toContain("r.session_id");
+    expect(params).toEqual([
+      fixture.sessionId,
+      fixture.eventId,
+      fixture.sessionId,
+      fixture.workspaceId,
+      fixture.sessionId,
+    ]);
+    // The exact synthetic native consumption receipt belongs to this event,
+    // workspace and session; the native departure varies independently.
+    return [{ event_id: fixture.eventId }];
+  }
   if (sql.startsWith('SELECT d.user_id AS "userId"')) {
     expect(params).toContain(fixture.eventId);
     return [actor];
@@ -175,7 +205,13 @@ function mockRows(statement: SQL) {
   }
   if (sql.startsWith('SELECT b.conversation_id AS "roomId", d.output')) {
     expect(params).toEqual([fixture.eventId]);
-    return [{ roomId: fixture.roomId, output: fixture.output }];
+    return [
+      {
+        roomId: fixture.roomId,
+        output: fixture.output,
+        sessionId: fixture.sessionId,
+      },
+    ];
   }
   if (
     sql.startsWith(
@@ -186,7 +222,7 @@ function mockRows(statement: SQL) {
     return [{ roomId: fixture.roomId }];
   }
   if (sql.startsWith("UPDATE matrix_deliveries SET state = 'completed'")) {
-    expect(params).toEqual([fixture.eventId]);
+    expect(params).toContain(fixture.eventId);
     return [];
   }
   throw new Error(`Unexpected mocked SQL boundary: ${sql}`);

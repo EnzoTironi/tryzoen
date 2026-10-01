@@ -1,3 +1,6 @@
+import { TRPCError } from "@trpc/server";
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
+import { ensureMatrixParticipation } from "../../server/matrix/participation";
 import { setMatrixRoomAvatar } from "../../server/matrix/avatar";
 import { roomAvatarWriteSchema } from "@zoen/companion-ui/rooms";
 import {
@@ -111,6 +114,7 @@ import {
   roomReadPositionSchema,
   roomCreateSchema,
   roomSchema,
+  roomParticipationSchema,
   directPeopleSchema,
   directPeopleSearchSchema,
   directOpenSchema,
@@ -146,6 +150,20 @@ import {
 } from "../../server/matrix/reactions";
 
 export const workspaceRoomsRouter = {
+  participate: workspaceProcedure
+    .input(roomReadSchema.pick({ id: true }))
+    .output(roomParticipationSchema)
+    .mutation(({ ctx, input, signal }) =>
+      withSignal(signal, async () => {
+        try {
+          return await ensureMatrixParticipation(ctx.actor, input.id);
+        } catch (error) {
+          if (error instanceof WorkspaceAccessDenied)
+            throw new TRPCError({ code: "FORBIDDEN", cause: error });
+          throw error;
+        }
+      })
+    ),
   readReceiptPreference: workspaceProcedure
     .input(roomReadSchema.pick({ id: true }))
     .output(readReceiptPreferenceSchema)

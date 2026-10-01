@@ -1,8 +1,8 @@
 import { requireActiveCreatorPilot } from "./pilots";
 import type { corpusAccessSchema } from "./corpus/schema";
 import { authorizedCreatorCorpus } from "./corpus/access";
-import { openCreatorCorpus, readCreatorCorpusPage } from "./corpus/engine";
-import { verifyCorpusManifest } from "./corpus/files";
+import { readCorpusManifest } from "./corpus/files";
+import { transaction } from "../../db/queries";
 import type { z } from "zod";
 import {
   creatorGroundingSchema,
@@ -110,51 +110,57 @@ export function validateGroundedAnswer(
   return answer;
 }
 
-/** Recheck native availability and exact approved evidence before execution or acceptance. */
-export async function verifyCreatorGrounding(
+/** Recheck the complete approved file and current authority before acceptance. */
+export function verifyCreatorGrounding(
   actor: z.infer<typeof WorkspaceActorSchema>,
   evidence: z.infer<typeof creatorGroundingSchema>,
   pilotId?: string
 ) {
-  if (pilotId) {
-    const pilot = await requireActiveCreatorPilot(actor, pilotId);
-    if (
-      pilot.answerMode !== "grounded" ||
-      !pilot.qualificationId ||
-      pilot.releaseId !== evidence.releaseId ||
-      pilot.manifestDigest !== evidence.manifestDigest
-    )
-      throw new Error("This grounded pilot is no longer authorized.");
-  }
-  const corpus = await authorizedCreatorCorpus(
-    actor,
-    pilotId
-      ? { kind: "pilot", pilotId }
-      : { kind: "creator", releaseId: evidence.releaseId }
-  );
-  if (!corpus.initialized || corpus.digest !== evidence.manifestDigest)
-    throw new Error("Grounded corpus is no longer available.");
-  await using engine = await openCreatorCorpus(corpus.namespace, true);
-  await verifyCorpusManifest(engine.data, corpus.manifest, true);
-  for (const citation of evidence.citations) {
-    const page = corpus.manifest.pages.find(
-      (item) =>
-        item.entryId === citation.entryId &&
-        item.start === citation.start &&
-        item.digest === citation.pageDigest &&
-        item.kind !== "guidance"
+  return transaction(async () => {
+    const approved = creatorGroundingSchema.parse(evidence);
+    if (pilotId) {
+      const pilot = await requireActiveCreatorPilot(actor, pilotId);
+      if (
+        pilot.answerMode !== "grounded" ||
+        !pilot.qualificationId ||
+        pilot.releaseId !== approved.releaseId ||
+        pilot.manifestDigest !== approved.manifestDigest
+      )
+        throw new Error("This grounded pilot is no longer authorized.");
+    }
+    const access = pilotId
+      ? { kind: "pilot" as const, pilotId }
+      : { kind: "creator" as const, releaseId: approved.releaseId };
+    const corpus = await authorizedCreatorCorpus(actor, access);
+    if (!corpus.initialized || corpus.digest !== approved.manifestDigest)
+      throw new Error("Grounded corpus is no longer available.");
+    const manifest = await readCorpusManifest(
+      corpus.namespace,
+      corpus.manifest
     );
-    if (
-      !page ||
-      page.attribution !== citation.attribution ||
-      page.title !== citation.title
-    )
-      throw new Error("Grounded citation is outside the approved corpus.");
-    await readCreatorCorpusPage(engine, evidence.releaseId, page);
-    if (
-      page.body.slice(0, citation.end - citation.start) !== citation.excerpt ||
-      corpusDigest(citation.excerpt) !== citation.excerptDigest
-    )
-      throw new Error("Grounded citation content changed.");
-  }
+    for (const citation of approved.citations) {
+      const page = manifest.pages.find(
+        (item) =>
+          item.entryId === citation.entryId &&
+          item.start === citation.start &&
+          item.digest === citation.pageDigest &&
+          item.kind !== "guidance"
+      );
+      if (
+        !page ||
+        page.attribution !== citation.attribution ||
+        page.title !== citation.title
+      )
+        throw new Error("Grounded citation is outside the approved corpus.");
+      if (
+        citation.end > page.end ||
+        citation.end - citation.start !== citation.excerpt.length ||
+        page.body.slice(0, citation.end - citation.start) !==
+          citation.excerpt ||
+        corpusDigest(citation.excerpt) !== citation.excerptDigest
+      )
+        throw new Error("Grounded citation content changed.");
+    }
+    await authorizedCreatorCorpus(actor, access);
+  });
 }

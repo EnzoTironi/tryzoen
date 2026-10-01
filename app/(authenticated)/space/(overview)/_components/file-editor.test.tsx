@@ -25,6 +25,9 @@ const controls = vi.hoisted(() => ({
   darkAppearance: vi.fn<typeof useDarkAppearance>().mockReturnValue(false),
   buttons: [] as ComponentProps<typeof Button>[],
   editorProps: undefined as MarkdownEditorProps | undefined,
+  dialog: undefined as ComponentProps<typeof Dialog> | undefined,
+  popup: undefined as ComponentProps<typeof DialogContent> | undefined,
+  writePending: false,
   writes: vi.fn<() => Promise<void>>(),
   invalidate: vi.fn<() => Promise<void>>(),
 }));
@@ -41,7 +44,10 @@ vi.mock("@web/trpc/client", () => ({
     }),
     workspaces: {
       write: {
-        useMutation: () => ({ mutateAsync: controls.writes, isPending: false }),
+        useMutation: () => ({
+          mutateAsync: controls.writes,
+          isPending: controls.writePending,
+        }),
       },
     },
   },
@@ -60,18 +66,23 @@ vi.mock("@web/components/ui/button", () => ({
   },
 }));
 vi.mock("@web/components/ui/dialog", () => ({
-  Dialog: ({ children }: ComponentProps<typeof Dialog>) => children,
-  DialogContent: ({
-    children,
-    className,
-  }: ComponentProps<typeof DialogContent>) => (
-    <div
-      data-testid="file-panel"
-      className={typeof className === "string" ? className : undefined}
-    >
-      {children}
-    </div>
-  ),
+  Dialog: (props: ComponentProps<typeof Dialog>) => {
+    controls.dialog = props;
+    return props.children;
+  },
+  DialogContent: (props: ComponentProps<typeof DialogContent>) => {
+    controls.popup = props;
+    return (
+      <div
+        data-testid="file-panel"
+        className={
+          typeof props.className === "string" ? props.className : undefined
+        }
+      >
+        {props.children}
+      </div>
+    );
+  },
   DialogTitle: ({ children }: ComponentProps<typeof DialogTitle>) => (
     <h1>{children}</h1>
   ),
@@ -121,6 +132,9 @@ beforeEach(() => {
   controls.darkAppearance.mockReturnValue(false);
   controls.buttons = [];
   controls.editorProps = undefined;
+  controls.dialog = undefined;
+  controls.popup = undefined;
+  controls.writePending = false;
   vi.clearAllMocks();
 });
 
@@ -204,3 +218,83 @@ test("preserves read-only historical content and disabled writes in dark appeara
   expect(controls.buttons.some((button) => button.disabled)).toBe(true);
   expect(controls.writes).not.toHaveBeenCalled();
 });
+
+// Contract assertions; actual focus, dirty veto and isolation are checked in browser QA.
+test.each([
+  ["knowledge/launch-notes.md", false],
+  ["knowledge/launch-notes.md", true],
+  ["knowledge/launch-notes.txt", false],
+  ["knowledge/launch-notes.txt", true],
+] as const)(
+  "declares the existing modal contract for %s (readOnly=%s)",
+  (path, readOnly) => {
+    const markup = renderToStaticMarkup(
+      <FileEditor
+        path={path}
+        content={original}
+        revision="revision-current"
+        onClose={onClose}
+        onSaved={onSaved}
+        readOnly={readOnly}
+      />
+    );
+    expect(controls.dialog).toMatchObject({ open: true, modal: true });
+    expect(controls.popup).toMatchObject({
+      "aria-modal": true,
+      animated: false,
+      showCloseButton: false,
+    });
+    expect(controls.popup?.["aria-describedby"]).toBeUndefined();
+    const initialFocus = controls.popup?.initialFocus;
+    if (typeof initialFocus !== "function")
+      throw new Error("The editor popup focus callback was lost");
+    expect(controls.popup?.ref).toMatchObject({ current: null });
+    expect(initialFocus("keyboard")).toBe(false);
+    expect(initialFocus("touch")).toBe(false);
+    expect(controls.popup?.finalFocus).toBeUndefined();
+    expect(markup).toContain(path.split("/").at(-1));
+    expect(markup).toContain("Conteúdo do arquivo");
+    expect(controls.writes).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  }
+);
+
+const changeDetails: Parameters<
+  NonNullable<ComponentProps<typeof Dialog>["onOpenChange"]>
+>[1] = {
+  reason: "none",
+  event: new Event("close"),
+  cancel: vi.fn<() => void>(),
+  allowPropagation: vi.fn<() => void>(),
+  isCanceled: false,
+  isPropagationAllowed: false,
+  trigger: undefined,
+  preventUnmountOnClose: vi.fn<() => void>(),
+};
+
+test.each([false, true])(
+  "keeps close requests under the editor's in-flight guard (pending=%s)",
+  (pending) => {
+    controls.writePending = pending;
+    renderToStaticMarkup(
+      <FileEditor
+        path="knowledge/launch-notes.md"
+        content={original}
+        revision="revision-current"
+        onClose={onClose}
+        onSaved={onSaved}
+        readOnly={false}
+      />
+    );
+    controls.dialog?.onOpenChange?.(true, changeDetails);
+    expect(onClose).not.toHaveBeenCalled();
+    controls.dialog?.onOpenChange?.(false, changeDetails);
+    expect(onClose).toHaveBeenCalledTimes(pending ? 0 : 1);
+    const closeButton = controls.buttons.find(
+      (button) => button["aria-label"] === "Fechar"
+    );
+    expect(closeButton?.disabled).toBe(pending);
+    expect(controls.writes).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  }
+);

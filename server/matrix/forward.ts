@@ -22,6 +22,7 @@ import {
   readRoomMessage,
 } from "./messages";
 import { projectMatrixActivity } from "./activity";
+import { lockMatrixAdmission } from "./authority";
 
 /** Only existing, authorized destinations in this workspace; no private previews. */
 export async function listForwardDestinations(
@@ -56,6 +57,10 @@ export async function forwardMatrixMessage(
   if (input.id === input.destinationId) throw new WorkspaceAccessDenied();
   const config = await matrixConfiguration();
   const outcome = await transaction(async () => {
+    await lockMatrixAdmission(
+      [actor.workspaceId],
+      [input.id, input.destinationId]
+    );
     const source = await joinMatrixRoom(actor, input.id);
     const destination = await joinMatrixRoom(actor, input.destinationId);
     await query(

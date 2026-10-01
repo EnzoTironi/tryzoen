@@ -204,13 +204,15 @@ export async function readKnowledgeProposal(
     actor,
     knowledgeProposalPathSchema.parse(path)
   );
+  if (stored.content === null)
+    throw new WorkspaceRepositoryError({ reason: "not_found" });
   const { proposal, paths, citations } = await validateKnowledgeProposal(
     jsonString(knowledgeProposalSchema).parse(stored.content)
   );
   // Reads use the captured head. A concurrent save cannot produce a mixed preview;
   // the publication's CAS still checks this exact head after the human decides.
   const current = await WorkspaceRepository.selection(actor, paths, {
-    revision: stored.revision ?? undefined,
+    revision: stored.revision,
   });
   const base =
     proposal.baseRevision === null
@@ -258,6 +260,8 @@ export async function reviewKnowledgeProposal(
     input.proposal,
     input.expectedRevision ?? undefined
   );
+  if (saved.content === null)
+    throw new WorkspaceRepositoryError({ reason: "not_found" });
   if (input.decision === "reject")
     return WorkspaceRepository.write(
       actor,

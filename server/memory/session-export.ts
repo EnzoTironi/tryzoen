@@ -11,20 +11,18 @@ import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { sessionSourceSchema, sessionSourceSegments } from "./session-files";
+import {
+  decodeSessionSource,
+  sessionArchiveLimits,
+  type SessionSourceBackupSchema,
+  writeSessionSource,
+} from "./session-files";
 import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
 
-const segmentSchema = sessionSourceSchema.extend({
-  segment: z.object({
-    index: z.int().nonnegative(),
-    count: z.int().positive().max(512),
-  }),
-  captureSequence: z.int().positive().max(Number.MAX_SAFE_INTEGER),
-});
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
-const fileLimit = 8 * 1024 * 1024;
-const exportLimit = 128 * 1024 * 1024;
+const fileLimit = sessionArchiveLimits.fileBytes;
+const exportLimit = sessionArchiveLimits.bytes;
 
 export class SessionArchiveUnavailable extends Error {
   constructor() {
@@ -56,14 +54,21 @@ async function archiveNamespace(
       AND s.session_id = ${sessionId}
       ${lockNamespace ? sql`FOR UPDATE OF n FOR SHARE OF s` : sql`FOR SHARE OF n, s`}`);
   if (!rows[0]) throw new WorkspaceAccessDenied();
-  return z.uuid().parse(rows[0].namespace_id);
+  const namespace = z.uuid().parse(rows[0].namespace_id);
+  // Recovery may restore a namespace while its non-restored erasure is pending.
+  // Never release raw evidence/export or rebuild its index in that state.
+  const erasure = await query(
+    sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = ${namespace}`
+  );
+  if (erasure.length) throw new SessionArchiveUnavailable();
+  return namespace;
 }
 
 /** Read one immutable file with a hard allocation bound, even if it grows. */
 async function sourceFile(path: string, sessionId: string, filename: string) {
   await using file = await open(
     path,
-    constants.O_RDONLY | constants.O_NOFOLLOW
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
   );
   const info = await file.stat();
   if (!info.isFile() || (info.mode & 0o077) !== 0 || info.size > fileLimit)
@@ -78,44 +83,15 @@ async function sourceFile(path: string, sessionId: string, filename: string) {
   if (length !== info.size)
     throw new Error("The saved conversation archive changed while reading.");
   const content = bytes.subarray(0, length);
-  const segments = content
-    .toString("utf8")
-    .trimEnd()
-    .split("\n")
-    .map((line) => segmentSchema.parse(JSON.parse(line)));
-  const first = segments[0];
+  const decoded = decodeSessionSource(content);
   if (
-    !first ||
-    first.sessionId !== sessionId ||
-    filename !== `${hash(first.eventId)}.jsonl` ||
-    first.segment.count !== segments.length
+    decoded.source.sessionId !== sessionId ||
+    filename !== `${hash(decoded.source.eventId)}.jsonl`
   )
     throw new Error(
       "The saved conversation archive has invalid source coordinates."
     );
-  const source = sessionSourceSchema.parse({
-    ...first,
-    text:
-      first.text === null
-        ? null
-        : segments.map((segment) => segment.text).join(""),
-  });
-  const expected = sessionSourceSegments(source)
-    .map(
-      (segment) =>
-        `${JSON.stringify({ ...segment, captureSequence: first.captureSequence })}\n`
-    )
-    .join("");
-  if (!content.equals(Buffer.from(expected)))
-    throw new Error(
-      "The saved conversation archive has inconsistent segments."
-    );
-  return {
-    content,
-    source,
-    captureSequence: first.captureSequence,
-    digest: hash(JSON.stringify(source)),
-  };
+  return decoded;
 }
 
 export async function exportSessionSources(
@@ -287,24 +263,244 @@ export async function verifySessionClaimSource(
         join(directory, `${hash(citation.eventId)}.jsonl`)
       );
       if (!file || file.digest !== citation.sha256) return false;
-      const source = file.source;
-      const accepted =
-        (source.kind === "message.received" &&
-          source.role === "user" &&
-          source.settlement === null) ||
-        (source.kind === "message.settled" &&
-          source.role === "assistant" &&
-          source.settlement === "accepted");
-      return (
-        accepted &&
-        source.eventId === citation.eventId &&
-        (source.text?.includes(citation.excerpt) ?? false)
-      );
+      return sessionClaimMatches(file, citation);
     });
   } catch (error) {
     if (error instanceof WorkspaceAccessDenied) throw error;
     throw new SessionArchiveUnavailable();
   }
+}
+
+function sessionClaimMatches(
+  file: ReturnType<typeof decodeSessionSource>,
+  citation: z.infer<typeof LearnedClaimSessionSourceSchema>
+) {
+  const source = file.source;
+  const accepted =
+    (source.kind === "message.received" &&
+      source.role === "user" &&
+      source.settlement === null) ||
+    (source.kind === "message.settled" &&
+      source.role === "assistant" &&
+      source.settlement === "accepted");
+  return (
+    accepted &&
+    source.sessionId === citation.sessionId &&
+    source.eventId === citation.eventId &&
+    file.digest === citation.sha256 &&
+    (source.text?.includes(citation.excerpt) ?? false)
+  );
+}
+
+/** Export only exact cited events, including retained pre-clear evidence. Current
+ * ownership and stored delivery receipts, not citation text, establish access. */
+export async function backupSessionClaimSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string,
+  citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[]
+) {
+  if (!citations.length) return [];
+  const root = env.ZOEN_SESSION_ARCHIVE_DIR;
+  if (!root) throw new SessionArchiveUnavailable();
+  const files = new Map<string, Awaited<ReturnType<typeof verifiedSource>>>();
+  let size = 0;
+  for (const citation of citations) {
+    let file = files.get(citation.eventId);
+    if (!file) {
+      if (files.size >= sessionArchiveLimits.events)
+        throw new SessionArchiveUnavailable();
+      const directory = await sessionDirectory(
+        root,
+        namespace,
+        citation.sessionId
+      );
+      file = await verifiedSource(
+        actor,
+        citation.sessionId,
+        namespace,
+        join(directory, `${hash(citation.eventId)}.jsonl`)
+      );
+      if (!file) throw new SessionArchiveUnavailable();
+      size += file.content.byteLength;
+      if (size > exportLimit) throw new SessionArchiveUnavailable();
+      files.set(citation.eventId, file);
+    }
+    if (!sessionClaimMatches(file, citation))
+      throw new SessionArchiveUnavailable();
+  }
+  return [...files.values()]
+    .map((file) => {
+      if (!file) throw new SessionArchiveUnavailable();
+      return {
+        sessionId: file.source.sessionId,
+        eventId: file.source.eventId,
+        captureSequence: file.captureSequence,
+        content: Buffer.from(file.content),
+      };
+    })
+    .toSorted((a, b) =>
+      a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0
+    );
+}
+
+/** Capture and receipt repair share namespace→allocation lock ordering. Default
+ * nextval must commit before recovery can inspect its allocation/collision fence. */
+export async function lockSessionSourceAllocation() {
+  await query(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended('zoen-session-source-allocation', 0))`
+  );
+}
+
+/** The existing native sequence is a denial fence, never reset from files. */
+async function lockSourceReceiptRecovery() {
+  await lockSessionSourceAllocation();
+  const [row] = await query(
+    sql`SELECT pg_sequence_last_value(pg_get_serial_sequence('memory_session_sources', 'capture_sequence')::regclass)::text AS high_water`
+  );
+  return row?.high_water === null || row?.high_water === undefined
+    ? null
+    : BigInt(
+        z
+          .string()
+          .regex(/^[0-9]+$/u)
+          .parse(row.high_water)
+      );
+}
+
+async function sourceReceipt(
+  namespace: string,
+  file: ReturnType<typeof decodeSessionSource>,
+  highWater: bigint | null
+) {
+  if (highWater === null || BigInt(file.captureSequence) > highWater)
+    throw new SessionArchiveUnavailable();
+  const collisions =
+    await query(sql`SELECT namespace_id, event_id FROM memory_session_sources
+    WHERE capture_sequence = ${file.captureSequence} AND (namespace_id <> ${namespace} OR event_id <> ${file.source.eventId}) LIMIT 1`);
+  if (collisions.length) throw new SessionArchiveUnavailable();
+  const [existing] =
+    await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
+    FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR UPDATE`);
+  if (
+    existing &&
+    (existing.digest !== file.digest ||
+      existing.sequence !== String(file.captureSequence))
+  )
+    throw new SessionArchiveUnavailable();
+  return existing ?? null;
+}
+
+/** Authenticated bytes are recoverable, permissions and pending deliveries are not.
+ * Preflight the whole set before any write. SQL rollback can leave exact immutable
+ * bytes without a receipt; replay repairs that state without deleting/overwriting. */
+export async function restoreSessionClaimSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string,
+  citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[],
+  archives: readonly z.infer<typeof SessionSourceBackupSchema>[]
+) {
+  const root = env.ZOEN_SESSION_ARCHIVE_DIR;
+  if (archives.length && !root) throw new SessionArchiveUnavailable();
+  const files = new Map<string, ReturnType<typeof decodeSessionSource>>();
+  const sequences = new Set<number>();
+  let size = 0;
+  for (const archive of archives) {
+    size += archive.content.byteLength;
+    if (
+      files.size >= sessionArchiveLimits.events ||
+      size > exportLimit ||
+      files.has(archive.eventId) ||
+      sequences.has(archive.captureSequence)
+    )
+      throw new SessionArchiveUnavailable();
+    const file = decodeSessionSource(archive.content);
+    if (
+      file.source.sessionId !== archive.sessionId ||
+      file.source.eventId !== archive.eventId ||
+      file.captureSequence !== archive.captureSequence
+    )
+      throw new SessionArchiveUnavailable();
+    files.set(archive.eventId, file);
+    sequences.add(archive.captureSequence);
+  }
+  const cited = new Set<string>();
+  for (const citation of citations) {
+    const file = files.get(citation.eventId);
+    if (!file || !sessionClaimMatches(file, citation))
+      throw new SessionArchiveUnavailable();
+    cited.add(citation.eventId);
+  }
+  if (cited.size !== files.size) throw new SessionArchiveUnavailable();
+  if (!files.size || !root) return { files: 0, receipts: 0 };
+  for (const sessionId of new Set(
+    [...files.values()].map((file) => file.source.sessionId)
+  )) {
+    if ((await archiveNamespace(actor, sessionId)) !== namespace)
+      throw new WorkspaceAccessDenied();
+  }
+  const highWater = await lockSourceReceiptRecovery();
+  const missing: ReturnType<typeof decodeSessionSource>[] = [];
+  // Validate every existing directory without creating missing paths. Reject
+  // symlinks/non-private parents even if the leaf happens to be missing.
+  for (const file of files.values()) {
+    let path = root;
+    for (const component of [
+      "",
+      namespace,
+      "raw",
+      "eve",
+      hash(file.source.sessionId),
+    ]) {
+      path = join(path, component);
+      const info = await lstat(path).catch((error: unknown) => {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          return null;
+        throw error;
+      });
+      if (
+        info &&
+        (!info.isDirectory() ||
+          info.isSymbolicLink() ||
+          (info.mode & 0o077) !== 0)
+      )
+        throw new SessionArchiveUnavailable();
+    }
+    const target = join(path, `${hash(file.source.eventId)}.jsonl`);
+    const exists = await lstat(target).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return null;
+      throw error;
+    });
+    if (exists) {
+      const local = await sourceFile(
+        target,
+        file.source.sessionId,
+        basename(target)
+      );
+      if (!local.content.equals(file.content))
+        throw new SessionArchiveUnavailable();
+    }
+    const receipt = await sourceReceipt(namespace, file, highWater);
+    if (receipt && !receipt.stored_at) throw new SessionArchiveUnavailable();
+    if (!receipt) missing.push(file);
+  }
+  await requireWorkspaceAccess(actor);
+  for (const file of files.values())
+    await writeSessionSource(
+      root,
+      namespace,
+      file.source,
+      file.captureSequence
+    );
+  for (const file of missing)
+    await query(sql`INSERT INTO memory_session_sources
+    (namespace_id, event_id, digest, capture_sequence, stored_at)
+    VALUES (${namespace}, ${file.source.eventId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
+  return { files: files.size, receipts: missing.length };
 }
 
 /** Reconstruct only missing receipt indexes from this owner's immutable files.
@@ -321,6 +517,11 @@ export async function rebuildSessionSourceReceipts(
     return await transaction(async () => {
       const namespace = await archiveNamespace(actor, sessionId, true);
       const directory = await sessionDirectory(root, namespace, sessionId);
+      const highWater = await lockSourceReceiptRecovery();
+      const erasure = await query(
+        sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = ${namespace}`
+      );
+      if (erasure.length) throw new SessionArchiveUnavailable();
       let count = 0;
       let bytes = 0;
       let restored = 0;
@@ -337,10 +538,7 @@ export async function rebuildSessionSourceReceipts(
         );
         bytes += file.content.byteLength;
         if (bytes > exportLimit) throw new SessionArchiveUnavailable();
-        const existing = (
-          await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
-          FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR UPDATE`)
-        )[0];
+        const existing = await sourceReceipt(namespace, file, highWater);
         if (existing) {
           if (
             existing.digest !== file.digest ||

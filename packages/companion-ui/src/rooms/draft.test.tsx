@@ -14,6 +14,7 @@ vi.mock("react", async (original) => ({
 }));
 const client = new QueryClient();
 const data: RoomData = {
+  participate: vi.fn<RoomData["participate"]>(),
   pins: vi.fn<RoomData["pins"]>(),
   pin: vi.fn<RoomData["pin"]>(),
   reactors: vi.fn<RoomData["reactors"]>(),

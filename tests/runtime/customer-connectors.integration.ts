@@ -79,6 +79,8 @@ test.each(["mcp", "mcp-sse", "openapi"] as const)(
     const connection = await connectTools(personal, input);
     expect(await connectTools(personal, input)).toEqual(connection);
     expect(await listToolConnections(guestPersonal)).toEqual([]);
+    if (connection.kind === "postgres")
+      throw new Error("Expected HTTP connector");
     const operation = connection.operations[0];
     expect(operation).toBeDefined();
     if (!operation) return;
@@ -203,6 +205,8 @@ test.each(["mcp", "openapi"] as const)(
       share: "owner",
       document: kind === "openapi" ? connectorDocument : undefined,
     });
+    if (connection.kind === "postgres")
+      throw new Error("Expected HTTP connector");
     const operation = connection.operations[0];
     if (!operation) throw new Error("Missing operation");
     const definition = await decodeCustomerTool(
@@ -337,6 +341,7 @@ test("TL remote: personal credentials never leak to company members or groups; w
   expect((await listToolConnections(group)).map((entry) => entry.id)).toEqual([
     shared.id,
   ]);
+  if (shared.kind === "postgres") throw new Error("Expected HTTP connector");
   const operation = shared.operations[0];
   if (!operation) throw new Error("Missing operation");
   const definition = await decodeCustomerTool(
@@ -481,6 +486,8 @@ test("TL remote: competing delivery and changed arguments do not cause another w
     share: "owner",
     document: connectorDocument,
   });
+  if (connection.kind === "postgres")
+    throw new Error("Expected HTTP connector");
   const operation = connection.operations[0];
   if (!operation) throw new Error("Missing operation");
   const definition = await decodeCustomerTool(
@@ -555,6 +562,8 @@ test("TL remote: removing the credential owner erases the connection and receipt
     share: "workspace",
     document: connectorDocument,
   });
+  if (connection.kind === "postgres")
+    throw new Error("Expected HTTP connector");
   const operation = connection.operations[0];
   if (!operation) throw new Error("Missing operation");
   const definition = await decodeCustomerTool(

@@ -7,7 +7,7 @@ import { query } from "@db/queries";
 import { env } from "@shared/environment/env";
 import { buildEveFixture, clearFixtureWorkflows, runtime } from "./eve-fixture";
 import { workspaceFixture, workspaceExecutionFor } from "./workspace-fixture";
-import { wakeMatrixService } from "./matrix-fixture";
+import { matrixCallbackPort, wakeMatrixService } from "./matrix-fixture";
 import {
   createMatrixRoom,
   readMatrixMessages,
@@ -15,6 +15,7 @@ import {
   reconcileMatrixRooms,
 } from "../../server/matrix/rooms";
 import { sendMatrixMessage } from "../../server/matrix/send";
+import { readNativeGroupMembership } from "../../server/matrix/membership";
 import { matrixConfiguration, matrixRequest } from "../../server/matrix/client";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import { readNativeReceipt } from "../../server/messaging/native-receipts";
@@ -24,7 +25,7 @@ afterAll(clearFixtureWorkflows);
 
 let matrixAwake = false;
 async function groupRuntime() {
-  const server = await runtime(4350, "0.0.0.0");
+  const server = await runtime(matrixCallbackPort, "0.0.0.0");
   if (!matrixAwake) {
     await wakeMatrixService();
     matrixAwake = true;
@@ -316,12 +317,24 @@ test("real group conversation executes workspace tools, retains shared context a
     await expect(readMatrixMessages(guest, room.id)).rejects.toThrow(
       "WorkspaceAccessDenied"
     );
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
+    const departed = await query<{
+      state: string;
+      nativePending: boolean;
+      matrixId: string;
+    }>(sql`SELECT m.state, m.native_pending AS "nativePending", i.matrix_id AS "matrixId"
+      FROM matrix_room_members m JOIN matrix_identities i ON i.user_id = m.user_id
+      WHERE m.binding_id = ${room.id} AND m.user_id = ${guest.userId}`);
     expect(
-      await query(
-        sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${room.id} AND user_id = ${guest.userId}`
-      )
-    ).toEqual([]);
+      departed.map(({ state, nativePending }) => ({ state, nativePending }))
+    ).toEqual([{ state: "removed", nativePending: false }]);
+    // Retain local revocation so a later read cannot enroll this user again.
+    // The receipt clears only after the provider confirms exact native absence.
+    const member = departed[0];
+    if (!member) throw new Error("Missing retained Matrix departure receipt");
+    expect(await readNativeGroupMembership(room.roomId, member.matrixId)).toBe(
+      "leave"
+    );
   } catch (error) {
     const sessions = await query<{ sessionId: string }>(
       sql`SELECT DISTINCT d.session_id AS "sessionId" FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id=d.binding_id WHERE b.workspace_id=${actor.workspaceId} AND d.session_id IS NOT NULL`
@@ -337,7 +350,7 @@ test("real group conversation executes workspace tools, retains shared context a
     });
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);
@@ -348,7 +361,8 @@ async function replayMatrixEvent(roomId: string, eventId: string) {
     `rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`
   );
   const response = await fetch(
-    "http://127.0.0.1:4350/_matrix/app/v1/transactions/" + randomUUID(),
+    `http://127.0.0.1:${matrixCallbackPort}/_matrix/app/v1/transactions/` +
+      randomUUID(),
     {
       method: "PUT",
       headers: {
@@ -507,7 +521,7 @@ test("delivered group reactions tolerate an empty model follow-up while actual f
     }
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);
@@ -721,7 +735,7 @@ test("group approvals require the original requester, reject denial and replay, 
     });
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);

@@ -42,9 +42,10 @@ const principal = {
 const connection: Awaited<ReturnType<typeof Connections.readToolConnection>> = {
   connected_by: actor.userId,
   operations: [],
+  postgres_config: null,
   share: "owner",
   id: "62c5ebef-9c20-4e14-827d-b2f6c4f659ff",
-  revision: "revision-1",
+  revision: "22222222-2222-4222-8222-222222222222",
   kind: "mcp",
   name: "My services",
   endpoint: "https://treg.to/mcp/",
@@ -113,6 +114,60 @@ describe("Treg native connection", () => {
     ]);
     expect(await connections()).toEqual([]);
   });
+
+  test("does not expose PostgreSQL connections or load their credentials", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        ...connection,
+        kind: "postgres",
+        endpoint: null,
+        operations: null,
+        postgres_config: {
+          host: "db.example.com",
+          port: 5432,
+          database: "studio",
+          tls: "verify-full",
+        },
+      },
+    ]);
+    expect(await connections()).toEqual([]);
+    expect(mocks.credential).not.toHaveBeenCalled();
+  });
+  test.each(["postgres", "endpoint"] as const)(
+    "rejects changed %s at the actual token/headers boundary",
+    async (change) => {
+      const item = actionConnection(await connections());
+      if (typeof item.auth !== "function" || typeof item.headers !== "function")
+        throw new Error("Missing scoped auth");
+      const auth = await item.auth(execution);
+      mocks.read.mockResolvedValue(
+        change === "postgres"
+          ? {
+              ...connection,
+              kind: "postgres",
+              endpoint: null,
+              operations: null,
+              postgres_config: {
+                host: "db.example.com",
+                port: 5432,
+                database: "studio",
+                tls: "verify-full",
+              },
+            }
+          : { ...connection, endpoint: "https://attacker.example/mcp" }
+      );
+      await expect(item.headers(execution)).rejects.toThrow(
+        "WorkspaceAccessDenied"
+      );
+      await expect(
+        auth.getToken({
+          principal: { type: "user", id: "alice" },
+          connection: { url: connection.endpoint },
+        })
+      ).rejects.toThrow("WorkspaceAccessDenied");
+      expect(mocks.credential).not.toHaveBeenCalled();
+    }
+  );
 
   test("does not give anonymous or reporting turns access", async () => {
     expect(

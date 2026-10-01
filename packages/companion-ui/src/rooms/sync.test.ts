@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   effects: [] as (() => void | (() => void))[],
   active: "active",
   online: true,
+  confirmed: true,
   listeners: new Set<(state: string) => void>(),
   network: new Set<(online: boolean) => void>(),
   snapshots: [] as unknown[],
@@ -54,7 +55,13 @@ const data = {
 };
 let dispose: (() => void) | undefined;
 function TypingHarness({ enabled }: { enabled: boolean }) {
-  return useRoomSync(data, "account:workspace", "room", enabled);
+  return useRoomSync(data, "account:workspace", "room", enabled, {
+    revision: 1,
+    requireJoined: () => {
+      if (!state.confirmed)
+        throw new Error("Room participation is not confirmed.");
+    },
+  });
 }
 function mount(enabled = true) {
   state.effects = [];
@@ -70,6 +77,7 @@ beforeEach(() => {
   vi.setSystemTime(100000);
   state.active = "active";
   state.online = true;
+  state.confirmed = true;
   state.snapshots = [];
   data.setTyping.mockReset().mockResolvedValue();
   data.readSync.mockReset().mockImplementation(
@@ -133,8 +141,12 @@ test("background/offline abort observation and stop publication without auto-res
   expect(data.readSync).toHaveBeenCalledTimes(1);
   state.active = "active";
   for (const listener of state.listeners) listener("active");
-  expect(data.readSync).toHaveBeenCalledTimes(2);
+  // Foreground recovery itself cannot poll before a fresh participation confirmation.
+  expect(data.readSync).toHaveBeenCalledTimes(1);
   expect(data.setTyping).toHaveBeenCalledTimes(2);
+  dispose?.();
+  mount();
+  expect(data.readSync).toHaveBeenCalledTimes(2);
   state.online = false;
   for (const listener of state.network) listener(false);
   await vi.advanceTimersByTimeAsync(60000);
@@ -696,7 +708,7 @@ test("revoked access stops polling and refreshes the authorized inbox", async ()
   expect(data.readSync).toHaveBeenCalledTimes(1);
   expect(inbox.getCurrentResult().data).toEqual([]);
   expect(state.snapshots).toContain(
-    JSON.stringify(["account:workspace", "room", true])
+    JSON.stringify(["account:workspace", "room", true, 1])
   );
 });
 
@@ -737,4 +749,51 @@ test("read receipts merge by reader and thread, survive presence expiry and clea
   state.online = false;
   for (const listener of state.network) listener(false);
   expect(state.snapshots.at(-1)).toBeUndefined();
+});
+
+test("pending participation prevents observation and typing even on an otherwise enabled surface", async () => {
+  state.confirmed = false;
+  const hook = mount();
+  hook.change(true);
+  for (const listener of state.listeners) listener("active");
+  for (const listener of state.network) listener(true);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(data.readSync).not.toHaveBeenCalled();
+  expect(data.setTyping).not.toHaveBeenCalled();
+});
+
+test("a response arriving after participation is revoked cannot revalidate cached history", async () => {
+  let resolve:
+    | ((value: Awaited<ReturnType<RoomData["readSync"]>>) => void)
+    | undefined;
+  data.readSync.mockImplementationOnce(
+    () =>
+      new Promise((ready) => {
+        resolve = ready;
+      })
+  );
+  const readHistory = vi
+    .fn<() => Promise<string>>()
+    .mockResolvedValue("cached authorized history");
+  const observer = new QueryObserver(client, {
+    queryKey: ["matrix-messages", "account:workspace", "room"],
+    queryFn: readHistory,
+    initialData: "retained history",
+    staleTime: Infinity,
+  });
+  unsubscribe.push(
+    observer.subscribe(() => {
+      /* The retained history observer stays active while the receipt arrives late. */
+    })
+  );
+  mount();
+  expect(data.readSync).toHaveBeenCalledTimes(1);
+  state.confirmed = false;
+  resolve?.({ ...healthy, reset: true });
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(readHistory).not.toHaveBeenCalled();
+  expect(
+    client.getQueryData(["matrix-messages", "account:workspace", "room"])
+  ).toBe("retained history");
+  expect(data.readSync).toHaveBeenCalledTimes(1);
 });

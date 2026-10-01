@@ -1,3 +1,4 @@
+import { transaction } from "@db/queries";
 import { SemanticQuerySchema } from "../workspaces/semantic/schema";
 import { executePublishedSemanticQuery } from "../workspaces/semantic/published";
 import { withSignal } from "../operations/async";
@@ -9,7 +10,10 @@ import {
   workspaceActorFromPrincipal,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { WorkspaceRepository } from "../workspaces/repository";
+import {
+  WorkspaceRepository,
+  WorkspaceRepositoryError,
+} from "../workspaces/repository";
 import {
   WorkspacePathSchema,
   WorkspaceRecordedViewSchema,
@@ -151,35 +155,37 @@ class ToolAccessDenied extends Error {
 export const readWorkspaceToolCatalog = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const capabilities = await readWorkspaceCapabilities(actor);
-  const granted = actor.agentGrantId
-    ? await readAgentGrantCapabilities(actor)
-    : capabilities.enabled;
-  return {
-    revision: capabilities.revision,
-    tools: tools
-      .filter(
-        (tool) =>
-          capabilities.enabled.includes(tool.plugin) &&
-          granted.includes(tool.plugin) &&
-          (tool.plugin !== "memory" ||
-            Boolean(
-              env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
-            )) &&
-          (!(actor.agentGrantId ?? actor.groupBindingId) ||
-            tool.path !== "workspace_knowledge_query") &&
-          (!actor.agentGrantId ||
-            tool.path !== "workspace_tools_connections") &&
-          (!(actor.agentGrantId ?? actor.groupBindingId) ||
-            (tool.plugin !== "memory" && tool.plugin !== "google"))
-      )
-      .map((tool) => ({
-        path: tool.path,
-        plugin: tool.plugin,
-        description: tool.description,
-        input: tool.input,
-      })),
-  };
+  return transaction(async () => {
+    const capabilities = await readWorkspaceCapabilities(actor);
+    const granted = actor.agentGrantId
+      ? await readAgentGrantCapabilities(actor)
+      : capabilities.enabled;
+    return {
+      revision: capabilities.revision,
+      tools: tools
+        .filter(
+          (tool) =>
+            capabilities.enabled.includes(tool.plugin) &&
+            granted.includes(tool.plugin) &&
+            (tool.plugin !== "memory" ||
+              Boolean(
+                env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
+              )) &&
+            (!(actor.agentGrantId ?? actor.groupBindingId) ||
+              tool.path !== "workspace_knowledge_query") &&
+            (!actor.agentGrantId ||
+              tool.path !== "workspace_tools_connections") &&
+            (!(actor.agentGrantId ?? actor.groupBindingId) ||
+              (tool.plugin !== "memory" && tool.plugin !== "google"))
+        )
+        .map((tool) => ({
+          path: tool.path,
+          plugin: tool.plugin,
+          description: tool.description,
+          input: tool.input,
+        })),
+    };
+  });
 };
 
 async function listPublishedFiles(
@@ -249,6 +255,21 @@ export const invokeWorkspaceTool = async function (
   const catalog = await readWorkspaceToolCatalog(actor);
   if (!catalog.tools.some((tool) => tool.path === call.path))
     throw new ToolAccessDenied();
+  async function admittedFile<Result extends { revision: string | null }>(
+    result: Result,
+    view: z.output<typeof WorkspaceRecordedViewSchema>
+  ) {
+    if (!view.revision && !view.asOf && result.revision !== catalog.revision)
+      throw new WorkspaceRepositoryError({ reason: "conflict" });
+    // Recheck current rights after data access, including for historical data.
+    // This is a bounded final check, not revocation atomic with network delivery.
+    const current = await readWorkspaceToolCatalog(actor);
+    if (!current.tools.some((tool) => tool.path === call.path))
+      throw new ToolAccessDenied();
+    if (current.revision !== catalog.revision)
+      throw new WorkspaceRepositoryError({ reason: "conflict" });
+    return result;
+  }
   const repository = WorkspaceRepository;
   switch (call.path) {
     case "workspace_knowledge_discover": {
@@ -262,26 +283,25 @@ export const invokeWorkspaceTool = async function (
       return await discoverToolConnections(actor, input);
     }
     case "workspace_files_list": {
-      return await listPublishedFiles(
-        actor,
-        await WorkspaceRecordedViewSchema.parseAsync(call.args)
-      );
+      const input = await WorkspaceRecordedViewSchema.parseAsync(call.args);
+      return admittedFile(await listPublishedFiles(actor, input), input);
     }
     case "workspace_files_read": {
-      return await readPublishedFile(
-        actor,
-        await ReadFile.parseAsync(call.args)
-      );
+      const input = await ReadFile.parseAsync(call.args);
+      return admittedFile(await readPublishedFile(actor, input), input);
     }
     case "workspace_files_search": {
       const input = await FileSearch.parseAsync(call.args);
-      return {
-        ...(await repository.search(actor, input.query, {
-          revision: input.revision,
-          asOf: input.asOf,
-        })),
-        asOf: input.asOf ?? null,
-      };
+      return admittedFile(
+        {
+          ...(await repository.search(actor, input.query, {
+            revision: input.revision,
+            asOf: input.asOf,
+          })),
+          asOf: input.asOf ?? null,
+        },
+        input
+      );
     }
     case "workspace_memory_search": {
       const { query } = await Query.strict().parseAsync(call.args);

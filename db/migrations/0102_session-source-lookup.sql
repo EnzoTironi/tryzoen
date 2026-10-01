@@ -1,0 +1,1 @@
+CREATE INDEX "memory_session_sources_capture_idx" ON "memory_session_sources" USING btree ("capture_sequence");

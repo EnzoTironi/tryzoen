@@ -108,7 +108,7 @@ test(
     ).toEqual([{ latest_event_id: message.event_id }]);
     await vi.waitFor(
       async () => {
-        await reconcileMatrixActivity();
+        await reconcileMatrixActivity(Date.now() + 30_000, 5);
         expect(
           await query(
             sql`SELECT reconciled_at IS NOT NULL AS ready FROM matrix_room_activity WHERE room_id = ${room.roomId}`
@@ -148,7 +148,7 @@ test(
     await query(
       sql`UPDATE matrix_room_activity SET latest_edited=false,reconciled_at=NULL WHERE room_id=${room.roomId}`
     );
-    await reconcileMatrixActivity();
+    await reconcileMatrixActivity(Date.now() + 30_000, 5);
     expect(
       (await readMatrixInboxSummaries(fixture.guest, [room.id])).get(room.id)
         ?.preview

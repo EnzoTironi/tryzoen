@@ -43,9 +43,10 @@ export function ConnectorLibrary({
   const connection = connections.data?.find(
     (entry) => entry.id === selected?.connectionId
   );
-  const operation = connection?.operations.find(
-    (entry) => entry.id === selected?.operation
-  );
+  const operation =
+    connection && connection.kind !== "postgres"
+      ? connection.operations.find((entry) => entry.id === selected?.operation)
+      : undefined;
   const pending = propose.isPending || revoke.isPending || test.isPending;
   if (adding)
     return (
@@ -59,7 +60,7 @@ export function ConnectorLibrary({
         }}
       />
     );
-  if (connection && operation) {
+  if (connection && connection.kind !== "postgres" && operation) {
     const selection = {
       connectionId: connection.id,
       revision: connection.revision,
@@ -192,27 +193,35 @@ export function ConnectorLibrary({
             <ChevronRightIcon className="ml-auto" aria-hidden="true" />
           </summary>
           <div className={styles.list}>
-            {entry.operations.map((tool) => (
-              <button
-                key={tool.id}
-                type="button"
-                className={styles.row}
-                onClick={() => {
-                  setSelected({ connectionId: entry.id, operation: tool.id });
-                  setInput("{}");
-                  setSlug(
-                    tool.id
-                      .toLowerCase()
-                      .replace(/[^a-z0-9-]/gu, "-")
-                      .slice(0, 40)
-                  );
-                  test.reset();
-                }}
-              >
-                <span className="min-w-0 flex-1">{tool.name}</span>
-                <PlusIcon aria-hidden="true" />
-              </button>
-            ))}
+            {entry.kind === "postgres" ? (
+              <p className="py-3 type-caption text-muted-foreground">
+                {t(
+                  "Conexão PostgreSQL registrada. Consultas de dados ainda indisponíveis."
+                )}
+              </p>
+            ) : (
+              entry.operations.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  className={styles.row}
+                  onClick={() => {
+                    setSelected({ connectionId: entry.id, operation: tool.id });
+                    setInput("{}");
+                    setSlug(
+                      tool.id
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]/gu, "-")
+                        .slice(0, 40)
+                    );
+                    test.reset();
+                  }}
+                >
+                  <span className="min-w-0 flex-1">{tool.name}</span>
+                  <PlusIcon aria-hidden="true" />
+                </button>
+              ))
+            )}
           </div>
           {mayManage && (
             <Button

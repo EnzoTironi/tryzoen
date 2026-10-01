@@ -9,6 +9,11 @@ export const SemanticDecimalSchema = z
   .string()
   .max(4096)
   .regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/);
+export const SemanticColumnSchema = z.strictObject({
+  name: SemanticIdentifierSchema,
+  type: z.enum(["text", "numeric", "boolean", "date"]),
+});
+
 export const SemanticNumberSchema = z
   .number()
   .refine(
