@@ -695,3 +695,63 @@ test("a mismatched key fingerprint cannot be attached to a new allocation", asyn
   ).rejects.toMatchObject({ code: "23503" });
   expect(await stored()).toHaveLength(1);
 });
+
+// Advance only the authorization query's wall clock after blocking accounting
+// work. Session row values stay unchanged; SQL SHARE locks cannot stop expiry.
+test.each([
+  { disposition: "new", wait: "accounting" },
+  { disposition: "new", wait: "insert" },
+  { disposition: "replay", wait: "accounting" },
+] as const)(
+  "$disposition denies session expiry after $wait work and rolls back any new hold",
+  async ({ disposition, wait }) => {
+    if (disposition === "replay") await allocate();
+    const before = await stored();
+    const sessions = (await database.query("SELECT * FROM public.session"))
+      .rows;
+    const delegate = boundary.query.getMockImplementation();
+    if (!delegate) throw new Error("Missing synthetic query owner");
+    let expired = false;
+    let initialChecks = 0;
+    boundary.query.mockImplementation(async (statement) => {
+      const compiled = dialect.sqlToQuery(statement);
+      if (compiled.sql.includes("FROM public.session")) {
+        if (!expired) initialChecks++;
+        if (expired)
+          return (
+            await (transactions.getStore() ?? database).query<
+              Record<string, unknown>
+            >(
+              compiled.sql.replace(
+                "clock_timestamp()",
+                "(clock_timestamp() + interval '2 hours')"
+              ),
+              compiled.params
+            )
+          ).rows;
+      }
+      const result = await delegate(statement);
+      if (
+        (wait === "accounting" &&
+          compiled.sql.includes("pg_advisory_xact_lock")) ||
+        (wait === "insert" &&
+          compiled.sql.includes("INSERT INTO tool_call_allocations"))
+      )
+        expired = true;
+      return result;
+    });
+    try {
+      await expect(
+        admitSourceReadBudget(actor, native, source)
+      ).rejects.toThrow("WorkspaceAccessDenied");
+      expect(initialChecks).toBeGreaterThan(0);
+      expect(expired).toBe(true);
+      expect(await stored()).toEqual(before);
+      expect(
+        (await database.query("SELECT * FROM public.session")).rows
+      ).toEqual(sessions);
+    } finally {
+      boundary.query.mockImplementation(delegate);
+    }
+  }
+);

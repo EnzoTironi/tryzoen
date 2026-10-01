@@ -17,6 +17,7 @@ import {
 import { WorkspaceRepository } from "../workspaces/repository";
 import {
   WorkspaceAccessDenied,
+  requireWorkspaceAccess,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { resolveWorkspaceBillingSubject } from "../workspaces/billing";
@@ -163,6 +164,7 @@ export async function admitSourceReadBudget(
         )
           throw new SourceReadBudgetError();
         const { status, consumedCalls, ...receipt } = parsed;
+        await requireWorkspaceAccess(actor);
         return {
           disposition: "replay" as const,
           receipt,
@@ -200,6 +202,9 @@ export async function admitSourceReadBudget(
       ON CONFLICT (operation_hash) DO NOTHING RETURNING id`);
       // A cross-actor claim cannot turn a conflict into another dispatch permit.
       if (inserted.length !== 1) throw new SourceReadBudgetError();
+      // Row fences do not stop wall-clock session expiry during accounting waits.
+      // Recheck inside this transaction so a denial rolls back the new hold.
+      await requireWorkspaceAccess(actor);
       return {
         disposition: "new" as const,
         receipt,
