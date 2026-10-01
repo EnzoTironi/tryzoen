@@ -72,7 +72,11 @@ test.each(["fulfilled", "rejected"])(
       UNION ALL SELECT 'user', count(*)::integer FROM public.user WHERE 'better-auth:' || id IN (${workspace.actor.userId}, ${workspace.guest.userId})
       UNION ALL SELECT 'session', count(*)::integer FROM public.session WHERE id IN (${workspace.actor.authSessionId}, ${workspace.guest.authSessionId})
     `);
-    expect(remaining).toEqual(
+    expect(
+      remaining.toSorted((left, right) =>
+        left.resource.localeCompare(right.resource)
+      )
+    ).toEqual(
       [
         "workspaces",
         "workspace_memberships",
@@ -83,7 +87,9 @@ test.each(["fulfilled", "rejected"])(
         "organization_memberships",
         "user",
         "session",
-      ].map((resource) => ({ resource, count: 0 }))
+      ]
+        .toSorted((left, right) => left.localeCompare(right))
+        .map((resource) => ({ resource, count: 0 }))
     );
     expect(
       await query<{ ownerUserId: string }>(
