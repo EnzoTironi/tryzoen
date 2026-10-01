@@ -229,9 +229,9 @@ export function LearnedNotes({
           Things you ask Zoen to remember will appear here.
         </Text>
       )}
-      {memory.data && !memory.isError && (
+      {!memory.isPending && (
         <MemoryBackup
-          disabled={actionsDisabled}
+          disabled={mutation.isPending || memory.isFetching}
           data={data.archives}
           onRestored={refresh}
         />

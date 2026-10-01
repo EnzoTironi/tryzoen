@@ -283,9 +283,9 @@ function LearnedMemoryContent({ space }: { readonly space: string | null }) {
           </div>
         ))}
       </div>
-      {memory.data && !memory.isError && (
+      {!memory.isPending && (
         <MemoryBackup
-          disabled={disabled}
+          disabled={mutation.isPending || memory.isFetching}
           data={data.archives}
           onRestored={refresh}
         />
