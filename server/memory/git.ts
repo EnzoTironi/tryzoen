@@ -404,31 +404,37 @@ export async function readPrivateMemoryGit(input: {
         input.revision === undefined ? input.head : input.revision,
         input.recordedThrough
       );
+      let historyBytes = 2;
+      let historyEntries = 0;
       const history =
         input.historyClaimId === undefined
           ? []
           : await mapAsync(
-              captured.operations
-                .filter((item) =>
-                  includesClaim(
-                    item.operation,
-                    input.historyClaimId ?? invalid()
-                  )
-                )
-                .slice(0, 50),
-              (item) =>
-                readVersion(
+              captured.operations.filter((item) =>
+                includesClaim(item.operation, input.historyClaimId ?? invalid())
+              ),
+              async (item) => {
+                const version = await readVersion(
                   git,
                   scope,
                   captured.operations,
                   input.historyClaimId ?? invalid(),
                   item.revision
-                ),
+                );
+                // Bound the complete UTF-8 response before retaining each version.
+                // A partial prefix must never masquerade as authoritative history.
+                historyBytes +=
+                  Buffer.byteLength(JSON.stringify(version)) +
+                  (historyEntries++ ? 1 : 0);
+                if (historyBytes > privateMemoryGitLimits.outputBytes)
+                  throw new GitBundleError({ reason: "too_large" });
+                return version;
+              },
               4
             );
       // A recovery archive retains evidence from every historical active version,
-      // including later corrections and clears. The UI history window is never
-      // a source-retention policy. The caller must reauthorize these sources.
+      // including later corrections and clears. The caller must reauthorize
+      // all of these sources; response bounds never establish retention policy.
       const retainedSources: z.infer<typeof LearnedClaimBodySchema>["sources"] =
         [];
       if (input.includeRetainedSources) {

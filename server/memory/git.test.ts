@@ -8,7 +8,11 @@ import {
   readPrivateMemoryGit,
   privateMemoryGitLimits,
 } from "./git";
-import { planLearnedClaim } from "./claims";
+import {
+  planLearnedClaim,
+  bindLearnedClaimPublication,
+  validateLearnedClaimSnapshot,
+} from "./claims";
 import { projectLearnedClaims, searchLearnedClaims } from "./retrieval";
 
 const scope = { workspaceId: "private-team", userId: "alice" };
@@ -526,6 +530,7 @@ test("retained recovery evidence spans more than fifty corrections and survives 
   const claimId = randomUUID();
   let head: string | null = null;
   let bundle: Uint8Array | null = null;
+  const revisions: string[] = [];
   const sources = Array.from({ length: 55 }, (_, index) => ({
     kind: "session" as const,
     sessionId: "synthetic-retained-history",
@@ -551,6 +556,7 @@ test("retained recovery evidence spans more than fifty corrections and survives 
       throw new Error("Expected a real historical publication");
     head = published.receipt.revision;
     bundle = published.bundle;
+    revisions.push(head);
   }
   const cleared = await publishPrivateMemoryGit({
     scope,
@@ -568,12 +574,23 @@ test("retained recovery evidence spans more than fifty corrections and survives 
     scope,
     head: cleared.receipt.revision,
     bundle: cleared.bundle,
+    historyClaimId: claimId,
     includeRetainedSources: true,
   });
   expect(captured.snapshot.claims[0]?.file.state).toEqual({
     kind: "tombstone",
   });
   expect(captured.operations).toHaveLength(56);
+  expect(captured.history).toHaveLength(56);
+  expect(captured.history.map((version) => version.revision)).toEqual([
+    cleared.receipt.revision,
+    ...revisions.toReversed(),
+  ]);
+  expect(captured.history[0]?.file.state).toEqual({ kind: "tombstone" });
+  expect(captured.history.at(-1)?.file.state).toEqual({
+    kind: "active",
+    body: { ...body("Revision 0"), sources: [sources[0]] },
+  });
   expect(captured.retainedSources).toHaveLength(55);
   expect(captured.retainedSources).toEqual(sources.toReversed());
   expect(captured.retainedSources).toContainEqual(sources[0]);
@@ -847,3 +864,84 @@ test("a later recorded reversal cannot hide an active payload forged into an old
     GitBundleError
   );
 });
+
+test("complete history fails at its UTF-8 byte budget instead of returning a partial prefix", async () => {
+  const claimId = randomUUID();
+  const fixture = await withGitBundle(
+    { bundle: null, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      let current = validateLearnedClaimSnapshot(scope, {
+        scope,
+        revision: null,
+        recordedAt: null,
+        claims: [],
+      });
+      let historyBytes = 2;
+      const sources = Array.from({ length: 10 }, (_, index) => ({
+        kind: "session" as const,
+        sessionId: "synthetic-large-history",
+        eventId: `synthetic-event-${index}`,
+        sha256: "a".repeat(64),
+        excerpt: "é".repeat(2000),
+      }));
+      // Construct valid native commits once rather than repeatedly importing
+      // a growing bundle. Each file fits; the complete historical response does not.
+      for (let index = 0; index < 150; index++) {
+        const plan = planLearnedClaim({
+          scope,
+          current,
+          change: {
+            action: index === 0 ? "assert" : "correct",
+            claimId,
+            operationId: randomUUID(),
+            expectedRevision: current.revision,
+            body: { ...body(`Version ${index} ${"é".repeat(7800)}`), sources },
+          },
+          publication: publication(index + 1),
+        });
+        if (!plan.applied) throw new Error("Expected a new historical version");
+        const encoded = JSON.stringify(plan.file) + "\n";
+        expect(Buffer.byteLength(encoded)).toBeLessThanOrEqual(
+          privateMemoryGitLimits.fileBytes
+        );
+        const path = `${directory}/claim.json`;
+        await writeFile(path, encoded, { mode: 0o600 });
+        const blob = (await git(["hash-object", "-w", "--", path])).trim();
+        await git([
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          `100644,${blob},claims/${claimId}.json`,
+        ]);
+        const tree = (await git(["write-tree"])).trim();
+        const revision = (
+          await git([
+            "commit-tree",
+            tree,
+            ...(current.revision ? ["-p", current.revision] : []),
+            "-m",
+            JSON.stringify(plan.operation),
+          ])
+        ).trim();
+        const bound = bindLearnedClaimPublication({ plan, current, revision });
+        current = bound.snapshot;
+        historyBytes +=
+          Buffer.byteLength(JSON.stringify(bound.claim)) + (index ? 1 : 0);
+      }
+      const head = current.revision;
+      if (!head) throw new Error("Missing native Git history");
+      expect(historyBytes).toBeGreaterThan(privateMemoryGitLimits.outputBytes);
+      await git(["update-ref", "refs/heads/main", head]);
+      const path = `${directory}/large-history.bundle`;
+      await git(["bundle", "create", path, "--all"]);
+      return { head, bundle: await readFile(path) };
+    }
+  );
+  const ordinary = await readPrivateMemoryGit({ scope, ...fixture });
+  expect(ordinary.operations).toHaveLength(150);
+  expect(ordinary.history).toEqual([]);
+  expect(ordinary.snapshot.claims).toHaveLength(1);
+  await expect(
+    readPrivateMemoryGit({ scope, ...fixture, historyClaimId: claimId })
+  ).rejects.toMatchObject({ reason: "too_large" });
+}, 20_000);
