@@ -52,7 +52,7 @@
   font:
     0.9em ui-monospace,
     monospace;
-  background: #f0f0f2;
+  background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 5px;
   padding: 1px 4px;
 }
