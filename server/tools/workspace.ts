@@ -19,7 +19,8 @@ import {
   WorkspaceRecordedViewSchema,
 } from "@zoen/companion-ui/workspace-files";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
-import { LearnedMemory } from "../memory/learned";
+import { PrivateMemoryRepository } from "../memory/repository";
+import { LearnedClaimSearchInputSchema } from "@zoen/companion-ui/memory";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";
 import { readOntology } from "../workspaces/ontology";
 import { OntologyReadSchema } from "@zoen/companion-ui/ontology";
@@ -87,8 +88,9 @@ const tools = [
     path: "workspace_memory_search",
     plugin: "memory",
     description:
-      "Find this person's private learned memories within the current workspace.",
-    input: "{ query: string }",
+      "Search this person's private learned claims within the current workspace. Results retain actual recorded revision, evidence and unknown world-valid dates. An explicit recorded audit may use view.asOf or view.revision, never both; validOn is a separate world date. Explicit review remains available when automatic recall is paused. Shared, delegated and scheduled executions cannot read these claims.",
+    input:
+      "{ query: string, view?: { revision?: string, asOf?: string }, validOn?: string, limit?: number }",
   },
   {
     path: "workspace_ontology_read",
@@ -136,7 +138,7 @@ const schemas = {
   workspace_files_list: WorkspaceRecordedViewSchema,
   workspace_files_read: ReadFile,
   workspace_files_search: FileSearch,
-  workspace_memory_search: Query,
+  workspace_memory_search: LearnedClaimSearchInputSchema,
   workspace_ontology_read: OntologyReadSchema,
   workspace_google_mail_search: GoogleSearchQuery,
   workspace_google_contacts_search: GoogleSearchQuery,
@@ -168,9 +170,12 @@ export const readWorkspaceToolCatalog = async function (
             capabilities.enabled.includes(tool.plugin) &&
             granted.includes(tool.plugin) &&
             (tool.plugin !== "memory" ||
-              Boolean(
-                env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
-              )) &&
+              (Boolean(env.ZOEN_SESSION_ARCHIVE_DIR) &&
+                !actor.agentGrantId &&
+                !actor.protocolTaskId &&
+                !actor.scheduledRunId &&
+                !actor.groupBindingId &&
+                !actor.groupEpoch)) &&
             (!(actor.agentGrantId ?? actor.groupBindingId) ||
               tool.path !== "workspace_knowledge_query") &&
             (!actor.agentGrantId ||
@@ -304,10 +309,8 @@ export const invokeWorkspaceTool = async function (
       );
     }
     case "workspace_memory_search": {
-      const { query } = await Query.strict().parseAsync(call.args);
-      const memory = await LearnedMemory.read(actor, query);
-      if (memory.needsAttention) throw new ToolAccessDenied();
-      return { results: memory.results.slice(0, 8) };
+      const input = await LearnedClaimSearchInputSchema.parseAsync(call.args);
+      return PrivateMemoryRepository.search(actor, input);
     }
     case "workspace_knowledge_query":
       return executePublishedSemanticQuery(
