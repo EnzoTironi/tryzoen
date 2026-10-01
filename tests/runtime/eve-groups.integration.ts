@@ -15,6 +15,7 @@ import {
   reconcileMatrixRooms,
 } from "../../server/matrix/rooms";
 import { sendMatrixMessage } from "../../server/matrix/send";
+import { readNativeGroupMembership } from "../../server/matrix/membership";
 import { matrixConfiguration, matrixRequest } from "../../server/matrix/client";
 import { removeWorkspaceMember } from "../../server/workspaces/team";
 import { readNativeReceipt } from "../../server/messaging/native-receipts";
@@ -317,11 +318,23 @@ test("real group conversation executes workspace tools, retains shared context a
       "WorkspaceAccessDenied"
     );
     await reconcileMatrixRooms(Date.now() + 30_000, 5);
+    const departed = await query<{
+      state: string;
+      nativePending: boolean;
+      matrixId: string;
+    }>(sql`SELECT m.state, m.native_pending AS "nativePending", i.matrix_id AS "matrixId"
+      FROM matrix_room_members m JOIN matrix_identities i ON i.user_id = m.user_id
+      WHERE m.binding_id = ${room.id} AND m.user_id = ${guest.userId}`);
     expect(
-      await query(
-        sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${room.id} AND user_id = ${guest.userId}`
-      )
-    ).toEqual([]);
+      departed.map(({ state, nativePending }) => ({ state, nativePending }))
+    ).toEqual([{ state: "removed", nativePending: false }]);
+    // Retain local revocation so a later read cannot enroll this user again.
+    // The receipt clears only after the provider confirms exact native absence.
+    const member = departed[0];
+    if (!member) throw new Error("Missing retained Matrix departure receipt");
+    expect(await readNativeGroupMembership(room.roomId, member.matrixId)).toBe(
+      "leave"
+    );
   } catch (error) {
     const sessions = await query<{ sessionId: string }>(
       sql`SELECT DISTINCT d.session_id AS "sessionId" FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id=d.binding_id WHERE b.workspace_id=${actor.workspaceId} AND d.session_id IS NOT NULL`
