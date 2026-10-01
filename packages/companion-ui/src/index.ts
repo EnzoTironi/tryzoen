@@ -68,4 +68,4 @@ export {
 export type { KnowledgeProposalData } from "./library/knowledge";
 export type { OntologyData } from "./library/ontology/collection";
 
-export { useDarkAppearance } from "./theme";
+export { useAccessibilityPreferences, useDarkAppearance } from "./theme";
