@@ -185,9 +185,12 @@ async function recordOperation(
       ${operation.requestHash}, ${operation.authorUserId}, ${operation.recordedAt}::timestamptz)`);
 }
 
-async function authorized<Result>(run: () => Promise<Result>) {
+async function authorized<Result>(
+  run: () => Promise<Result>,
+  options?: Parameters<typeof transaction>[1]
+) {
   try {
-    return await transaction(run);
+    return await transaction(run, options);
   } catch (error) {
     if (
       error instanceof PrivateMemoryError ||
@@ -446,94 +449,105 @@ export const PrivateMemoryRepository = {
       archive: z.infer<typeof PrivateMemoryBackupSchema>;
     }
   ) {
-    return authorized(async () => {
-      if (
-        !actor.authSessionId ||
-        actor.channelIdentityId ||
-        actor.matrixIdentityId
-      )
-        throw new WorkspaceAccessDenied();
-      const owner = await privateScope(actor);
-      const expected = GitRevisionSchema.nullable().parse(
-        input.expectedRevision
-      );
-      const archive = PrivateMemoryBackupSchema.parse(input.archive);
-      if (
-        archive.scope.workspaceId !== owner.scope.workspaceId ||
-        archive.scope.userId !== owner.scope.userId ||
-        archive.namespaceId !== owner.namespace.id
-      )
-        throw new WorkspaceAccessDenied();
-      if (
-        !timingSafeEqual(
-          Buffer.from(archive.integrity, "hex"),
-          Buffer.from(archiveIntegrity(archive), "hex")
+    return authorized(
+      async () => {
+        if (
+          !actor.authSessionId ||
+          actor.channelIdentityId ||
+          actor.matrixIdentityId
         )
-      )
-        throw new PrivateMemoryError("invalid_input");
-      if (owner.namespace.pendingOperation !== null)
-        throw new PrivateMemoryError("conflict");
-      const current = await stored(owner.namespace.id);
-      const restored = await readPrivateMemoryGit({
-        scope: owner.scope,
-        head: archive.revision,
-        bundle: archive.bundle,
-        includeRetainedSources: true,
-      });
-      await verifySources(owner.actor, restored.retainedSources, false);
-      // Restoring retained history can advance the current lineage or rebuild a
-      // lost projection. It cannot roll back a later correction/tombstone or
-      // import a divergent history. Explicit reversal remains a separate write.
-      if (
-        current.head !== null &&
-        !restored.operations.some((entry) => entry.revision === current.head)
-      )
-        throw new PrivateMemoryError("conflict");
-      await verifyEvidence(
-        owner.actor,
-        restored.snapshot.claims.map((claim) => claim.file),
-        true
-      );
-      await requireWorkspaceAccess(owner.actor);
-      const identical =
-        current.head === archive.revision &&
-        (current.bundle === null
-          ? archive.bundle === null
-          : archive.bundle !== null &&
-            Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)));
-      if (identical) return { applied: false as const, revision: current.head };
-      if (current.head !== archive.revision && current.head !== expected)
-        throw new PrivateMemoryError("conflict");
-      if (current.head === null && archive.revision !== null) {
-        // A missing projection must not permit an older archive to bypass a later
-        // tombstone. Retained operational high-water mark is a denial fence, not
-        // the authority for facts. If both head and receipts are lost, recovery
-        // requires the coordinated installation backup, never a blind overwrite.
-        const latest = await query<{
-          revision: string;
-        }>(sql`SELECT revision FROM private_memory_operation
-          WHERE namespace_id = ${owner.namespace.id} ORDER BY recorded_at DESC LIMIT 1`);
-        if (latest[0]?.revision !== archive.revision)
+          throw new WorkspaceAccessDenied();
+        const owner = await privateScope(actor);
+        const expected = GitRevisionSchema.nullable().parse(
+          input.expectedRevision
+        );
+        const archive = PrivateMemoryBackupSchema.parse(input.archive);
+        if (
+          archive.scope.workspaceId !== owner.scope.workspaceId ||
+          archive.scope.userId !== owner.scope.userId ||
+          archive.namespaceId !== owner.namespace.id
+        )
+          throw new WorkspaceAccessDenied();
+        if (
+          !timingSafeEqual(
+            Buffer.from(archive.integrity, "hex"),
+            Buffer.from(archiveIntegrity(archive), "hex")
+          )
+        )
+          throw new PrivateMemoryError("invalid_input");
+        if (owner.namespace.pendingOperation !== null)
           throw new PrivateMemoryError("conflict");
-      }
-      await query(
-        sql`INSERT INTO private_memory_repository (namespace_id) VALUES (${owner.namespace.id}) ON CONFLICT DO NOTHING`
-      );
-      const written =
-        await query(sql`UPDATE private_memory_repository SET head_sha = ${archive.revision},bundle = ${archive.bundle},
+        // A receipt can coexist with a namespace after coordinated DB recovery.
+        // A presence read cannot wait behind a worker and miss its row after deletion.
+        // The namespace lock already fences ordinary deletion/enrollment.
+        const erasure =
+          await query(sql`SELECT namespace_id FROM workspace_memory_erasure
+        WHERE namespace_id = ${owner.namespace.id}`);
+        if (erasure.length) throw new PrivateMemoryError("conflict");
+        const current = await stored(owner.namespace.id);
+        const restored = await readPrivateMemoryGit({
+          scope: owner.scope,
+          head: archive.revision,
+          bundle: archive.bundle,
+          includeRetainedSources: true,
+        });
+        await verifySources(owner.actor, restored.retainedSources, false);
+        // Restoring retained history can advance the current lineage or rebuild a
+        // lost projection. It cannot roll back a later correction/tombstone or
+        // import a divergent history. Explicit reversal remains a separate write.
+        if (
+          current.head !== null &&
+          !restored.operations.some((entry) => entry.revision === current.head)
+        )
+          throw new PrivateMemoryError("conflict");
+        await verifyEvidence(
+          owner.actor,
+          restored.snapshot.claims.map((claim) => claim.file),
+          true
+        );
+        await requireWorkspaceAccess(owner.actor);
+        const identical =
+          current.head === archive.revision &&
+          (current.bundle === null
+            ? archive.bundle === null
+            : archive.bundle !== null &&
+              Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)));
+        if (identical)
+          return { applied: false as const, revision: current.head };
+        if (current.head !== archive.revision && current.head !== expected)
+          throw new PrivateMemoryError("conflict");
+        if (current.head === null && archive.revision !== null) {
+          // A missing projection must not permit an older archive to bypass a later
+          // tombstone. Retained operational high-water mark is a denial fence, not
+          // the authority for facts. If both head and receipts are lost, recovery
+          // requires the coordinated installation backup, never a blind overwrite.
+          const latest = await query<{
+            revision: string;
+          }>(sql`SELECT revision FROM private_memory_operation
+          WHERE namespace_id = ${owner.namespace.id} ORDER BY recorded_at DESC LIMIT 1`);
+          if (latest[0]?.revision !== archive.revision)
+            throw new PrivateMemoryError("conflict");
+        }
+        await query(
+          sql`INSERT INTO private_memory_repository (namespace_id) VALUES (${owner.namespace.id}) ON CONFLICT DO NOTHING`
+        );
+        const written =
+          await query(sql`UPDATE private_memory_repository SET head_sha = ${archive.revision},bundle = ${archive.bundle},
         recorded_at = ${restored.snapshot.recordedAt}::timestamptz
         WHERE namespace_id = ${owner.namespace.id} AND head_sha IS NOT DISTINCT FROM ${current.head} RETURNING namespace_id`);
-      if (written.length !== 1) throw new PrivateMemoryError("conflict");
-      await query(
-        sql`DELETE FROM private_memory_operation WHERE namespace_id = ${owner.namespace.id}`
-      );
-      for (const entry of restored.operations.toReversed())
-        await recordOperation(owner.namespace.id, entry);
-      await query(
-        sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${owner.namespace.id}`
-      );
-      return { applied: true as const, revision: archive.revision };
-    });
+        if (written.length !== 1) throw new PrivateMemoryError("conflict");
+        await query(
+          sql`DELETE FROM private_memory_operation WHERE namespace_id = ${owner.namespace.id}`
+        );
+        for (const entry of restored.operations.toReversed())
+          await recordOperation(owner.namespace.id, entry);
+        await query(
+          sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${owner.namespace.id}`
+        );
+        return { applied: true as const, revision: archive.revision };
+      },
+      { outermost: true }
+    );
   },
   rebuildOperations(actor: z.infer<typeof WorkspaceActorSchema>) {
     return authorized(async () => {

@@ -8,6 +8,7 @@ import { PrivateMemoryError, PrivateMemoryRepository } from "./repository";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
 const owners = vi.hoisted(() => ({
+  transaction: vi.fn<typeof import("@db/queries").transaction>(),
   query: vi.fn<(statement: SQL) => Promise<Record<string, unknown>[]>>(),
   access: vi.fn<() => Promise<boolean>>(),
   namespace: vi.fn<typeof memoryNamespace>(),
@@ -23,7 +24,7 @@ const owners = vi.hoisted(() => ({
 }));
 vi.mock("@db/queries", () => ({
   query: owners.query,
-  transaction: (run: () => Promise<unknown>) => run(),
+  transaction: owners.transaction,
   SqlError: class extends Error {},
 }));
 vi.mock("../workspaces/access", async (original) => ({
@@ -128,6 +129,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  owners.transaction.mockReset().mockImplementation((run) => run());
   owners.access.mockReset().mockResolvedValue(true);
   owners.namespace.mockReset().mockResolvedValue({
     id: "3a3df84d-d3d8-4189-99ea-f2d49807067e",
@@ -146,6 +148,7 @@ beforeEach(() => {
   }));
   owners.query.mockReset().mockImplementation(async (statement) => {
     const compiled = new PgDialect().sqlToQuery(statement);
+    if (compiled.sql.includes("FROM workspace_memory_erasure")) return [];
     if (!compiled.sql.includes("FROM private_memory_repository"))
       throw new Error("Backup must only read its private repository");
     return [retained];
@@ -258,5 +261,53 @@ test("same-head signed restore preserves its no-op receipt after complete lineag
     [fileSource.path],
     { revision: fileSource.revision }
   );
+  expect(owners.query).toHaveBeenCalledTimes(2);
+  expect(owners.transaction).toHaveBeenCalledWith(expect.any(Function), {
+    outermost: true,
+  });
+});
+
+test("restore requests a real outermost boundary before authorization, queries or source work", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  vi.clearAllMocks();
+  const failure = new Error("Synthetic native transaction boundary rejection");
+  owners.transaction.mockRejectedValueOnce(failure);
+  await expect(
+    PrivateMemoryRepository.restore(actor, {
+      expectedRevision: retained.head,
+      archive,
+    })
+  ).rejects.toBe(failure);
+  expect(owners.transaction).toHaveBeenCalledExactlyOnceWith(
+    expect.any(Function),
+    { outermost: true }
+  );
+  expect(owners.access).not.toHaveBeenCalled();
+  expect(owners.namespace).not.toHaveBeenCalled();
+  expect(owners.query).not.toHaveBeenCalled();
+  expect(owners.session).not.toHaveBeenCalled();
+  expect(owners.selection).not.toHaveBeenCalled();
+});
+
+test("same-head restore refuses an outstanding exact-namespace erasure before reading retained history", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  vi.clearAllMocks();
+  owners.query.mockImplementation(async (statement) => {
+    const compiled = new PgDialect().sqlToQuery(statement);
+    expect(compiled.sql).toContain("FROM workspace_memory_erasure");
+    expect(compiled.sql).not.toMatch(
+      /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
+    );
+    expect(compiled.params).toEqual([archive.namespaceId]);
+    return [{ namespace_id: archive.namespaceId }];
+  });
+  await expect(
+    PrivateMemoryRepository.restore(actor, {
+      expectedRevision: retained.head,
+      archive,
+    })
+  ).rejects.toMatchObject({ reason: "conflict" });
   expect(owners.query).toHaveBeenCalledTimes(1);
+  expect(owners.session).not.toHaveBeenCalled();
+  expect(owners.selection).not.toHaveBeenCalled();
 });

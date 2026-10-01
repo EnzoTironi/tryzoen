@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, lstat, mkdir, open, readFile, rm } from "node:fs/promises";
+import { link, lstat, mkdir, open, rm } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { HookEvent } from "eve/hooks";
@@ -192,17 +193,43 @@ export async function writeSessionSource(
         error.code !== "EEXIST"
       )
         throw error;
-      const info = await lstat(path);
-      if (
-        !info.isFile() ||
-        info.isSymbolicLink() ||
-        (info.mode & 0o077) !== 0 ||
-        (await readFile(path, "utf8")) !== content
-      )
+      try {
+        await using existing = await open(
+          path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        );
+        const info = await existing.stat();
+        const expected = Buffer.from(content, "utf8");
+        if (
+          !info.isFile() ||
+          (info.mode & 0o077) !== 0 ||
+          info.size !== expected.byteLength
+        )
+          throw new Error("Invalid immutable source file", { cause: error });
+        // One extra byte detects growth after stat without reading an unbounded
+        // pre-existing file. Match exact bytes, not a lossy UTF-8 decoding.
+        const bytes = Buffer.alloc(expected.byteLength + 1);
+        let length = 0;
+        while (length < bytes.byteLength) {
+          const result = await existing.read(
+            bytes,
+            length,
+            bytes.byteLength - length,
+            null
+          );
+          if (result.bytesRead === 0) break;
+          length += result.bytesRead;
+        }
+        if (!expected.equals(bytes.subarray(0, length)))
+          throw new Error("Conflicting immutable source bytes", {
+            cause: error,
+          });
+      } catch (cause) {
         throw new Error(
           "Session archive event conflicts with the stored source.",
-          { cause: error }
+          { cause }
         );
+      }
     }
   } finally {
     await rm(temporary, { force: true });

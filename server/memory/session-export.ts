@@ -63,7 +63,7 @@ async function archiveNamespace(
 async function sourceFile(path: string, sessionId: string, filename: string) {
   await using file = await open(
     path,
-    constants.O_RDONLY | constants.O_NOFOLLOW
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
   );
   const info = await file.stat();
   if (!info.isFile() || (info.mode & 0o077) !== 0 || info.size > fileLimit)
