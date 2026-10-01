@@ -742,3 +742,45 @@ The subsequent static cleanup moves the private-channel assertions into a
 separate test, without changing production code; that final twelve-case runtime
 layout awaits a fresh exclusive lease. These checks do not establish live
 analytics, durable quota enforcement or aggregate/native approval qualification.
+
+## Durable source-read accounting foundation — 1 October 2026
+
+The operations owner now reserves exactly one daily tool call for the current
+app actor using the verified payer's current per-user entitlement. Usage follows
+that actor across personal/company workspaces and payers. The existing plan
+catalog defines 200 calls for Free and 1,000 for active Pro/Org; this slice does
+not invent a pooled organization budget, license-seat admission or a physical
+PostgreSQL execution cap, and does not count a source read as another agent turn.
+Other tool/model/storage usage remains outside this narrow accounting boundary.
+
+A supported Eve `sessionId/callId` must be supplied out of band, with the exact
+currently owned session, workspace authority, PostgreSQL connection revision,
+current published source file and canonical parameter ordering. One true outer
+transaction commits its unique allocation before any warehouse work. An
+identical replay returns the existing allocation without another dispatch permit;
+changed operation-bound input fails closed. Billing SQL failure propagates rather
+than becoming the account UI's availability-oriented Free fallback.
+
+Allocations are separate from provider results and contain keyed opaque actor,
+payer, native-operation and request identities plus their original UTC window and
+counts. Connector/account cascades cannot refund them. A singleton nonsecret key
+fingerprint and composite RESTRICT foreign key make replacing the installation
+key fail closed instead of presenting all identities as fresh. Restore requires
+the coherent accounting ledger and its existing installation key. No key rotation,
+ledger rewind reconciliation or irreversible cleanup is implemented here.
+
+Settlement serializes the exact accounting scope and allocation once. Confirmed
+zero/one consumption updates only that original window; duplicate matching
+settlement is inert, conflicting final claims fail, and crash/timeout/unknown
+work retains its hold. Observed work can be recorded after auth revocation using
+the exact internal receipt; clients/models receive no settlement endpoint.
+
+This foundation has no productive live source-tool caller. A new budget allocation
+proves authorization/accounting, not executable parameter validation or a transport
+grant. The owning fixed-read builder must validate exact filter arity/types before
+credential decryption, DNS or socket I/O. Live PostgreSQL execution remains
+disabled until physical/account policy, bounded TLS/cancellation, post-read
+permission/provenance and actual runtime qualification pass. Local PGlite tests
+exercise real authorization/accounting SQL and the additive 0104 constraints on
+one connection; they do not prove PostgreSQL multi-connection lock schedules,
+provider billing, whole-installation enforcement or full TextQL/K3 parity.

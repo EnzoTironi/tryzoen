@@ -729,6 +729,13 @@
       "when": 1790840792626,
       "tag": "0103_postgres-connections",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1790846830395,
+      "tag": "0104_tool-call-allocations",
+      "breakpoints": true
     }
   ]
 }
