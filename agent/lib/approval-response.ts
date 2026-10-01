@@ -1,6 +1,7 @@
 import { matrixSessionActor } from "../../server/matrix/authority";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { z } from "zod";
+import { transaction } from "@db/queries";
 import type {
   ApprovalResponseContext,
   ApprovalResponseDecision,
@@ -36,7 +37,10 @@ export async function authorizeApprovalResponse(context: {
         reason: "Respond to the original group request.",
       };
     try {
-      const actor = await matrixSessionActor(eventId.data, session.id);
+      const actor = await transaction(
+        () => matrixSessionActor(eventId.data, session.id),
+        { outermost: true }
+      );
       return actor.userId === responder.principalId &&
         actor.workspaceId === responder.attributes.workspaceId
         ? { status: "allowed" }
