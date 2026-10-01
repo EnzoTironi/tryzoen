@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CompanionShell } from "./shell";
 
 const state = vi.hoisted(() => ({
@@ -8,12 +8,36 @@ const state = vi.hoisted(() => ({
   dark: false,
   labelColor: "",
   selectedFill: "",
+  platform: "web",
+  blurSupported: true,
+  preferences: {
+    reduceMotion: false,
+    reduceTransparency: false,
+    increasedContrast: false,
+    forcedColors: false,
+  },
+  materials: [] as Record<string, unknown>[],
+  header: undefined as
+    | ComponentProps<typeof import("react-native").View>
+    | undefined,
 }));
 vi.mock("react-native", async () => {
   const native =
     await vi.importActual<typeof import("react-native")>("react-native-web");
   return {
     ...native,
+    Platform: {
+      ...native.Platform,
+      get OS() {
+        return state.platform;
+      },
+    },
+    View: (props: ComponentProps<typeof import("react-native").View>) => {
+      const style = native.StyleSheet.flatten(props.style);
+      if (props.testID === "conversation-header") state.header = props;
+      if (props.style && style.backdropFilter) state.materials.push(style);
+      return <native.View {...props} />;
+    },
     useWindowDimensions: () => ({
       width: state.width,
       height: 800,
@@ -48,6 +72,10 @@ vi.mock("react-native", async () => {
   };
 });
 vi.mock("lucide-react-native", () => import("lucide-react"));
+vi.mock("./theme", async (original) => ({
+  ...(await original<typeof import("./theme")>()),
+  useAccessibilityPreferences: () => state.preferences,
+}));
 vi.mock("./conversation", async () => ({
   ConversationChrome: (await import("react")).createContext({
     topInset: 0,
@@ -59,6 +87,7 @@ function render(
   open = true,
   section: ComponentProps<typeof CompanionShell>["section"] = "chat"
 ) {
+  state.materials = [];
   return renderToStaticMarkup(
     <CompanionShell
       conversationOpen={open}
@@ -84,6 +113,19 @@ beforeEach(() => {
   state.dark = false;
   state.labelColor = "";
   state.selectedFill = "";
+  state.platform = "web";
+  state.blurSupported = true;
+  state.preferences = {
+    reduceMotion: false,
+    reduceTransparency: false,
+    increasedContrast: false,
+    forcedColors: false,
+  };
+  state.header = undefined;
+  vi.stubGlobal("CSS", { supports: () => state.blurSupported });
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 it("exposes real desktop destinations alongside the two messaging panes", () => {
   const html = render();
@@ -170,5 +212,87 @@ it.each([false, true])(
     ).toBeGreaterThanOrEqual(4.5);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('aria-label="Conversas"');
+  }
+);
+
+function geometry(style: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(style).filter(
+      ([key]) =>
+        !["backgroundColor", "borderColor", "backdropFilter"].includes(key)
+    )
+  );
+}
+it.each([false, true])(
+  "keeps header materials independent of motion in dark %s",
+  (dark) => {
+    state.dark = dark;
+    render();
+    const normal = state.materials;
+    expect(normal).toHaveLength(3);
+    state.preferences.reduceMotion = true;
+    render();
+    expect(state.materials).toEqual(normal);
+    expect(state.header?.pointerEvents).toBe("box-none");
+    expect(state.header?.style).toBeDefined();
+    expect(
+      normal.every(
+        (style) =>
+          typeof style.backgroundColor === "string" &&
+          style.backgroundColor.endsWith("b8")
+      )
+    ).toBe(true);
+  }
+);
+it.each([false, true])(
+  "keeps header geometry and actions when transparency is reduced in dark %s",
+  (dark) => {
+    state.width = 390;
+    state.dark = dark;
+    render();
+    const normal = state.materials.map(geometry);
+    state.preferences.reduceTransparency = true;
+    const markup = render();
+    expect(state.materials.map(geometry)).toEqual(normal);
+    expect(state.materials.map((style) => style.backgroundColor)).toEqual(
+      Array(3).fill(dark ? "#1c1c1e" : "#ffffff")
+    );
+    expect(state.materials.map((style) => style.backdropFilter)).toEqual(
+      Array(3).fill("none")
+    );
+    expect(markup).toContain('aria-label="Voltar às conversas"');
+    expect(markup).toContain('aria-label="Detalhes da conversa"');
+    expect(state.header?.pointerEvents).toBe("box-none");
+  }
+);
+it.each(["increasedContrast", "forcedColors"] as const)(
+  "reinforces controls for %s without changing the transparency preference",
+  (preference) => {
+    render();
+    const normal = state.materials.map(geometry);
+    state.preferences[preference] = true;
+    render();
+    expect(state.preferences.reduceTransparency).toBe(false);
+    expect(state.materials.map(geometry)).toEqual(normal);
+    expect(state.materials.map((style) => style.borderColor)).toEqual(
+      Array(3).fill("#1c1c1e")
+    );
+    expect(state.materials.map((style) => style.backgroundColor)).toEqual(
+      Array(3).fill("#ffffff")
+    );
+  }
+);
+it.each(["native", "unsupported-blur"])(
+  "uses an opaque header when %s cannot provide material",
+  (capability) => {
+    state.platform = capability === "native" ? "ios" : "web";
+    state.blurSupported = capability !== "unsupported-blur";
+    const markup = render();
+    expect(markup).toContain('aria-label="Detalhes da conversa"');
+    const native = capability === "native";
+    expect(state.materials).toHaveLength(native ? 0 : 3);
+    expect(state.materials.map((style) => style.backdropFilter)).toEqual(
+      Array(native ? 0 : 3).fill("none")
+    );
   }
 );

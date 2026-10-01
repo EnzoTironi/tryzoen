@@ -19,13 +19,44 @@ vi.mock("react-native", async () => {
     await vi.importActual<typeof import("react-native")>("react-native-web");
   return {
     ...native,
+    Platform: {
+      ...native.Platform,
+      get OS() {
+        return mocks.platform;
+      },
+    },
+    useColorScheme: () => (mocks.dark ? "dark" : "light"),
+    useWindowDimensions: () => ({
+      width: mocks.width,
+      height: 844,
+      scale: 1,
+      fontScale: 1,
+    }),
+    View: (props: ComponentProps<typeof import("react-native").View>) => {
+      const style = native.StyleSheet.flatten(props.style);
+      if (props.testID === "conversation-header") mocks.header = props;
+      if (props.style && style.backdropFilter && style.boxShadow)
+        mocks.materials.push(style);
+      return <native.View {...props} />;
+    },
     Pressable: (props: ComponentProps<typeof Pressable>) => {
       if (props.accessibilityHint) mocks.hints.push(props.accessibilityHint);
+      const style = native.StyleSheet.flatten(
+        typeof props.style === "function"
+          ? props.style({ pressed: false })
+          : props.style
+      );
+      if (props.accessibilityLabel?.startsWith("Detalhes de "))
+        mocks.capsule = style;
       return <native.Pressable {...props} />;
     },
   };
 });
 vi.mock("lucide-react-native", () => import("lucide-react"));
+vi.mock("../theme", async (original) => ({
+  ...(await original<typeof import("../theme")>()),
+  useAccessibilityPreferences: () => mocks.preferences,
+}));
 vi.mock("react-native-svg", () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <svg>{children}</svg>
@@ -68,6 +99,21 @@ vi.mock("./context", () => ({
 const mocks = vi.hoisted(() => ({
   participation: "joined" as ReturnType<typeof useRoomParticipation>["status"],
   revoked: false,
+  width: 1000,
+  dark: false,
+  platform: "web",
+  blurSupported: true,
+  preferences: {
+    reduceMotion: false,
+    reduceTransparency: false,
+    increasedContrast: false,
+    forcedColors: false,
+  },
+  materials: [] as Record<string, unknown>[],
+  capsule: undefined as Record<string, unknown> | undefined,
+  header: undefined as
+    | ComponentProps<typeof import("react-native").View>
+    | undefined,
   direct: false,
   hints: [] as string[],
   options: undefined as Parameters<typeof useInfiniteQuery>[0] | undefined,
@@ -173,9 +219,23 @@ beforeEach(() => {
   mocks.revoked = false;
   mocks.direct = false;
   mocks.hints = [];
+  mocks.width = 1000;
+  mocks.dark = false;
+  mocks.platform = "web";
+  mocks.blurSupported = true;
+  mocks.preferences = {
+    reduceMotion: false,
+    reduceTransparency: false,
+    increasedContrast: false,
+    forcedColors: false,
+  };
+  mocks.header = undefined;
+  vi.stubGlobal("CSS", { supports: () => mocks.blurSupported });
   vi.mocked(useRoomSync).mockClear();
 });
 function render(selectedMessage?: string, client = new QueryClient()) {
+  mocks.materials = [];
+  mocks.capsule = undefined;
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <RoomConversation
@@ -218,6 +278,7 @@ it("renders direct conversation identity without group or agent participation co
 
 const historyClient = new QueryClient();
 afterEach(() => {
+  vi.unstubAllGlobals();
   historyClient.clear();
   vi.mocked(data.messages).mockReset();
 });
@@ -418,3 +479,85 @@ it.each(["error", "cancelled"] as const)(
     );
   }
 );
+
+function geometry(style: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(style).filter(
+      ([key]) =>
+        !["backgroundColor", "borderColor", "backdropFilter"].includes(key)
+    )
+  );
+}
+function headerMaterials() {
+  expect(mocks.materials).toHaveLength(2);
+  expect(mocks.capsule).toBeDefined();
+  return [...mocks.materials, ...(mocks.capsule ? [mocks.capsule] : [])];
+}
+it.each([false, true])(
+  "keeps group header material independent of reduced motion in dark %s",
+  (dark) => {
+    mocks.dark = dark;
+    render();
+    const normal = headerMaterials();
+    mocks.preferences.reduceMotion = true;
+    render();
+    expect(headerMaterials()).toEqual(normal);
+    expect(normal.map((style) => style.backdropFilter)).toEqual(
+      Array(3).fill("blur(20px) saturate(180%)")
+    );
+    expect(mocks.header?.pointerEvents).toBe("box-none");
+  }
+);
+it.each([false, true])(
+  "keeps narrow group identity and message controls when transparency is reduced in dark %s",
+  (dark) => {
+    mocks.width = 390;
+    mocks.dark = dark;
+    render();
+    const normal = headerMaterials().map(geometry);
+    mocks.preferences.reduceTransparency = true;
+    const markup = render();
+    const opaque = headerMaterials();
+    expect(opaque.map(geometry)).toEqual(normal);
+    expect(opaque.map((style) => style.backgroundColor)).toEqual(
+      Array(3).fill(dark ? "#1c1c1e" : "#ffffff")
+    );
+    expect(opaque.map((style) => style.backdropFilter)).toEqual(
+      Array(3).fill("none")
+    );
+    expect(markup).toContain('aria-label="Voltar às conversas"');
+    expect(markup).toContain('aria-label="Detalhes de Shared room"');
+    expect(markup).toContain("Synthetic private text");
+    expect(markup).toContain("❤️: 2 reações");
+  }
+);
+it.each(["increasedContrast", "forcedColors"] as const)(
+  "strengthens group controls for %s while preserving the independent source flag",
+  (preference) => {
+    render();
+    const normal = headerMaterials().map(geometry);
+    mocks.preferences[preference] = true;
+    render();
+    const strong = headerMaterials();
+    expect(mocks.preferences.reduceTransparency).toBe(false);
+    expect(strong.map(geometry)).toEqual(normal);
+    expect(strong.map((style) => style.borderColor)).toEqual(
+      Array(3).fill("#1c1c1e")
+    );
+    expect(strong.map((style) => style.backgroundColor)).toEqual(
+      Array(3).fill("#ffffff")
+    );
+  }
+);
+it.each(["native", "unsupported-blur"])(
+  "keeps group actions with opaque fallback for %s",
+  (capability) => {
+    mocks.platform = capability === "native" ? "ios" : "web";
+    mocks.blurSupported = capability !== "unsupported-blur";
+    const markup = render();
+    expect(markup).toContain('aria-label="Opções da conversa"');
+    expect(markup).toContain("Synthetic private text");
+    expect(mocks.capsule?.backgroundColor).toBe("#ffffff");
+  }
+);
+

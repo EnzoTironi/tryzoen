@@ -37,7 +37,7 @@ import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
 import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "../chats/avatar";
-import { systemFont, useColors } from "../theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "../theme";
 import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
@@ -73,13 +73,9 @@ export function RoomConversation({
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
-  const colors = useColors();
   const width = useWindowDimensions().width;
   const compact = width < 720;
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { colors, styles } = useRoomStyles(compact);
   const [headerHeight, setHeaderHeight] = useState(compact ? 104 : 80);
   const [threadHeaderHeight, setThreadHeaderHeight] = useState(
     compact ? 104 : 80
@@ -337,7 +333,7 @@ export function RoomConversation({
                 <Text numberOfLines={1} style={styles.title}>
                   {room?.label ?? "Thread"}
                 </Text>
-                <ChevronRight size={12} color={colors.muted} />
+                <ChevronRight size={12} color={colors.ink} />
               </View>
             </Pressable>
             <View style={styles.headerSide}>
@@ -567,11 +563,7 @@ function RoomHeader({
   readonly onSearch: () => void;
   readonly onOptions: () => void;
 }) {
-  const colors = useColors();
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { colors, styles } = useRoomStyles(compact);
   return (
     <View
       testID="conversation-header"
@@ -620,7 +612,7 @@ function RoomHeader({
           >
             {room?.label ?? "Conversa"}
           </Text>
-          <ChevronRight size={12} color={colors.muted} />
+          <ChevronRight size={12} color={colors.ink} />
         </Pressable>
         {presence && presence !== "offline" && (
           <PresenceIndicator state={presence} />
@@ -670,12 +662,8 @@ function RoomThread({
   >["requireJoined"];
   readonly typing: ReturnType<typeof useRoomSync>;
 }) {
-  const colors = useColors();
   const compact = useWindowDimensions().width < 720;
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { styles } = useRoomStyles(compact);
   const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
   const [subscriptionHeight, setSubscriptionHeight] = useState(44);
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
@@ -816,7 +804,30 @@ function RoomThread({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
+function useRoomStyles(compact: boolean) {
+  const colors = useColors();
+  const preferences = useAccessibilityPreferences();
+  const increasedContrast =
+    preferences.increasedContrast || preferences.forcedColors;
+  const opaque =
+    preferences.reduceTransparency ||
+    increasedContrast ||
+    Platform.OS !== "web" ||
+    typeof CSS === "undefined" ||
+    !CSS.supports("backdrop-filter", "blur(1px)");
+  const styles = useMemo(
+    () => createStyles(colors, compact, opaque, increasedContrast),
+    [colors, compact, opaque, increasedContrast]
+  );
+  return { colors, styles };
+}
+
+function createStyles(
+  colors: ReturnType<typeof useColors>,
+  compact: boolean,
+  opaque: boolean,
+  increasedContrast: boolean
+) {
   return StyleSheet.create({
     unavailable: {
       flex: 1,
@@ -859,10 +870,8 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       zIndex: 20,
       maxWidth: "100%",
       borderRadius: 22,
-      backgroundColor: `${colors.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
-        : {}),
+      // Secondary status captions need a solid surface over busy media.
+      backgroundColor: colors.surface,
     },
     hidden: { display: "none" },
     header: {
@@ -882,10 +891,14 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
     headerControl: {
       borderRadius: 22,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.line}70`,
-      backgroundColor: `${colors.surface}b8`,
+      borderColor: increasedContrast
+        ? colors.ink
+        : opaque
+          ? colors.line
+          : `${colors.line}70`,
+      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
       boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
     },
@@ -900,10 +913,14 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       paddingVertical: 3,
       borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.line}70`,
-      backgroundColor: `${colors.surface}b8`,
+      borderColor: increasedContrast
+        ? colors.ink
+        : opaque
+          ? colors.line
+          : `${colors.line}70`,
+      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
     },
     options: { gap: 2 },
