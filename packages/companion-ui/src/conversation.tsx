@@ -284,7 +284,7 @@ export function Conversation({
         }}
         style={styles.composer}
       >
-        <View style={styles.column}>
+        <View pointerEvents="box-none" style={styles.column}>
           <Composer
             initialDraft={{
               text: staged?.text ?? initialDraft?.text ?? "",
@@ -529,7 +529,7 @@ function createStyles(colors: ReturnType<typeof useColors>, compact = true) {
       right: 0,
       bottom: 0,
       zIndex: 20,
-      paddingHorizontal: compact ? 12 : 10,
+      paddingHorizontal: compact ? 24 : 10,
       paddingTop: 8,
       paddingBottom: compact ? 10 : 8,
     },

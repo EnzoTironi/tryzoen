@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  gmailSendInputSchema,
   gmailSendSchema,
   NetworkContactInputSchema,
   NetworkDestinationSchema,
@@ -26,10 +27,15 @@ const network = {
     revision: "a".repeat(64),
   },
   text: 'Synthetic exact network message.\nSecond line with "quoted" detail.',
-  approvalMessage: "Ask the public support bot a generic greeting?",
 };
+const networkSupplementary = "Ask the public support bot a generic greeting?";
 
 function readyText(toolName: string, input: unknown) {
+  const schema =
+    toolName === "gmail-send"
+      ? gmailSendInputSchema
+      : NetworkContactInputSchema;
+  expect(schema.safeParse(input).success).toBe(true);
   const result = renderApprovalDisclosure(toolName, input);
   expect(result.kind).toBe("ready");
   if (result.kind !== "ready")
@@ -39,6 +45,11 @@ function readyText(toolName: string, input: unknown) {
 }
 
 function expectInvalid(toolName: string, input: unknown) {
+  const schema =
+    toolName === "gmail-send"
+      ? gmailSendInputSchema
+      : NetworkContactInputSchema;
+  expect(schema.safeParse(input).success).toBe(false);
   const result = renderApprovalDisclosure(toolName, input);
   expect(result.kind).toBe("invalid");
   if (result.kind !== "invalid")
@@ -78,7 +89,7 @@ describe("shared exact approval disclosure", () => {
     expect(text).toBe(renderGmailApproval(gmail, gmail.approvalMessage));
   });
 
-  test("discloses the immutable network audience and complete message despite supplementary wording", () => {
+  test("discloses the immutable network audience and complete native message", () => {
     const before = structuredClone(network);
     const text = readyText("network-contact", network);
     expect(text).toContain(network.username);
@@ -86,19 +97,31 @@ describe("shared exact approval disclosure", () => {
     expect(text).toContain(network.destination.workspaceId);
     expect(text).toContain(network.destination.revision);
     expect(text).toContain(JSON.stringify(network.text));
-    expect(text).toContain(network.approvalMessage);
     expect(network).toEqual(before);
-    expect(text).toBe(renderNetworkApproval(network, network.approvalMessage));
+    expect(text).toBe(renderNetworkApproval(network));
   });
 
-  test("discloses complete known proposals without supplementary prose", () => {
+  test("keeps material formatters separate from required native Gmail supplementary input", () => {
     const { approvalMessage: _gmailSummary, ...mailPayload } = gmail;
-    const { approvalMessage: _networkSummary, ...networkPayload } = network;
-    expect(readyText("gmail-send", mailPayload)).toBe(
-      renderGmailApproval(mailPayload)
+    expect(renderGmailApproval(mailPayload)).toContain(
+      JSON.stringify(mailPayload.body)
     );
-    expect(readyText("network-contact", networkPayload)).toBe(
-      renderNetworkApproval(networkPayload)
+    expectInvalid("gmail-send", mailPayload);
+    expect(readyText("network-contact", network)).toBe(
+      renderNetworkApproval(network)
+    );
+  });
+
+  test("explicit network supplementary context cannot replace its exact audience or message", () => {
+    const text = renderNetworkApproval(network, networkSupplementary);
+    expect(text).toContain(networkSupplementary);
+    expect(text).toContain(network.destination.botId);
+    expect(text).toContain(network.destination.workspaceId);
+    expect(text).toContain(network.destination.revision);
+    expect(text).toContain(JSON.stringify(network.text));
+    expect(text).toContain(renderNetworkApproval(network));
+    expect(readyText("network-contact", network)).not.toContain(
+      networkSupplementary
     );
   });
 
@@ -139,6 +162,26 @@ describe("shared exact approval disclosure", () => {
     expectInvalid("gmail-send", input);
   });
 
+  test.each(
+    (["to", "cc", "bcc"] as const).flatMap((field) =>
+      [
+        "friendly@example.com\r\nBcc: injected@example.com",
+        "friendly@example.com\u0000hidden",
+        "friendly@example.com\t",
+        " friendly@example.com",
+        "friendly@example.com ",
+        "friendly@example.com\u007F",
+      ].map((recipient) => ({ field, recipient }))
+    )
+  )(
+    "rejects unsafe exact recipient $field: $recipient",
+    ({ field, recipient }) => {
+      const payload = { ...gmail, [field]: [recipient] };
+      expect(gmailSendSchema.safeParse(payload).success).toBe(false);
+      expectInvalid("gmail-send", payload);
+    }
+  );
+
   test.each([
     { botId: "not-a-uuid" },
     { workspaceId: "" },
@@ -160,7 +203,7 @@ describe("shared exact approval disclosure", () => {
     { text: "Malformed \uD800" },
     { text: "x".repeat(8001) },
   ])("rejects malformed network payload %j", (change) => {
-    const { approvalMessage: _summary, ...payload } = { ...network, ...change };
+    const payload = { ...network, ...change };
     expect(NetworkContactInputSchema.safeParse(payload).success).toBe(false);
     expectInvalid("network-contact", { ...network, ...change });
   });
@@ -173,7 +216,6 @@ describe("shared exact approval disclosure", () => {
       "network-contact",
       { ...network, text: `Start${"\u0000".repeat(3000)}End` },
     ],
-    ["network-contact", { ...network, approvalMessage: "x".repeat(16_384) }],
   ])(
     "fails closed instead of truncating oversized %s disclosure",
     (toolName, input) => {
@@ -187,9 +229,17 @@ describe("shared exact approval disclosure", () => {
     (approvalMessage) => {
       expect.hasAssertions();
       expectInvalid("gmail-send", { ...gmail, approvalMessage });
-      expectInvalid("network-contact", { ...network, approvalMessage });
+      expect(() => renderNetworkApproval(network, approvalMessage)).toThrow(
+        /well-formed|complete|non-empty|>=1/u
+      );
     }
   );
+
+  test("rejects oversized explicit network supplementary context without truncation", () => {
+    expect(() => renderNetworkApproval(network, "x".repeat(16_384))).toThrow(
+      /16384/u
+    );
+  });
 
   test("preserves valid surrogate pairs and emoji in exact Gmail and network content", () => {
     const body = "Valid \uD83D\uDE80 surrogate pair and 🛰️ content.";
@@ -214,10 +264,9 @@ describe("shared exact approval disclosure", () => {
       expectInvalid("gmail-send", { ...gmail, subject: invalid });
       expectInvalid("network-contact", { ...network, text: invalid });
       expectInvalid("gmail-send", { ...gmail, approvalMessage: invalid });
-      expectInvalid("network-contact", {
-        ...network,
-        approvalMessage: invalid,
-      });
+      expect(() => renderNetworkApproval(network, invalid)).toThrow(
+        /well-formed/u
+      );
     }
   );
 
@@ -246,12 +295,26 @@ describe("shared exact approval disclosure", () => {
   });
 
   test("accepts the full 16384-character disclosure and rejects the next character without truncation", () => {
-    const { approvalMessage: _summary, ...payload } = gmail;
-    const baseline = renderGmailApproval({ ...payload, body: "x" });
+    const baseline = renderGmailApproval(
+      { ...gmail, body: "x" },
+      gmail.approvalMessage
+    );
     const body = "x".repeat(16_384 - baseline.length + 1);
-    const text = readyText("gmail-send", { ...payload, body });
+    const text = readyText("gmail-send", { ...gmail, body });
     expect(text).toHaveLength(16_384);
     expect(text).toContain(JSON.stringify(body));
-    expectInvalid("gmail-send", { ...payload, body: `${body}x` });
+    expectInvalid("gmail-send", { ...gmail, body: `${body}x` });
+  });
+
+  test("rejects a native Gmail request missing its required approvalMessage", () => {
+    expect.hasAssertions();
+    const { approvalMessage: _summary, ...payload } = gmail;
+    expectInvalid("gmail-send", payload);
+  });
+
+  test("rejects a native network request containing prohibited approvalMessage", () => {
+    const payload = { ...network, approvalMessage: networkSupplementary };
+    expect(NetworkContactInputSchema.safeParse(payload).success).toBe(false);
+    expectInvalid("network-contact", payload);
   });
 });

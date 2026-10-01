@@ -8,7 +8,11 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import type { ChannelReceiveContext } from "eve/channels";
-import { matrixDeliveryActor, matrixPrincipal } from "./authority";
+import {
+  matrixDeliveryActor,
+  matrixPrincipal,
+  requireMatrixEgress,
+} from "./authority";
 import { matrixRequest, MatrixEventSchema, MatrixError } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
@@ -95,13 +99,15 @@ export const publishMatrixAnswer = async function (eventId: string) {
     WHERE d.event_id = ${eventId} AND d.state = 'answer_ready'`);
     if (!rows[0]) return undefined;
     const transaction = `zoen_${createHash("sha256").update(eventId).digest("hex")}`;
+    const relation = await matrixReplyRelation(rows[0].roomId, eventId);
+    await requireMatrixEgress(eventId);
     await matrixRequest(
       "PUT",
       `rooms/${encodeURIComponent(rows[0].roomId)}/send/m.room.message/${transaction}`,
       {
         msgtype: "m.text",
         body: rows[0].output,
-        "m.relates_to": await matrixReplyRelation(rows[0].roomId, eventId),
+        "m.relates_to": relation,
       }
     );
     await query(

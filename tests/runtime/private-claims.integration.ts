@@ -539,7 +539,7 @@ test("atomic clear keeps all history, rolls back on receipt failure and concurre
     PrivateMemoryRepository.change(actor, clear),
   ]);
   expect(results.filter((result) => result.applied)).toHaveLength(1);
-  expect(results[0]?.receipt).toEqual(results[1]?.receipt);
+  expect(results[0].receipt).toEqual(results[1].receipt);
   const current = await PrivateMemoryRepository.read(actor);
   expect(current.snapshot.claims.map((claim) => claim.file.state.kind)).toEqual(
     ["tombstone", "tombstone"]

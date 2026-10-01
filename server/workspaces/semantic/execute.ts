@@ -91,6 +91,17 @@ export async function executeSemanticSnapshot(
       },
     };
   } catch (error) {
+    // Fix the execution's cause before its separately bounded cleanup. A deadline
+    // reached while acknowledging cancellation must not relabel a prior failure.
+    const cause = signal.aborted
+      ? cancelled
+      : deadline.aborted
+        ? timedOut
+        : error === busy
+          ? busy
+          : error === tooLarge
+            ? tooLarge
+            : failed;
     // Acknowledgement waits for the child to close before this endpoint is reusable.
     // A dead capsule remains unavailable until its supervisor restarts it.
     await fetch(new URL("cancel", endpoint), {
@@ -100,10 +111,7 @@ export async function executeSemanticSnapshot(
       redirect: "error",
     }).catch(() => undefined);
     // Untrusted transport/parser diagnostics may contain returned source text.
-    if (signal.aborted) throw cancelled;
-    if (deadline.aborted) throw timedOut;
-    if (error === busy || error === tooLarge) throw error;
-    throw failed;
+    throw cause;
   } finally {
     occupied.delete(endpoint);
   }
