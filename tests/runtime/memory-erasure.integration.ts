@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { query, transaction } from "@db/queries";
+import { query, transaction, TransactionBoundaryError } from "@db/queries";
 import { drainMemoryErasures } from "../../server/memory/erasure";
 import * as sources from "../../server/memory/session-files";
 
@@ -45,6 +45,32 @@ async function enqueue(owner: string | null = null) {
     VALUES (${id}, ${owner}, ${new Date(receipts.length)}, ${new Date(receipts.length)})`);
   return id;
 }
+
+test("an uncommitted erasure receipt cannot remove files through a nested drain", async () => {
+  let id: string | undefined;
+  const rollback = new Error("Synthetic outer transaction rollback");
+  await expect(
+    transaction(async () => {
+      id = await enqueue();
+      await expect(drainMemoryErasures()).rejects.toBeInstanceOf(
+        TransactionBoundaryError
+      );
+      expect(
+        await readFile(join(directory, id, "raw/eve/synthetic.jsonl"), "utf8")
+      ).toBe("Synthetic erasure fixture");
+      throw rollback;
+    })
+  ).rejects.toBe(rollback);
+  if (!id) throw new Error("Expected the synthetic receipt to be prepared");
+  expect(
+    await query(
+      sql`SELECT 1 FROM workspace_memory_erasure WHERE namespace_id=${id}`
+    )
+  ).toHaveLength(0);
+  expect(
+    await readFile(join(directory, id, "raw/eve/synthetic.jsonl"), "utf8")
+  ).toBe("Synthetic erasure fixture");
+});
 
 test("a failed erasure does not roll back another account's completion", async () => {
   const healthy = await enqueue();
