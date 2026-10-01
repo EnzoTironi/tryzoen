@@ -2,7 +2,7 @@ import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { readBody } from "../http/body";
-import { operationSignal, withTimeout } from "../operations/async";
+import { operationSignal, withDeadline } from "../operations/async";
 import { lockMatrixAdmission } from "./authority";
 import {
   deactivateMatrixUser,
@@ -25,7 +25,7 @@ function withinBudget<Value>(deadlineMs: number, run: () => Promise<Value>) {
   const remaining = deadlineMs - Date.now();
   if (remaining <= 0)
     throw new Error("Matrix erasure reconciliation deadline reached.");
-  return withTimeout(run, remaining);
+  return withDeadline(run, deadlineMs);
 }
 
 function boundedTransaction<Value>(
@@ -170,81 +170,83 @@ export async function reconcileMatrixErasures(
   if (limit === 0 || deadlineMs <= Date.now()) return 0;
   if (deadlineMs > Date.now() + 30_000)
     throw new Error("Matrix erasure deadline exceeds bounded schedule budget.");
-  // This initial guard rejects nested/savepoint callers before any provider I/O.
-  const { departures, config: installation } = await boundedTransaction(
-    deadlineMs,
-    async () => {
-      const config = await matrixConfiguration();
-      const suffix = `:${config.serverName}`;
-      const rows =
-        await query(sql`SELECT d.binding_id AS "bindingId",d.matrix_id AS "matrixId",d.owner_user_id AS "ownerUserId",
+  return withDeadline(async () => {
+    // This initial guard rejects nested/savepoint callers before any provider I/O.
+    const { departures, config: installation } = await boundedTransaction(
+      deadlineMs,
+      async () => {
+        const config = await matrixConfiguration();
+        const suffix = `:${config.serverName}`;
+        const rows =
+          await query(sql`SELECT d.binding_id AS "bindingId",d.matrix_id AS "matrixId",d.owner_user_id AS "ownerUserId",
       b.conversation_id AS "roomId",b.installation_id AS "installationId",b.workspace_id AS "workspaceId",w.organization_id AS "organizationId"
       FROM matrix_erasure_departures d JOIN workspace_group_bindings b ON b.id=d.binding_id JOIN workspaces w ON w.id=b.workspace_id
       WHERE d.native_retry_at<=now() AND b.channel='matrix'
         AND b.installation_id=${config.serverName} AND right(d.matrix_id,char_length(${suffix}))=${suffix}
       ORDER BY d.native_retry_at,d.binding_id,d.matrix_id LIMIT ${Math.ceil(limit / 2)}`);
-      return {
-        config,
-        departures: z
-          .array(departureSchema)
-          .max(Math.ceil(limit / 2))
-          .parse(rows),
-      };
-    }
-  );
-  let consumed = 0;
-  for (const item of departures) {
-    if (Date.now() >= deadlineMs) return consumed;
-    consumed += 1;
-    try {
-      await retireDeparture(item, deadlineMs);
-    } catch {
-      if (Date.now() < deadlineMs)
-        await boundedTransaction(deadlineMs, () =>
-          query(sql`UPDATE matrix_erasure_departures
+        return {
+          config,
+          departures: z
+            .array(departureSchema)
+            .max(Math.ceil(limit / 2))
+            .parse(rows),
+        };
+      }
+    );
+    let consumed = 0;
+    for (const item of departures) {
+      if (Date.now() >= deadlineMs) return consumed;
+      consumed += 1;
+      try {
+        await retireDeparture(item, deadlineMs);
+      } catch {
+        if (Date.now() < deadlineMs)
+          await boundedTransaction(deadlineMs, () =>
+            query(sql`UPDATE matrix_erasure_departures
           SET native_retry_at=now()+interval '1 minute'
           WHERE binding_id=${item.bindingId} AND matrix_id=${item.matrixId} AND owner_user_id=${item.ownerUserId}`)
-        );
-      console.warn("Matrix erasure departure remains pending");
+          );
+        console.warn("Matrix erasure departure remains pending");
+      }
     }
-  }
-  if (Date.now() >= deadlineMs || consumed === limit) return consumed;
-  const identities = await boundedTransaction(deadlineMs, async () => {
-    const rows =
-      await query(sql`SELECT l.id AS "ledgerId",r.user_id AS "userId",ids.matrix_id AS "matrixId"
+    if (Date.now() >= deadlineMs || consumed === limit) return consumed;
+    const identities = await boundedTransaction(deadlineMs, async () => {
+      const rows =
+        await query(sql`SELECT l.id AS "ledgerId",r.user_id AS "userId",ids.matrix_id AS "matrixId"
       FROM account_deletion_ledger l JOIN account_deletion_requests r ON r.id=l.request_id
       CROSS JOIN LATERAL unnest(l.matrix_ids) WITH ORDINALITY AS ids(matrix_id,position)
       WHERE l.surface='matrix' AND l.status='pending_external'
         AND right(ids.matrix_id,char_length(${`:${installation.serverName}`}))=${`:${installation.serverName}`}
       ORDER BY r.completed_at,l.id,ids.position LIMIT ${limit - consumed}`);
-    return z
-      .array(ledgerCandidateSchema)
-      .max(limit - consumed)
-      .parse(rows);
-  });
-  for (const item of identities) {
-    if (Date.now() >= deadlineMs) break;
-    consumed += 1;
-    try {
-      await withinBudget(deadlineMs, async () => {
-        const config = await matrixConfiguration();
-        if (!item.matrixId.endsWith(`:${config.serverName}`))
-          throw new Error("Unconfigured Matrix identity installation.");
-        // No SQL transaction is held during this provider call. A concurrent
-        // replay can add B while A completes; acknowledgement reads the latest row.
-        await deactivateMatrixUser(item.matrixId);
-        await verifyDeactivation(item.matrixId);
-      });
-      await acknowledgeIdentity(item.ledgerId, item.matrixId, deadlineMs);
-    } catch {
-      if (Date.now() < deadlineMs)
-        await boundedTransaction(deadlineMs, () =>
-          query(sql`UPDATE account_deletion_ledger SET
+      return z
+        .array(ledgerCandidateSchema)
+        .max(limit - consumed)
+        .parse(rows);
+    });
+    for (const item of identities) {
+      if (Date.now() >= deadlineMs) break;
+      consumed += 1;
+      try {
+        await withinBudget(deadlineMs, async () => {
+          const config = await matrixConfiguration();
+          if (!item.matrixId.endsWith(`:${config.serverName}`))
+            throw new Error("Unconfigured Matrix identity installation.");
+          // No SQL transaction is held during this provider call. A concurrent
+          // replay can add B while A completes; acknowledgement reads the latest row.
+          await deactivateMatrixUser(item.matrixId);
+          await verifyDeactivation(item.matrixId);
+        });
+        await acknowledgeIdentity(item.ledgerId, item.matrixId, deadlineMs);
+      } catch {
+        if (Date.now() < deadlineMs)
+          await boundedTransaction(deadlineMs, () =>
+            query(sql`UPDATE account_deletion_ledger SET
           matrix_ids=array_remove(matrix_ids,${item.matrixId})||ARRAY[${item.matrixId}]::text[]
           WHERE id=${item.ledgerId} AND surface='matrix' AND status='pending_external' AND ${item.matrixId}=ANY(matrix_ids)`)
-        );
-      console.warn("Matrix account erasure remains pending");
+          );
+        console.warn("Matrix account erasure remains pending");
+      }
     }
-  }
-  return consumed;
+    return consumed;
+  }, deadlineMs);
 }

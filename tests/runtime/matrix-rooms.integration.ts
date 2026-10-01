@@ -4,7 +4,7 @@ import {
   readMatrixReactions,
   setMatrixReaction,
 } from "../../server/matrix/reactions";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { sleep } from "../../server/operations/async";
 import { randomUUID } from "node:crypto";
@@ -319,13 +319,13 @@ test(
         )
       ).ok
     ).toBe(true);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     expect(
       await query(
         sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${room.id} AND user_id = ${guest.userId}`
       )
     ).toEqual([]);
-    await pendingMatrixEvents();
+    await transaction(() => pendingMatrixEvents(25), { outermost: true });
     expect(
       (
         await query<{
@@ -342,6 +342,6 @@ test(
         )
       ).ok
     ).toBe(true);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
   }
 );

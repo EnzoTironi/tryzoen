@@ -316,7 +316,7 @@ test("real group conversation executes workspace tools, retains shared context a
     await expect(readMatrixMessages(guest, room.id)).rejects.toThrow(
       "WorkspaceAccessDenied"
     );
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     expect(
       await query(
         sql`SELECT user_id FROM matrix_room_members WHERE binding_id = ${room.id} AND user_id = ${guest.userId}`
@@ -337,7 +337,7 @@ test("real group conversation executes workspace tools, retains shared context a
     });
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);
@@ -507,7 +507,7 @@ test("delivered group reactions tolerate an empty model follow-up while actual f
     }
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);
@@ -721,7 +721,7 @@ test("group approvals require the original requester, reject denial and replay, 
     });
   } finally {
     await closeMatrixRoom(actor, room.id);
-    await reconcileMatrixRooms();
+    await reconcileMatrixRooms(Date.now() + 30_000, 5);
     await server.stop();
   }
 }, 120_000);

@@ -1,7 +1,7 @@
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { mapAsync } from "../operations/async";
+import { mapAsync, withDeadline } from "../operations/async";
 import {
   MatrixError,
   matrixConfiguration,
@@ -21,11 +21,49 @@ const historyPage = z.object({
   end: z.string().optional(),
 });
 
-/** Five rooms/tick, one 100-event history page each, two concurrent requests. */
-export async function reconcileMatrixActivity() {
-  const config = await matrixConfiguration();
-  const rooms = z.array(pendingRoom).parse(
-    await query(sql`
+function activityTransaction<Value>(
+  deadlineMs: number,
+  run: () => Promise<Value>
+) {
+  const remaining = deadlineMs - Date.now();
+  if (remaining <= 0) throw new Error("Matrix activity deadline reached.");
+  return withDeadline(
+    () =>
+      transaction(
+        async () => {
+          await query(
+            sql`SELECT set_config('statement_timeout',${String(Math.max(1, deadlineMs - Date.now()))},true)`
+          );
+          return run();
+        },
+        { outermost: true }
+      ),
+    deadlineMs
+  );
+}
+
+/** One 100-event page per admitted room, at most two concurrent requests.
+ * The existing Matrix schedule owns the absolute deadline and item budget.
+ */
+export async function reconcileMatrixActivity(
+  deadlineMs: number,
+  limit: number
+) {
+  z.number().int().min(0).max(5).parse(limit);
+  z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).parse(deadlineMs);
+  if (limit === 0 || deadlineMs <= Date.now()) return 0;
+  if (deadlineMs > Date.now() + 30_000)
+    throw new Error(
+      "Matrix activity deadline exceeds bounded schedule budget."
+    );
+  return withDeadline(async () => {
+    const config = await matrixConfiguration();
+    const rooms = await activityTransaction(deadlineMs, async () =>
+      z
+        .array(pendingRoom)
+        .max(limit)
+        .parse(
+          await query(sql`
     WITH bindings AS (
       SELECT conversation_id AS room_id, ${config.botId}::text AS matrix_id FROM workspace_group_bindings
       WHERE channel = 'matrix' AND installation_id = ${config.serverName} AND revoked_at IS NULL
@@ -36,38 +74,51 @@ export async function reconcileMatrixActivity() {
     SELECT b.room_id AS "roomId", b.matrix_id AS "matrixId", a.reconcile_cursor AS cursor, COALESCE(a.latest_edited, false) AS edited
     FROM bindings b LEFT JOIN matrix_room_activity a ON a.server_name = ${config.serverName} AND a.room_id = b.room_id
     WHERE a.reconciled_at IS NULL
-    ORDER BY a.reconcile_attempted_at NULLS FIRST, b.room_id LIMIT 5
+    ORDER BY a.reconcile_attempted_at NULLS FIRST, b.room_id LIMIT ${limit}
   `)
-  );
-  return mapAsync(
-    rooms,
-    async (room) => {
-      await query(sql`INSERT INTO matrix_room_activity(server_name, room_id, reconcile_attempted_at)
-      VALUES (${config.serverName}, ${room.roomId}, now())
-      ON CONFLICT (server_name, room_id) DO UPDATE SET reconcile_attempted_at = now()`);
-      try {
-        await reconcileRoomActivity(config.serverName, room);
-        return { roomId: room.roomId, synchronized: true };
-      } catch (error) {
-        if (!(error instanceof MatrixError)) throw error;
-        // Cursor stays durable; another room gets a turn before this one retries.
-        return { roomId: room.roomId, synchronized: false };
-      }
-    },
-    2
-  );
+        )
+    );
+    let attempted = 0;
+    await mapAsync(
+      rooms,
+      async (room) => {
+        if (Date.now() >= deadlineMs) return;
+        attempted += 1;
+        await activityTransaction(deadlineMs, () =>
+          query(sql`INSERT INTO matrix_room_activity(server_name, room_id, reconcile_attempted_at)
+        VALUES (${config.serverName}, ${room.roomId}, now())
+        ON CONFLICT (server_name, room_id) DO UPDATE SET reconcile_attempted_at = now()`)
+        );
+        try {
+          await reconcileRoomActivity(config.serverName, room, deadlineMs);
+        } catch (error) {
+          if (!(error instanceof MatrixError)) throw error;
+          // Cursor stays durable; another room gets a turn before this one retries.
+        }
+      },
+      2
+    );
+    return attempted;
+  }, deadlineMs);
 }
 
 async function reconcileRoomActivity(
   serverName: string,
-  room: z.infer<typeof pendingRoom>
+  room: z.infer<typeof pendingRoom>,
+  deadlineMs: number
 ) {
+  const remaining = deadlineMs - Date.now();
+  if (remaining <= 0) throw new Error("Matrix activity deadline reached.");
   const result = historyPage.parse(
-    await matrixRequest(
-      "GET",
-      `rooms/${encodeURIComponent(room.roomId)}/messages?dir=b&limit=100&filter=${encodeURIComponent(JSON.stringify({ types: ["m.room.message"] }))}${room.cursor ? `&from=${encodeURIComponent(room.cursor)}` : ""}`,
-      undefined,
-      room.matrixId
+    await withDeadline(
+      () =>
+        matrixRequest(
+          "GET",
+          `rooms/${encodeURIComponent(room.roomId)}/messages?dir=b&limit=100&filter=${encodeURIComponent(JSON.stringify({ types: ["m.room.message"] }))}${room.cursor ? `&from=${encodeURIComponent(room.cursor)}` : ""}`,
+          undefined,
+          room.matrixId
+        ),
+      deadlineMs
     )
   );
   const messages = result.chunk.filter(
@@ -76,13 +127,17 @@ async function reconcileRoomActivity(
       event.content["m.relates_to"]?.rel_type !== "m.replace"
   );
   for (const event of messages)
-    await projectMatrixActivity(serverName, { ...event, room_id: room.roomId });
+    await activityTransaction(deadlineMs, () =>
+      projectMatrixActivity(serverName, { ...event, room_id: room.roomId })
+    );
   for (const event of result.chunk)
     if (event.content["m.relates_to"]?.rel_type === "m.replace")
-      await projectMatrixActivity(serverName, {
-        ...event,
-        room_id: room.roomId,
-      });
+      await activityTransaction(deadlineMs, () =>
+        projectMatrixActivity(serverName, {
+          ...event,
+          room_id: room.roomId,
+        })
+      );
   if (!messages.length && result.end && result.end === room.cursor)
     throw new MatrixError({ reason: "conflict" });
   const complete = messages.length > 0 || !result.end;
@@ -92,11 +147,12 @@ async function reconcileRoomActivity(
       result.chunk.some(
         (event) => event.content["m.relates_to"]?.rel_type === "m.replace"
       ));
-  if (uncertainEdits)
-    await query(
-      sql`UPDATE matrix_room_activity SET latest_edited = true WHERE server_name = ${serverName} AND room_id = ${room.roomId}`
-    );
-  await query(sql`UPDATE matrix_room_activity SET reconcile_cursor = ${complete ? null : (result.end ?? null)},
-    reconciled_at = ${complete ? new Date() : null}
-    WHERE server_name = ${serverName} AND room_id = ${room.roomId}`);
+  await activityTransaction(deadlineMs, async () => {
+    if (uncertainEdits)
+      await query(sql`UPDATE matrix_room_activity SET latest_edited = true
+        WHERE server_name = ${serverName} AND room_id = ${room.roomId}`);
+    await query(sql`UPDATE matrix_room_activity SET reconcile_cursor = ${complete ? null : (result.end ?? null)},
+      reconciled_at = ${complete ? new Date() : null}
+      WHERE server_name = ${serverName} AND room_id = ${room.roomId}`);
+  });
 }
