@@ -25,7 +25,6 @@ const columns = z
 const cell = z.union([
   z.string().max(4096),
   SemanticNumberSchema,
-  SemanticColumnSchema,
   z.boolean(),
   z.null(),
 ]);
