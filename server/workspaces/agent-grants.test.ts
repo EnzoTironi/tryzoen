@@ -62,6 +62,7 @@ const rawQuery = async (statement: SQL) => {
 };
 beforeAll(async () => {
   await database.exec(`
+    CREATE TABLE organizations(id text PRIMARY KEY);
     CREATE TABLE workspaces(id text PRIMARY KEY, organization_id text);
     CREATE TABLE workspace_memberships(workspace_id text,user_id text,role text,PRIMARY KEY(workspace_id,user_id));
     CREATE TABLE organization_memberships(organization_id text,user_id text,PRIMARY KEY(organization_id,user_id));
@@ -93,8 +94,9 @@ beforeAll(async () => {
 }, 20000);
 beforeEach(async () => {
   await database.exec(`TRUNCATE workspace_agent_grants, workspace_agent_members, agent_protocol_tasks, agent_protocol_cancellations, matrix_agent_conversations,
-    matrix_room_retirements, workspace_group_bindings, matrix_room_members, workspace_memberships, organization_memberships, public.session, user_directory, workspace_bots;
-    INSERT INTO workspaces VALUES ('workspace','org'),('other','other-org') ON CONFLICT DO NOTHING;
+    matrix_room_retirements, workspace_group_bindings, matrix_room_members, workspace_memberships, organization_memberships, public.session, user_directory, workspace_bots, workspaces, organizations;
+    INSERT INTO organizations VALUES ('org'),('other-org');
+    INSERT INTO workspaces VALUES ('workspace','org'),('other','other-org');
     INSERT INTO workspace_memberships VALUES ('workspace','better-auth:manager','admin'),('workspace','better-auth:human','member'),('other','better-auth:manager','admin');
     INSERT INTO organization_memberships VALUES ('org','better-auth:manager'),('org','better-auth:human'),('other-org','better-auth:manager');
     INSERT INTO public.session VALUES ('manager-session','manager',now()+interval '1 hour');
@@ -390,14 +392,15 @@ it("rolls back member/grant/task fences together if room retirement cannot be re
   const caller = await member();
   const key = await grant(caller.id);
   const running = await task(key.id);
+  const failure = new SqlError(new Error("Injected write failure"));
   mocks.query.mockImplementation(async (statement) => {
     if (dialect.sqlToQuery(statement).sql.includes("WITH retired"))
-      throw new SqlError(new Error("Injected write failure"));
+      throw failure;
     return rawQuery(statement);
   });
-  await expect(
-    revokeExternalAgentMember(actor, caller.id)
-  ).rejects.toBeInstanceOf(SqlError);
+  await expect(revokeExternalAgentMember(actor, caller.id)).rejects.toBe(
+    failure
+  );
   mocks.query.mockImplementation(rawQuery);
   await authenticate(key.token);
   expect(
