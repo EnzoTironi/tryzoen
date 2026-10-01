@@ -687,3 +687,13 @@ it does not measure application throughput or maximum restore contention. Privat
 completed erasure safety after a database rewind; installation recovery must retain
 the allocator, ownership and the non-restored erasure journal. Full K3 still requires
 active-consumer/recall/creator cutover and recovery/erasure qualification.
+
+The private repository now checks the exact namespace's pending erasure before
+read, recall, change, history or index rebuild, including claims without citations.
+The namespace lock fences ordinary deletion; the receipt presence read adds no
+worker lock or due-time filter. Backup/restore retain their explicit checks. This
+withholds a recovered namespace while its erasure marker remains; it does not
+establish safety after that marker is acknowledged or after completed erasure and
+a database rewind. The erasure worker currently clears namespace files and the
+receipt, not a restored private Git bundle. Coordinated recovery must preserve the
+non-restored deletion journal before the active-consumer cutover can be qualified.

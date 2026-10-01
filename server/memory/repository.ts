@@ -152,13 +152,21 @@ async function privateScope(
   )
     throw new WorkspaceAccessDenied();
   await requireWorkspaceAccess(actor);
+  const namespace = await memoryNamespace(actor, scopeKey);
+  // Coordinated recovery may restore a namespace beside its pending erasure.
+  // Withhold all private Git access, including claims without session citations.
+  // This presence read must not wait on the erasure worker's receipt-row lock.
+  const erasure =
+    await query(sql`SELECT namespace_id FROM workspace_memory_erasure
+    WHERE namespace_id = ${namespace.id}`);
+  if (erasure.length) throw new PrivateMemoryError("conflict");
   return {
     actor,
     scope: LearnedClaimScopeSchema.parse({
       workspaceId: actor.workspaceId,
       userId: actor.userId,
     }),
-    namespace: await memoryNamespace(actor, scopeKey),
+    namespace,
   };
 }
 

@@ -188,6 +188,137 @@ beforeEach(() => {
   });
 });
 
+for (const principal of [
+  actor,
+  { ...actor, workspaceId: "private-backup-personal" },
+]) {
+  test(`unsourced ${principal.workspaceId} claims remain readable only when their exact namespace has no pending erasure`, async () => {
+    const privateScope = {
+      workspaceId: principal.workspaceId,
+      userId: principal.userId,
+    };
+    const publication = await publishPrivateMemoryGit({
+      scope: privateScope,
+      head: null,
+      bundle: null,
+      change: {
+        action: "assert",
+        operationId: randomUUID(),
+        claimId: randomUUID(),
+        expectedRevision: null,
+        body: {
+          text: "Private unsourced preference",
+          sources: [],
+          relations: [],
+          validTime: null,
+        },
+      },
+      publication: async () => ({
+        authorUserId: principal.userId,
+        recordedAt: "2026-10-01T03:00:00.000001Z",
+      }),
+    });
+    if (!publication.applied) throw new Error("Expected private publication");
+    let pendingNamespace = "8a55b657-573e-4d5b-af0d-fca0d96d208d";
+    owners.query.mockImplementation(async (statement) => {
+      const compiled = new PgDialect().sqlToQuery(statement);
+      if (compiled.sql.includes("FROM workspace_memory_erasure"))
+        return pendingNamespace === compiled.params[0]
+          ? [{ namespace_id: pendingNamespace }]
+          : [];
+      if (!compiled.sql.includes("FROM private_memory_repository"))
+        throw new Error("Unexpected private memory query");
+      return [
+        { head: publication.receipt.revision, bundle: publication.bundle },
+      ];
+    });
+    const value = await PrivateMemoryRepository.read(principal);
+    expect(owners.query).toHaveBeenCalledTimes(2);
+    const [presence] = owners.query.mock.calls.map(([statement]) =>
+      new PgDialect().sqlToQuery(statement)
+    );
+    expect(presence?.sql).toMatch(/WHERE namespace_id = \$1/u);
+    expect(presence?.params).toEqual(["3a3df84d-d3d8-4189-99ea-f2d49807067e"]);
+    expect(value.snapshot.claims[0]?.file.state).toMatchObject({
+      kind: "active",
+      body: { text: "Private unsourced preference", sources: [] },
+    });
+    expect(owners.selection).not.toHaveBeenCalled();
+    expect(owners.session).not.toHaveBeenCalled();
+    owners.query.mockClear();
+    pendingNamespace = "3a3df84d-d3d8-4189-99ea-f2d49807067e";
+    await expect(PrivateMemoryRepository.read(principal)).rejects.toMatchObject(
+      {
+        reason: "conflict",
+      }
+    );
+    expect(owners.query).toHaveBeenCalledTimes(1);
+  });
+
+  for (const operation of [
+    {
+      name: "read",
+      run: () => PrivateMemoryRepository.read(principal),
+    },
+    {
+      name: "recall",
+      run: () =>
+        PrivateMemoryRepository.recall(
+          principal,
+          "synthetic-private-scope",
+          randomUUID(),
+          "Original claim"
+        ),
+    },
+    {
+      name: "change",
+      run: () =>
+        PrivateMemoryRepository.change(principal, {
+          action: "clear",
+          operationId: randomUUID(),
+          expectedRevision: retained.head,
+        }),
+    },
+    {
+      name: "history",
+      run: () => PrivateMemoryRepository.history(principal, randomUUID()),
+    },
+    {
+      name: "rebuild",
+      run: () => PrivateMemoryRepository.rebuildOperations(principal),
+    },
+  ]) {
+    test(`${operation.name} withholds a restored ${principal.workspaceId} namespace with pending erasure before Git or source work`, async () => {
+      owners.query.mockImplementation(async (statement) => {
+        const compiled = new PgDialect().sqlToQuery(statement);
+        expect(compiled.sql).toContain("FROM workspace_memory_erasure");
+        expect(compiled.sql).not.toMatch(
+          /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
+        );
+        expect(compiled.params).toEqual([
+          "3a3df84d-d3d8-4189-99ea-f2d49807067e",
+        ]);
+        return [{ namespace_id: compiled.params[0] }];
+      });
+      await expect(operation.run()).rejects.toMatchObject({
+        reason: "conflict",
+      });
+      expect(owners.namespace).toHaveBeenCalledExactlyOnceWith(
+        principal,
+        operation.name === "recall" ? "synthetic-private-scope" : undefined
+      );
+      expect(owners.query).toHaveBeenCalledTimes(1);
+      expect(owners.namespace.mock.invocationCallOrder[0]).toBeLessThan(
+        owners.query.mock.invocationCallOrder[0] ?? -1
+      );
+      expect(owners.selection).not.toHaveBeenCalled();
+      expect(owners.session).not.toHaveBeenCalled();
+      expect(owners.backup).not.toHaveBeenCalled();
+      expect(owners.restore).not.toHaveBeenCalled();
+    });
+  }
+}
+
 test("cleared private backup reauthorizes original file and session evidence from its real Git lineage", async () => {
   const archive = await PrivateMemoryRepository.backup(actor);
   expect(archive).toMatchObject({
@@ -207,7 +338,7 @@ test("cleared private backup reauthorizes original file and session evidence fro
     { revision: fileSource.revision }
   );
   expect(owners.access).toHaveBeenCalledTimes(2);
-  expect(owners.query).toHaveBeenCalledTimes(2);
+  expect(owners.query).toHaveBeenCalledTimes(3);
 });
 
 test("clearing or correcting a claim cannot export an older citation whose file permission was revoked", async () => {
@@ -220,7 +351,7 @@ test("clearing or correcting a claim cannot export an older citation whose file 
     [fileSource.path],
     { revision: fileSource.revision }
   );
-  expect(owners.query).toHaveBeenCalledTimes(2);
+  expect(owners.query).toHaveBeenCalledTimes(3);
 });
 
 test("backup refuses unverifiable retained session evidence even after clear", async () => {
@@ -294,7 +425,7 @@ test("same-head signed restore preserves its no-op receipt after complete lineag
     [fileSource.path],
     { revision: fileSource.revision }
   );
-  expect(owners.query).toHaveBeenCalledTimes(2);
+  expect(owners.query).toHaveBeenCalledTimes(3);
   expect(owners.transaction).toHaveBeenCalledWith(expect.any(Function), {
     outermost: true,
   });
