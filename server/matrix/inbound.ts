@@ -93,7 +93,7 @@ export const acceptMatrixTransaction = async function (
       }>(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId"
         FROM workspace_group_bindings
         WHERE channel = 'matrix' AND installation_id = ${config.serverName}
-          AND conversation_id = ANY(${rooms}::text[]) AND revoked_at IS NULL
+          AND conversation_id = ANY(${sql.param(rooms)}::text[]) AND revoked_at IS NULL
         ORDER BY id`);
       const network = await query<{
         id: string;
@@ -107,7 +107,7 @@ export const acceptMatrixTransaction = async function (
         FROM matrix_agent_conversations c
         JOIN workspace_agent_grants g ON g.id = c.grant_id
         JOIN workspace_bots b ON b.id = g.bot_id
-        WHERE c.server_name = ${config.serverName} AND c.room_id = ANY(${rooms}::text[])
+        WHERE c.server_name = ${config.serverName} AND c.room_id = ANY(${sql.param(rooms)}::text[])
           AND c.closed_at IS NULL ORDER BY c.id`);
       return {
         groups: groups.toSorted((left, right) =>

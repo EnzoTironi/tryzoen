@@ -456,3 +456,114 @@ it.each(["group", "network"] as const)(
     expect(admissionTrace).not.toContain("server:test");
   }
 );
+
+/** Compiles actual owner statements with Drizzle's PostgreSQL dialect.
+ * The SQL boundary is mocked; this does not execute PostgreSQL. */
+it.each([
+  {
+    label: "singleton special-character room repeated",
+    groupRooms: ['!z,{"quoted"}\\path:test'],
+    networkRooms: [],
+    rooms: [
+      '!z,{"quoted"}\\path:test',
+      '!z,{"quoted"}\\path:test',
+      '!z,{"quoted"}\\path:test',
+    ],
+  },
+  {
+    label: "multiple special-character group and network rooms",
+    groupRooms: ['!z,{"quoted"}\\path:test', "!a,brace{room}\\tail:test"],
+    networkRooms: ['!network,"comma,brace{}"\\path:test'],
+    rooms: [
+      '!network,"comma,brace{}"\\path:test',
+      '!z,{"quoted"}\\path:test',
+      '!network,"comma,brace{}"\\path:test',
+      "!a,brace{room}\\tail:test",
+      '!z,{"quoted"}\\path:test',
+    ],
+  },
+])(
+  "binds one sorted native room array in all initial and revalidation locators for $label",
+  async ({ groupRooms, networkRooms, rooms }) => {
+    groupBindings = groupRooms.map((roomId, index) => ({
+      ...defaultBinding,
+      id: `binding-${index}`,
+      workspaceId: `workspace-${index}`,
+      organizationId: `organization-${index}`,
+      roomId,
+    }));
+    networkBindings = networkRooms.map((roomId, index) => ({
+      ...networkBinding,
+      id: `network-${index}`,
+      roomId,
+    }));
+    mocks.network.mockResolvedValue(true);
+    const events = rooms.map((roomId, index) =>
+      MatrixEventSchema.parse({
+        ...base,
+        event_id: `$compiled-${index}`,
+        room_id: roomId,
+      })
+    );
+    expect(
+      await acceptMatrixTransaction(request(events), "compiled-room-array")
+    ).toEqual(events.map((event) => event.event_id));
+
+    const compiledLocators = mocks.query.mock.calls
+      .map(([statement]) => dialect.sqlToQuery(statement))
+      .filter((statement) => statement.sql.includes(" = ANY("));
+    expect(compiledLocators).toHaveLength(4);
+    expect(
+      compiledLocators.map((statement) =>
+        statement.sql.includes("matrix_agent_conversations")
+          ? "network"
+          : "group"
+      )
+    ).toEqual(["group", "network", "group", "network"]);
+    const expectedRooms = [...new Set(rooms)].toSorted();
+    for (const statement of compiledLocators) {
+      expect(statement.sql).toContain("ANY($2::text[])");
+      expect(statement.params).toEqual(["test", expectedRooms]);
+      expect(Array.isArray(statement.params[1])).toBe(true);
+      for (const room of expectedRooms) {
+        expect(statement.sql).not.toContain(room);
+      }
+    }
+    expect(groupLocatorReads).toBe(2);
+    expect(networkLocatorReads).toBe(2);
+
+    const organizations = [
+      ...new Set([
+        ...groupBindings.map((binding) => binding.organizationId),
+        ...networkBindings.flatMap((binding) => [
+          binding.sourceOrganizationId,
+          binding.destOrganizationId,
+        ]),
+      ]),
+    ]
+      .filter((id) => id !== null)
+      .toSorted();
+    const fences = [
+      ...organizations.map((id) => `organization:${id}`),
+      ...groupBindings
+        .map((binding) => binding.id)
+        .toSorted()
+        .map((id) => `room:${id}`),
+      "server:test",
+    ];
+    expect(admissionTrace.slice(0, fences.length)).toEqual(fences);
+    expect(mocks.project.mock.calls.map(([, event]) => event.event_id)).toEqual(
+      events.map((event) => event.event_id)
+    );
+    expect(deliveries.map(([eventId]) => eventId)).toEqual(
+      events
+        .filter((event) => groupRooms.includes(event.room_id ?? ""))
+        .map((event) => event.event_id)
+    );
+    expect(mocks.network.mock.calls.map(([event]) => event.event_id)).toEqual(
+      events
+        .filter((event) => networkRooms.includes(event.room_id ?? ""))
+        .map((event) => event.event_id)
+    );
+  }
+);
