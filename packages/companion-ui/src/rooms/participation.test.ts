@@ -21,6 +21,15 @@ const state = vi.hoisted(() => ({
       }
     | undefined
   )[],
+  layouts: [] as (
+    | {
+        dependencies?: readonly unknown[];
+        pending?: () => void | (() => void);
+        cleanup?: () => void;
+      }
+    | undefined
+  )[],
+  layoutIndex: 0,
   valueIndex: 0,
   refIndex: 0,
   callbackIndex: 0,
@@ -30,6 +39,34 @@ const state = vi.hoisted(() => ({
 
 function isUpdater(value: unknown): value is (previous: unknown) => unknown {
   return typeof value === "function";
+}
+
+function queueEffect(
+  queue: typeof state.effects,
+  index: number,
+  effect: () => void | (() => void),
+  dependencies?: readonly unknown[]
+) {
+  const previous = queue[index];
+  if (
+    !previous ||
+    previous.pending ||
+    !dependencies ||
+    dependencies.some(
+      (item, offset) => !Object.is(item, previous.dependencies?.[offset])
+    )
+  )
+    queue[index] = { ...previous, dependencies, pending: effect };
+}
+function commitEffects(queue: typeof state.effects) {
+  for (const effect of queue) {
+    if (!effect?.pending) continue;
+    effect.cleanup?.();
+    const run = effect.pending;
+    effect.pending = undefined;
+    const cleanup = run();
+    effect.cleanup = typeof cleanup === "function" ? cleanup : undefined;
+  }
 }
 
 vi.mock("react", () => ({
@@ -64,21 +101,17 @@ vi.mock("react", () => ({
       state.callbacks[index] = { value, dependencies };
     return state.callbacks[index]?.value;
   },
+  useLayoutEffect: (
+    effect: () => void | (() => void),
+    dependencies?: readonly unknown[]
+  ) => {
+    queueEffect(state.layouts, state.layoutIndex++, effect, dependencies);
+  },
   useEffect: (
     effect: () => void | (() => void),
     dependencies?: readonly unknown[]
   ) => {
-    const index = state.effectIndex++;
-    const previous = state.effects[index];
-    if (
-      !previous ||
-      !dependencies ||
-      dependencies.some(
-        (item, offset) => !Object.is(item, previous.dependencies?.[offset])
-      )
-    ) {
-      state.effects[index] = { ...previous, dependencies, pending: effect };
-    }
+    queueEffect(state.effects, state.effectIndex++, effect, dependencies);
   },
 }));
 vi.mock("react-native", () => ({
@@ -134,7 +167,7 @@ function ParticipationHarness() {
 function hasUpdates(): boolean {
   return state.dirty;
 }
-function render(next = inputs) {
+function render(next = inputs, runPassive = true) {
   inputs = next;
   let renders = 0;
   do {
@@ -143,16 +176,14 @@ function render(next = inputs) {
     state.refIndex = 0;
     state.callbackIndex = 0;
     state.effectIndex = 0;
+    state.layoutIndex = 0;
     current = ParticipationHarness();
-    for (const effect of state.effects) {
-      if (!effect?.pending) continue;
-      effect.cleanup?.();
-      const run = effect.pending;
-      effect.pending = undefined;
-      const cleanup = run();
-      effect.cleanup = typeof cleanup === "function" ? cleanup : undefined;
-    }
     if (++renders > 20) throw new Error("Hook did not settle after rendering.");
+    // Render-phase state updates settle before committing an observation owner.
+    if (hasUpdates()) continue;
+    commitEffects(state.layouts);
+    if (hasUpdates()) continue;
+    if (runPassive) commitEffects(state.effects);
   } while (hasUpdates());
   return current;
 }
@@ -180,7 +211,9 @@ function deferred() {
   return { promise, resolve };
 }
 function dispose() {
+  for (const effect of state.layouts) effect?.cleanup?.();
   for (const effect of state.effects) effect?.cleanup?.();
+  state.layouts = [];
   state.effects = [];
 }
 
@@ -193,6 +226,7 @@ beforeEach(() => {
   state.values = [];
   state.refs = [];
   state.callbacks = [];
+  state.layouts = [];
   state.effects = [];
   state.dirty = false;
   inputs = [data, "account:workspace", "room", true];
@@ -500,3 +534,401 @@ test("replacing the data adapter requires its own confirmation and revokes old a
   expect(render().ready).toBe(true);
   expect(replacement.participate).toHaveBeenCalledTimes(1);
 });
+
+const stopReasons = [
+  "cancelled",
+  "error",
+  "FORBIDDEN",
+  "UNAUTHORIZED",
+] as const;
+function stoppedStatus(reason: (typeof stopReasons)[number]) {
+  return reason === "FORBIDDEN" || reason === "UNAUTHORIZED"
+    ? "denied"
+    : reason;
+}
+async function stopRoom(reason: (typeof stopReasons)[number]) {
+  if (reason === "error")
+    data.participate.mockRejectedValueOnce(new Error("Transport unavailable"));
+  else if (reason !== "cancelled")
+    data.participate.mockRejectedValueOnce({ data: { code: reason } });
+  render();
+  await settle();
+  if (reason === "cancelled") {
+    current.cancel();
+    render();
+  }
+  return current;
+}
+
+test.each(stopReasons)(
+  "%s remains stopped through repeated hide/show cycles until an explicit retry",
+  async (reason) => {
+    const stopped = await stopRoom(reason);
+    expect(stopped.status).toBe(stoppedStatus(reason));
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      render([data, "account:workspace", "room", false]);
+      expect(current.status).toBe(stoppedStatus(reason));
+      expect(current.ready).toBe(false);
+      expect(current.requireJoined).toThrow(/not confirmed/u);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(data.participate).toHaveBeenCalledTimes(1);
+      render([data, "account:workspace", "room", true]);
+      await settle();
+      expect(current.status).toBe(stoppedStatus(reason));
+      expect(current.requireJoined).toThrow(/not confirmed/u);
+      expect(data.participate).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  }
+);
+
+test.each(stopReasons)(
+  "transport replacement in the same account and room preserves %s",
+  async (reason) => {
+    const old = await stopRoom(reason);
+    const replacement = {
+      participate: vi.fn<RoomData["participate"]>().mockImplementation(
+        () =>
+          new Promise(() => {
+            // No replacement request should start while the exact room remains stopped.
+          })
+      ),
+    };
+    render([replacement, "account:workspace", "room", true]);
+    expect(current.status).toBe(stoppedStatus(reason));
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    old.cancel();
+    old.retry();
+    render();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(replacement.participate).not.toHaveBeenCalled();
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    expect(current.status).toBe(stoppedStatus(reason));
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      render([replacement, "account:workspace", "room", false]);
+      expect(current.status).toBe(stoppedStatus(reason));
+      render([replacement, "account:workspace", "room", true]);
+      await settle();
+      expect(replacement.participate).not.toHaveBeenCalled();
+      expect(current.status).toBe(stoppedStatus(reason));
+    }
+  }
+);
+
+test.each(
+  stopReasons.flatMap((reason) =>
+    (["account", "room"] as const).map((changed) => ({ reason, changed }))
+  )
+)(
+  "$reason does not transfer to a different $changed and old actions cannot disturb its confirmation",
+  async ({ reason, changed }) => {
+    const old = await stopRoom(reason);
+    const next = deferred();
+    data.participate.mockReturnValueOnce(next.promise);
+    const scope =
+      changed === "account" ? "another-account:workspace" : "account:workspace";
+    const id = changed === "room" ? "another-room" : "room";
+    render([data, scope, id, true]);
+    expect(current.status).toBe("pending");
+    expect(current.ready).toBe(false);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    expect(data.participate).toHaveBeenLastCalledWith(
+      { id },
+      expect.any(AbortSignal)
+    );
+    const signal = data.participate.mock.calls[1]?.[1];
+    old.cancel();
+    old.retry();
+    render();
+    expect(signal?.aborted).toBe(false);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    next.resolve(joined(id));
+    expect((await settle()).ready).toBe(true);
+    expect(current.requireJoined).not.toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    old.cancel();
+    old.retry();
+    expect(render().ready).toBe(true);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+  }
+);
+
+test.each(
+  (["cancelled", "FORBIDDEN"] as const).flatMap((reason) =>
+    (["account", "room"] as const).map((changed) => ({ reason, changed }))
+  )
+)(
+  "late completion and actions from an unrelated $changed cannot clear current $reason",
+  async ({ reason, changed }) => {
+    const first = deferred();
+    data.participate.mockReturnValueOnce(first.promise);
+    const old = render();
+    if (reason === "FORBIDDEN")
+      data.participate.mockRejectedValueOnce({ data: { code: "FORBIDDEN" } });
+    const scope =
+      changed === "account" ? "another-account:workspace" : "account:workspace";
+    const id = changed === "room" ? "another-room" : "room";
+    render([data, scope, id, true]);
+    await settle();
+    if (reason === "cancelled") {
+      current.cancel();
+      render();
+    }
+    expect(current.status).toBe(stoppedStatus(reason));
+    expect(data.participate.mock.calls[0]?.[1]?.aborted).toBe(true);
+    first.resolve(joined());
+    old.cancel();
+    old.retry();
+    await settle();
+    expect(current.status).toBe(stoppedStatus(reason));
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);
+
+test.each(stopReasons)(
+  "explicit retry after %s while hidden waits until the room is enabled",
+  async (reason) => {
+    await stopRoom(reason);
+    const next = deferred();
+    data.participate.mockReturnValueOnce(next.promise);
+    render([data, "account:workspace", "room", false]);
+    current.retry();
+    render();
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    render([data, "account:workspace", "room", false]);
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    render([data, "account:workspace", "room", true]);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    expect(current.ready).toBe(false);
+    next.resolve(joined());
+    expect((await settle()).ready).toBe(true);
+    expect(current.requireJoined).not.toThrow(/not confirmed/u);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+  }
+);
+
+test("each unresolved hide/show lifetime aborts its own request and only the latest exact confirmation can join", async () => {
+  const requests = [deferred(), deferred(), deferred(), deferred()];
+  for (const request of requests)
+    data.participate.mockReturnValueOnce(request.promise);
+  render();
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const signal = data.participate.mock.calls[cycle]?.[1];
+    render([data, "account:workspace", "room", false]);
+    expect(signal?.aborted).toBe(true);
+    requests[cycle]?.resolve(joined());
+    await settle();
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(data.participate).toHaveBeenCalledTimes(cycle + 1);
+    render([data, "account:workspace", "room", true]);
+    expect(current.ready).toBe(false);
+    expect(data.participate).toHaveBeenCalledTimes(cycle + 2);
+  }
+  requests[3]?.resolve(joined());
+  expect((await settle()).ready).toBe(true);
+  expect(current.requireJoined).not.toThrow(/not confirmed/u);
+  expect(data.participate).toHaveBeenCalledTimes(4);
+});
+
+test.each(stopReasons)(
+  "actions from an aborted visibility lifetime cannot retry the current %s decision",
+  async (reason) => {
+    const first = deferred();
+    data.participate.mockReturnValueOnce(first.promise);
+    const old = render();
+    render([data, "account:workspace", "room", false]);
+    expect(data.participate.mock.calls[0]?.[1]?.aborted).toBe(true);
+    if (reason === "error")
+      data.participate.mockRejectedValueOnce(
+        new Error("Transport unavailable")
+      );
+    else if (reason !== "cancelled")
+      data.participate.mockRejectedValueOnce({ data: { code: reason } });
+    render([data, "account:workspace", "room", true]);
+    await settle();
+    if (reason === "cancelled") {
+      current.cancel();
+      render();
+    }
+    expect(current.status).toBe(stoppedStatus(reason));
+    old.retry();
+    old.cancel();
+    render();
+    first.resolve(joined());
+    await settle();
+    expect(current.status).toBe(stoppedStatus(reason));
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);
+
+test.each(["account", "room"] as const)(
+  "returning to an earlier $0 cannot revive actions from its previous lifetime",
+  async (changed) => {
+    data.participate.mockResolvedValueOnce(joined());
+    render();
+    const oldA = await settle();
+    expect(oldA.ready).toBe(true);
+    const scope =
+      changed === "account" ? "another-account:workspace" : "account:workspace";
+    const id = changed === "room" ? "another-room" : "room";
+    data.participate.mockResolvedValueOnce(joined(id));
+    render([data, scope, id, true]);
+    const oldB = await settle();
+    expect(oldB.ready).toBe(true);
+    const next = deferred();
+    data.participate.mockReturnValueOnce(next.promise);
+    render([data, "account:workspace", "room", true]);
+    const signal = data.participate.mock.calls[2]?.[1];
+    expect(current.ready).toBe(false);
+    oldA.cancel();
+    oldA.retry();
+    oldB.cancel();
+    oldB.retry();
+    render();
+    expect(signal?.aborted).toBe(false);
+    expect(data.participate).toHaveBeenCalledTimes(3);
+    next.resolve(joined());
+    expect((await settle()).ready).toBe(true);
+    expect(current.requireJoined).not.toThrow(/not confirmed/u);
+    expect(oldA.requireJoined).toThrow(/not confirmed/u);
+    expect(oldB.requireJoined).toThrow(/not confirmed/u);
+    oldA.cancel();
+    oldA.retry();
+    expect(render().ready).toBe(true);
+    expect(data.participate).toHaveBeenCalledTimes(3);
+  }
+);
+
+test("current Cancel after layout commit blocks a deferred passive network effect until explicit Retry", async () => {
+  const committed = render(inputs, false);
+  expect(data.participate).not.toHaveBeenCalled();
+  committed.cancel();
+  render(inputs, false);
+  expect(current.status).toBe("cancelled");
+  expect(current.ready).toBe(false);
+  expect(current.requireJoined).toThrow(/not confirmed/u);
+  render(inputs, true);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(data.participate).not.toHaveBeenCalled();
+  expect(render().status).toBe("cancelled");
+  expect(vi.getTimerCount()).toBe(0);
+  data.participate.mockResolvedValueOnce(joined());
+  current.retry();
+  render();
+  expect((await settle()).ready).toBe(true);
+  expect(data.participate).toHaveBeenCalledTimes(1);
+});
+
+const staleListenerSchedules = (["app", "online"] as const).flatMap((kind) =>
+  (["adapter", "enabled"] as const).flatMap((changed) =>
+    (["beforeCleanup", "afterUnsubscribe"] as const).map((phase) => ({
+      kind,
+      changed,
+      phase,
+    }))
+  )
+);
+
+test.each(staleListenerSchedules)(
+  "old $kind listener after $changed replacement $phase cannot erase a newer layout Cancel",
+  async ({ kind, changed, phase }) => {
+    const first = deferred();
+    data.participate.mockReturnValueOnce(first.promise);
+    const old = render();
+    expect(state.listeners.size).toBe(1);
+    expect(state.network.size).toBe(1);
+    const [oldApp] = state.listeners;
+    const [oldOnline] = state.network;
+    const replacement = {
+      participate: vi.fn<RoomData["participate"]>().mockImplementation(
+        () =>
+          new Promise(() => {
+            // The new adapter must not observe a request after its current Cancel.
+          })
+      ),
+    };
+    const nextInputs: Parameters<typeof useRoomParticipation> = [
+      changed === "adapter" ? replacement : data,
+      "account:workspace",
+      "room",
+      changed === "adapter",
+    ];
+    render(nextInputs, false);
+    current.cancel();
+    render(nextInputs, false);
+    expect(current.status).toBe("cancelled");
+    expect(data.participate.mock.calls[0]?.[1]?.aborted).toBe(true);
+    if (phase === "afterUnsubscribe") render(nextInputs, true);
+    const subscribed = phase !== "afterUnsubscribe";
+    expect(state.listeners.has(oldApp)).toBe(subscribed);
+    expect(state.network.has(oldOnline)).toBe(subscribed);
+    // Invoke the retained callback itself, including a callback queued before unsubscribe.
+    if (kind === "app") oldApp("active");
+    else oldOnline();
+    render(nextInputs, false);
+    expect(current.status).toBe("cancelled");
+    expect(current.ready).toBe(false);
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    expect(replacement.participate).not.toHaveBeenCalled();
+    first.resolve(joined());
+    await settle();
+    if (changed === "enabled")
+      render([data, "account:workspace", "room", true]);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(render().status).toBe("cancelled");
+    expect(current.requireJoined).toThrow(/not confirmed/u);
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    expect(replacement.participate).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);
+
+test.each(stopReasons)(
+  "explicit Retry after %s immediately revokes retained controls before the next render",
+  async (reason) => {
+    const old = await stopRoom(reason);
+    const next = deferred();
+    data.participate.mockReturnValueOnce(next.promise);
+    old.retry();
+    // React has not committed the replacement observation yet; these controls already expired.
+    old.retry();
+    old.cancel();
+    expect(data.participate).toHaveBeenCalledTimes(1);
+    render();
+    expect(current.status).toBe("pending");
+    expect(current.ready).toBe(false);
+    expect(data.participate).toHaveBeenCalledTimes(2);
+    const signal = data.participate.mock.calls[1]?.[1];
+    old.cancel();
+    old.retry();
+    expect(signal?.aborted).toBe(false);
+    next.resolve(joined());
+    expect((await settle()).ready).toBe(true);
+    expect(current.requireJoined).not.toThrow(/not confirmed/u);
+    expect(old.requireJoined).toThrow(/not confirmed/u);
+    current.cancel();
+    expect(render().status).toBe("cancelled");
+    data.participate.mockResolvedValueOnce(joined());
+    current.retry();
+    render();
+    expect((await settle()).ready).toBe(true);
+    expect(data.participate).toHaveBeenCalledTimes(3);
+  }
+);

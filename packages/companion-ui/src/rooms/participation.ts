@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { AppState } from "react-native";
 import { onlineManager } from "@tanstack/react-query";
 import { z } from "zod";
@@ -15,49 +21,86 @@ export function useRoomParticipation(
   roomId: string,
   enabled: boolean
 ) {
-  const [attempt, setAttempt] = useState(0);
+  const [observation, setObservation] = useState({
+    data,
+    enabled,
+    visit: { cacheScope, roomId },
+  });
+  let currentObservation = observation;
+  const sameVisit =
+    observation.visit.cacheScope === cacheScope &&
+    observation.visit.roomId === roomId;
+  if (
+    !sameVisit ||
+    observation.data !== data ||
+    observation.enabled !== enabled
+  ) {
+    currentObservation = {
+      data,
+      enabled,
+      visit: sameVisit ? observation.visit : { cacheScope, roomId },
+    };
+    setObservation(currentObservation);
+  }
   const [revision, setRevision] = useState(0);
-  const scope = JSON.stringify([cacheScope, roomId, enabled, attempt]);
   const lifetime = useRef<{
-    data: typeof data;
-    scope: string;
+    observation: typeof observation;
+    active: boolean;
     joined: boolean;
-    cancel?: () => void;
+    stopped?: "cancelled" | "denied" | "error";
+    abort?: () => void;
   }>(undefined);
   const [snapshot, setSnapshot] = useState<{
-    data: typeof data;
-    scope: string;
+    observation: typeof observation;
     result?: Awaited<ReturnType<RoomData["participate"]>>;
-    failed?: boolean;
-    denied?: boolean;
-    cancelled?: boolean;
+    stopped?: NonNullable<typeof lifetime.current>["stopped"];
   }>();
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const previous = lifetime.current;
     const owner: NonNullable<typeof lifetime.current> = {
-      data,
-      scope,
+      observation: currentObservation,
+      active: true,
       joined: false,
+      stopped:
+        previous?.observation.visit === currentObservation.visit
+          ? previous.stopped
+          : undefined,
     };
+    // Publish controls before passive work, so an early Cancel also stops startup.
     lifetime.current = owner;
+    return () => {
+      owner.active = false;
+      owner.joined = false;
+      owner.abort?.();
+    };
+  }, [currentObservation]);
+  useEffect(() => {
+    const owner = lifetime.current;
+    if (!owner || owner.observation !== currentObservation) return undefined;
+    const {
+      data: currentData,
+      enabled: currentEnabled,
+      visit,
+    } = currentObservation;
     let foreground = AppState.currentState === "active";
     let disposed = false;
-    let cancelled = false;
-    let terminal = false;
     let request: AbortController | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const allowed = () =>
-      enabled &&
+      currentEnabled &&
       foreground &&
       onlineManager.isOnline() &&
+      owner.active &&
+      lifetime.current === owner &&
       !disposed &&
-      !cancelled &&
-      !terminal;
+      !owner.stopped;
     const stop = () => {
       owner.joined = false;
       clearTimeout(timer);
       request?.abort();
       request = undefined;
     };
+    owner.abort = stop;
     const confirm = async () => {
       if (!allowed() || request) return;
       const controller = new AbortController();
@@ -65,40 +108,37 @@ export function useRoomParticipation(
       const stopped = () => controller.signal.aborted || !allowed();
       try {
         const result = roomParticipationSchema.parse(
-          await data.participate({ id: roomId }, controller.signal)
+          await currentData.participate({ id: visit.roomId }, controller.signal)
         );
         if (stopped()) return;
         if (
-          (result.status === "joined" ? result.room.id : result.id) !== roomId
+          (result.status === "joined" ? result.room.id : result.id) !==
+          visit.roomId
         )
           throw new Error("Room participation returned a different room.");
         owner.joined = result.status === "joined";
         if (owner.joined) setRevision((value) => value + 1);
-        setSnapshot({ data, scope, result });
+        setSnapshot({ observation: currentObservation, result });
         if (result.status === "pending")
           timer = setTimeout(() => void confirm(), result.retryAfterMs);
       } catch (error) {
         if (stopped()) return;
         owner.joined = false;
-        terminal = true;
+        owner.stopped = deniedSchema.safeParse(error).success
+          ? "denied"
+          : "error";
         setSnapshot({
-          data,
-          scope,
-          failed: true,
-          denied: deniedSchema.safeParse(error).success,
+          observation: currentObservation,
+          stopped: owner.stopped,
         });
       } finally {
         if (request === controller) request = undefined;
       }
     };
-    owner.cancel = () => {
-      cancelled = true;
-      stop();
-      setSnapshot({ data, scope, cancelled: true });
-    };
     const resume = () => {
+      if (disposed || !owner.active || lifetime.current !== owner) return;
       stop();
-      if (terminal || cancelled) return;
+      if (owner.stopped) return;
       setSnapshot(undefined);
       if (allowed()) void confirm();
     };
@@ -111,47 +151,57 @@ export function useRoomParticipation(
     return () => {
       disposed = true;
       stop();
+      if (owner.abort === stop) owner.abort = undefined;
       listener.remove();
       unsubscribe();
     };
-  }, [data, scope, roomId, enabled]);
+  }, [currentObservation]);
   const requireJoined = useCallback(() => {
+    const owner = lifetime.current;
     if (
-      !enabled ||
-      lifetime.current?.scope !== scope ||
-      lifetime.current.data !== data ||
-      !lifetime.current.joined ||
+      !currentObservation.enabled ||
+      owner?.observation !== currentObservation ||
+      !owner.active ||
+      !owner.joined ||
+      owner.stopped ||
       AppState.currentState !== "active" ||
       !onlineManager.isOnline()
     )
       throw new Error("Room participation is not confirmed.");
-  }, [data, scope, enabled]);
+  }, [currentObservation]);
   const current =
-    snapshot?.scope === scope && snapshot.data === data ? snapshot : undefined;
-  const ready = enabled && current?.result?.status === "joined";
-  const status = ready
-    ? "joined"
-    : current?.denied
-      ? "denied"
-      : current?.cancelled
-        ? "cancelled"
-        : current?.failed
-          ? "error"
-          : "pending";
+    snapshot?.observation === currentObservation ? snapshot : undefined;
+  // A stop belongs to this visit, independently of visibility or transport replacement.
+  const stopped =
+    snapshot?.observation.visit === currentObservation.visit
+      ? snapshot.stopped
+      : undefined;
+  const ready =
+    currentObservation.enabled &&
+    !stopped &&
+    current?.result?.status === "joined";
   return {
     ready,
     revision,
-    status,
+    status: ready ? "joined" : (stopped ?? "pending"),
     requireJoined,
     cancel: () => {
-      if (lifetime.current?.scope === scope && lifetime.current.data === data)
-        lifetime.current.cancel?.();
+      const owner = lifetime.current;
+      if (owner?.observation !== currentObservation || !owner.active) return;
+      owner.stopped = "cancelled";
+      owner.abort?.();
+      setSnapshot({ observation: currentObservation, stopped: "cancelled" });
     },
     retry: () => {
-      if (lifetime.current?.scope !== scope || lifetime.current.data !== data)
-        return;
-      lifetime.current.cancel?.();
-      setAttempt((value) => value + 1);
+      const owner = lifetime.current;
+      if (owner?.observation !== currentObservation || !owner.active) return;
+      owner.active = false;
+      owner.abort?.();
+      owner.stopped = undefined;
+      setSnapshot(undefined);
+      setObservation((active) =>
+        active === currentObservation ? { ...active } : active
+      );
     },
   };
 }
