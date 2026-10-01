@@ -11,6 +11,7 @@ export function renderWebCompanionOverlay({
   return (
     <Dialog
       open
+      modal={true}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -29,6 +30,7 @@ export function renderWebCompanionOverlay({
         }
         className="fixed inset-0 flex h-dvh w-full max-w-none! translate-0 rounded-none bg-transparent p-0 ring-0"
         aria-describedby={undefined}
+        aria-modal={true}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         {children}
