@@ -1,3 +1,4 @@
+// Historical SQL-boundary harness. Real journal/corpus acceptance lives in tests/runtime/private-memory-journal.integration.ts.
 import { createHash, randomUUID } from "node:crypto";
 import {
   mkdtemp,
@@ -33,13 +34,18 @@ const owner = vi.hoisted(() => ({
   query: vi.fn<(statement: SQL) => Promise<Record<string, unknown>[]>>(),
   access: vi.fn<() => Promise<boolean>>(),
 }));
-vi.mock("@shared/environment/env", () => ({
-  env: {
-    get ZOEN_SESSION_ARCHIVE_DIR() {
-      return owner.root();
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      get ZOEN_SESSION_ARCHIVE_DIR() {
+        return owner.root();
+      },
     },
-  },
-}));
+  };
+});
 vi.mock("@db/queries", () => ({
   query: owner.query,
   transaction: async <T>(run: () => Promise<T>) => run(),
@@ -119,12 +125,15 @@ beforeEach(async () => {
       return [{ high_water: highWater }];
     if (sql.includes("FROM workspace_memory_erasure")) return erasure;
     if (sql.includes("WHERE capture_sequence =")) return collisions;
-    if (sql.includes("SELECT digest, capture_sequence"))
+    if (
+      sql.includes('SELECT session_id AS "sessionId", digest, capture_sequence')
+    )
       return receipt ? [receipt] : [];
     if (sql.includes("INSERT INTO memory_session_sources")) {
       // A receipt cannot be inserted before the immutable file exists.
       await readFile(target());
       receipt = {
+        sessionId: source.sessionId,
         digest: citation.sha256,
         sequence: "7",
         stored_at: "operational-rebuild-time",
@@ -228,7 +237,7 @@ test("authenticated exact source restoration fsyncs bytes before reconstructing 
   expect(receipt?.stored_at).toBe("operational-rebuild-time");
   expect(
     statements().find((item) => item.sql.includes("INSERT"))?.params
-  ).toEqual([namespace, source.eventId, citation.sha256, 7]);
+  ).toEqual([namespace, source.eventId, source.sessionId, citation.sha256, 7]);
 });
 
 test("exact replay retains immutable bytes and the existing stored receipt", async () => {
@@ -251,7 +260,12 @@ for (const state of [
   "collision",
 ] as const) {
   test(`recovery refuses ${state} before creating any source directory or acknowledging a receipt`, async () => {
-    receipt = { digest: citation.sha256, sequence: "7", stored_at: "stored" };
+    receipt = {
+      sessionId: source.sessionId,
+      digest: citation.sha256,
+      sequence: "7",
+      stored_at: "stored",
+    };
     if (state === "pending") receipt.stored_at = null;
     if (state === "digest") receipt.digest = "f".repeat(64);
     if (state === "sequence") receipt.sequence = "8";
@@ -396,6 +410,7 @@ test("failed SQL receipt reconstruction leaves replayable immutable bytes, never
 test("backup includes exact delivered event bytes once for repeated historical citations", async () => {
   await writeSessionSource(root, namespace, source, 7);
   receipt = {
+    sessionId: source.sessionId,
     digest: citation.sha256,
     sequence: "7",
     stored_at: "native-delivered",
@@ -411,7 +426,12 @@ test("backup includes exact delivered event bytes once for repeated historical c
 
 test("backup never promotes a pending stream/outbox receipt", async () => {
   await writeSessionSource(root, namespace, source, 7);
-  receipt = { digest: citation.sha256, sequence: "7", stored_at: null };
+  receipt = {
+    sessionId: source.sessionId,
+    digest: citation.sha256,
+    sequence: "7",
+    stored_at: null,
+  };
   await expect(
     backupSessionClaimSources(actor, namespace, [citation])
   ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
@@ -419,7 +439,12 @@ test("backup never promotes a pending stream/outbox receipt", async () => {
 
 test("standalone receipt rebuild uses the same allocator/collision denial fence and preserves pending delivery", async () => {
   await writeSessionSource(root, namespace, source, 7);
-  receipt = { digest: citation.sha256, sequence: "7", stored_at: null };
+  receipt = {
+    sessionId: source.sessionId,
+    digest: citation.sha256,
+    sequence: "7",
+    stored_at: null,
+  };
   await expect(
     rebuildSessionSourceReceipts(actor, source.sessionId)
   ).resolves.toEqual({ restored: 0, pending: 1 });
@@ -478,6 +503,7 @@ test("two archive events cannot reuse one native allocation even when both recei
 
 test("known delivered receipt can reconstruct a lost raw file without new publication or receipt", async () => {
   receipt = {
+    sessionId: source.sessionId,
     digest: citation.sha256,
     sequence: "7",
     stored_at: "original-delivery-time",
@@ -515,13 +541,24 @@ test("accepted settled assistant evidence retains its absent source date instead
     return usual(statement);
   });
   await restoreSessionClaimSources(actor, namespace, [fact], [item]);
-  expect(observed.params).toEqual([namespace, source.eventId, fact.sha256, 7]);
+  expect(observed.params).toEqual([
+    namespace,
+    source.eventId,
+    source.sessionId,
+    fact.sha256,
+    7,
+  ]);
   expect(observed.source?.occurredAt).toBeNull();
 });
 
 test("pending exact namespace erasure blocks raw evidence export and recovery before receipt work", async () => {
   await writeSessionSource(root, namespace, source, 7);
-  receipt = { digest: citation.sha256, sequence: "7", stored_at: "delivered" };
+  receipt = {
+    sessionId: source.sessionId,
+    digest: citation.sha256,
+    sequence: "7",
+    stored_at: "delivered",
+  };
   erasure = [{ namespace_id: namespace }];
   await expect(
     backupSessionClaimSources(actor, namespace, [citation])

@@ -260,7 +260,8 @@ function restoreArchive(
   input: {
     expectedRevision: string | null;
     archive: z.infer<typeof PrivateMemoryArchiveSchema>;
-  }
+  },
+  expectedVersion: 2 | 3
 ) {
   let archive: z.infer<typeof PrivateMemoryArchiveSchema>;
   let expected: string | null;
@@ -269,6 +270,8 @@ function restoreArchive(
     // Freeze caller-owned bytes before the first asynchronous boundary.
     expected = GitRevisionSchema.nullable().parse(input.expectedRevision);
     archive = copyPrivateMemoryArchive(input.archive);
+    if (archive.version !== expectedVersion)
+      throw new PrivateMemoryError("invalid_input");
   } catch {
     return Promise.reject(new PrivateMemoryError("invalid_input"));
   }
@@ -853,8 +856,7 @@ export const PrivateMemoryRepository = {
       archive: z.infer<typeof PrivateMemoryBackupSchema>;
     }
   ) {
-    const archive = PrivateMemoryBackupSchema.parse(input.archive);
-    return restoreArchive(actor, { ...input, archive });
+    return restoreArchive(actor, input, 2);
   },
   async restoreCorpus(
     actor: z.infer<typeof WorkspaceActorSchema>,
@@ -863,8 +865,7 @@ export const PrivateMemoryRepository = {
       archive: z.infer<typeof PrivateMemoryCorpusBackupSchema>;
     }
   ) {
-    const archive = PrivateMemoryCorpusBackupSchema.parse(input.archive);
-    return restoreArchive(actor, { ...input, archive });
+    return restoreArchive(actor, input, 3);
   },
   rebuildOperations(actor: z.infer<typeof WorkspaceActorSchema>) {
     return authorized(async () => {

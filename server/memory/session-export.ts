@@ -19,7 +19,7 @@ import {
 } from "./session-files";
 import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
 import { memoryNamespace, requireMemoryNamespaceAvailable } from "./namespace";
-import { operationSignal } from "../operations/async";
+import { operationSignal, withDeadline, withSignal } from "../operations/async";
 import {
   archivedPrivateNamespace,
   AccountMemoryArchiveUnavailable,
@@ -104,66 +104,93 @@ async function sourceFile(
   return decoded;
 }
 
+/** Capture a bounded, exact delivered snapshot before returning any bytes. A
+ * surviving later append can never hide a missing retained event. */
 export async function exportSessionSources(
   actor: z.infer<typeof WorkspaceActorSchema>,
   sessionId: string,
   signal: AbortSignal
 ) {
-  z.string().min(1).max(200).parse(sessionId);
+  z.string().min(1).max(256).parse(sessionId);
   const root = env.ZOEN_SESSION_ARCHIVE_DIR;
   if (!root) throw new SessionArchiveUnavailable();
-  const namespace = await transaction(() => archiveNamespace(actor, sessionId));
-  const directory = await sessionDirectory(root, namespace, sessionId);
-  const iterator = sessionRecords(
-    actor,
-    sessionId,
-    namespace,
-    directory,
-    signal
-  );
-  const first = await iterator.next();
-  if (first.done) throw new SessionArchiveUnavailable();
-  let abort: () => void;
-  const body = new ReadableStream<Uint8Array>(
-    {
-      start(controller) {
-        abort = () => {
-          controller.error(signal.reason);
-          void iterator.return().catch((error: unknown) => {
-            controller.error(error);
+  return withDeadline(
+    () =>
+      withSignal(signal, () =>
+        transaction(async () => {
+          const namespace = await archiveNamespace(actor, sessionId);
+          const rows =
+            await query(sql`SELECT session_id AS "sessionId",event_id AS "eventId",digest,
+      capture_sequence::text AS sequence,stored_at FROM memory_session_sources WHERE namespace_id=${namespace}
+      ORDER BY capture_sequence LIMIT ${sessionArchiveLimits.events + 1} FOR SHARE`);
+          const [checkpoint] =
+            await query(sql`SELECT journal_event_count::text AS count,journal_high_water::text AS "highWater"
+      FROM workspace_memory_namespace WHERE namespace_id=${namespace}`);
+          if (
+            !checkpoint ||
+            rows.length > sessionArchiveLimits.events ||
+            checkpoint.count !== String(rows.length) ||
+            (checkpoint.highWater ?? null) !== (rows.at(-1)?.sequence ?? null)
+          )
+            throw new SessionArchiveUnavailable();
+          const expected = rows.filter((row) => row.sessionId === sessionId);
+          if (!expected.length || expected.some((row) => !row.stored_at))
+            throw new SessionArchiveUnavailable();
+          const directory = await sessionDirectory(root, namespace, sessionId);
+          const filenames = new Set(
+            expected.map(
+              (row) => `${hash(z.string().parse(row.eventId))}.jsonl`
+            )
+          );
+          let count = 0;
+          for await (const entry of await opendir(directory)) {
+            operationSignal().throwIfAborted();
+            if (
+              ++count > sessionArchiveLimits.events ||
+              !entry.isFile() ||
+              !filenames.delete(entry.name)
+            )
+              throw new SessionArchiveUnavailable();
+          }
+          if (filenames.size) throw new SessionArchiveUnavailable();
+          const contents: Buffer[] = [];
+          let bytes = 0;
+          for (const receipt of expected) {
+            operationSignal().throwIfAborted();
+            const file = await deliveredSource(
+              namespace,
+              sessionId,
+              join(
+                directory,
+                `${hash(z.string().parse(receipt.eventId))}.jsonl`
+              )
+            );
+            if (
+              !file ||
+              receipt.digest !== file.digest ||
+              receipt.sequence !== String(file.captureSequence)
+            )
+              throw new SessionArchiveUnavailable();
+            bytes += file.content.byteLength;
+            if (bytes > exportLimit) throw new SessionArchiveUnavailable();
+            contents.push(file.content);
+          }
+          await requireWorkspaceAccess(actor);
+          await requireMemoryNamespaceAvailable(namespace);
+          const body = Buffer.concat(contents, bytes);
+          return new Response(body, {
+            headers: {
+              "content-type": "application/x-ndjson; charset=utf-8",
+              "content-length": String(body.byteLength),
+              "content-disposition": `attachment; filename="zoen-conversation-${hash(sessionId).slice(0, 12)}.jsonl"`,
+              "cache-control": "private, no-store",
+              "x-content-type-options": "nosniff",
+            },
           });
-        };
-        signal.addEventListener("abort", abort, { once: true });
-        controller.enqueue(first.value);
-        if (signal.aborted) abort();
-      },
-      async pull(controller) {
-        try {
-          const next = await iterator.next();
-          if (next.done) {
-            signal.removeEventListener("abort", abort);
-            controller.close();
-          } else controller.enqueue(next.value);
-        } catch (error) {
-          signal.removeEventListener("abort", abort);
-          controller.error(error);
-        }
-      },
-      async cancel() {
-        signal.removeEventListener("abort", abort);
-        await iterator.return();
-      },
-    },
-    { highWaterMark: 0 }
+        })
+      ),
+    Date.now() + 60_000
   );
-  return new Response(body, {
-    headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "content-disposition": `attachment; filename="zoen-conversation-${hash(sessionId).slice(0, 12)}.jsonl"`,
-      "cache-control": "private, no-store",
-      "x-content-type-options": "nosniff",
-    },
-  });
 }
 
 async function sessionDirectory(
@@ -189,39 +216,6 @@ async function sessionDirectory(
   return join(...parts);
 }
 
-async function* sessionRecords(
-  actor: z.infer<typeof WorkspaceActorSchema>,
-  sessionId: string,
-  namespace: string,
-  directory: string,
-  signal: AbortSignal
-) {
-  let count = 0;
-  let size = 0;
-  for await (const entry of await opendir(directory)) {
-    signal.throwIfAborted();
-    if (++count > 10_000)
-      throw new Error("This conversation archive exceeds the download limit.");
-    if (entry.name.startsWith(".") && entry.name.endsWith(".tmp")) continue;
-    if (!/^[a-f0-9]{64}\.jsonl$/u.test(entry.name) || !entry.isFile())
-      throw new Error(
-        "The saved conversation archive contains an unexpected file."
-      );
-    const content = await verifiedSource(
-      actor,
-      sessionId,
-      namespace,
-      join(directory, entry.name)
-    );
-    if (!content) continue;
-    size += content.content.byteLength;
-    if (size > exportLimit)
-      throw new Error("This conversation archive exceeds the download limit.");
-    signal.throwIfAborted();
-    yield content.content;
-  }
-}
-
 async function verifiedSource(
   actor: z.infer<typeof WorkspaceActorSchema>,
   sessionId: string,
@@ -242,11 +236,12 @@ async function deliveredSource(
 ) {
   const file = await sourceFile(path, sessionId, basename(path));
   const receipt = (
-    await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
+    await query(sql`SELECT session_id AS "sessionId", digest, capture_sequence::text AS sequence, stored_at
           FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR SHARE`)
   )[0];
   if (
     !receipt ||
+    receipt.sessionId !== sessionId ||
     receipt.digest !== file.digest ||
     receipt.sequence !== String(file.captureSequence)
   )
@@ -434,7 +429,7 @@ async function captureCompleteJournal(
   const root = env.ZOEN_SESSION_ARCHIVE_DIR;
   if (!root) throw new SessionArchiveUnavailable();
   const rows =
-    await query(sql`SELECT event_id AS "eventId", digest, capture_sequence::text AS sequence, stored_at
+    await query(sql`SELECT session_id AS "sessionId", event_id AS "eventId", digest, capture_sequence::text AS sequence, stored_at
     FROM memory_session_sources WHERE namespace_id=${namespace}
     ORDER BY capture_sequence LIMIT ${sessionArchiveLimits.events + 1} FOR SHARE`);
   const [checkpoint] =
@@ -519,6 +514,7 @@ async function captureCompleteJournal(
         const receipt = receipts.get(file.source.eventId);
         if (
           !receipt ||
+          receipt.sessionId !== file.source.sessionId ||
           receipt.digest !== file.digest ||
           receipt.sequence !== String(file.captureSequence)
         )
@@ -576,11 +572,12 @@ async function sourceReceipt(
     WHERE capture_sequence = ${file.captureSequence} AND (namespace_id <> ${namespace} OR event_id <> ${file.source.eventId}) LIMIT 1`);
   if (collisions.length) throw new SessionArchiveUnavailable();
   const [existing] =
-    await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
+    await query(sql`SELECT session_id AS "sessionId", digest, capture_sequence::text AS sequence, stored_at
     FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR UPDATE`);
   if (
     existing &&
-    (existing.digest !== file.digest ||
+    (existing.sessionId !== file.source.sessionId ||
+      existing.digest !== file.digest ||
       existing.sequence !== String(file.captureSequence))
   )
     throw new SessionArchiveUnavailable();
@@ -743,8 +740,8 @@ async function restoreSessionSources(
     );
   for (const file of missing)
     await query(sql`INSERT INTO memory_session_sources
-    (namespace_id, event_id, digest, capture_sequence, stored_at)
-    VALUES (${namespace}, ${file.source.eventId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
+    (namespace_id, event_id, session_id, digest, capture_sequence, stored_at)
+    VALUES (${namespace}, ${file.source.eventId}, ${file.source.sessionId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
   return { files: files.size, receipts: missing.length };
 }
 
@@ -793,8 +790,8 @@ export async function rebuildSessionSourceReceipts(
           if (!existing.stored_at) pending++;
         } else {
           await query(sql`INSERT INTO memory_session_sources
-            (namespace_id, event_id, digest, capture_sequence, stored_at)
-            VALUES (${namespace}, ${file.source.eventId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
+            (namespace_id, event_id, session_id, digest, capture_sequence, stored_at)
+            VALUES (${namespace}, ${file.source.eventId}, ${file.source.sessionId}, ${file.digest}, ${file.captureSequence}, clock_timestamp())`);
           restored++;
         }
       }

@@ -1,5 +1,5 @@
 {
-  "id": "68501f1e-502e-4eb7-9d3c-bcbba14a0dcc",
+  "id": "c7d485bc-6990-4859-b4db-99279c69442c",
   "prevId": "f60f76bd-f00a-484e-a165-aa7b036d6f05",
   "version": "7",
   "dialect": "postgresql",
@@ -1539,6 +1539,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "private_memory_namespace_id": {
+          "name": "private_memory_namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "challenge_id": {
           "name": "challenge_id",
           "type": "uuid",
@@ -1551,12 +1557,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "private_memory_namespace_id": {
-          "name": "private_memory_namespace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -4643,12 +4643,6 @@
           "notNull": true,
           "default": true
         },
-        "eve_scope_key": {
-          "name": "eve_scope_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "preference_revision": {
           "name": "preference_revision",
           "type": "uuid",
@@ -4666,6 +4660,12 @@
         "journal_high_water": {
           "name": "journal_high_water",
           "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "eve_scope_key": {
+          "name": "eve_scope_key",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -4704,7 +4704,7 @@
       "checkConstraints": {
         "workspace_memory_namespace_journal_check": {
           "name": "workspace_memory_namespace_journal_check",
-          "value": "\"workspace_memory_namespace\".\"journal_event_count\" BETWEEN 0 AND 9007199254740991 AND ((\"workspace_memory_namespace\".\"journal_event_count\" = 0 AND \"workspace_memory_namespace\".\"journal_high_water\" IS NULL) OR (\"workspace_memory_namespace\".\"journal_event_count\" > 0 AND \"workspace_memory_namespace\".\"journal_high_water\" BETWEEN \"workspace_memory_namespace\".\"journal_event_count\" AND 9007199254740991))"
+          "value": "\n      \"workspace_memory_namespace\".\"journal_event_count\" BETWEEN 0 AND 9007199254740991 AND\n      ((\"workspace_memory_namespace\".\"journal_event_count\" = 0 AND \"workspace_memory_namespace\".\"journal_high_water\" IS NULL) OR\n       (\"workspace_memory_namespace\".\"journal_event_count\" > 0 AND \"workspace_memory_namespace\".\"journal_high_water\" BETWEEN \"workspace_memory_namespace\".\"journal_event_count\" AND 9007199254740991))"
         }
       },
       "isRLSEnabled": false
@@ -10958,6 +10958,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "capture_sequence": {
           "name": "capture_sequence",
           "type": "bigserial",
@@ -11014,6 +11020,33 @@
         "memory_session_sources_capture_idx": {
           "name": "memory_session_sources_capture_idx",
           "columns": [
+            {
+              "expression": "capture_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "memory_session_sources_session_idx": {
+          "name": "memory_session_sources_session_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "capture_sequence",
               "isExpression": false,
@@ -12445,6 +12478,76 @@
       },
       "isRLSEnabled": false
     },
+    "public.private_memory_preference_operation": {
+      "name": "private_memory_preference_operation",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preference_revision": {
+          "name": "preference_revision",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "private_memory_preference_operation_namespace_id_workspace_memory_namespace_namespace_id_fk": {
+          "name": "private_memory_preference_operation_namespace_id_workspace_memory_namespace_namespace_id_fk",
+          "tableFrom": "private_memory_preference_operation",
+          "tableTo": "workspace_memory_namespace",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["namespace_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "private_memory_preference_operation_namespace_id_operation_id_pk": {
+          "name": "private_memory_preference_operation_namespace_id_operation_id_pk",
+          "columns": ["namespace_id", "operation_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "private_memory_preference_operation_identity_check": {
+          "name": "private_memory_preference_operation_identity_check",
+          "value": "length(\"private_memory_preference_operation\".\"operation_id\") BETWEEN 1 AND 256 AND \"private_memory_preference_operation\".\"request_hash\" ~ '^[a-f0-9]{64}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.private_memory_repository": {
       "name": "private_memory_repository",
       "schema": "",
@@ -12833,76 +12936,6 @@
         "tool_call_allocations_state_check": {
           "name": "tool_call_allocations_state_check",
           "value": "CASE\n    WHEN \"tool_call_allocations\".\"status\" = 'settled' THEN \"tool_call_allocations\".\"consumed_calls\" IS NOT NULL AND \"tool_call_allocations\".\"consumed_calls\" IN (0,1) AND \"tool_call_allocations\".\"settled_at\" IS NOT NULL\n    WHEN \"tool_call_allocations\".\"status\" IN ('reserved', 'uncertain') THEN \"tool_call_allocations\".\"consumed_calls\" IS NULL AND \"tool_call_allocations\".\"settled_at\" IS NULL\n    ELSE false END"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.private_memory_preference_operation": {
-      "name": "private_memory_preference_operation",
-      "schema": "",
-      "columns": {
-        "namespace_id": {
-          "name": "namespace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "operation_id": {
-          "name": "operation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_hash": {
-          "name": "request_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "preference_revision": {
-          "name": "preference_revision",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "private_memory_preference_operation_namespace_id_workspace_memory_namespace_namespace_id_fk": {
-          "name": "private_memory_preference_operation_namespace_id_workspace_memory_namespace_namespace_id_fk",
-          "tableFrom": "private_memory_preference_operation",
-          "tableTo": "workspace_memory_namespace",
-          "columnsFrom": ["namespace_id"],
-          "columnsTo": ["namespace_id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "private_memory_preference_operation_namespace_id_operation_id_pk": {
-          "name": "private_memory_preference_operation_namespace_id_operation_id_pk",
-          "columns": ["namespace_id", "operation_id"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "private_memory_preference_operation_identity_check": {
-          "name": "private_memory_preference_operation_identity_check",
-          "value": "length(\"private_memory_preference_operation\".\"operation_id\") BETWEEN 1 AND 256 AND \"private_memory_preference_operation\".\"request_hash\" ~ '^[a-f0-9]{64}$'"
         }
       },
       "isRLSEnabled": false

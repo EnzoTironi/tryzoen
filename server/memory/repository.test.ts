@@ -4,7 +4,10 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { publishPrivateMemoryGit } from "./git";
-import type { memoryNamespace } from "./namespace";
+import {
+  type memoryNamespace,
+  requireMemoryNamespaceAvailable,
+} from "./namespace";
 import {
   PrivateMemoryError,
   PrivateMemoryRepository,
@@ -145,13 +148,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   owners.transaction.mockReset().mockImplementation((run) => run());
   owners.access.mockReset().mockResolvedValue(true);
-  owners.namespace.mockReset().mockResolvedValue({
-    id: "3a3df84d-d3d8-4189-99ea-f2d49807067e",
-    enabled: true,
-    workspaceEnabled: true,
-    scopeKey: null,
-    pendingOperation: null,
-    pendingHash: null,
+  owners.namespace.mockReset().mockImplementation(async () => {
+    // Keep the real guard visible in this historical boundary harness. These
+    // mocked ownership cases do not replace the real PostgreSQL acceptance.
+    await requireMemoryNamespaceAvailable(
+      "3a3df84d-d3d8-4189-99ea-f2d49807067e"
+    );
+    return {
+      id: "3a3df84d-d3d8-4189-99ea-f2d49807067e",
+      enabled: true,
+      workspaceEnabled: true,
+      automaticEnabled: true,
+      preferenceRevision: "f83aa67a-f607-43ca-9c61-d7b0d5c0d190",
+      journalEventCount: 0,
+      journalHighWater: null,
+      scopeKey: null,
+    };
   });
   owners.session.mockReset().mockResolvedValue(true);
   owners.backup

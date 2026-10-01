@@ -1,4 +1,9 @@
-import { withSignal } from "../../../../../server/operations/async";
+import { transaction } from "../../../../../db/queries";
+import {
+  withDeadline,
+  withSignal,
+  TimeoutError,
+} from "../../../../../server/operations/async";
 import { SqlError } from "../../../../../db/queries";
 import { AccountMemoryArchiveUnavailable } from "../../../../../server/accounts/archive-entitlement";
 import { MemoryNamespaceError } from "../../../../../server/memory/namespace";
@@ -18,69 +23,87 @@ export async function GET(
 ) {
   const { id } = await context.params;
   const query = new URL(request.url).searchParams;
-  return withSignal(request.signal, async () => {
-    try {
-      try {
+  return withDeadline(
+    () =>
+      withSignal(request.signal, async () => {
         try {
-          const section = await z
-            .enum([
-              "memory",
-              "private-memory",
-              "files",
-              "attachment",
-              "source",
-              "creator",
-              "creator-release",
-            ])
-            .parseAsync(query.get("section"));
-          return await downloadAccountArchive(
-            request.headers,
-            id,
-            section,
-            query.get("attachment") ?? undefined
-          );
+          try {
+            try {
+              const section = await z
+                .enum([
+                  "memory",
+                  "private-memory",
+                  "files",
+                  "attachment",
+                  "source",
+                  "creator",
+                  "creator-release",
+                ])
+                .parseAsync(query.get("section"));
+              return await transaction(
+                () =>
+                  downloadAccountArchive(
+                    request.headers,
+                    id,
+                    section,
+                    query.get("attachment") ?? undefined
+                  ),
+                { outermost: true }
+              );
+            } catch (error) {
+              if (error instanceof AccountControlError)
+                return new Response("Sign in to continue", {
+                  status: 401,
+                  headers: { "cache-control": "no-store" },
+                });
+              throw error;
+            }
+          } catch (error) {
+            if (
+              error instanceof AccountArchiveMissing ||
+              error instanceof SchemaError
+            )
+              return new Response("Not found", {
+                status: 404,
+                headers: { "cache-control": "no-store" },
+              });
+            throw error;
+          }
         } catch (error) {
-          if (error instanceof AccountControlError)
-            return new Response("Sign in to continue", {
-              status: 401,
+          if (error instanceof WorkspaceAccessDenied)
+            return new Response("Archive access denied", {
+              status: 403,
+              headers: { "cache-control": "private, no-store" },
+            });
+          if (
+            error instanceof MemoryNamespaceError &&
+            error.reason === "erased"
+          )
+            return new Response("Archive generation is being erased", {
+              status: 409,
+              headers: { "cache-control": "private, no-store" },
+            });
+          if (
+            error instanceof AuthUnavailable ||
+            error instanceof AccountMemoryArchiveUnavailable ||
+            error instanceof SessionArchiveUnavailable ||
+            error instanceof PrivateMemoryArchiveError ||
+            error instanceof SqlError
+          )
+            return new Response("Archive unavailable", {
+              status: 503,
               headers: { "cache-control": "no-store" },
             });
           throw error;
         }
-      } catch (error) {
-        if (
-          error instanceof AccountArchiveMissing ||
-          error instanceof SchemaError
-        )
-          return new Response("Not found", {
-            status: 404,
-            headers: { "cache-control": "no-store" },
-          });
-        throw error;
-      }
-    } catch (error) {
-      if (error instanceof WorkspaceAccessDenied)
-        return new Response("Archive access denied", {
-          status: 403,
-          headers: { "cache-control": "private, no-store" },
-        });
-      if (error instanceof MemoryNamespaceError && error.reason === "erased")
-        return new Response("Archive generation is being erased", {
-          status: 409,
-          headers: { "cache-control": "private, no-store" },
-        });
-      if (
-        error instanceof AuthUnavailable ||
-        error instanceof AccountMemoryArchiveUnavailable ||
-        error instanceof SessionArchiveUnavailable ||
-        error instanceof PrivateMemoryArchiveError ||
-        error instanceof SqlError
-      )
-        return new Response("Archive unavailable", {
-          status: 503,
-          headers: { "cache-control": "no-store" },
-        });
-      throw error;
-    }
+      }),
+    Date.now() + 60_000
+  ).catch((error: unknown) => {
+    if (error instanceof TimeoutError)
+      return new Response("Archive timed out", {
+        status: 504,
+        headers: { "cache-control": "private, no-store" },
+      });
+    throw error;
   });
 }
