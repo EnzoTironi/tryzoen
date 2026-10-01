@@ -9,8 +9,89 @@ import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 const run = async (
   body: (value: Awaited<ReturnType<typeof fixture>>) => Promise<void>
 ) => {
-  await body(await fixture());
+  await using workspace = await fixture();
+  await body(workspace);
 };
+
+test.each(["fulfilled", "rejected"])(
+  "disposes repository fixtures after a %s test body",
+  async (outcome) => {
+    const observed: Awaited<ReturnType<typeof fixture>>[] = [];
+    const organizationIds: string[] = [];
+    const namespaceId = randomUUID();
+    const failure = new Error("Synthetic test body failure");
+    const operation = run(async (workspace) => {
+      observed.push(workspace);
+      const organizations = await query<{ id: string }>(
+        sql`SELECT organization_id AS id FROM workspaces WHERE id = ${workspace.actor.workspaceId}`
+      );
+      organizationIds.push(...organizations.map(({ id }) => id));
+      await query(
+        sql`INSERT INTO workspace_memory_namespace (workspace_id, user_id, namespace_id)
+          VALUES (${workspace.actor.workspaceId}, ${workspace.actor.userId}, ${namespaceId})`
+      );
+      await workspace.repository.write(workspace.actor, {
+        operationId: randomUUID(),
+        expectedRevision: null,
+        path: "knowledge/disposable.md",
+        content: "Synthetic fixture lifecycle proof",
+      });
+      expect(
+        (
+          await workspace.repository.read(
+            workspace.actor,
+            "knowledge/disposable.md"
+          )
+        ).content
+      ).toBe("Synthetic fixture lifecycle proof");
+      if (outcome === "rejected") throw failure;
+    });
+    const error = await operation.then(
+      () => null,
+      (reason: unknown) => reason
+    );
+    expect(error).toBe(outcome === "rejected" ? failure : null);
+    const workspace = observed[0];
+    const organizationId = organizationIds[0];
+    if (!workspace || !organizationId)
+      throw new Error("Missing fixture identity");
+    const workspaceIds = sql.join(
+      [workspace.actor, workspace.personal, workspace.guestPersonal].map(
+        ({ workspaceId }) => sql`${workspaceId}`
+      ),
+      sql`, `
+    );
+    const remaining = await query<{ resource: string; count: number }>(sql`
+      SELECT 'workspaces' AS resource, count(*)::integer AS count FROM workspaces WHERE id IN (${workspaceIds})
+      UNION ALL SELECT 'workspace_memberships', count(*)::integer FROM workspace_memberships WHERE workspace_id IN (${workspaceIds})
+      UNION ALL SELECT 'workspace_repository', count(*)::integer FROM workspace_repository WHERE workspace_id IN (${workspaceIds})
+      UNION ALL SELECT 'workspace_revision', count(*)::integer FROM workspace_revision WHERE workspace_id IN (${workspaceIds})
+      UNION ALL SELECT 'workspace_memory_namespace', count(*)::integer FROM workspace_memory_namespace WHERE namespace_id = ${namespaceId}
+      UNION ALL SELECT 'organizations', count(*)::integer FROM organizations WHERE id = ${organizationId}
+      UNION ALL SELECT 'organization_memberships', count(*)::integer FROM organization_memberships WHERE organization_id = ${organizationId}
+      UNION ALL SELECT 'user', count(*)::integer FROM public.user WHERE 'better-auth:' || id IN (${workspace.actor.userId}, ${workspace.guest.userId})
+      UNION ALL SELECT 'session', count(*)::integer FROM public.session WHERE id IN (${workspace.actor.authSessionId}, ${workspace.guest.authSessionId})
+    `);
+    expect(remaining).toEqual(
+      [
+        "workspaces",
+        "workspace_memberships",
+        "workspace_repository",
+        "workspace_revision",
+        "workspace_memory_namespace",
+        "organizations",
+        "organization_memberships",
+        "user",
+        "session",
+      ].map((resource) => ({ resource, count: 0 }))
+    );
+    expect(
+      await query<{ ownerUserId: string }>(
+        sql`SELECT owner_user_id AS "ownerUserId" FROM workspace_memory_erasure WHERE namespace_id = ${namespaceId}`
+      )
+    ).toEqual([{ ownerUserId: workspace.actor.userId }]);
+  }
+);
 
 test("isolates personal and team repositories, preserves history and rejects forged revisions", () =>
   run(async ({ actor, guest, personal, repository }) => {
