@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { operationSignal } from "../server/operations/async";
+import {
+  operationDeadline,
+  operationSignal,
+  TimeoutError,
+} from "../server/operations/async";
 import { db } from "./index";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -22,16 +27,34 @@ export class TransactionBoundaryError extends Error {
   }
 }
 
-/** Bound parameters stay separate from SQL; nested calls share the active transaction. */
+/**
+ * Bound parameters stay separate from SQL; nested calls share the active transaction.
+ * Budgeted callers serialize statements on that transaction's connection.
+ */
 export async function query<
   Row extends Record<string, unknown> = Record<string, unknown>,
 >(statement: SQL): Promise<Row[]> {
   operationSignal().throwIfAborted();
+  const active = transactions.getStore();
+  const deadline = operationDeadline();
+  if (deadline !== undefined) {
+    if (!active) throw new TransactionBoundaryError();
+    const remaining = deadline - Date.now();
+    operationSignal().throwIfAborted();
+    // Zero disables PostgreSQL statement_timeout; an elapsed budget fails closed.
+    if (remaining <= 0) throw new TimeoutError();
+    try {
+      await active.execute(
+        sql`SELECT set_config('statement_timeout', ${String(remaining)}, true)`
+      );
+    } catch (cause) {
+      throw new SqlError(cause);
+    }
+    operationSignal().throwIfAborted();
+  }
   let rows: Row[];
   try {
-    const result = await (transactions.getStore() ?? db).execute<Row>(
-      statement
-    );
+    const result = await (active ?? db).execute<Row>(statement);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema or pinned SDK contract establishes this boundary.
     rows = result.rows as Row[];
   } catch (cause) {
@@ -42,7 +65,7 @@ export async function query<
 }
 
 /** Nested transactions use PostgreSQL savepoints and restore the outer context. */
-export function transaction<Result>(
+export async function transaction<Result>(
   run: () => Promise<Result>,
   options?: { readonly outermost: true }
 ): Promise<Result> {
@@ -50,8 +73,10 @@ export function transaction<Result>(
   if (options?.outermost && active) {
     return Promise.reject(new TransactionBoundaryError());
   }
+  operationSignal().throwIfAborted();
   return (active ?? db).transaction((tx) =>
     transactions.run(tx, async () => {
+      operationSignal().throwIfAborted();
       const result = await run();
       operationSignal().throwIfAborted();
       return result;
