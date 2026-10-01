@@ -736,20 +736,20 @@ test("real bounded list pagination and invalid cursors", async () => {
   });
 });
 
-test("real catalog exposes memory only with both runtime settings in private context", async () => {
+test("real catalog exposes private memory review with configured journal storage", async () => {
   await using workspace = await workspaceFixture();
   const { actor } = workspace;
   const catalog = await readWorkspaceToolCatalog(actor);
   expect(
     catalog.tools.some((tool) => tool.path === "workspace_memory_search")
-  ).toBe(Boolean(env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY));
+  ).toBe(Boolean(env.ZOEN_SESSION_ARCHIVE_DIR));
   expect(catalog.tools.map((tool) => tool.path)).toContain(
     "workspace_files_read"
   );
   expect(catalog.tools.map((tool) => tool.path)).toContain(
     "workspace_ontology_read"
   );
-  if (!env.ZOEN_SESSION_ARCHIVE_DIR || !env.ZOEN_AI_MEMORY_BINARY) {
+  if (!env.ZOEN_SESSION_ARCHIVE_DIR) {
     // oxlint-disable-next-line vitest/no-conditional-expect -- Each actual environment variant is run in its own process.
     await expect(
       invokeWorkspaceTool(actor, {

@@ -28,7 +28,6 @@ vi.mock("@shared/environment/env", async (original) => {
     env: {
       ...actual.env,
       ZOEN_SESSION_ARCHIVE_DIR: directory,
-      ZOEN_AI_MEMORY_BINARY: undefined,
     },
   };
 });

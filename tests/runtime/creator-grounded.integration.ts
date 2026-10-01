@@ -149,7 +149,7 @@ async function approved(actor: Parameters<typeof saveCreatorDraft>[0]) {
   return { request, release };
 }
 
-test("real Akita evidence reaches isolated structured specialist and human review survives restart without qualifying snapshot release", async () => {
+test("real approved manifest evidence reaches isolated structured specialist and human review survives restart without qualifying snapshot release", async () => {
   await using workspace = await workspaceFixture();
   const { request } = await approved(workspace.personal);
   const preview = await createCreatorPreview(workspace.personal, request);

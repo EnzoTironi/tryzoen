@@ -39,7 +39,6 @@ vi.mock("@shared/environment/env", async (original) => {
     env: {
       ...actual.env,
       ZOEN_SESSION_ARCHIVE_DIR: owners.directory,
-      ZOEN_AI_MEMORY_BINARY: undefined,
     },
   };
 });
@@ -85,7 +84,7 @@ function path(corpus: ReturnType<typeof approved>) {
   );
 }
 
-test("build publishes every approved page without an AI-memory binary and acknowledges only after authority recheck", async () => {
+test("build publishes every approved page and acknowledges only after authority recheck", async () => {
   const corpus = approved();
   owners.authorize.mockImplementation(async () => {
     expect(owners.depth).toBeGreaterThan(0);

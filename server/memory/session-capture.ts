@@ -33,10 +33,11 @@ export async function captureSessionSource(
     const digest = createHash("sha256").update(payload).digest("hex");
     const prior = await query<{
       digest: string;
-    }>(sql`SELECT digest FROM memory_session_sources
+      sessionId: string;
+    }>(sql`SELECT digest, session_id AS "sessionId" FROM memory_session_sources
       WHERE namespace_id = ${partition.id} AND event_id = ${source.eventId}`);
     if (prior[0]) {
-      if (prior[0].digest !== digest)
+      if (prior[0].digest !== digest || prior[0].sessionId !== source.sessionId)
         throw new Error("Session source identity conflict.");
       return;
     }
@@ -54,8 +55,8 @@ export async function captureSessionSource(
     await lockSessionSourceAllocation();
     const inserted = await query<{
       captureSequence: number;
-    }>(sql`INSERT INTO memory_session_sources (namespace_id, event_id, digest, payload, available_at)
-      VALUES (${partition.id}, ${source.eventId}, ${digest}, ${payload}::jsonb,
+    }>(sql`INSERT INTO memory_session_sources (namespace_id, event_id, session_id, digest, payload, available_at)
+      VALUES (${partition.id}, ${source.eventId}, ${source.sessionId}, ${digest}, ${payload}::jsonb,
         COALESCE((SELECT available_at FROM memory_session_sources
           WHERE namespace_id = ${partition.id} AND stored_at IS NULL
           ORDER BY capture_sequence LIMIT 1), clock_timestamp()))
@@ -152,9 +153,9 @@ async function deliverNamespaceBatch(root: string, namespaceId: string) {
   const records = await query<
     Pick<
       typeof memorySessionSources.$inferSelect,
-      "eventId" | "captureSequence" | "payload" | "digest"
+      "eventId" | "sessionId" | "captureSequence" | "payload" | "digest"
     >
-  >(sql`SELECT event_id AS "eventId", capture_sequence::float8 AS "captureSequence", payload, digest
+  >(sql`SELECT event_id AS "eventId", session_id AS "sessionId", capture_sequence::float8 AS "captureSequence", payload, digest
     FROM memory_session_sources WHERE namespace_id = ${namespaceId} AND stored_at IS NULL
     ORDER BY capture_sequence LIMIT 25 FOR UPDATE`);
   // Admission owns the namespace lock. Recheck after any batch-row wait, before
@@ -163,8 +164,9 @@ async function deliverNamespaceBatch(root: string, namespaceId: string) {
   for (const record of records) {
     const source = sessionSourceSchema.parse(record.payload);
     if (
+      source.sessionId !== record.sessionId ||
       createHash("sha256").update(JSON.stringify(source)).digest("hex") !==
-      record.digest
+        record.digest
     )
       throw new Error("Session source failed integrity verification.");
     await writeSessionSource(root, namespaceId, source, record.captureSequence);

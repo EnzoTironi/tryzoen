@@ -43,7 +43,6 @@ vi.mock("@shared/environment/env", async (original) => {
     env: {
       ...actual.env,
       ZOEN_SESSION_ARCHIVE_DIR: directory,
-      ZOEN_AI_MEMORY_BINARY: undefined,
     },
   };
 });
@@ -113,7 +112,7 @@ test("a private claim cites the actual immutable user event digest only after jo
     },
   };
   const result = await PrivateMemoryRepository.change(actor, change);
-  if (!result.applied || !result.claim)
+  if (!result.applied || !("claim" in result))
     throw new Error("Expected claim publication");
   expect(
     (await PrivateMemoryRepository.read(actor)).snapshot.claims[0]
@@ -211,7 +210,8 @@ test("source receipt loss rebuilds from files without changing the actual claim 
       validTime: null,
     },
   });
-  if (!result.applied || !result.claim) throw new Error("Expected publication");
+  if (!result.applied || !("claim" in result))
+    throw new Error("Expected publication");
   await query(
     sql`DELETE FROM memory_session_sources WHERE event_id = ${source.eventId}`
   );
@@ -291,7 +291,7 @@ for (const workspace of ["personal", "actor"] as const) {
         validTime: null,
       },
     });
-    if (!first.applied || !first.claim)
+    if (!first.applied || !("claim" in first))
       throw new Error("Expected original publication");
     const corrected = {
       ...original,

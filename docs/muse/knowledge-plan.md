@@ -1,5 +1,7 @@
 # Knowledge and ontology — implementation contract
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The pre-launch preference permits direct removal of obsolete interfaces and atomic caller updates. Data-destructive resets and migration-baseline consolidation require specific coordinated authorization. The current repository policy is greenfield and supersedes the 19 September persistent-rollout assumption. This plan does not authorize destructive migration, deletion of hosted records, credential use or deployment. This does not reopen creator marketplace work.
 
 ## Decisions

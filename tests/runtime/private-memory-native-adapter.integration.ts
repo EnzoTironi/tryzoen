@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, lstat, mkdir } from "node:fs/promises";
+import { readFile, readdir, lstat, mkdir } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "pg";
@@ -468,12 +468,7 @@ test("journal-only delivery commits exact replayable JSONL and capture observes 
     expect(decoded.captureSequence).toBe(receipt.sequence);
     expect(await drainSessionSources()).toMatchObject({ configured: true });
     expect(await readFile(path)).toEqual(original);
-    await expect(lstat(join(root, id, "ai-memory"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(lstat(join(root, id, "learned-memory"))).rejects.toMatchObject(
-      { code: "ENOENT" }
-    );
+    expect(await readdir(join(root, id))).toEqual(["raw"]);
   } finally {
     await retireNamespace(actor);
   }

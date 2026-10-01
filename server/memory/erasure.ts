@@ -4,7 +4,7 @@ import type {
   workspaceMemoryErasures,
   workspaceMemoryNamespaces,
 } from "@db/schema/learned-memory";
-import { FileMemoryError } from "./ai-memory/mutations";
+import { PrivateMemoryError } from "./repository";
 import { env } from "@shared/environment/env";
 import { eraseSessionSources } from "./session-files";
 
@@ -26,7 +26,7 @@ async function eraseNextReceipt() {
         // Keep the receipt lock if any DB acknowledgement rolls back to this savepoint.
         await transaction(async () => {
           if (!env.ZOEN_SESSION_ARCHIVE_DIR)
-            throw new FileMemoryError("unconfigured");
+            throw new PrivateMemoryError("unavailable");
           // Recovery can restore a retired generation beside its erasure receipt.
           // A busy generation must retry; skipping its lock cannot prove absence.
           const [restored] = await query<
@@ -34,7 +34,7 @@ async function eraseNextReceipt() {
           >(sql`SELECT user_id AS "userId" FROM workspace_memory_namespace
             WHERE namespace_id=${namespaceId} FOR UPDATE NOWAIT`);
           if (restored && (!ownerUserId || restored.userId !== ownerUserId))
-            throw new FileMemoryError("unavailable");
+            throw new PrivateMemoryError("unavailable");
           await eraseSessionSources(env.ZOEN_SESSION_ARCHIVE_DIR, namespaceId);
           if (restored) {
             // Cascades retire this generation's Git, recalls and source outbox.
@@ -43,7 +43,8 @@ async function eraseNextReceipt() {
               sql`DELETE FROM workspace_memory_namespace WHERE namespace_id=${namespaceId}
                 AND user_id=${ownerUserId} RETURNING namespace_id`
             );
-            if (retired.length !== 1) throw new FileMemoryError("unavailable");
+            if (retired.length !== 1)
+              throw new PrivateMemoryError("unavailable");
           }
           // Concurrent workers may erase different namespaces of one account.
           // Serialize acknowledgement, then use a fresh statement snapshot below.

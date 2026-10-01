@@ -109,30 +109,18 @@ jobs:
             -o Dir::Etc::sourceparts="-" \
             -o APT::Get::List-Cleanup="0"
           sudo apt-get install -y ffmpeg
-      - name: Qualify and install the pinned file memory engine
+      - name: Create the private isolated journal fixture
         run: |
-          set -euo pipefail
-          docker build --target memory-engine --platform linux/amd64 -t zoen-memory-proof:2.4.1 .
-          docker run --rm --network none --tmpfs /data:mode=0700 \
-            --mount type=bind,source="$PWD/infrastructure/file-memory/verify.sh",target=/verify.sh,readonly \
-            zoen-memory-proof:2.4.1 sh /verify.sh
-          container=$(docker create zoen-memory-proof:2.4.1 true)
-          trap 'docker rm "$container"' EXIT
-          docker cp "$container:/usr/local/bin/ai-memory" "$RUNNER_TEMP/ai-memory"
-          chmod 755 "$RUNNER_TEMP/ai-memory"
-          "$RUNNER_TEMP/ai-memory" --version
-          printf 'ZOEN_AI_MEMORY_BINARY=%s\n' "$RUNNER_TEMP/ai-memory" >> "$GITHUB_ENV"
+          journal_root=$(mktemp -d "${TMPDIR:-/tmp}/zoen-k3-runtime-XXXXXX")
+          printf 'ZOEN_SESSION_ARCHIVE_DIR=%s\n' "$journal_root" >> "$GITHUB_ENV"
       - name: Create isolated services and verify migration idempotence
         run: |
           pnpm test:runtime:setup
           pnpm test:runtime:setup
-      - name: Verify PostgreSQL, Matrix and compiled Eve restart behavior
+      - name: Verify canonical claims, journal archives, PostgreSQL, Matrix and compiled Eve restart
         run: pnpm test:runtime
-      - name: Verify file memory ingestion, isolated restore and dream contracts
-        run: |
-          pnpm test:memory:upstream "$ZOEN_AI_MEMORY_BINARY"
-          pnpm test:memory:lifecycle "$ZOEN_AI_MEMORY_BINARY"
-          pnpm test:memory:dream "$ZOEN_AI_MEMORY_BINARY"
+      - name: Measure the bounded real journal fixture
+        run: pnpm test:memory:capacity --accounts 4 --sources 10 --workers 2
       - name: Build web app and agent
         run: |
           set -a
@@ -161,7 +149,13 @@ jobs:
           test "$callback_status" = 401
       - name: Stop isolated services
         if: always()
-        run: docker compose -p zoen-runtime-tests -f tests/runtime/compose.yaml down --volumes
+        run: |
+          status=0
+          docker compose -p zoen-runtime-tests -f tests/runtime/compose.yaml down --volumes || status=$?
+          if [[ "${ZOEN_SESSION_ARCHIVE_DIR:-}" == "${TMPDIR:-/tmp}"/zoen-k3-runtime-* ]]; then
+            rm -rf -- "$ZOEN_SESSION_ARCHIVE_DIR"
+          fi
+          exit "$status"
 
   postgres-recovery:
     name: PostgreSQL backup recovery

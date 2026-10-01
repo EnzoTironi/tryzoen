@@ -1,17 +1,11 @@
-/** Exercises the public AsyncLocalStorage transaction guard with mocked SQL,
- * source files and engine. This does not qualify PostgreSQL locks or provider atomicity. */
+/** Exercises the public AsyncLocalStorage transaction guard with mocked SQL and
+ * filesystem boundaries. This does not qualify PostgreSQL locks or filesystem atomicity. */
 import { beforeEach, expect, test, vi } from "vitest";
 import { createHash } from "node:crypto";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { transaction, TransactionBoundaryError, SqlError } from "@db/queries";
 import type { memoryNamespace } from "./namespace";
-import type { openMemoryEngine } from "./ai-memory/engine";
-import type { ingestSessionSource } from "./ai-memory/session-ingestion";
-import type {
-  acceptMemoryCorpus,
-  memoryCorpusInitialized,
-} from "@db/services/memory-corpora";
 import { sessionSourceSchema, type writeSessionSource } from "./session-files";
 import { captureSessionSource, drainSessionSources } from "./session-capture";
 
@@ -43,17 +37,7 @@ const boundary = vi.hoisted(() => {
     rollback: vi.fn<() => void>(),
     namespace: vi.fn<typeof memoryNamespace>(),
     write: vi.fn<typeof writeSessionSource>(),
-    open: vi.fn<
-      (
-        ...input: Parameters<typeof openMemoryEngine>
-      ) => Promise<AsyncDisposable>
-    >(),
-    ingest: vi.fn<typeof ingestSessionSource>(),
-    initialized: vi.fn<typeof memoryCorpusInitialized>(),
-    accept: vi.fn<typeof acceptMemoryCorpus>(),
-    dispose: vi.fn<() => Promise<void>>(),
     archiveRoot: vi.fn<() => string | undefined>(),
-    binary: vi.fn<() => string | undefined>(),
   };
 });
 vi.mock("../../db/index", () => ({
@@ -67,28 +51,21 @@ vi.mock("./session-files", async (original) => ({
   ...(await original<typeof import("./session-files")>()),
   writeSessionSource: boundary.write,
 }));
-vi.mock("./ai-memory/engine", () => ({ openMemoryEngine: boundary.open }));
-vi.mock("./ai-memory/session-ingestion", () => ({
-  ingestSessionSource: boundary.ingest,
-}));
-vi.mock("@db/services/memory-corpora", () => ({
-  memoryCorpusInitialized: boundary.initialized,
-  acceptMemoryCorpus: boundary.accept,
-}));
-vi.mock("@shared/environment/env", () => ({
-  env: {
-    get ZOEN_SESSION_ARCHIVE_DIR() {
-      return boundary.archiveRoot();
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      get ZOEN_SESSION_ARCHIVE_DIR() {
+        return boundary.archiveRoot();
+      },
     },
-    get ZOEN_AI_MEMORY_BINARY() {
-      return boundary.binary();
-    },
-  },
-}));
+  };
+});
 
 const dialect = new PgDialect();
 const root = "/synthetic-session-archive";
-const binary = "/synthetic-ai-memory";
 const namespaceA = "10000000-0000-4000-8000-000000000001";
 const namespaceB = "10000000-0000-4000-8000-000000000002";
 const actor = {
@@ -96,7 +73,6 @@ const actor = {
   workspaceId: "synthetic-workspace",
   authSessionId: "synthetic-auth-session",
 };
-const engine = { [Symbol.asyncDispose]: boundary.dispose };
 const source = sessionSourceSchema.parse({
   version: 2,
   source: "eve",
@@ -118,20 +94,16 @@ beforeEach(() => {
   boundary.savepointExecute.mockResolvedValue({ rows: [] });
   boundary.rootExecute.mockRejectedValue(new Error("Unexpected root query"));
   boundary.archiveRoot.mockReturnValue(root);
-  boundary.binary.mockReturnValue(undefined);
   boundary.write.mockResolvedValue("/synthetic-source.jsonl");
-  boundary.open.mockResolvedValue(engine);
-  boundary.ingest.mockResolvedValue(undefined);
-  boundary.initialized.mockResolvedValue(true);
-  boundary.accept.mockResolvedValue(undefined);
-  boundary.dispose.mockResolvedValue(undefined);
   boundary.namespace.mockResolvedValue({
     id: namespaceA,
     enabled: true,
     workspaceEnabled: true,
     scopeKey: null,
-    pendingOperation: null,
-    pendingHash: null,
+    automaticEnabled: true,
+    preferenceRevision: namespaceB,
+    journalEventCount: 0,
+    journalHighWater: null,
   });
   boundary.outer.mockImplementation(async (run) =>
     run({ execute: boundary.execute, transaction: boundary.savepoint })
@@ -159,6 +131,7 @@ function record(eventId = source.eventId, captureSequence = 17) {
   const payload = sessionSourceSchema.parse({ ...source, eventId });
   return {
     eventId,
+    sessionId: payload.sessionId,
     captureSequence,
     payload,
     digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
@@ -184,15 +157,9 @@ function batch(
 }
 function assertNoArchiveEffects() {
   expect(boundary.write).not.toHaveBeenCalled();
-  expect(boundary.open).not.toHaveBeenCalled();
-  expect(boundary.ingest).not.toHaveBeenCalled();
-  expect(boundary.initialized).not.toHaveBeenCalled();
-  expect(boundary.accept).not.toHaveBeenCalled();
-  expect(boundary.dispose).not.toHaveBeenCalled();
 }
 
-test("nested drain rejects before candidate SQL, savepoints, file writes, engine I/O or ACK", async () => {
-  boundary.binary.mockReturnValue(binary);
+test("nested drain rejects before candidate SQL, savepoints, file writes or ACK", async () => {
   head();
   await transaction(async () => {
     await expect(drainSessionSources()).rejects.toBeInstanceOf(
@@ -211,13 +178,16 @@ test("DB-only capture remains composable inside an enclosing transaction without
   boundary.savepointExecute
     .mockResolvedValueOnce({ rows: [{ session_id: source.sessionId }] })
     .mockResolvedValueOnce({ rows: [] })
-    .mockResolvedValueOnce({ rows: [{ count: "0", bytes: "0" }] });
+    .mockResolvedValueOnce({ rows: [{ count: "0", bytes: "0" }] })
+    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: [{ captureSequence: 17 }] })
+    .mockResolvedValueOnce({ rows: [{ namespace_id: namespaceA }] });
   await transaction(async () => captureSessionSource(actor, source));
   expect(boundary.outer).toHaveBeenCalledTimes(1);
   expect(boundary.savepoint).toHaveBeenCalledTimes(1);
   expect(boundary.namespace).toHaveBeenCalledExactlyOnceWith(actor);
   const captured = statements(boundary.savepointExecute);
-  expect(captured).toHaveLength(5);
+  expect(captured).toHaveLength(6);
   expect(captured[0]?.params).toEqual([
     source.sessionId,
     actor.workspaceId,
@@ -230,10 +200,15 @@ test("DB-only capture remains composable inside an enclosing transaction without
   expect(captured[4]?.params).toEqual([
     namespaceA,
     source.eventId,
+    source.sessionId,
     record().digest,
     JSON.stringify(source),
     namespaceA,
   ]);
+  expect(captured[5]?.sql).toContain(
+    "journal_event_count = journal_event_count + 1"
+  );
+  expect(captured[5]?.params).toEqual([17, namespaceA, 0, null]);
   expect(boundary.execute).not.toHaveBeenCalled();
   assertNoArchiveEffects();
 });
@@ -277,9 +252,6 @@ test("file-only delivery preserves exact source coordinates and ACKs each source
     [root, namespaceA, first.payload, first.captureSequence],
     [root, namespaceA, second.payload, second.captureSequence],
   ]);
-  expect(boundary.open).not.toHaveBeenCalled();
-  expect(boundary.ingest).not.toHaveBeenCalled();
-  expect(boundary.accept).not.toHaveBeenCalled();
   const delivered = statements(boundary.savepointExecute);
   expect(delivered[0]?.sql).toContain(
     "ORDER BY capture_sequence LIMIT 25 FOR UPDATE"
@@ -305,67 +277,6 @@ test("file-only delivery preserves exact source coordinates and ACKs each source
     expect(order).toBeLessThan(acknowledgement);
   }
   expect(statements(boundary.execute)[1]?.params).toEqual([namespaceA]);
-});
-
-test.each([false, true])(
-  "engine delivery preserves corpus admission requireExisting=%s and closes the engine",
-  async (initialized) => {
-    const item = record();
-    boundary.binary.mockReturnValue(binary);
-    boundary.initialized.mockResolvedValue(initialized);
-    head();
-    batch([item]);
-    await expect(drainSessionSources()).resolves.toEqual({
-      stored: 1,
-      configured: true,
-    });
-    expect(boundary.open).toHaveBeenCalledExactlyOnceWith(
-      binary,
-      root,
-      namespaceA,
-      "ai-memory",
-      { requireExisting: initialized }
-    );
-    expect(boundary.ingest).toHaveBeenCalledExactlyOnceWith(
-      engine,
-      namespaceA,
-      item.payload
-    );
-    expect(boundary.accept).toHaveBeenCalledExactlyOnceWith(
-      namespaceA,
-      "ai-memory"
-    );
-    expect(boundary.dispose).toHaveBeenCalledTimes(1);
-    const [writeOrder] = boundary.write.mock.invocationCallOrder;
-    const [ingestOrder] = boundary.ingest.mock.invocationCallOrder;
-    const acknowledgement =
-      boundary.savepointExecute.mock.invocationCallOrder[2];
-    if (
-      writeOrder === undefined ||
-      ingestOrder === undefined ||
-      acknowledgement === undefined
-    )
-      throw new Error("Expected file, ingestion and acknowledgement calls");
-    expect(writeOrder).toBeLessThan(ingestOrder);
-    expect(ingestOrder).toBeLessThan(acknowledgement);
-  }
-);
-
-test("engine startup failure retains queued sources without file writes or ACK", async () => {
-  boundary.binary.mockReturnValue(binary);
-  const failure = new Error("Synthetic missing accepted corpus");
-  boundary.open.mockRejectedValueOnce(failure);
-  head();
-  batch([record()], 0);
-  await expect(drainSessionSources()).rejects.toMatchObject({
-    errors: [failure],
-  });
-  expect(boundary.write).not.toHaveBeenCalled();
-  expect(boundary.ingest).not.toHaveBeenCalled();
-  expect(boundary.accept).not.toHaveBeenCalled();
-  expect(boundary.dispose).not.toHaveBeenCalled();
-  expect(statements(boundary.savepointExecute)).toHaveLength(2);
-  expect(boundary.rollback).toHaveBeenCalledTimes(1);
 });
 
 test("a mismatched immutable source digest fails before file write or ACK", async () => {
@@ -414,25 +325,7 @@ test.each([
   }
 );
 
-test("ingestion failure closes the engine and retains the source even after a successful file write", async () => {
-  boundary.binary.mockReturnValue(binary);
-  const failure = new Error("Synthetic engine ingestion failure");
-  boundary.ingest.mockRejectedValueOnce(failure);
-  head();
-  batch([record()], 0);
-  await expect(drainSessionSources()).rejects.toMatchObject({
-    errors: [failure],
-  });
-  expect(boundary.write).toHaveBeenCalledTimes(1);
-  expect(boundary.ingest).toHaveBeenCalledTimes(1);
-  expect(boundary.accept).not.toHaveBeenCalled();
-  expect(boundary.dispose).toHaveBeenCalledTimes(1);
-  expect(statements(boundary.savepointExecute)).toHaveLength(2);
-  expect(boundary.rollback).toHaveBeenCalledTimes(1);
-});
-
 test("ACK failure stays in the batch savepoint and leaves namespace retry outside it", async () => {
-  boundary.binary.mockReturnValue(binary);
   head();
   batch([record()], 0);
   boundary.savepointExecute.mockRejectedValueOnce(
@@ -442,9 +335,6 @@ test("ACK failure stays in the batch savepoint and leaves namespace retry outsid
     errors: [expect.any(SqlError)],
   });
   expect(boundary.write).toHaveBeenCalledTimes(1);
-  expect(boundary.ingest).toHaveBeenCalledTimes(1);
-  expect(boundary.dispose).toHaveBeenCalledTimes(1);
-  expect(boundary.accept).not.toHaveBeenCalled();
   expect(boundary.rollback).toHaveBeenCalledTimes(1);
   expect(statements(boundary.savepointExecute)[2]?.params).toEqual([
     namespaceA,

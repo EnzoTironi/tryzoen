@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempDisposable } from "node:fs/promises";
+import { glob, mkdtempDisposable, readFile } from "node:fs/promises";
 import { arch, platform, tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 const { values } = parseArgs({
   options: {
-    binary: { type: "string" },
     accounts: { type: "string", default: "20" },
     sources: { type: "string", default: "25" },
     workers: { type: "string", default: "4" },
@@ -18,16 +16,15 @@ const { values } = parseArgs({
   },
 });
 if (values.help) {
-  console.log(`Measure bounded archive delivery with PostgreSQL, fsync and real Akita ingestion.
+  console.log(`Measure bounded archive delivery with PostgreSQL outbox receipts, fsync and immutable JSONL.
 
 Options:
-  --binary PATH   Required: absolute path to qualified ai-memory 2.4.1
   --accounts N    Synthetic accounts, 1–100 (default 20)
   --sources N     Sources per account, 1–100 (default 25)
   --workers N     Concurrent dispatch calls, 1–8 (default 4)
 
 Example (Node 24, isolated services already started and migrated):
-  node --env-file=tests/runtime/.env.example --import tsx scripts/session-archive-capacity.ts --binary /tmp/zoen-ai-memory-runtime/ai-memory --accounts 20 --sources 25 --workers 4 > /tmp/archive-capacity.json
+  node --env-file=tests/runtime/.env.example --import tsx scripts/session-archive-capacity.ts --accounts 20 --sources 25 --workers 4 > /tmp/archive-capacity.json
 
 Run alone, never alongside runtime tests. Only loopback companion_runtime_test
 is accepted; pending sources must be empty. Fixtures and files are disposed after
@@ -36,12 +33,6 @@ Stdout is one JSON report. This local sample does not certify production scale.`
 } else {
   const parsed = z
     .object({
-      binary: z
-        .string()
-        .refine(
-          (value) => isAbsolute(value),
-          "--binary must be an absolute path"
-        ),
       accounts: z.coerce.number().int().min(1).max(100),
       sources: z.coerce.number().int().min(1).max(100),
       workers: z.coerce.number().int().min(1).max(8),
@@ -51,14 +42,6 @@ Stdout is one JSON report. This local sample does not certify production scale.`
     throw new Error(`${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}
 Run: node --import tsx scripts/session-archive-capacity.ts --help`);
   const options = parsed.data;
-  assert.equal(
-    execFileSync(options.binary, ["--version"], {
-      encoding: "utf8",
-      timeout: 10_000,
-      env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" },
-    }).trim(),
-    "ai-memory 2.4.1"
-  );
   process.umask(0o077);
   await using directory = await mkdtempDisposable(
     join(tmpdir(), "zoen-archive-capacity-")
@@ -68,7 +51,6 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
   // oxlint-disable-next-line eslint/no-restricted-properties
   Object.assign(process.env, {
     ZOEN_SESSION_ARCHIVE_DIR: directory.path,
-    ZOEN_AI_MEMORY_BINARY: options.binary,
   });
   const { requireRuntimeDatabase } = await import("../tests/runtime/database");
   const { db } = await import("../db");
@@ -91,7 +73,8 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
     const { claimSession } = await import("../db/services/sessions");
     const { captureSessionSource, drainSessionSources } =
       await import("../server/memory/session-capture");
-    const { sessionSource } = await import("../server/memory/session-files");
+    const { decodeSessionSource, sessionSource } =
+      await import("../server/memory/session-files");
     const started = performance.now();
     for (let account = 0; account < options.accounts; account++) {
       const fixture = fixtures.use(await workspaceFixture());
@@ -171,10 +154,32 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
       assert.equal(receipt.stored, options.sources);
       assert.equal(receipt.pending, 0);
     }
+    let deliveredBytes = 0;
+    for (const namespaceId of namespaceIds) {
+      const files = await Array.fromAsync(
+        glob(join(directory.path, namespaceId, "raw/eve/**/*.jsonl"))
+      );
+      assert.equal(files.length, options.sources);
+      const sequences = [];
+      for (const path of files) {
+        const content = await readFile(path);
+        const source = decodeSessionSource(content);
+        deliveredBytes += content.byteLength;
+        sequences.push(source.captureSequence);
+      }
+      const [checkpoint] = await query<{
+        count: number;
+        highWater: number;
+      }>(sql`
+        SELECT journal_event_count::float8 AS count, journal_high_water::float8 AS "highWater"
+        FROM workspace_memory_namespace WHERE namespace_id=${namespaceId}`);
+      assert.equal(checkpoint?.count, options.sources);
+      assert.equal(checkpoint?.highWater, Math.max(...sequences));
+    }
     assert.equal((await drainSessionSources()).stored, 0);
     dispatchMs.sort((a, b) => a - b);
     const report = {
-      schema: 1,
+      schema: 2,
       measuredAt: new Date().toISOString(),
       workload: {
         accounts: options.accounts,
@@ -182,7 +187,8 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
         workers: options.workers,
         sourceKind: "message.received",
       },
-      engine: "ai-memory 2.4.1",
+      storage: "PostgreSQL outbox and immutable JSONL",
+      deliveredBytes,
       host: { platform: platform(), arch: arch(), node: process.version },
       stored,
       rounds,
@@ -202,8 +208,8 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
       limits: [
         "Loopback PostgreSQL and temporary local disk, not production topology",
         "Minute scheduler cadence is excluded; dispatch is continuous",
-        "Parent process metrics exclude native child processes and PostgreSQL",
-        "No embeddings, LLM dreaming, cold/large corpora, outage injection or one-million-account claim",
+        "Parent process metrics exclude PostgreSQL",
+        "No model calls, cold/large journals, outage injection or one-million-account claim",
       ],
     };
     console.log(JSON.stringify(report, null, 2));

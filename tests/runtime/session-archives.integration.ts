@@ -9,11 +9,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, expect, test, vi } from "vitest";
+import { Client } from "pg";
+import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
-import { query, transaction } from "@db/queries";
+import { query, transaction, TransactionBoundaryError } from "@db/queries";
+import { env } from "@shared/environment/env";
+import { dbMigrationEnv } from "../../db/env/migration";
 import type { HookEvent } from "eve/hooks";
-import { workspaceFixture } from "./workspace-fixture";
+import { privateMemoryFixture } from "./private-memory-fixture";
 import {
   sessionSource,
   settledSessionSource,
@@ -30,26 +33,11 @@ import {
   SessionArchiveUnavailable,
 } from "../../server/memory/session-export";
 
-const { directory } = await vi.hoisted(async () => {
-  const { mkdtemp } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const pathModule = await import("node:path");
-  return {
-    directory: await mkdtemp(
-      pathModule.join(tmpdir(), "zoen-session-archive-integration-")
-    ),
-  };
-});
-vi.mock("@shared/environment/env", async (original) => {
-  const actual = await original<typeof import("@shared/environment/env")>();
-  return {
-    ...actual,
-    env: { ...actual.env, ZOEN_SESSION_ARCHIVE_DIR: directory },
-  };
-});
-afterAll(async () => {
-  await rm(directory, { recursive: true, force: true });
-});
+const directory = env.ZOEN_SESSION_ARCHIVE_DIR;
+if (!directory)
+  throw new Error(
+    "Configure the isolated private K3 journal root before running this suite"
+  );
 
 const source = (
   id: string = randomUUID(),
@@ -61,11 +49,7 @@ const source = (
 });
 
 test("resumed Eve turns with empty turn IDs have separate native receipts and do not block later sources", async () => {
-  if (!process.env.ZOEN_AI_MEMORY_BINARY)
-    throw new Error(
-      "This case requires the qualified native memory executable."
-    );
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -97,7 +81,7 @@ test("resumed Eve turns with empty turn IDs have separate native receipts and do
 });
 
 test("exports delivered sources only to their owner, including segmented text while memory is paused", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -144,7 +128,7 @@ test("exports delivered sources only to their owner, including segmented text wh
 });
 
 test("stops streaming further private sources after membership revocation or request cancellation", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -179,7 +163,7 @@ test("stops streaming further private sources after membership revocation or req
 });
 
 test("rejects tampered content, public files and symlink replacements in a private archive", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -212,7 +196,7 @@ test("rejects tampered content, public files and symlink replacements in a priva
 });
 
 test("owns capture by persisted session and retires outbox content only after private disk delivery", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -277,7 +261,7 @@ test("owns capture by persisted session and retires outbox content only after pr
 });
 
 test("disk errors retain queued content for retry; account deletion fences sources and leaves an erasure receipt", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const event = source();
@@ -320,7 +304,7 @@ test("disk errors retain queued content for retry; account deletion fences sourc
 });
 
 test("drains at most 25 events per account and serializes capture identity inside its owner boundary", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -335,7 +319,7 @@ test("drains at most 25 events per account and serializes capture identity insid
 });
 
 test("revoked membership cannot deliver previously queued private sources", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const event = source();
@@ -352,21 +336,44 @@ test("revoked membership cannot deliver previously queued private sources", asyn
 });
 
 test("replays the same file when acknowledgement rolls back after filesystem delivery", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const event = source();
   await claimSession(actor, sessionId);
   await captureSessionSource(actor, sessionSource(event, sessionId));
-  await expect(
-    transaction(async () => {
-      expect(await drainSessionSources()).toEqual({
-        stored: 1,
-        configured: true,
-      });
-      throw new Error("Synthetic acknowledgement failure");
-    })
-  ).rejects.toThrow("acknowledgement failure");
+  const namespace = await workspace.namespace(actor);
+  const constraint = `journal_ack_${randomUUID().replaceAll("-", "")}`;
+  const migrationUrl = new URL(dbMigrationEnv.DATABASE_URL_UNPOOLED);
+  const applicationUrl = new URL(env.DATABASE_URL);
+  if (
+    migrationUrl.hostname !== applicationUrl.hostname ||
+    migrationUrl.port !== applicationUrl.port ||
+    migrationUrl.pathname !== "/companion_runtime_test" ||
+    migrationUrl.username !== "zoen_migrator"
+  )
+    throw new Error(
+      "The journal ACK fault requires the same isolated migration owner"
+    );
+  const migration = new Client({ connectionString: migrationUrl.toString() });
+  await migration.connect();
+  try {
+    // Both interpolated values are generated UUIDs from the guarded fixture.
+    // The runtime role retains only DML privileges throughout this fault.
+    await migration.query(`ALTER TABLE memory_session_sources ADD CONSTRAINT "${constraint}"
+      CHECK (namespace_id <> '${namespace.id}'::uuid OR stored_at IS NULL) NOT VALID`);
+    try {
+      await expect(drainSessionSources()).rejects.toBeInstanceOf(
+        AggregateError
+      );
+    } finally {
+      await migration.query(
+        `ALTER TABLE memory_session_sources DROP CONSTRAINT "${constraint}"`
+      );
+    }
+  } finally {
+    await migration.end();
+  }
   const [pending] = await query<{ namespaceId: string; payload: unknown }>(
     sql`SELECT namespace_id AS "namespaceId", payload FROM memory_session_sources WHERE event_id = ${event.meta.id}`
   );
@@ -378,12 +385,16 @@ test("replays the same file when acknowledgement rolls back after filesystem del
   );
   expect(files).toHaveLength(1);
   const before = await readFile(files[0] ?? "missing", "utf8");
+  expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
+  await query(
+    sql`UPDATE memory_session_sources SET available_at = now() WHERE namespace_id=${namespace.id} AND stored_at IS NULL`
+  );
   expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
   expect(await readFile(files[0] ?? "missing", "utf8")).toBe(before);
 });
 
 test("preserves long escaped text and rejects excess queued bytes atomically", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -421,7 +432,7 @@ test("preserves long escaped text and rejects excess queued bytes atomically", a
 });
 
 test("refuses to acknowledge a modified outbox payload", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const event = source();
@@ -443,8 +454,45 @@ test("refuses to acknowledge a modified outbox payload", async () => {
   expect(pending?.storedAt).toBeNull();
 });
 
+test("retained session identity must match the queued source before journal publication", async () => {
+  await using workspace = await privateMemoryFixture();
+  const actor = workspace.personal;
+  const sessionId = `receipt-session-${randomUUID()}`;
+  const otherSessionId = `receipt-session-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  await claimSession(actor, otherSessionId);
+  const event = source();
+  await captureSessionSource(actor, sessionSource(event, sessionId));
+  const namespace = await workspace.namespace(actor);
+  await query(sql`UPDATE memory_session_sources SET session_id=${otherSessionId}
+    WHERE namespace_id=${namespace.id} AND event_id=${event.meta.id}`);
+  await expect(drainSessionSources()).rejects.toMatchObject({
+    errors: [
+      expect.objectContaining({
+        message: "Session source failed integrity verification.",
+      }),
+    ],
+  });
+  await expect(
+    captureSessionSource(actor, sessionSource(event, sessionId))
+  ).rejects.toThrow("identity conflict");
+  const [receipt] = await query<{
+    storedAt: string | null;
+    payload: unknown;
+  }>(sql`
+    SELECT stored_at AS "storedAt", payload FROM memory_session_sources
+    WHERE namespace_id=${namespace.id} AND event_id=${event.meta.id}`);
+  expect(receipt?.storedAt).toBeNull();
+  expect(receipt?.payload).toMatchObject({ sessionId });
+  expect(
+    await Array.fromAsync(
+      glob(join(directory, namespace.id, "raw/eve/**/*.jsonl"))
+    )
+  ).toEqual([]);
+});
+
 test("pausing memory fences delivery of already queued sources until it is resumed", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const event = source();
@@ -461,7 +509,7 @@ test("pausing memory fences delivery of already queued sources until it is resum
 });
 
 test("accepted replies use the same ownership, replay and immutable-file guarantees", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await privateMemoryFixture();
   const actor = workspace.personal;
   const sessionId = `session-${randomUUID()}`;
   const turn = { id: "settled-turn", sequence: 0 };
@@ -497,4 +545,104 @@ test("accepted replies use the same ownership, replay and immutable-file guarant
     occurredAt: null,
     text: "Accepted Willowport reply.",
   });
+});
+
+test("native drain rejects an enclosing SQL transaction before journal publication", async () => {
+  await using workspace = await privateMemoryFixture();
+  const actor = workspace.personal;
+  const sessionId = `nested-journal-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  const event = source();
+  await transaction(() =>
+    captureSessionSource(actor, sessionSource(event, sessionId))
+  );
+  const namespace = await workspace.namespace(actor);
+  await expect(transaction(() => drainSessionSources())).rejects.toBeInstanceOf(
+    TransactionBoundaryError
+  );
+  expect(
+    await Array.fromAsync(
+      glob(join(directory, namespace.id, "raw/eve/**/*.jsonl"))
+    )
+  ).toEqual([]);
+  const [receipt] = await query<{
+    storedAt: string | null;
+    payload: unknown;
+  }>(sql`
+    SELECT stored_at AS "storedAt", payload FROM memory_session_sources
+    WHERE namespace_id=${namespace.id} AND event_id=${event.meta.id}`);
+  expect(receipt?.storedAt).toBeNull();
+  expect(receipt?.payload).toMatchObject({ eventId: event.meta.id });
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
+});
+
+test("a failed account backs off while a different account commits its delivered journal", async () => {
+  await using failed = await privateMemoryFixture();
+  await using healthy = await privateMemoryFixture();
+  const firstSession = `journal-failure-${randomUUID()}`;
+  const secondSession = `journal-healthy-${randomUUID()}`;
+  await claimSession(failed.personal, firstSession);
+  await claimSession(healthy.personal, secondSession);
+  const first = source();
+  const second = source();
+  await captureSessionSource(
+    failed.personal,
+    sessionSource(first, firstSession)
+  );
+  await captureSessionSource(
+    healthy.personal,
+    sessionSource(second, secondSession)
+  );
+  const namespace = await failed.namespace(failed.personal);
+  const raw = join(directory, namespace.id, "raw");
+  await mkdir(raw, { recursive: true, mode: 0o700 });
+  await writeFile(join(raw, "eve"), "Synthetic isolated disk failure");
+  await expect(drainSessionSources()).rejects.toMatchObject({
+    message:
+      "Session archive delivery failed for 1 account(s); 1 source(s) stored.",
+  });
+  const receipts = await query<{
+    eventId: string;
+    storedAt: string | null;
+    failures: number;
+    delayed: boolean;
+  }>(sql`
+    SELECT event_id AS "eventId", stored_at AS "storedAt", delivery_failures AS failures,
+      available_at > statement_timestamp() AS delayed FROM memory_session_sources
+    WHERE event_id IN (${first.meta.id},${second.meta.id})`);
+  expect(receipts.find((row) => row.eventId === first.meta.id)).toMatchObject({
+    storedAt: null,
+    failures: 1,
+    delayed: true,
+  });
+  expect(
+    receipts.find((row) => row.eventId === second.meta.id)?.storedAt
+  ).not.toBeNull();
+  expect(await drainSessionSources()).toEqual({ stored: 0, configured: true });
+});
+
+test("one real drain commits at most five namespace batches", async () => {
+  await using fixtures = new AsyncDisposableStack();
+  const events = [];
+  for (let count = 0; count < 6; count++) {
+    const fixture = fixtures.use(await privateMemoryFixture());
+    const sessionId = `bounded-journal-${randomUUID()}`;
+    await claimSession(fixture.personal, sessionId);
+    const event = source();
+    events.push(event.meta.id);
+    await captureSessionSource(
+      fixture.personal,
+      sessionSource(event, sessionId)
+    );
+  }
+  expect(await drainSessionSources()).toEqual({ stored: 5, configured: true });
+  const [count] = await query<{ stored: number; pending: number }>(sql`
+    SELECT count(*) FILTER (WHERE stored_at IS NOT NULL)::int AS stored,
+      count(*) FILTER (WHERE stored_at IS NULL)::int AS pending FROM memory_session_sources
+    WHERE event_id IN (${sql.join(
+      events.map((id) => sql`${id}`),
+      sql`, `
+    )})`);
+  expect(count).toEqual({ stored: 5, pending: 1 });
+  expect(await drainSessionSources()).toEqual({ stored: 1, configured: true });
 });

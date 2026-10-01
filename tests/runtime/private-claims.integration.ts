@@ -96,14 +96,16 @@ test("lost receipt indexes rebuild from files/Git without losing facts, timestam
   const { actor } = fixture;
   const initial = assertion("Weekly private report");
   const first = await PrivateMemoryRepository.change(actor, initial);
-  if (!first.applied || !first.claim) throw new Error("Expected publication");
+  if (!first.applied || !("claim" in first))
+    throw new Error("Expected publication");
   const deleted = await PrivateMemoryRepository.change(actor, {
     action: "tombstone",
     operationId: randomUUID(),
     claimId: initial.claimId,
     expectedRevision: first.receipt.revision,
   });
-  if (!deleted.applied || !deleted.claim) throw new Error("Expected tombstone");
+  if (!deleted.applied || !("claim" in deleted))
+    throw new Error("Expected tombstone");
   await queries.query(sql`DELETE FROM private_memory_operation WHERE namespace_id IN
     (SELECT namespace_id FROM workspace_memory_namespace WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId})`);
   const historical = await PrivateMemoryRepository.read(actor, {
@@ -209,7 +211,7 @@ test("unverified or changed evidence cannot yield current facts; explicit audit 
     ...input,
     body: { ...input.body, sources },
   });
-  if (!first.applied || !first.claim)
+  if (!first.applied || !("claim" in first))
     throw new Error("Expected verified claim");
   const revised = await repository.publish(actor, {
     operationId: randomUUID(),
