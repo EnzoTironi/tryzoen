@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  hono@<4.13.5: 4.13.5
+  hono@<4.13.7: 4.13.7
   '@hono/node-server@<1.19.15': 1.19.15
   lodash@<4.18.1: 4.18.1
   valibot@>=1.0.0 <1.4.2: 1.4.2
@@ -19,7 +19,7 @@ importers:
     dependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: 2.0.0-beta.76
-        version: 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
+        version: 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@distilled.cloud/fly-io':
         specifier: 1.0.0-rc.8
         version: 1.0.0-rc.8(effect@4.0.0-rc.112)
@@ -28,13 +28,13 @@ importers:
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
       alchemy:
         specifier: 2.0.0-beta.76
-        version: 2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3)
+        version: 2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3)
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
       hono:
-        specifier: 4.13.5
-        version: 4.13.5
+        specifier: 4.13.7
+        version: 4.13.7
     devDependencies:
       '@types/node':
         specifier: 24.10.4
@@ -81,7 +81,7 @@ packages:
       '@vitejs/plugin-react': ^6.0.2
       astro: ^7.0.0
       effect: '>=4.0.0-rc.112 || >=4.0.0'
-      hono: 4.13.5
+      hono: 4.13.7
       nuxt: '>=4.5.0'
       vite: ^7.0.0 || ^8.0.0
       vocs: 2.8.2
@@ -503,7 +503,7 @@ packages:
     resolution: {integrity: sha512-Za2ai6TLdKjUvnur+eenO6nuYYipVAEhyCAdaV8IRvmU9kK8crOZUSYvIXn72E4f8fJqyAbpcJuTsYYmZp9Deg==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: 4.13.5
+      hono: 4.13.7
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -1475,8 +1475,8 @@ packages:
   graphmatch@1.1.1:
     resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   http-status-codes@2.3.0:
@@ -2114,7 +2114,7 @@ snapshots:
     dependencies:
       effect: 4.0.0-rc.112
 
-  '@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))':
+  '@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))':
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.76(@distilled.cloud/cloudflare@1.0.0-rc.8(effect@4.0.0-rc.112))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(rolldown@1.2.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@distilled.cloud/cloudflare': 1.0.0-rc.8(effect@4.0.0-rc.112)
@@ -2124,7 +2124,7 @@ snapshots:
       rolldown: 1.2.5
     optionalDependencies:
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
-      hono: 4.13.5
+      hono: 4.13.7
       vite: 8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@types/node'
@@ -2536,9 +2536,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@1.19.15(hono@4.13.5)':
+  '@hono/node-server@1.19.15(hono@4.13.7)':
     dependencies:
-      hono: 4.13.5
+      hono: 4.13.7
 
   '@img/colour@1.1.0': {}
 
@@ -2835,13 +2835,13 @@ snapshots:
       '@electric-sql/pglite': 0.3.15
       '@electric-sql/pglite-socket': 0.0.20(@electric-sql/pglite@0.3.15)
       '@electric-sql/pglite-tools': 0.2.20(@electric-sql/pglite@0.3.15)
-      '@hono/node-server': 1.19.15(hono@4.13.5)
+      '@hono/node-server': 1.19.15(hono@4.13.7)
       '@mrleebo/prisma-ast': 0.13.1
       '@prisma/get-platform': 7.2.0
       '@prisma/query-plan-executor': 7.2.0
       foreground-child: 3.3.1
       get-port-please: 3.2.0
-      hono: 4.13.5
+      hono: 4.13.7
       http-status-codes: 2.3.0
       pathe: 2.0.3
       proper-lockfile: 4.1.2
@@ -3101,7 +3101,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  alchemy@2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3):
+  alchemy@2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.76(@distilled.cloud/cloudflare@1.0.0-rc.8(effect@4.0.0-rc.112))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(rolldown@1.2.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@alchemy.run/floci': 2.0.0-beta.76(effect@4.0.0-rc.112)
@@ -3143,7 +3143,7 @@ snapshots:
       undici: 7.29.1
       yaml: 2.9.0
     optionalDependencies:
-      '@alchemy.run/frontend-frameworks': 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
+      '@alchemy.run/frontend-frameworks': 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
       vite: 8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)
       ws: 8.21.3
@@ -3363,7 +3363,7 @@ snapshots:
 
   graphmatch@1.1.1: {}
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   http-status-codes@2.3.0: {}
 
