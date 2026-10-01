@@ -8,6 +8,12 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { matrixRoomMembers } from "../../db/schema/matrix";
 import { transaction, TransactionBoundaryError } from "@db/queries";
 import { WorkspaceAccessDenied } from "../workspaces/access";
+import {
+  TimeoutError,
+  operationDeadline,
+  operationSignal,
+  withSignal,
+} from "../operations/async";
 import { MatrixError, type matrixRequest } from "./client";
 import {
   stageMatrixIdentity,
@@ -119,6 +125,20 @@ async function rows(statement: SQL) {
   const text = compiled.sql.replace(/\s+/gu, " ").trim();
   const params = compiled.params;
   statements.push(text);
+  if (text === "SELECT set_config('statement_timeout', $1, true)") {
+    const deadlineMs = operationDeadline();
+    expect(deadlineMs).toBeDefined();
+    expect(params).toHaveLength(1);
+    expect(typeof params[0]).toBe("string");
+    const remaining = Number(params[0]);
+    expect(Number.isSafeInteger(remaining)).toBe(true);
+    expect(remaining).toBeGreaterThan(0);
+    expect(remaining).toBeLessThanOrEqual(30_000);
+    expect(remaining).toBeGreaterThanOrEqual(
+      Math.max(1, (deadlineMs ?? 0) - Date.now())
+    );
+    return [];
+  }
   if (
     text.includes(
       'SELECT w.id AS "workspaceId", w.organization_id AS "organizationId"'
@@ -299,18 +319,38 @@ async function rows(statement: SQL) {
   throw new Error(`Unexpected mocked SQL: ${text}`);
 }
 
+function assertNativeRequest(...args: Parameters<typeof matrixRequest>) {
+  const [method, path, body, userId] = args;
+  expect([
+    "register",
+    `rooms/${encodeURIComponent(room.roomId)}/state/m.room.member/${encodeURIComponent(matrixId)}`,
+    `rooms/${encodeURIComponent(room.roomId)}/invite`,
+    `join/${encodeURIComponent(room.roomId)}`,
+  ]).toContain(path);
+  const expectedBody =
+    path === "register"
+      ? {
+          type: "m.login.application_service",
+          username: localpart,
+          inhibit_login: true,
+        }
+      : path.endsWith("/invite")
+        ? { user_id: matrixId }
+        : method === "POST"
+          ? {}
+          : undefined;
+  expect(body).toEqual(expectedBody);
+  expect(userId).toBe(path.startsWith("join/") ? matrixId : undefined);
+}
+
 async function nativeProvider(
   ...args: Parameters<typeof matrixRequest>
 ): ReturnType<typeof matrixRequest> {
-  const [method, path, body, userId] = args;
+  const [method, path] = args;
   trace.push(`native:${method}:${path}`);
+  assertNativeRequest(...args);
   expect(committed.identities.get(actor.userId)).toBe(matrixId);
   if (path === "register") {
-    expect(body).toEqual({
-      type: "m.login.application_service",
-      username: localpart,
-      inhibit_login: true,
-    });
     const wasRegistered = nativeRegistered;
     nativeRegistered = true;
     if (providerFailure === "register-ack")
@@ -321,7 +361,6 @@ async function nativeProvider(
   expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
   expect(committed.epoch).not.toBe(room.epoch);
   if (method === "GET" && path.includes("/state/m.room.member/")) {
-    expect(path).toContain(encodeURIComponent(matrixId));
     membershipGets++;
     if (providerFailure === "verify" && membershipGets > 1)
       throw new MatrixError({ reason: "unavailable" });
@@ -335,12 +374,10 @@ async function nativeProvider(
   if (method === "POST" && path.endsWith("/invite")) {
     if (providerFailure === "forbidden")
       throw new MatrixError({ reason: "forbidden" });
-    expect(body).toEqual({ user_id: matrixId });
     nativeState = "invite";
     return {};
   }
   if (method === "POST" && path.startsWith("join/")) {
-    expect(userId).toBe(matrixId);
     nativeState = "join";
     if (providerFailure === "join-ack")
       throw new MatrixError({ reason: "unavailable" });
@@ -456,7 +493,7 @@ describe("durable Matrix participation", () => {
     pendingIntent();
     await transaction(async () => {
       await expect(
-        completeMatrixGroupJoin(bindingId, actor.userId)
+        completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
       ).rejects.toThrow(TransactionBoundaryError);
     });
     expect(boundary.nested).not.toHaveBeenCalled();
@@ -500,7 +537,7 @@ describe("durable Matrix participation", () => {
     membershipGets = 0;
     boundary.request.mockClear();
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).resolves.toBe(true);
     expect(committed.members.get(actor.userId)?.nativePending).toBe(false);
     expect(committed.epoch).toBe(epoch);
@@ -525,7 +562,7 @@ describe("durable Matrix participation", () => {
     failCommitAt = 0;
     boundary.request.mockClear();
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).resolves.toBe(true);
     expect(
       boundary.request.mock.calls.some(
@@ -547,7 +584,7 @@ describe("durable Matrix participation", () => {
     pendingIntent();
     sessionValid = false;
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).resolves.toBe(true);
     expect(trace).toContain("live-member");
     expect(trace).toContain("live-account");
@@ -557,7 +594,7 @@ describe("durable Matrix participation", () => {
     pendingIntent();
     membershipValid = false;
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).resolves.toBe(false);
     expect(committed.members.get(actor.userId)).toEqual({
       state: "removed",
@@ -643,7 +680,7 @@ describe("durable Matrix participation", () => {
     pendingIntent();
     accountLive = false;
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).resolves.toBe(false);
     expect(committed.members.get(actor.userId)).toEqual({
       state: "removed",
@@ -691,7 +728,7 @@ describe("durable Matrix participation", () => {
       { bindingId, userId: actor.userId },
     ]);
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).rejects.toMatchObject({ reason: "forbidden" });
     expect(committed.retryTimes.get(actor.userId)).toBe(60002);
     expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
@@ -702,7 +739,7 @@ describe("durable Matrix participation", () => {
     committed.due = true;
     boundary.request.mockClear();
     await expect(
-      completeMatrixGroupJoin(bindingId, actor.userId)
+      completeMatrixGroupJoin(bindingId, actor.userId, Date.now() + 30_000)
     ).rejects.toMatchObject({ reason: "forbidden" });
     expect(
       boundary.request.mock.calls.some(
@@ -723,5 +760,252 @@ describe("durable Matrix participation", () => {
     expect(statements.at(-1)).toContain("state = 'joined'");
     expect(statements.at(-1)).toContain("native_retry_at <= clock_timestamp()");
     expect(boundary.request).not.toHaveBeenCalled();
+  });
+});
+
+/** Wall-clock advancement at mocked native boundaries checks phase admission,
+ * not PostgreSQL cancellation or whether an already-sent native effect failed.
+ * No deadline helper is mocked; the real transaction and signal owners remain.
+ */
+describe("scheduled Matrix participation deadline", () => {
+  beforeEach(() => {
+    now = 10_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    pendingIntent();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("requires an explicit runtime deadline before any SQL or provider work", async () => {
+    await expect(
+      Reflect.apply(completeMatrixGroupJoin, undefined, [
+        bindingId,
+        actor.userId,
+      ])
+    ).rejects.toBeInstanceOf(Error);
+    expect(boundary.outer).not.toHaveBeenCalled();
+    expect(boundary.execute).not.toHaveBeenCalled();
+    expect(boundary.request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    -1,
+    10_000.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects malformed deadline %s before I/O", async (deadlineMs) => {
+    await expect(
+      completeMatrixGroupJoin(bindingId, actor.userId, deadlineMs)
+    ).rejects.toBeInstanceOf(Error);
+    expect(boundary.outer).not.toHaveBeenCalled();
+    expect(boundary.execute).not.toHaveBeenCalled();
+    expect(boundary.request).not.toHaveBeenCalled();
+  });
+
+  it("rejects a deadline beyond the single thirty-second budget before I/O", async () => {
+    await expect(
+      completeMatrixGroupJoin(bindingId, actor.userId, now + 30_001)
+    ).rejects.toBeInstanceOf(Error);
+    expect(boundary.outer).not.toHaveBeenCalled();
+    expect(boundary.execute).not.toHaveBeenCalled();
+    expect(boundary.request).not.toHaveBeenCalled();
+  });
+
+  it("does no SQL or provider work for an expired deadline", async () => {
+    const result = await completeMatrixGroupJoin(
+      bindingId,
+      actor.userId,
+      now
+    ).catch((error: unknown) => error);
+    expect(boundary.outer).not.toHaveBeenCalled();
+    expect(boundary.execute).not.toHaveBeenCalled();
+    expect(boundary.request).not.toHaveBeenCalled();
+    expect(result === false || result instanceof TimeoutError).toBe(true);
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
+  });
+
+  it("confirms a due intent within one explicit valid deadline", async () => {
+    await expect(
+      completeMatrixGroupJoin(bindingId, actor.userId, now + 30_000)
+    ).resolves.toBe(true);
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(false);
+    expect(trace).toContain("completion-row-lock");
+    expect(trace).toContain("live-member");
+    expect(trace).toContain("live-account");
+  });
+
+  it("preserves the real foreground authorization rejection delivered after expiry", async () => {
+    const deadlineMs = now + 30_000;
+    const epoch = committed.epoch;
+    const rejected = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const owningTransaction = boundary.outer.getMockImplementation();
+    if (!owningTransaction)
+      throw new Error("Missing owning transaction fixture");
+    let original: unknown;
+    afterPrepare = () => {
+      sessionValid = false;
+    };
+    // Delay delivery of a real session-authority failure, rather than mocking
+    // the authorization helper or inventing a database/provider guarantee.
+    boundary.outer.mockImplementation(async (run) => {
+      try {
+        return await owningTransaction(run);
+      } catch (error) {
+        original = error;
+        rejected.resolve();
+        await release.promise;
+        throw error;
+      }
+    });
+    const result = ensureMatrixParticipation(actor, bindingId).catch(
+      (error: unknown) => error
+    );
+    try {
+      await rejected.promise;
+      expect(original).toBeInstanceOf(WorkspaceAccessDenied);
+      now = deadlineMs;
+    } finally {
+      release.resolve();
+    }
+    await expect(result).resolves.toBe(original);
+    expect(boundary.request).not.toHaveBeenCalled();
+    expect(trace).not.toContain("retry-stage");
+    expect(trace).not.toContain("pending-clear");
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
+    expect(committed.epoch).toBe(epoch);
+  });
+
+  it("preserves a native forbidden reply at expiry without starting retry SQL", async () => {
+    const deadlineMs = now + 1000;
+    const epoch = committed.epoch;
+    let original: unknown;
+    let statementsAtExpiry = -1;
+    providerFailure = "forbidden";
+    boundary.request.mockImplementation(async (...args) => {
+      try {
+        return await nativeProvider(...args);
+      } catch (error) {
+        original = error;
+        now = deadlineMs;
+        statementsAtExpiry = statements.length;
+        throw error;
+      }
+    });
+    const result = await completeMatrixGroupJoin(
+      bindingId,
+      actor.userId,
+      deadlineMs
+    ).catch((error: unknown) => error);
+    expect(original).toBeInstanceOf(MatrixError);
+    expect(original).toMatchObject({ reason: "forbidden" });
+    expect(result).toBe(original);
+    expect(boundary.request).toHaveBeenCalledTimes(3);
+    expect(statementsAtExpiry).toBeGreaterThanOrEqual(0);
+    expect(statements.slice(statementsAtExpiry)).toEqual([]);
+    expect(trace).not.toContain("retry-stage");
+    expect(trace).not.toContain("pending-clear");
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
+    expect(committed.epoch).toBe(epoch);
+  });
+
+  it("preserves inherited cancellation before any native work", async () => {
+    const controller = new AbortController();
+    const cancellation = new TimeoutError();
+    boundary.request.mockImplementation(async (...args) => {
+      expect(operationSignal().aborted).toBe(false);
+      const value = await nativeProvider(...args);
+      if (args[1] === "register") controller.abort(cancellation);
+      return value;
+    });
+    let completion: ReturnType<typeof completeMatrixGroupJoin> | undefined;
+    const result = await withSignal(controller.signal, () => {
+      completion = completeMatrixGroupJoin(
+        bindingId,
+        actor.userId,
+        now + 30_000
+      );
+      return completion;
+    }).catch((error: unknown) => error);
+    await completion?.catch(() => undefined);
+    expect(result).toBe(cancellation);
+    expect(boundary.request).toHaveBeenCalledTimes(1);
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
+    expect(trace).not.toContain("pending-clear");
+    expect(trace).not.toContain("retry-stage");
+  });
+
+  it.each([
+    ["registration", 1],
+    ["first membership read", 2],
+    ["join acknowledgement", 4],
+    ["membership verification", 5],
+  ] as const)(
+    "admits no further phase after expiry at %s",
+    async (phase, expectedRequests) => {
+      const deadlineMs = now + 1000;
+      const epoch = committed.epoch;
+      let statementsAtExpiry = -1;
+      boundary.request.mockImplementation(async (...args) => {
+        const value = await nativeProvider(...args);
+        const [method, path] = args;
+        if (
+          (phase === "registration" && path === "register") ||
+          (phase === "first membership read" &&
+            method === "GET" &&
+            membershipGets === 1) ||
+          (phase === "join acknowledgement" &&
+            method === "POST" &&
+            path.startsWith("join/")) ||
+          (phase === "membership verification" && membershipGets === 2)
+        ) {
+          now = deadlineMs;
+          statementsAtExpiry = statements.length;
+        }
+        return value;
+      });
+      const result = await completeMatrixGroupJoin(
+        bindingId,
+        actor.userId,
+        deadlineMs
+      ).catch((error: unknown) => error);
+      expect(statementsAtExpiry).toBeGreaterThanOrEqual(0);
+      expect(boundary.request).toHaveBeenCalledTimes(expectedRequests);
+      expect(statements.slice(statementsAtExpiry)).toEqual([]);
+      expect(trace).not.toContain("pending-clear");
+      expect(trace).not.toContain("retry-stage");
+      expect(result).toBeInstanceOf(TimeoutError);
+      expect(committed.members.get(actor.userId)).toEqual({
+        state: "joined",
+        nativePending: true,
+      });
+      expect(committed.epoch).toBe(epoch);
+      expect(nativeState).toBe(expectedRequests >= 4 ? "join" : "leave");
+    }
+  );
+
+  it("retains intent without retry SQL when transport uncertainty consumes the deadline", async () => {
+    const deadlineMs = now + 1000;
+    const epoch = committed.epoch;
+    let statementsAtExpiry = -1;
+    boundary.request.mockImplementation(async (...args) => {
+      await nativeProvider(...args);
+      now = deadlineMs;
+      statementsAtExpiry = statements.length;
+      throw new MatrixError({ reason: "unavailable" });
+    });
+    const result = await completeMatrixGroupJoin(
+      bindingId,
+      actor.userId,
+      deadlineMs
+    ).catch((error: unknown) => error);
+    expect(boundary.request).toHaveBeenCalledTimes(1);
+    expect(statements.slice(statementsAtExpiry)).toEqual([]);
+    expect(trace).not.toContain("retry-stage");
+    expect(trace).not.toContain("pending-clear");
+    expect(result).toBeInstanceOf(TimeoutError);
+    expect(committed.members.get(actor.userId)?.nativePending).toBe(true);
+    expect(committed.epoch).toBe(epoch);
   });
 });

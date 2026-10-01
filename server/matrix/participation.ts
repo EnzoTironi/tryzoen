@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
-import { query, transaction, SqlError } from "@db/queries";
+import { query, SqlError } from "@db/queries";
 import type { matrixRoomMembers } from "../../db/schema/matrix";
 import { roomParticipationSchema, roomSchema } from "@zoen/companion-ui/rooms";
 import {
@@ -10,8 +10,13 @@ import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { TimeoutError } from "../operations/async";
+import {
+  operationDeadline,
+  operationSignal,
+  withDeadline,
+} from "../operations/async";
 import { lockMatrixAdmission } from "./authority";
+import { validateMatrixDeadline, withMatrixTransaction } from "./deadline";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
 import {
   matrixIdentityForUser,
@@ -48,15 +53,17 @@ function membership(bindingId: string, userId: string) {
     FROM matrix_room_members WHERE binding_id = ${bindingId} AND user_id = ${userId} FOR UPDATE`);
 }
 
-async function scheduleRetry(bindingId: string, userId: string) {
-  await transaction(
-    async () => {
-      await lockMatrixAdmission([], [bindingId]);
-      await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
+async function scheduleRetry(
+  bindingId: string,
+  userId: string,
+  deadlineMs: number
+) {
+  operationSignal().throwIfAborted();
+  await withMatrixTransaction(deadlineMs, async () => {
+    await lockMatrixAdmission([], [bindingId]);
+    await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
       WHERE binding_id = ${bindingId} AND user_id = ${userId} AND state = 'joined' AND native_pending`);
-    },
-    { outermost: true }
-  );
+  });
 }
 
 /** One committed intent drives both foreground confirmation and scheduled
@@ -65,22 +72,20 @@ async function scheduleRetry(bindingId: string, userId: string) {
 async function completeGroupJoin(
   bindingId: string,
   userId: string,
+  deadlineMs: number,
   actor?: z.output<typeof WorkspaceActorSchema>
 ) {
   try {
-    const outcome = await transaction(
-      async () => {
-        await lockMatrixAdmission(actor ? [actor.workspaceId] : [], [
-          bindingId,
-        ]);
-        if (actor) await currentHuman(actor);
-        const config = await matrixConfiguration();
-        const rows = await query<{
-          workspaceId: string;
-          roomId: string;
-          matrixId: string;
-          due: boolean;
-        }>(sql`SELECT b.workspace_id AS "workspaceId", b.conversation_id AS "roomId",
+    const outcome = await withMatrixTransaction(deadlineMs, async () => {
+      await lockMatrixAdmission(actor ? [actor.workspaceId] : [], [bindingId]);
+      if (actor) await currentHuman(actor);
+      const config = await matrixConfiguration();
+      const rows = await query<{
+        workspaceId: string;
+        roomId: string;
+        matrixId: string;
+        due: boolean;
+      }>(sql`SELECT b.workspace_id AS "workspaceId", b.conversation_id AS "roomId",
         i.matrix_id AS "matrixId", m.native_retry_at <= clock_timestamp() AS due
         FROM workspace_group_bindings b
         JOIN matrix_room_members m ON m.binding_id = b.id AND m.user_id = ${userId}
@@ -88,87 +93,96 @@ async function completeGroupJoin(
         WHERE b.id = ${bindingId} AND b.channel = 'matrix' AND b.installation_id = ${config.serverName}
           AND b.revoked_at IS NULL AND m.state = 'joined' AND m.native_pending
         FOR UPDATE OF b, m FOR SHARE OF i`);
-        const row = rows[0];
-        if (!row) return "pending" as const;
-        if (
-          actor &&
-          (actor.userId !== userId || actor.workspaceId !== row.workspaceId)
-        )
-          throw new WorkspaceAccessDenied();
-        const identity = matrixIdentityForUser(userId, config.serverName);
-        if (row.matrixId !== identity.matrixId)
-          throw new WorkspaceAccessDenied();
-        try {
-          const access = await requireWorkspaceMembership({
-            userId,
-            workspaceId: row.workspaceId,
-          });
-          const account = await query(sql`SELECT id FROM public.user
+      const row = rows[0];
+      if (!row) return "pending" as const;
+      if (
+        actor &&
+        (actor.userId !== userId || actor.workspaceId !== row.workspaceId)
+      )
+        throw new WorkspaceAccessDenied();
+      const identity = matrixIdentityForUser(userId, config.serverName);
+      if (row.matrixId !== identity.matrixId) throw new WorkspaceAccessDenied();
+      try {
+        const access = await requireWorkspaceMembership({
+          userId,
+          workspaceId: row.workspaceId,
+        });
+        const account = await query(sql`SELECT id FROM public.user
           WHERE ('better-auth:' || id) = ${userId} FOR SHARE`);
-          if (!access.organization_id || account.length !== 1)
-            throw new WorkspaceAccessDenied();
-        } catch (error) {
-          if (actor || !(error instanceof WorkspaceAccessDenied)) throw error;
-          await query(sql`UPDATE matrix_room_members SET state = 'removed', native_pending = true, native_retry_at = now()
+        if (!access.organization_id || account.length !== 1)
+          throw new WorkspaceAccessDenied();
+      } catch (error) {
+        if (actor || !(error instanceof WorkspaceAccessDenied)) throw error;
+        await query(sql`UPDATE matrix_room_members SET state = 'removed', native_pending = true, native_retry_at = now()
           WHERE binding_id = ${bindingId} AND user_id = ${userId} AND state = 'joined' AND native_pending`);
-          await query(
-            sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
-          );
-          return "removed" as const;
-        }
-        if (!row.due) return "pending" as const;
-        // SQL staging survives restart; registration must still be attempted.
-        await registerVirtualUser(identity.localpart);
-        const native = await readNativeGroupMembership(
-          row.roomId,
+        await query(
+          sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${bindingId}`
+        );
+        return "removed" as const;
+      }
+      if (!row.due) return "pending" as const;
+      // SQL staging survives restart; registration must still be attempted.
+      operationSignal().throwIfAborted();
+      await registerVirtualUser(identity.localpart);
+      operationSignal().throwIfAborted();
+      const native = await readNativeGroupMembership(row.roomId, row.matrixId);
+      operationSignal().throwIfAborted();
+      if (native === "ban") throw new MatrixError({ reason: "forbidden" });
+      if (native !== "join") {
+        operationSignal().throwIfAborted();
+        await matrixRequest(
+          "POST",
+          `rooms/${encodeURIComponent(row.roomId)}/invite`,
+          { user_id: row.matrixId }
+        );
+        operationSignal().throwIfAborted();
+        await matrixRequest(
+          "POST",
+          `join/${encodeURIComponent(row.roomId)}`,
+          {},
           row.matrixId
         );
-        if (native === "ban") throw new MatrixError({ reason: "forbidden" });
-        if (native !== "join") {
-          await matrixRequest(
-            "POST",
-            `rooms/${encodeURIComponent(row.roomId)}/invite`,
-            { user_id: row.matrixId }
-          );
-          await matrixRequest(
-            "POST",
-            `join/${encodeURIComponent(row.roomId)}`,
-            {},
-            row.matrixId
-          );
-          if (
-            (await readNativeGroupMembership(row.roomId, row.matrixId)) !==
-            "join"
-          ) {
-            await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
+        operationSignal().throwIfAborted();
+        if (
+          (await readNativeGroupMembership(row.roomId, row.matrixId)) !== "join"
+        ) {
+          operationSignal().throwIfAborted();
+          await query(sql`UPDATE matrix_room_members SET native_retry_at = now() + interval '1 minute'
             WHERE binding_id = ${bindingId} AND user_id = ${userId} AND state = 'joined' AND native_pending`);
-            return "pending" as const;
-          }
+          return "pending" as const;
         }
-        await query(sql`UPDATE matrix_room_members SET native_pending = false
+      }
+      operationSignal().throwIfAborted();
+      await query(sql`UPDATE matrix_room_members SET native_pending = false
         WHERE binding_id = ${bindingId} AND user_id = ${userId} AND state = 'joined' AND native_pending`);
-        return "joined" as const;
-      },
-      { outermost: true }
-    );
+      return "joined" as const;
+    });
+    operationSignal().throwIfAborted();
     if (outcome === "removed") await retireMatrixGroupMember(bindingId, userId);
+    operationSignal().throwIfAborted();
     return outcome === "joined";
   } catch (error) {
     if (error instanceof MatrixError && error.reason === "forbidden") {
-      // Advance native-denied candidates without treating denial as pending.
-      await scheduleRetry(bindingId, userId).catch(() => undefined);
+      // Preserve exact native denial even when expiry prevents advancing retry.
+      if (!operationSignal().aborted)
+        await scheduleRetry(bindingId, userId, deadlineMs).catch(
+          () => undefined
+        );
       throw error;
     }
+    // Original authorization, boundary, validation and timeout failures remain
+    // terminal. Cancellation governs admission of retries for uncertainty.
     if (
       !(
         error instanceof SqlError ||
-        error instanceof TimeoutError ||
         (error instanceof MatrixError && error.reason === "unavailable")
       )
     )
       throw error;
+    operationSignal().throwIfAborted();
     // An earlier owning commit still contains the receipt if retry scheduling fails.
-    await scheduleRetry(bindingId, userId).catch(() => undefined);
+    await scheduleRetry(bindingId, userId, deadlineMs).catch(() => undefined);
+    operationSignal().throwIfAborted();
     return false;
   }
 }
@@ -181,8 +195,13 @@ export async function ensureMatrixParticipation(
   actor: z.output<typeof WorkspaceActorSchema>,
   id: string
 ): Promise<z.output<typeof roomParticipationSchema>> {
-  const prepared = await transaction(
-    async () => {
+  const now = Date.now();
+  const deadlineMs = Math.min(
+    operationDeadline() ?? now + 30_000,
+    now + 30_000
+  );
+  return withDeadline(async () => {
+    const prepared = await withMatrixTransaction(deadlineMs, async () => {
       await lockMatrixAdmission([actor.workspaceId], [id]);
       await currentHuman(actor);
       const room = await requireMatrixRoom(actor, id);
@@ -207,13 +226,11 @@ export async function ensureMatrixParticipation(
         joined: current?.nativePending === false,
         due: current?.due ?? true,
       };
-    },
-    { outermost: true }
-  );
-  if (!prepared.joined && prepared.due)
-    await completeGroupJoin(id, actor.userId, actor);
-  return transaction(
-    async () => {
+    });
+    if (!prepared.joined && prepared.due)
+      await completeGroupJoin(id, actor.userId, deadlineMs, actor);
+    operationSignal().throwIfAborted();
+    return withMatrixTransaction(deadlineMs, async () => {
       await lockMatrixAdmission([actor.workspaceId], [id]);
       await currentHuman(actor);
       const room = await requireMatrixRoom(actor, id);
@@ -238,19 +255,25 @@ export async function ensureMatrixParticipation(
         id,
         retryAfterMs: Math.min(30000, Math.max(100, current.retryAfterMs)),
       });
-    },
-    { outermost: true }
-  );
+    });
+  }, deadlineMs);
 }
 
 /** Scheduled recovery uses the committed intent and current target membership;
  * no captured human session becomes an authorization credential.
  */
-export function completeMatrixGroupJoin(
+export async function completeMatrixGroupJoin(
   bindingId: string,
-  userId: string
+  userId: string,
+  deadlineMs: number
 ): Promise<boolean> {
-  return completeGroupJoin(bindingId, userId);
+  validateMatrixDeadline(deadlineMs);
+  operationSignal().throwIfAborted();
+  if (deadlineMs <= Date.now()) return false;
+  return withDeadline(
+    () => completeGroupJoin(bindingId, userId, deadlineMs),
+    deadlineMs
+  );
 }
 
 /** Candidate discovery grants no authority. The owning poll supplies its budget
