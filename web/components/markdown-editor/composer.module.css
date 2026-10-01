@@ -1,7 +1,7 @@
 .root {
   flex: 1;
   min-width: 0;
-  color: #111112;
+  color: inherit;
 }
 .tools {
   display: flex;
@@ -58,7 +58,7 @@
 }
 .input :global(.tiptap):has(> p:only-child > br:only-child)::before {
   content: attr(data-placeholder);
-  color: #92969b;
+  color: inherit;
   pointer-events: none;
   position: absolute;
 }

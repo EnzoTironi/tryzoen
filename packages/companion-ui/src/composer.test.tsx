@@ -301,3 +301,84 @@ it.each([false, true])(
     }
   }
 );
+
+it.each([false, true])(
+  "provides the existing theme ink to rich editors in every material mode, dark %s",
+  (dark) => {
+    state.dark = dark;
+    const Editor = vi.fn<(props: ComposerEditorProps) => ReactNode>((props) => (
+      <span>{props.value}</span>
+    ));
+    const onSend = send();
+    for (const preferences of [
+      {
+        reduceMotion: false,
+        reduceTransparency: false,
+        increasedContrast: false,
+        forcedColors: false,
+      },
+      {
+        reduceMotion: true,
+        reduceTransparency: false,
+        increasedContrast: false,
+        forcedColors: false,
+      },
+      {
+        reduceMotion: false,
+        reduceTransparency: true,
+        increasedContrast: false,
+        forcedColors: false,
+      },
+      {
+        reduceMotion: false,
+        reduceTransparency: false,
+        increasedContrast: true,
+        forcedColors: false,
+      },
+      {
+        reduceMotion: false,
+        reduceTransparency: false,
+        increasedContrast: false,
+        forcedColors: true,
+      },
+    ]) {
+      state.preferences = preferences;
+      renderToStaticMarkup(
+        <ComposerEditorProvider value={{ Input: Editor }}>
+          <Composer
+            initialDraft={{ text: "Rascunho çã 😀", files: [] }}
+            attachments={false}
+            onSend={onSend}
+          />
+        </ComposerEditorProvider>
+      );
+      expect(material()).toHaveProperty("color", dark ? "#f5f5f7" : "#1c1c1e");
+      expect(state.input).toBeUndefined();
+      expect(Editor.mock.calls.at(-1)?.[0]).toMatchObject({
+        value: "Rascunho çã 😀",
+        disabled: false,
+      });
+      for (const backdrop of [0, 255])
+        expect(
+          contrast(
+            Reflect.get(material(), "color"),
+            material().backgroundColor,
+            backdrop
+          )
+        ).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(onSend).not.toHaveBeenCalled();
+  }
+);
+it.each(["ios", "android"])(
+  "keeps native text color on TextInput rather than the View on %s",
+  (platform) => {
+    state.platform = platform;
+    state.dark = true;
+    render(send());
+    expect(material()).not.toHaveProperty("color");
+    expect(StyleSheet.flatten(state.input?.style)).toMatchObject({
+      color: "#f5f5f7",
+    });
+  }
+);

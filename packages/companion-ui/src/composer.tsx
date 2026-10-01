@@ -570,7 +570,10 @@ const createStyles = (
       minHeight: compact ? 44 : 32,
       backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
+        ? {
+            color: palette.ink,
+            backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)",
+          }
         : {}),
       flexDirection: "row",
       alignItems: "flex-end",
