@@ -36,10 +36,13 @@ export const deliverMatrixEvent = async function (
       }>(
         sql`SELECT d.prompt, d.message, d.state, b.conversation_id AS "roomId" FROM matrix_deliveries d JOIN workspace_group_bindings b ON b.id = d.binding_id WHERE d.event_id = ${eventId}`
       );
-      const row = rows[0];
-      if (!row || (row.state !== "pending" && row.state !== "dispatched"))
+      const delivery = rows[0];
+      if (
+        !delivery ||
+        (delivery.state !== "pending" && delivery.state !== "dispatched")
+      )
         throw new WorkspaceAccessDenied();
-      return { row, matrixIdentityId: actor.matrixIdentityId };
+      return { row: delivery, matrixIdentityId: actor.matrixIdentityId };
     },
     { outermost: true }
   );
@@ -65,7 +68,7 @@ export const deliverMatrixEvent = async function (
   }
   const { actor, prompt } = await withDatabaseTransaction(
     async () => {
-      const actor = await matrixDeliveryActor(eventId);
+      const deliveryActor = await matrixDeliveryActor(eventId);
       if (row.prompt === null)
         await query(
           sql`UPDATE matrix_deliveries SET prompt = ${candidatePrompt} WHERE event_id = ${eventId} AND prompt IS NULL`
@@ -76,7 +79,7 @@ export const deliverMatrixEvent = async function (
       const prepared = current[0];
       if (!prepared || prepared.prompt === null)
         throw new WorkspaceAccessDenied();
-      return { actor, prompt: prepared.prompt };
+      return { actor: deliveryActor, prompt: prepared.prompt };
     },
     { outermost: true }
   );
