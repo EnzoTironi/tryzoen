@@ -17,6 +17,7 @@ import {
 } from "./authority";
 import { matrixRequest, MatrixEventSchema, MatrixError } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
+import { validateMatrixLimit } from "./deadline";
 
 export const deliverMatrixEvent = async function (
   eventId: string,
@@ -194,14 +195,26 @@ export async function publishMatrixInputNotice(
   });
 }
 
-export const pendingMatrixEvents = async function () {
-  await query(sql`UPDATE matrix_deliveries d SET state = 'suppressed', output = NULL, updated_at = now()
-    FROM workspace_group_bindings b WHERE b.id = d.binding_id
-    AND d.state IN ('pending', 'dispatched', 'answer_ready') AND (b.revoked_at IS NOT NULL OR b.epoch <> d.epoch
-      OR NOT EXISTS (SELECT 1 FROM workspace_memberships m JOIN workspaces w ON w.id = m.workspace_id JOIN organization_memberships o ON o.organization_id = w.organization_id AND o.user_id = m.user_id WHERE m.workspace_id = b.workspace_id AND m.user_id = d.user_id))`);
+/** The poll owns this discovery transaction and its inherited deadline.
+ * Cleanup and discovery each have their own SQL row bound, not a send budget.
+ */
+export const pendingMatrixEvents = async function (limit: number) {
+  validateMatrixLimit(limit, 25);
+  if (limit === 0) return [];
+  const obsolete = sql`b.revoked_at IS NOT NULL OR b.epoch <> d.epoch
+    OR NOT EXISTS (SELECT 1 FROM workspace_memberships m JOIN workspaces w ON w.id = m.workspace_id JOIN organization_memberships o ON o.organization_id = w.organization_id AND o.user_id = m.user_id WHERE m.workspace_id = b.workspace_id AND m.user_id = d.user_id)`;
+  await query(sql`WITH stale AS (SELECT d.event_id FROM matrix_deliveries d
+    JOIN workspace_group_bindings b ON b.id = d.binding_id
+    WHERE d.state IN ('pending', 'dispatched', 'answer_ready') AND (${obsolete})
+    ORDER BY d.created_at, d.event_id LIMIT ${limit} FOR UPDATE OF d SKIP LOCKED)
+    UPDATE matrix_deliveries d SET state = 'suppressed', output = NULL, updated_at = now()
+    FROM workspace_group_bindings b, stale WHERE b.id = d.binding_id AND d.event_id = stale.event_id
+      AND d.state IN ('pending', 'dispatched', 'answer_ready') AND (${obsolete})`);
   return await query<{
     eventId: string;
     state: string;
-  }>(sql`SELECT event_id AS "eventId", state FROM matrix_deliveries
-    WHERE state IN ('pending', 'answer_ready') ORDER BY created_at LIMIT 25`);
+  }>(sql`SELECT d.event_id AS "eventId", d.state FROM matrix_deliveries d
+    JOIN workspace_group_bindings b ON b.id = d.binding_id
+    WHERE d.state IN ('pending', 'answer_ready') AND NOT (${obsolete})
+    ORDER BY d.created_at, d.event_id LIMIT ${limit}`);
 };
