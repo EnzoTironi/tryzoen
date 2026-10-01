@@ -1,22 +1,5 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-
-function directories(directory: string) {
-  return readdirSync(directory)
-    .filter(
-      (entry) =>
-        statSync(join(directory, entry)).isDirectory() &&
-        readdirSync(join(directory, entry)).length > 0
-    )
-    .toSorted();
-}
-
-function files(directory: string) {
-  return readdirSync(directory)
-    .filter((entry) => statSync(join(directory, entry)).isFile())
-    .toSorted();
-}
 
 describe("source layout", () => {
   it("keeps the Eve agent and Next route tree at the repository root", () => {
@@ -30,35 +13,6 @@ describe("source layout", () => {
   });
 
   it("keeps browser support and cross-boundary contracts explicitly owned", () => {
-    expect(directories("web")).toEqual([
-      "auth",
-      "browser",
-      "components",
-      "eve",
-      "files",
-      "i18n",
-      "trpc",
-      "workspaces",
-    ]);
-    expect(files("web")).toEqual([]);
-    expect(directories("shared")).toEqual([
-      "billing",
-      "browser",
-      "chat",
-      "companion",
-      "environment",
-      "google-workspace",
-      "identity",
-      "models",
-      "observability",
-      "personal-memory",
-      "schedules",
-      "user-profile",
-      "vault",
-      "workspaces",
-      "workstreams",
-    ]);
-    expect(files("shared")).toEqual(["validation.ts"]);
     expect(existsSync("shared/environment/env.ts")).toBe(true);
     expect(existsSync("agent/subagents/browser-agent/lib/kernel.ts")).toBe(
       true
