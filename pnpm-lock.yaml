@@ -178,7 +178,7 @@ importers:
         version: 0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1))
       evlog:
         specifier: 2.27.1
-        version: 2.27.1(ai@7.0.107(zod@4.5.4))(eve@0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1)))(express@5.2.1(supports-color@8.1.1))(hono@4.13.5)(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ofetch@1.5.1)(react@19.2.8)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
+        version: 2.27.1(ai@7.0.107(zod@4.5.4))(eve@0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1)))(express@5.2.1(supports-color@8.1.1))(hono@4.13.7)(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ofetch@1.5.1)(react@19.2.8)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -6564,8 +6564,8 @@ packages:
   hermes-parser@0.36.1:
     resolution: {integrity: sha512-GApNk4zLHi2UWoWZZkx7LNCOSzLSc5lB55pZ/PhK7ycFeg7u5LcF88p/WbpIi1XUDtE0MpHE3uRR3u3KB7TjSQ==}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   hookable@6.1.1:
@@ -12041,9 +12041,9 @@ snapshots:
 
   '@henrygd/queue@1.2.0': {}
 
-  '@hono/node-server@2.1.1(hono@4.13.5)':
+  '@hono/node-server@2.1.1(hono@4.13.7)':
     dependencies:
-      hono: 4.13.5
+      hono: 4.13.7
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -12351,7 +12351,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.30.0(supports-color@8.1.1)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.5)
+      '@hono/node-server': 2.1.1(hono@4.13.7)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -12361,7 +12361,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1(supports-color@8.1.1)
       express-rate-limit: 8.6.2(express@5.2.1(supports-color@8.1.1))(supports-color@8.1.1)
-      hono: 4.13.5
+      hono: 4.13.7
       jose: 6.2.10
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -12373,7 +12373,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.30.0(supports-color@8.1.1)(zod@4.5.4)':
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.5)
+      '@hono/node-server': 2.1.1(hono@4.13.7)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -12383,7 +12383,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1(supports-color@8.1.1)
       express-rate-limit: 8.6.2(express@5.2.1(supports-color@8.1.1))(supports-color@8.1.1)
-      hono: 4.13.5
+      hono: 4.13.7
       jose: 6.2.10
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -15675,12 +15675,12 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.1
 
-  evlog@2.27.1(ai@7.0.107(zod@4.5.4))(eve@0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1)))(express@5.2.1(supports-color@8.1.1))(hono@4.13.5)(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ofetch@1.5.1)(react@19.2.8)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1)):
+  evlog@2.27.1(ai@7.0.107(zod@4.5.4))(eve@0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1)))(express@5.2.1(supports-color@8.1.1))(hono@4.13.7)(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(ofetch@1.5.1)(react@19.2.8)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1)):
     optionalDependencies:
       ai: 7.0.107(zod@4.5.4)
       eve: 0.63.0(patch_hash=07344a60813dabf74e1891125fa3e7188c3c54fce2fefedde0c00d232dfda3f6)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1))
       express: 5.2.1(supports-color@8.1.1)
-      hono: 4.13.5
+      hono: 4.13.7
       next: 16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       ofetch: 1.5.1
       react: 19.2.8
@@ -16712,7 +16712,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.36.1
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   hookable@6.1.1: {}
 
