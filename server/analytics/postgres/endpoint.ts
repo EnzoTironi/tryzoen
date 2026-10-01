@@ -10,9 +10,10 @@ import {
   withTimeout,
 } from "../../operations/async";
 
-/** Caller must authorize/admit before DNS. No credentials or socket are opened.
- * Native DNS lookup cannot be interrupted; cancellation rejects promptly and
- * the post-lookup signal check prevents late results from preparing a connection.
+/** Caller must authorize/admit before DNS. No PostgreSQL connection is opened.
+ * Native DNS lookup cannot be interrupted. An inherited strict deadline awaits
+ * lookup settlement; the post-lookup signal check rejects late answers.
+ * Outside that scope, established timeout/cancellation semantics apply.
  */
 export async function resolvePostgresEndpoint(
   rawEndpoint: unknown,

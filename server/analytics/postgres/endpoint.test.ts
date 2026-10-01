@@ -4,7 +4,14 @@ import type { LookupAddress, LookupAllOptions } from "node:dns";
 import type { PeerCertificate } from "node:tls";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolvePostgresEndpoint } from "./endpoint";
-import { withSignal, withTimeout, TimeoutError } from "../../operations/async";
+import {
+  operationDeadline,
+  operationSignal,
+  withDeadline,
+  withSignal,
+  withTimeout,
+  TimeoutError,
+} from "../../operations/async";
 
 const dns = vi.hoisted(() => ({
   lookup:
@@ -298,4 +305,201 @@ test("a shorter inherited deadline wins over the endpoint's relative cap", async
   held.resolve(addresses);
   await held.promise;
   expect(lookup).toHaveBeenCalledTimes(1);
+});
+
+test.each([0, -1])(
+  "an expired absolute deadline (%sms) prevents endpoint DNS",
+  async (offset) => {
+    vi.useFakeTimers();
+    await expect(
+      withDeadline(
+        () => resolvePostgresEndpoint(endpoint, signal),
+        Date.now() + offset
+      )
+    ).rejects.toBeInstanceOf(TimeoutError);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  }
+);
+
+test("an absolute expiry waits for started DNS and rejects its late answer without config", async () => {
+  vi.useFakeTimers();
+  const held = Promise.withResolvers<LookupAddress[]>();
+  const entered = Promise.withResolvers<AbortSignal>();
+  dns.lookup.mockImplementationOnce(() => {
+    entered.resolve(operationSignal());
+    return held.promise;
+  });
+  const published =
+    vi.fn<
+      (config: Awaited<ReturnType<typeof resolvePostgresEndpoint>>) => void
+    >();
+  const settled = vi.fn<() => void>();
+  const outcome = withDeadline(
+    () => resolvePostgresEndpoint(endpoint, signal),
+    Date.now() + 25
+  )
+    .then(published)
+    .catch((error: unknown) => error)
+    .finally(settled);
+  const effectiveSignal = await entered.promise;
+  try {
+    await vi.advanceTimersByTimeAsync(25);
+    expect(effectiveSignal.aborted).toBe(true);
+    expect(effectiveSignal.reason).toBeInstanceOf(TimeoutError);
+    expect(settled).not.toHaveBeenCalled();
+    expect(published).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(addresses);
+  }
+  expect(await outcome).toBe(effectiveSignal.reason);
+  expect(published).not.toHaveBeenCalled();
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("strict cancellation drains DNS and retains its reason when the absolute deadline expires later", async () => {
+  vi.useFakeTimers();
+  const held = Promise.withResolvers<LookupAddress[]>();
+  const entered = Promise.withResolvers<AbortSignal>();
+  dns.lookup.mockImplementationOnce(() => {
+    entered.resolve(operationSignal());
+    return held.promise;
+  });
+  const controller = new AbortController();
+  const reason = new Error("cancel strict endpoint lookup");
+  const published =
+    vi.fn<
+      (config: Awaited<ReturnType<typeof resolvePostgresEndpoint>>) => void
+    >();
+  const settled = vi.fn<() => void>();
+  const outcome = withDeadline(
+    () => resolvePostgresEndpoint(endpoint, controller.signal),
+    Date.now() + 25
+  )
+    .then(published)
+    .catch((error: unknown) => error)
+    .finally(settled);
+  const effectiveSignal = await entered.promise;
+  try {
+    controller.abort(reason);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(effectiveSignal.aborted).toBe(true);
+    expect(effectiveSignal.reason).toBe(reason);
+    expect(settled).not.toHaveBeenCalled();
+    expect(published).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(addresses);
+  }
+  expect(await outcome).toBe(reason);
+  expect(published).not.toHaveBeenCalled();
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("strict lookup preserves its original rejection after an absolute timeout", async () => {
+  vi.useFakeTimers();
+  const held = Promise.withResolvers<LookupAddress[]>();
+  const entered = Promise.withResolvers<AbortSignal>();
+  dns.lookup.mockImplementationOnce(() => {
+    entered.resolve(operationSignal());
+    return held.promise;
+  });
+  const original = new Error("original synthetic lookup rejection");
+  const published =
+    vi.fn<
+      (config: Awaited<ReturnType<typeof resolvePostgresEndpoint>>) => void
+    >();
+  const settled = vi.fn<() => void>();
+  const outcome = withDeadline(
+    () => resolvePostgresEndpoint(endpoint, signal),
+    Date.now() + 25
+  )
+    .then(published)
+    .catch((error: unknown) => error)
+    .finally(settled);
+  const effectiveSignal = await entered.promise;
+  try {
+    await vi.advanceTimersByTimeAsync(25);
+    expect(effectiveSignal.reason).toBeInstanceOf(TimeoutError);
+    expect(settled).not.toHaveBeenCalled();
+  } finally {
+    held.reject(original);
+  }
+  expect(await outcome).toBe(original);
+  expect(published).not.toHaveBeenCalled();
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("time spent before DNS consumes the inherited deadline rather than a new endpoint budget", async () => {
+  vi.useFakeTimers();
+  const initial = Date.now();
+  const deadline = initial + 25;
+  const held = Promise.withResolvers<LookupAddress[]>();
+  const entered = Promise.withResolvers<AbortSignal>();
+  let lookupDeadline: ReturnType<typeof operationDeadline>;
+  dns.lookup.mockImplementationOnce(() => {
+    lookupDeadline = operationDeadline();
+    entered.resolve(operationSignal());
+    return held.promise;
+  });
+  const settled = vi.fn<() => void>();
+  const outcome = withDeadline(async () => {
+    vi.setSystemTime(initial + 20);
+    return resolvePostgresEndpoint(endpoint, signal);
+  }, deadline)
+    .catch((error: unknown) => error)
+    .finally(settled);
+  const effectiveSignal = await entered.promise;
+  try {
+    expect(lookupDeadline).toBe(deadline);
+    await vi.advanceTimersByTimeAsync(5);
+    expect(effectiveSignal.aborted).toBe(true);
+    expect(effectiveSignal.reason).toBeInstanceOf(TimeoutError);
+    expect(settled).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(addresses);
+  }
+  expect(await outcome).toBe(effectiveSignal.reason);
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("the endpoint's shorter relative cap is an inherited strict deadline and drains lookup", async () => {
+  vi.useFakeTimers();
+  const initial = Date.now();
+  const held = Promise.withResolvers<LookupAddress[]>();
+  const entered = Promise.withResolvers<AbortSignal>();
+  let lookupDeadline: ReturnType<typeof operationDeadline>;
+  dns.lookup.mockImplementationOnce(() => {
+    lookupDeadline = operationDeadline();
+    entered.resolve(operationSignal());
+    return held.promise;
+  });
+  const settled = vi.fn<() => void>();
+  const outcome = withDeadline(
+    () => resolvePostgresEndpoint(endpoint, signal),
+    initial + 10_000
+  )
+    .catch((error: unknown) => error)
+    .finally(settled);
+  const effectiveSignal = await entered.promise;
+  try {
+    expect(lookupDeadline).toBe(initial + 5000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(effectiveSignal.aborted).toBe(true);
+    expect(effectiveSignal.reason).toBeInstanceOf(TimeoutError);
+    expect(settled).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(addresses);
+  }
+  expect(await outcome).toBe(effectiveSignal.reason);
+  expect(settled).toHaveBeenCalledTimes(1);
+  expect(lookup).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
 });
