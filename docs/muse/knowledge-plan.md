@@ -697,3 +697,28 @@ establish safety after that marker is acknowledged or after completed erasure an
 a database rewind. The erasure worker currently clears namespace files and the
 receipt, not a restored private Git bundle. Coordinated recovery must preserve the
 non-restored deletion journal before the active-consumer cutover can be qualified.
+
+## PostgreSQL registry boundary — 1 October 2026
+
+The existing connector registry now has an exclusive PostgreSQL configuration
+branch using the canonical file-source endpoint contract. PostgreSQL rows keep
+HTTP endpoint/operations SQL-null; HTTP rows keep PostgreSQL configuration
+SQL-null. Migration 0103 adds this invariant without changing the existing
+workspace/organization owner constraints. Registration requires the current
+authenticated app session and management access. Personal and organization
+workspaces share this contract; private channel, group, external-agent and
+scheduled contexts do not receive PostgreSQL registry entries.
+
+Credentials use one strict encrypted envelope bound to workspace, connection,
+revision and connector kind. This replaces the old untyped prelaunch envelope
+directly: existing connections with that envelope require a new registration.
+There is no dual reader, automatic reseal or data deletion. Secrets are absent
+from metadata, ontology files and remote discovery. PostgreSQL is rejected before
+remote credential selection/decryption and cannot become an HTTP operation.
+
+This is a registry foundation, not enabled live analytics. The current setup
+form remains HTTP-only, and PostgreSQL metadata reports live reads unavailable.
+Trusted payer resolution, durable once-only admission/settlement, bounded TLS
+transport and post-read authorization/provenance remain required before any
+live warehouse read. Synthetic schema/crypto/mocked-boundary tests and local
+PGlite CHECK tests do not qualify that remaining journey or native platforms.
