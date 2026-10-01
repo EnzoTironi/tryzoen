@@ -39,10 +39,10 @@ export class LearnedMemoryError extends Error {
  * later deletion as permission to access a restored generation.
  */
 export async function requireMemoryNamespaceAvailable(namespaceId: string) {
-  const erasure = await dbQuery(sql`SELECT namespace_id FROM workspace_memory_erasure
+  const erasure =
+    await dbQuery(sql`SELECT namespace_id FROM workspace_memory_erasure
     WHERE namespace_id = ${namespaceId}`);
-  if (erasure.length)
-    throw new LearnedMemoryError({ reason: "stale_recall" });
+  if (erasure.length) throw new LearnedMemoryError({ reason: "stale_recall" });
 }
 
 export const memoryNamespace = async function (

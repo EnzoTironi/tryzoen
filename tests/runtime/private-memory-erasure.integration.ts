@@ -32,9 +32,9 @@ for (const scope of ["personal", "company"] as const) {
     await query(sql`INSERT INTO workspace_memory_recall(namespace_id, operation_id, snapshot)
       VALUES (${namespace.id}, ${operationId}, ${JSON.stringify(snapshot)}::jsonb)`);
     // A real persisted recall needs no native engine, dependency replacement or mock.
-    expect(await LearnedMemory.recall(actor, scopeKey, operationId, "fact")).toEqual(
-      snapshot
-    );
+    expect(
+      await LearnedMemory.recall(actor, scopeKey, operationId, "fact")
+    ).toEqual(snapshot);
     const client = new Client({ connectionString: env.DATABASE_URL });
     let connected = false;
     await query(sql`INSERT INTO workspace_memory_erasure(namespace_id, owner_user_id, available_at)
@@ -55,9 +55,9 @@ for (const scope of ["personal", "company"] as const) {
         await expect(
           LearnedMemory.recall(actor, scopeKey, operationId, "fact")
         ).rejects.toMatchObject({ reason: "stale_recall" });
-        await expect(LearnedMemory.read(actor, undefined, true)).rejects.toMatchObject(
-          { reason: "stale_recall" }
-        );
+        await expect(
+          LearnedMemory.read(actor, undefined, true)
+        ).rejects.toMatchObject({ reason: "stale_recall" });
         await expect(
           LearnedMemory.history(actor, {
             query: "fact",
@@ -77,14 +77,21 @@ for (const scope of ["personal", "company"] as const) {
             text: "Synthetic write must remain unaccepted during erasure",
           })
         ).rejects.toMatchObject({ reason: "stale_recall" });
-        await expect(LearnedMemory.setEnabled(actor, false)).rejects.toMatchObject({
+        await expect(
+          LearnedMemory.setEnabled(actor, false)
+        ).rejects.toMatchObject({
           reason: "stale_recall",
         });
-        await expect(PrivateMemoryRepository.read(actor)).rejects.toMatchObject({
-          reason: "conflict",
-        });
+        await expect(PrivateMemoryRepository.read(actor)).rejects.toMatchObject(
+          {
+            reason: "conflict",
+          }
+        );
       }, 1500);
-      const [retained] = await query<{ snapshot: unknown; pending: string | null }>(sql`
+      const [retained] = await query<{
+        snapshot: unknown;
+        pending: string | null;
+      }>(sql`
         SELECT r.snapshot, n.pending_operation AS pending
         FROM workspace_memory_recall r JOIN workspace_memory_namespace n ON n.namespace_id=r.namespace_id
         WHERE r.namespace_id=${namespace.id} AND r.operation_id=${operationId}`);
@@ -97,15 +104,23 @@ for (const scope of ["personal", "company"] as const) {
         // Retire only this synthetic generation before removing its test receipt.
         await query(sql`DELETE FROM workspace_memory_namespace
           WHERE namespace_id=${namespace.id} AND workspace_id=${actor.workspaceId} AND user_id=${actor.userId}`);
-        await query(sql`DELETE FROM workspace_memory_erasure WHERE namespace_id=${namespace.id}`);
+        await query(
+          sql`DELETE FROM workspace_memory_erasure WHERE namespace_id=${namespace.id}`
+        );
       }
     }
     const fresh = await transaction(() => memoryNamespace(actor, scopeKey));
     expect(fresh.id).not.toBe(namespace.id);
-    expect(await query(sql`SELECT operation_id FROM workspace_memory_recall
-      WHERE namespace_id=${fresh.id}`)).toHaveLength(0);
-    await query(sql`DELETE FROM workspace_memory_namespace WHERE namespace_id=${fresh.id}`);
-    await query(sql`DELETE FROM workspace_memory_erasure WHERE namespace_id=${fresh.id}`);
+    expect(
+      await query(sql`SELECT operation_id FROM workspace_memory_recall
+      WHERE namespace_id=${fresh.id}`)
+    ).toHaveLength(0);
+    await query(
+      sql`DELETE FROM workspace_memory_namespace WHERE namespace_id=${fresh.id}`
+    );
+    await query(
+      sql`DELETE FROM workspace_memory_erasure WHERE namespace_id=${fresh.id}`
+    );
   });
 
   test(`${scope} private facts remain inaccessible during a locked, deferred erasure receipt`, async () => {
