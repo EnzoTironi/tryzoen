@@ -40,14 +40,22 @@ const boundary = vi.hoisted(() => {
 vi.mock("../../db/index", () => ({
   db: { transaction: boundary.outer, execute: boundary.rootExecute },
 }));
-vi.mock("./session-files", () => ({ eraseSessionSources: boundary.erase }));
-vi.mock("@shared/environment/env", () => ({
-  env: {
-    get ZOEN_SESSION_ARCHIVE_DIR() {
-      return boundary.archiveRoot();
-    },
-  },
+vi.mock("./session-files", async (original) => ({
+  ...(await original<typeof import("./session-files")>()),
+  eraseSessionSources: boundary.erase,
 }));
+vi.mock("@shared/environment/env", async (original) => {
+  const actual = await original<typeof import("@shared/environment/env")>();
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      get ZOEN_SESSION_ARCHIVE_DIR() {
+        return boundary.archiveRoot();
+      },
+    },
+  };
+});
 
 const dialect = new PgDialect();
 const root = "/synthetic-memory-archive";
@@ -177,7 +185,12 @@ test("missing archive configuration retains the receipt and schedules retry with
   boundary.archiveRoot.mockReturnValue(undefined);
   await expect(drainMemoryErasures()).rejects.toMatchObject({
     message: "Memory erasure failed for 1 partition(s); 0 cleared.",
-    errors: [expect.objectContaining({ reason: "unconfigured" })],
+    errors: [
+      expect.objectContaining({
+        _tag: "PrivateMemoryError",
+        reason: "unavailable",
+      }),
+    ],
   });
   expect(boundary.erase).not.toHaveBeenCalled();
   expect(boundary.savepointExecute).not.toHaveBeenCalled();
