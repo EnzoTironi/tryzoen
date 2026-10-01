@@ -1,6 +1,5 @@
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
-import { MatrixError } from "../matrix/client";
 import { WhatsAppBridgeUnavailable } from "../whatsapp/client";
 import { VaultwardenUnavailable } from "../workspaces/vault";
 import { AuthUnavailable } from "../../db/services/auth/index";
@@ -9,7 +8,6 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { readAuthSession } from "@db/services/auth/session";
 import { accessScopeForUser } from "@shared/identity/access-scope";
-import { deactivateMatrixUser } from "../matrix/client";
 import { logoutWhatsApp } from "../whatsapp/client";
 import {
   requireWorkspaceAccess,
@@ -17,6 +15,11 @@ import {
 } from "../workspaces/access";
 import { eraseVaultwardenUser } from "../workspaces/vault";
 import { ErasureJournal } from "./erasure-journal";
+import {
+  captureMatrixErasureDepartures,
+  MatrixErasureDepartureSchema,
+} from "../matrix/erasure";
+import { lockMatrixOrganizations } from "../matrix/authority";
 export class AccountDeletionError extends Error {
   readonly _tag = "AccountDeletionError";
   declare readonly reason:
@@ -51,7 +54,7 @@ const externalPending = [
   "backups",
 ] as const;
 const resultSchema = z.object({
-  backupExpiresAt: z.string(),
+  backupExpiresAt: z.iso.datetime(),
   pending: z.array(z.string()),
   retainedCompany: z.array(z.string()),
   status: z.enum(["pending_external", "completed"]),
@@ -59,56 +62,68 @@ const resultSchema = z.object({
 
 /**
  * Durable personal-account deletion. Zoen-controlled rows are erased or kept
- * as company property. File erasure and backups stay pending. Vaultwarden,
- * mautrix and Synapse are attempted after commit and stay pending_external
- * when the provider is down. The erasure journal survives restoration.
+ * as company property. File erasure and backups stay pending. Vaultwarden and
+ * mautrix keep their existing provider paths; Matrix handles and departures
+ * remain durable for the top-level reconciler. The journal survives restoration.
  */
 export const requestAccountDeletion = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
   try {
     const personal = accessScopeForUser(actor.userId);
-    const prepared = await withDatabaseTransaction(async () => {
-      await lockAccountOrganizations(actor.userId);
-      await requireLiveSession(actor);
-      if (await isSoleOrganizationOwner(actor.userId)) return null;
-      await Promise.try(async () => ErasureJournal.append(actor.userId)).catch(
-        () => {
-          throw new AccountDeletionError({
-            reason: "unavailable",
-          });
-        }
-      );
-      const handles = await collectExternalWipeHandles(
-        actor.userId,
-        personal.workspaceId
-      );
-      await eraseZoenControlledData(actor.userId, personal.workspaceId);
-      return {
-        handles,
-        result: await persistCompletedRequest(actor.userId, [
-          ...externalPending,
-        ]),
-      };
-    });
-    if (!prepared) {
-      await persistBlockedRequest(actor.userId);
-      throw new AccountDeletionError({
-        reason: "blocked_sole_owner",
-      });
-    }
+    // Authenticate before reading private, non-restored deletion history.
+    await requireLiveSession(actor);
+    const inherited = await readJournalIntent(actor.userId);
+    const prepared = await withDatabaseTransaction(
+      async () => {
+        const departures = await captureMatrixErasureDepartures(
+          actor.userId,
+          inherited.departures
+        );
+        await requireLiveSession(actor);
+        if (await isSoleOrganizationOwner(actor.userId))
+          throw new AccountDeletionError({ reason: "blocked_sole_owner" });
+        const handles = await collectExternalWipeHandles(
+          actor.userId,
+          personal.workspaceId
+        );
+        const matrixIds = mergeMatrixIds(
+          handles.matrixIds,
+          inherited.matrixIds,
+          departures.map((item) => item.matrixId),
+          await pendingMatrixIds(actor.userId)
+        );
+        // Publication is immutable intent. A SQL rollback leaves replayable handles,
+        // never evidence that provider erasure or an outer commit succeeded.
+        await ErasureJournal.append({
+          userId: actor.userId,
+          matrixIds,
+          departures,
+        });
+        await eraseZoenControlledData(actor.userId, personal.workspaceId);
+        return {
+          handles,
+          result: await persistCompletedRequest(
+            actor.userId,
+            [...externalPending],
+            matrixIds
+          ),
+        };
+      },
+      { outermost: true }
+    );
     return await finishExternalWipes(
       actor.userId,
       prepared.handles,
       prepared.result
     );
   } catch (error) {
-    if (error instanceof SqlError) {
-      throw new AccountDeletionError({
-        reason: "unavailable",
-      });
+    if (error instanceof AccountDeletionError) {
+      if (error.reason === "blocked_sole_owner")
+        await persistBlockedRequest(actor.userId);
+      throw error;
     }
-    throw error;
+    throw new AccountDeletionError({ reason: "unavailable" });
   }
 };
 export const requestAccountDeletionFromHeaders = async function (
@@ -218,42 +233,101 @@ export const closeOrganizationForDeletion = async function (
 };
 export const applyAccountDeletionTombstones = async function () {
   try {
-    const tombs = await Promise.try(async () => ErasureJournal.read()).catch(
-      () => {
-        throw new AccountDeletionError({
-          reason: "unavailable",
-        });
-      }
-    );
-    for (const tomb of tombs) {
+    let applied = 0;
+    for await (const tomb of ErasureJournal.read()) {
       const personal = accessScopeForUser(tomb.userId);
-      const raw = rawUserId(tomb.userId);
-      const present =
-        await query(sql`SELECT 1 FROM public."user" WHERE id = ${raw}
-        UNION ALL SELECT 1 FROM workspaces WHERE id = ${personal.workspaceId}`);
-      const handles = await collectExternalWipeHandles(
-        tomb.userId,
-        personal.workspaceId
-      );
-      if (present.length)
-        await withDatabaseTransaction(async () => {
+      const handles = await withDatabaseTransaction(
+        async () => {
+          // Restore exact receipts even if the user and identity rows no longer
+          // exist. Content-addressed record order is never treated as chronology.
+          const departures = await captureMatrixErasureDepartures(
+            tomb.userId,
+            tomb.departures
+          );
+          const current = await collectExternalWipeHandles(
+            tomb.userId,
+            personal.workspaceId
+          );
+          const novelIds = current.matrixIds.filter(
+            (id) => !tomb.matrixIds.includes(id)
+          );
+          const knownDepartures = new Set(
+            tomb.departures.map((item) => JSON.stringify(item))
+          );
+          const novelDepartures = departures.filter(
+            (item) => !knownDepartures.has(JSON.stringify(item))
+          );
+          if (novelIds.length || novelDepartures.length)
+            await ErasureJournal.append({
+              userId: tomb.userId,
+              matrixIds: novelIds,
+              departures: novelDepartures,
+            });
+          const matrixIds = mergeMatrixIds(
+            tomb.matrixIds,
+            current.matrixIds,
+            departures.map((item) => item.matrixId),
+            await pendingMatrixIds(tomb.userId)
+          );
           await eraseZoenControlledData(tomb.userId, personal.workspaceId);
-          await persistCompletedRequest(tomb.userId, [...externalPending]);
-        });
+          await persistCompletedRequest(
+            tomb.userId,
+            [...externalPending],
+            matrixIds
+          );
+          return current;
+        },
+        { outermost: true }
+      );
+      // Matrix provider I/O is exclusively owned by the top-level reconciler.
       await attemptExternalWipes(tomb.userId, handles);
+      applied += 1;
     }
-    return {
-      applied: tombs.length,
-    };
+    return { applied };
   } catch (error) {
-    if (error instanceof SqlError) {
-      throw new AccountDeletionError({
-        reason: "unavailable",
-      });
-    }
-    throw error;
+    if (error instanceof AccountDeletionError) throw error;
+    throw new AccountDeletionError({ reason: "unavailable" });
   }
 };
+
+function mergeMatrixIds(...groups: readonly (readonly string[])[]) {
+  return z
+    .array(MatrixErasureDepartureSchema.shape.matrixId)
+    .max(1024)
+    .parse([...new Set(groups.flat())].toSorted());
+}
+
+async function readJournalIntent(userId: string) {
+  let matrixIds: string[] = [];
+  const departures = new Map<
+    string,
+    z.infer<typeof MatrixErasureDepartureSchema>
+  >();
+  for await (const record of ErasureJournal.read(userId)) {
+    matrixIds = mergeMatrixIds(matrixIds, record.matrixIds);
+    for (const item of record.departures) {
+      const key = JSON.stringify([item.bindingId, item.matrixId]);
+      const previous = departures.get(key);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(item))
+        throw new AccountDeletionError({ reason: "unavailable" });
+      departures.set(key, item);
+    }
+    if (departures.size > 1024)
+      throw new AccountDeletionError({ reason: "unavailable" });
+  }
+  return { matrixIds, departures: [...departures.values()] };
+}
+
+async function pendingMatrixIds(userId: string) {
+  const rows =
+    await query(sql`SELECT l.matrix_ids FROM account_deletion_ledger l
+    JOIN account_deletion_requests r ON r.id=l.request_id
+    WHERE r.user_id=${userId} AND l.surface='matrix' FOR UPDATE OF l`);
+  return rows.flatMap((row) =>
+    mergeMatrixIds(z.array(z.string()).parse(row.matrix_ids))
+  );
+}
+
 const requireLiveSession = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
@@ -289,9 +363,16 @@ const isSoleOrganizationOwner = async function (userId: string) {
   return false;
 };
 const lockAccountOrganizations = async function (userId: string) {
-  await query(sql`SELECT id FROM organizations
-      WHERE id IN (SELECT organization_id FROM organization_memberships WHERE user_id = ${userId})
-      ORDER BY id FOR UPDATE`);
+  const rows = await query<{
+    organizationId: string;
+  }>(sql`SELECT organization_id AS "organizationId"
+    FROM organization_memberships WHERE user_id=${userId} LIMIT 1025`);
+  if (rows.length > 1024)
+    throw new AccountDeletionError({ reason: "unavailable" });
+  await lockMatrixOrganizations(
+    rows.map((row) => row.organizationId),
+    "update"
+  );
 };
 const requireOrganizationAdmin = async function (
   userId: string,
@@ -395,7 +476,8 @@ const persistBlockedRequest = async function (userId: string) {
 };
 const persistCompletedRequest = async function (
   userId: string,
-  pending: readonly string[]
+  pending: readonly string[],
+  matrixIds: string[]
 ) {
   const queuedMemory = await query(
     sql`SELECT 1 FROM workspace_memory_erasure WHERE owner_user_id = ${userId} LIMIT 1`
@@ -406,15 +488,23 @@ const persistCompletedRequest = async function (
     await query(sql`SELECT 1 FROM account_deletion_ledger l
     JOIN account_deletion_requests r ON r.id = l.request_id
     WHERE r.user_id = ${userId} AND l.surface = 'mem0' AND l.status = 'pending_external' LIMIT 1`);
+  const matrixDepartures = await query(
+    sql`SELECT 1 FROM matrix_erasure_departures WHERE owner_user_id=${userId} LIMIT 1`
+  );
   const remaining = [
     ...pending.filter(
-      (surface) => surface !== "file_memory" || queuedMemory.length > 0
+      (surface) =>
+        (surface !== "file_memory" || queuedMemory.length > 0) &&
+        (surface !== "matrix" ||
+          matrixIds.length > 0 ||
+          matrixDepartures.length > 0)
     ),
     ...(historicalMemory.length ? ["mem0"] : []),
   ];
   const backupExpiresAt = new Date(new Date().getTime() + 30 * 86400000);
   const rows = await query<{
     id: string;
+    backupExpiresAt: string;
   }>(sql`INSERT INTO account_deletion_requests(
         id, user_id, status, blocked_reason, backup_expires_at, completed_at
       ) VALUES (
@@ -422,16 +512,14 @@ const persistCompletedRequest = async function (
       )
       ON CONFLICT (user_id) DO UPDATE SET
         status = 'pending_external', blocked_reason = NULL,
-        backup_expires_at = EXCLUDED.backup_expires_at, completed_at = clock_timestamp()
-      RETURNING id`);
+        backup_expires_at = COALESCE(account_deletion_requests.backup_expires_at,EXCLUDED.backup_expires_at),
+        completed_at = COALESCE(account_deletion_requests.completed_at,clock_timestamp())
+      RETURNING id,to_char(backup_expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "backupExpiresAt"`);
   const requestId = rows[0]?.id;
   if (!requestId)
     throw new AccountDeletionError({
       reason: "unavailable",
     });
-  await query(
-    sql`DELETE FROM account_deletion_ledger WHERE request_id = ${requestId}`
-  );
   await query(sql`INSERT INTO account_deletion_tombstones(user_id, request_id)
       VALUES (${userId}, ${requestId})
       ON CONFLICT (user_id) DO UPDATE SET request_id = EXCLUDED.request_id, deleted_at = clock_timestamp()`);
@@ -447,16 +535,25 @@ const persistCompletedRequest = async function (
     ["company_git", "retained_company"],
     ["backups", "backup_held"],
     ...(!queuedMemory.length ? [["file_memory", "erased"] as const] : []),
+    ...(!remaining.includes("matrix") ? [["matrix", "erased"] as const] : []),
     ...remaining
       .filter((surface) => surface !== "backups")
       .map((surface) => [surface, "pending_external"] as const),
   ];
   for (const [surface, status] of ledger) {
-    await query(sql`INSERT INTO account_deletion_ledger(id, request_id, surface, status)
-        VALUES (${randomUUID()}, ${requestId}, ${surface}, ${status})`);
+    const handles = surface === "matrix" ? matrixIds : [];
+    await query(sql`INSERT INTO account_deletion_ledger(id, request_id, surface, status,matrix_ids)
+        VALUES (${randomUUID()}, ${requestId}, ${surface}, ${status},ARRAY[${sql.join(
+          handles.map((id) => sql`${id}`),
+          sql`, `
+        )}]::text[])
+        ON CONFLICT(request_id,surface) DO UPDATE SET
+          status=EXCLUDED.status,matrix_ids=EXCLUDED.matrix_ids`);
   }
   return await resultSchema.parseAsync({
-    backupExpiresAt: backupExpiresAt.toISOString(),
+    backupExpiresAt: resultSchema.shape.backupExpiresAt.parse(
+      rows[0]?.backupExpiresAt
+    ),
     pending: remaining,
     retainedCompany: ["company_workspace", "company_git", "audit_receipts"],
     status: "pending_external",
@@ -536,19 +633,6 @@ const attemptExternalWipes = async function (
   );
   if (handles.whatsapp.length > 0 && whatsappOk.every((ok) => ok))
     erased.push("whatsapp");
-  const matrixOk = await Promise.all(
-    handles.matrixIds.map(async (matrixId) => {
-      try {
-        await deactivateMatrixUser(matrixId);
-        return true;
-      } catch (error) {
-        if (error instanceof MatrixError) return false;
-        throw error;
-      }
-    })
-  );
-  if (handles.matrixIds.length > 0 && matrixOk.every((ok) => ok))
-    erased.push("matrix");
   await markLedgerErased(userId, erased);
   return erased;
 };

@@ -17,6 +17,7 @@ import { accountDeletionProvidersFixture } from "./account-deletion-providers-fi
 import { memoryNamespace } from "../../server/memory/namespace";
 import { workspaceFixture } from "./workspace-fixture";
 import { installErasureJournalFixture } from "./erasure-journal-fixture";
+import { reconcileMatrixErasures } from "../../server/matrix/erasure-reconcile";
 
 vi.mock("@shared/environment", async (original) => {
   const actual = await original<typeof Environment>();
@@ -47,6 +48,17 @@ vi.mock("@shared/environment", async (original) => {
   };
 });
 
+async function deletionWorkspaceFixture() {
+  const workspace = await workspaceFixture();
+  onTestFinished(async () => {
+    // Retain pending receipts during each test; remove only this synthetic fixture's
+    // ledger after assertions, so another bounded recovery suite has a clean frontier.
+    await query(sql`DELETE FROM account_deletion_requests
+      WHERE user_id IN (${workspace.actor.userId},${workspace.guest.userId})`);
+  });
+  return workspace;
+}
+
 const ledgerOf = async function (userId: string) {
   return await query<{
     status: string;
@@ -57,7 +69,7 @@ const ledgerOf = async function (userId: string) {
 };
 
 test("unreachable vault, WhatsApp and Matrix wipes stay pending_external", async () => {
-  await using workspace = await workspaceFixture();
+  await using workspace = await deletionWorkspaceFixture();
   const { guest, guestPersonal } = workspace;
   await query(sql`INSERT INTO matrix_identities(user_id, matrix_id)
         VALUES (${guest.userId}, ${`@guest-${randomUUID()}:zoen.test`})`);
@@ -83,11 +95,12 @@ test("unreachable vault, WhatsApp and Matrix wipes stay pending_external", async
   return true;
 });
 
-test("tombstone retries vault after the provider recovers", async () => {
-  await using workspace = await workspaceFixture();
+test("tombstone retries vault and scheduled reconciliation recovers the original Matrix handle", async () => {
+  await using workspace = await deletionWorkspaceFixture();
   const { guest, guestPersonal } = workspace;
+  const matrixId = `@guest-${randomUUID()}:zoen.test`;
   await query(sql`INSERT INTO matrix_identities(user_id, matrix_id)
-        VALUES (${guest.userId}, ${`@guest-${randomUUID()}:zoen.test`})`);
+        VALUES (${guest.userId}, ${matrixId})`);
   await startWhatsAppPairing(guestPersonal);
   const deleted = await requestAccountDeletion(guest);
   expect(deleted.pending).toEqual(
@@ -114,6 +127,11 @@ test("tombstone retries vault after the provider recovers", async () => {
   );
   expect(fixture.logouts).toEqual([]);
   expect(fixture.deactivated).toEqual([]);
+  await reconcileMatrixErasures(Date.now() + 30_000, 50);
+  expect(await ledgerOf(guest.userId)).toEqual(
+    expect.arrayContaining([{ status: "erased", surface: "matrix" }])
+  );
+  expect(fixture.deactivated).toContain(matrixId);
   return true;
 });
 
@@ -125,7 +143,7 @@ test("fixture wipes mark vault, WhatsApp and Matrix erased and keep queued file 
     });
     return resource;
   })();
-  await using workspace = await workspaceFixture();
+  await using workspace = await deletionWorkspaceFixture();
   const { guest, guestPersonal } = workspace;
   const matrixId = `@guest-${randomUUID()}:zoen.test`;
   await query(sql`INSERT INTO matrix_identities(user_id, matrix_id)
@@ -138,7 +156,9 @@ test("fixture wipes mark vault, WhatsApp and Matrix erased and keep queued file 
   expect(deleted.pending).toEqual(expect.arrayContaining(["file_memory"]));
   expect(deleted.pending).not.toContain("vaultwarden");
   expect(deleted.pending).not.toContain("whatsapp");
-  expect(deleted.pending).not.toContain("matrix");
+  expect(deleted.pending).toContain("matrix");
+  expect(fixture.deactivated).toEqual([]);
+  await reconcileMatrixErasures(Date.now() + 30_000, 50);
   const ledger = await ledgerOf(guest.userId);
   expect(ledger).toEqual(
     expect.arrayContaining([
@@ -164,7 +184,7 @@ test("tombstone replay wipes restored rows again and retries fixture providers",
     });
     return resource;
   })();
-  await using workspace = await workspaceFixture();
+  await using workspace = await deletionWorkspaceFixture();
   const { actor, guest, guestPersonal, repository } = workspace;
   const companyCanary = `company-${randomUUID()}`;
   await repository.write(actor, {
@@ -213,6 +233,8 @@ test("tombstone replay wipes restored rows again and retries fixture providers",
   expect((await repository.read(actor, "knowledge/team.md")).content).toBe(
     companyCanary
   );
+  expect(fixture.deactivated).not.toContain(restoredMatrix);
+  await reconcileMatrixErasures(Date.now() + 30_000, 50);
   expect(fixture.deactivated).toContain(restoredMatrix);
   expect(fixture.logouts.length).toBeGreaterThan(0);
   return true;
