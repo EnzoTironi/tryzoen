@@ -1,6 +1,15 @@
 import { joinNativeGroup, retireMatrixGroupMember } from "./membership";
 import { lockMatrixAdmission } from "./authority";
-import { withTimeout } from "../operations/async";
+import {
+  operationSignal,
+  TimeoutError,
+  withDeadline,
+} from "../operations/async";
+import {
+  validateMatrixDeadline,
+  validateMatrixLimit,
+  withMatrixTransaction,
+} from "./deadline";
 import { readRoomMembers } from "./members";
 import { findDirectRoom } from "./direct";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
@@ -301,53 +310,91 @@ export const closeMatrixRoom = async function (
 };
 
 /** Mirror live workspace revocation into Matrix; failed kicks remain retryable. */
-export const reconcileMatrixRooms = async function () {
-  await withTimeout(async () => {
-    const config = await matrixConfiguration();
-    const stale = await query<{
-      bindingId: string;
-      userId: string;
-    }>(sql`
-    SELECT m.binding_id AS "bindingId", m.user_id AS "userId"
-    FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
-    WHERE b.channel = 'matrix' AND b.installation_id = ${config.serverName} AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
-      SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
-      JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
-      WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id
-    ) AND NOT EXISTS (
-      SELECT 1 FROM workspace_agent_members a WHERE a.workspace_id = b.workspace_id
-        AND ('agent:' || a.id) = m.user_id AND a.revoked_at IS NULL
-    )) ORDER BY m.binding_id, m.user_id LIMIT 10`);
-    for (const member of stale) {
-      const pending = await withDatabaseTransaction(async () => {
-        await lockMatrixAdmission([], [member.bindingId]);
-        const binding =
-          await query(sql`SELECT b.workspace_id AS "workspaceId" FROM workspace_group_bindings b
-        WHERE b.id = ${member.bindingId} AND b.channel = 'matrix'
-          AND b.installation_id = ${config.serverName} FOR UPDATE OF b`);
-        if (binding.length !== 1) return false;
-        // Recheck the stale candidate under the organization/room fences; local
-        // revocation is durable even if the subsequent native kick fails.
-        const changed =
-          await query(sql`UPDATE matrix_room_members m SET state = 'removed',
-        native_pending = true, native_retry_at = now() FROM workspace_group_bindings b
-        WHERE b.id = m.binding_id AND b.id = ${member.bindingId} AND m.user_id = ${member.userId}
-          AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
+export const reconcileMatrixRooms = async function (
+  deadlineMs: number,
+  limit: number
+): Promise<number> {
+  validateMatrixDeadline(deadlineMs);
+  validateMatrixLimit(limit, 5);
+  operationSignal().throwIfAborted();
+  if (limit === 0 || Date.now() >= deadlineMs) return 0;
+  let attempted = 0;
+  try {
+    return await withDeadline(async () => {
+      const { config, stale } = await withMatrixTransaction(
+        deadlineMs,
+        async () => {
+          operationSignal().throwIfAborted();
+          const configuration = await matrixConfiguration();
+          operationSignal().throwIfAborted();
+          const candidates = await query(sql`
+          SELECT m.binding_id AS "bindingId", m.user_id AS "userId"
+          FROM matrix_room_members m JOIN workspace_group_bindings b ON b.id = m.binding_id
+          WHERE b.channel = 'matrix' AND b.installation_id = ${configuration.serverName} AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
             SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
             JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
             WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id
           ) AND NOT EXISTS (
             SELECT 1 FROM workspace_agent_members a WHERE a.workspace_id = b.workspace_id
               AND ('agent:' || a.id) = m.user_id AND a.revoked_at IS NULL
-          )) RETURNING m.user_id`);
-        if (changed.length !== 1) return false;
-        await query(
-          sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${member.bindingId}`
-        );
-        return true;
-      });
-      if (pending)
-        await retireMatrixGroupMember(member.bindingId, member.userId);
+          )) ORDER BY m.binding_id, m.user_id LIMIT ${limit}`);
+          operationSignal().throwIfAborted();
+          return {
+            config: configuration,
+            stale: z
+              .array(z.object({ bindingId: z.string(), userId: z.string() }))
+              .max(limit)
+              .parse(candidates),
+          };
+        }
+      );
+      for (const member of stale) {
+        operationSignal().throwIfAborted();
+        attempted++;
+        const pending = await withMatrixTransaction(deadlineMs, async () => {
+          operationSignal().throwIfAborted();
+          await lockMatrixAdmission([], [member.bindingId]);
+          operationSignal().throwIfAborted();
+          const binding =
+            await query(sql`SELECT b.workspace_id AS "workspaceId" FROM workspace_group_bindings b
+            WHERE b.id = ${member.bindingId} AND b.channel = 'matrix'
+              AND b.installation_id = ${config.serverName} FOR UPDATE OF b`);
+          operationSignal().throwIfAborted();
+          if (binding.length !== 1) return false;
+          // Commit local revocation before native retirement. Its pending receipt
+          // remains durable even when the shared budget ends before confirmation.
+          const changed =
+            await query(sql`UPDATE matrix_room_members m SET state = 'removed',
+            native_pending = true, native_retry_at = now() FROM workspace_group_bindings b
+            WHERE b.id = m.binding_id AND b.id = ${member.bindingId} AND m.user_id = ${member.userId}
+              AND m.state = 'joined' AND (b.revoked_at IS NOT NULL OR NOT EXISTS (
+                SELECT 1 FROM workspace_memberships w JOIN workspaces s ON s.id = w.workspace_id
+                JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = w.user_id
+                WHERE w.workspace_id = b.workspace_id AND w.user_id = m.user_id
+              ) AND NOT EXISTS (
+                SELECT 1 FROM workspace_agent_members a WHERE a.workspace_id = b.workspace_id
+                  AND ('agent:' || a.id) = m.user_id AND a.revoked_at IS NULL
+              )) RETURNING m.user_id`);
+          operationSignal().throwIfAborted();
+          if (changed.length !== 1) return false;
+          await query(
+            sql`UPDATE workspace_group_bindings SET epoch = ${randomUUID()} WHERE id = ${member.bindingId}`
+          );
+          operationSignal().throwIfAborted();
+          return true;
+        });
+        operationSignal().throwIfAborted();
+        if (pending)
+          await retireMatrixGroupMember(member.bindingId, member.userId);
+        operationSignal().throwIfAborted();
+      }
+      return attempted;
+    }, deadlineMs);
+  } catch (error) {
+    if (error instanceof TimeoutError) {
+      operationSignal().throwIfAborted();
+      if (Date.now() >= deadlineMs) return attempted;
     }
-  }, 30_000);
+    throw error;
+  }
 };
