@@ -114,26 +114,31 @@ export async function exportSessionSources(
   z.string().min(1).max(256).parse(sessionId);
   const root = env.ZOEN_SESSION_ARCHIVE_DIR;
   if (!root) throw new SessionArchiveUnavailable();
-  return withDeadline(
+  const deadline = Date.now() + 60_000;
+  const captured = await withDeadline(
     () =>
       withSignal(signal, () =>
         transaction(async () => {
           const namespace = await archiveNamespace(actor, sessionId);
+          const [inventory] =
+            await query(sql`SELECT count(*)::text AS count,max(capture_sequence)::text AS "highWater"
+            FROM memory_session_sources WHERE namespace_id=${namespace}`);
           const rows =
             await query(sql`SELECT session_id AS "sessionId",event_id AS "eventId",digest,
-      capture_sequence::text AS sequence,stored_at FROM memory_session_sources WHERE namespace_id=${namespace}
-      ORDER BY capture_sequence LIMIT ${sessionArchiveLimits.events + 1} FOR SHARE`);
+            capture_sequence::text AS sequence,stored_at FROM memory_session_sources
+            WHERE namespace_id=${namespace} AND session_id=${sessionId}
+            ORDER BY capture_sequence LIMIT ${sessionArchiveLimits.events + 1} FOR SHARE`);
           const [checkpoint] =
             await query(sql`SELECT journal_event_count::text AS count,journal_high_water::text AS "highWater"
       FROM workspace_memory_namespace WHERE namespace_id=${namespace}`);
           if (
             !checkpoint ||
             rows.length > sessionArchiveLimits.events ||
-            checkpoint.count !== String(rows.length) ||
-            (checkpoint.highWater ?? null) !== (rows.at(-1)?.sequence ?? null)
+            checkpoint.count !== inventory?.count ||
+            (checkpoint.highWater ?? null) !== (inventory?.highWater ?? null)
           )
             throw new SessionArchiveUnavailable();
-          const expected = rows.filter((row) => row.sessionId === sessionId);
+          const expected = rows;
           if (!expected.length || expected.some((row) => !row.stored_at))
             throw new SessionArchiveUnavailable();
           const directory = await sessionDirectory(root, namespace, sessionId);
@@ -153,7 +158,7 @@ export async function exportSessionSources(
               throw new SessionArchiveUnavailable();
           }
           if (filenames.size) throw new SessionArchiveUnavailable();
-          const contents: Buffer[] = [];
+          const contents: { eventId: string; content: Buffer }[] = [];
           let bytes = 0;
           for (const receipt of expected) {
             operationSignal().throwIfAborted();
@@ -173,24 +178,91 @@ export async function exportSessionSources(
               throw new SessionArchiveUnavailable();
             bytes += file.content.byteLength;
             if (bytes > exportLimit) throw new SessionArchiveUnavailable();
-            contents.push(file.content);
+            contents.push({
+              eventId: file.source.eventId,
+              content: file.content,
+            });
           }
           await requireWorkspaceAccess(actor);
           await requireMemoryNamespaceAvailable(namespace);
-          const body = Buffer.concat(contents, bytes);
-          return new Response(body, {
-            headers: {
-              "content-type": "application/x-ndjson; charset=utf-8",
-              "content-length": String(body.byteLength),
-              "content-disposition": `attachment; filename="zoen-conversation-${hash(sessionId).slice(0, 12)}.jsonl"`,
-              "cache-control": "private, no-store",
-              "x-content-type-options": "nosniff",
-            },
-          });
+          return { namespace, contents, bytes };
         })
       ),
-    Date.now() + 60_000
+    deadline
   );
+  const cancellation = new AbortController();
+  const combined = AbortSignal.any([signal, cancellation.signal]);
+  let activePull: Promise<void> | undefined;
+  let removeAbort: () => void = () => undefined;
+  let index = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      start(controller) {
+        const abort = () => {
+          cancellation.abort(signal.reason);
+          if (!activePull) controller.error(signal.reason);
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        removeAbort = () => signal.removeEventListener("abort", abort);
+        if (signal.aborted) abort();
+      },
+      pull(controller) {
+        activePull = withDeadline(
+          () =>
+            withSignal(combined, async () => {
+              const entry = captured.contents[index];
+              if (!entry) {
+                removeAbort();
+                controller.close();
+                return;
+              }
+              // Each bounded pull rechecks current identity, generation, receipt and
+              // immutable bytes. Prevalidation proves completeness, not future access.
+              const fresh = await verifiedSource(
+                actor,
+                sessionId,
+                captured.namespace,
+                join(
+                  await sessionDirectory(root, captured.namespace, sessionId),
+                  `${hash(entry.eventId)}.jsonl`
+                )
+              );
+              combined.throwIfAborted();
+              if (!fresh || !fresh.content.equals(entry.content))
+                throw new SessionArchiveUnavailable();
+              controller.enqueue(entry.content);
+              index++;
+              if (index === captured.contents.length) {
+                removeAbort();
+                controller.close();
+              }
+            }),
+          deadline
+        ).catch((error: unknown) => {
+          removeAbort();
+          controller.error(error);
+        });
+        return activePull.finally(() => {
+          activePull = undefined;
+        });
+      },
+      async cancel(reason) {
+        cancellation.abort(reason);
+        removeAbort();
+        await activePull;
+      },
+    },
+    { highWaterMark: 0 }
+  );
+  return new Response(body, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "content-length": String(captured.bytes),
+      "content-disposition": `attachment; filename="zoen-conversation-${hash(sessionId).slice(0, 12)}.jsonl"`,
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
 }
 
 async function sessionDirectory(

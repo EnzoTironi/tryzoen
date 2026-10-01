@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { Client } from "pg";
 import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
+import { z } from "zod";
 import { env } from "@shared/environment/env";
 import { claimSession } from "../../db/services/sessions";
 import {
@@ -23,7 +24,10 @@ import {
   rebuildSessionSourceReceipts,
   exportSessionSources,
   SessionArchiveUnavailable,
+  lockSessionSourceAllocation,
 } from "../../server/memory/session-export";
+import { memoryNamespace } from "../../server/memory/namespace";
+import { mapAsync } from "../../server/operations/async";
 import {
   encodePrivateMemoryArchive,
   decodePrivateMemoryArchive,
@@ -562,4 +566,138 @@ test("wrong owner/generation, older tombstones and lost session authority deny a
   await expect(
     PrivateMemoryRepository.backupCorpus(actor)
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("a small conversation remains exportable beyond the namespace-wide archive event budget", async () => {
+  await using fixture = await privateMemoryFixture();
+  const actor = fixture.personal;
+  const smallSession = `journal-small-${randomUUID()}`;
+  const bulkSession = `journal-bulk-${randomUUID()}`;
+  await claimSession(actor, smallSession);
+  await claimSession(actor, bulkSession);
+  const small = source(smallSession, "One-event conversation stays complete");
+  await captureSessionSource(actor, small);
+  await drainSessionSources();
+  const namespace = await fixture.namespace(actor);
+  // Seed real retained history with native allocations and real fsynced files.
+  // Batches remain below the actual pending budget; no mock policy is installed.
+  for (let offset = 0; offset < 10_000; offset += 250) {
+    const events = Array.from({ length: 250 }, (_, index) =>
+      source(bulkSession, `Retained event ${offset + index}`)
+    );
+    const allocated = await transaction(async () => {
+      await memoryNamespace(actor);
+      await lockSessionSourceAllocation();
+      const values = events.map(
+        (event) =>
+          sql`(${namespace.id},${event.eventId},${event.sessionId},${hash(JSON.stringify(event))},${JSON.stringify(event)}::jsonb)`
+      );
+      const rows =
+        await query(sql`INSERT INTO memory_session_sources(namespace_id,event_id,session_id,digest,payload)
+        VALUES ${sql.join(values, sql`, `)} RETURNING event_id AS "eventId",capture_sequence::float8 AS sequence`);
+      const parsed = z
+        .array(
+          z.object({
+            eventId: z.string(),
+            sequence: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+          })
+        )
+        .parse(rows);
+      const highWater = Math.max(...parsed.map((row) => row.sequence));
+      await query(sql`UPDATE workspace_memory_namespace SET journal_event_count=journal_event_count+${events.length},journal_high_water=${highWater}
+        WHERE namespace_id=${namespace.id}`);
+      return new Map(parsed.map((row) => [row.eventId, row.sequence]));
+    });
+    await mapAsync(
+      events,
+      async (event) => {
+        const sequence = allocated.get(event.eventId);
+        if (sequence === undefined)
+          throw new Error("Expected actual native allocation");
+        await writeSessionSource(fixture.root, namespace.id, event, sequence);
+      },
+      8
+    );
+    await transaction(async () => {
+      await memoryNamespace(actor);
+      await query(sql`UPDATE memory_session_sources SET payload=NULL,stored_at=clock_timestamp()
+        WHERE namespace_id=${namespace.id} AND event_id IN (${sql.join(
+          events.map((event) => sql`${event.eventId}`),
+          sql`, `
+        )})`);
+    });
+  }
+  expect((await fixture.namespace(actor)).journalEventCount).toBe(10_001);
+  const response = await exportSessionSources(
+    actor,
+    smallSession,
+    new AbortController().signal
+  );
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(
+    await readFile(sourcePath(fixture.root, namespace.id, small))
+  );
+  // The distinct whole-journal archive still honestly refuses its own budget.
+  await expect(
+    PrivateMemoryRepository.backupCorpus(actor)
+  ).rejects.toMatchObject({ reason: "unavailable" });
+}, 90_000);
+
+test("prevalidated raw export rechecks current authority and cancellation before every bounded pull", async () => {
+  await using fixture = await privateMemoryFixture();
+  const actor = fixture.personal;
+  const sessionId = `journal-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  for (let index = 0; index < 3; index++)
+    await captureSessionSource(
+      actor,
+      source(sessionId, `Bounded event ${index}`)
+    );
+  await drainSessionSources();
+  const cancelled = new AbortController();
+  const response = await exportSessionSources(
+    actor,
+    sessionId,
+    cancelled.signal
+  );
+  if (!response.body) throw new Error("Expected bounded stream");
+  const reader = response.body.getReader();
+  expect((await reader.read()).done).toBe(false);
+  cancelled.abort(new Error("Private download cancelled"));
+  await expect(reader.read()).rejects.toThrow("Private download cancelled");
+  const current = await exportSessionSources(
+    actor,
+    sessionId,
+    new AbortController().signal
+  );
+  if (!current.body) throw new Error("Expected bounded stream");
+  const active = current.body.getReader();
+  expect((await active.read()).done).toBe(false);
+  await query(
+    sql`DELETE FROM workspace_memberships WHERE workspace_id=${actor.workspaceId} AND user_id=${actor.userId}`
+  );
+  await expect(active.read()).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+});
+
+test("raw export refuses missing receipt plus file even after a later append", async () => {
+  await using fixture = await privateMemoryFixture();
+  const actor = fixture.personal;
+  const sessionId = `journal-${randomUUID()}`;
+  await claimSession(actor, sessionId);
+  const lost = source(sessionId, "Lost retained source");
+  await captureSessionSource(actor, lost);
+  await drainSessionSources();
+  const namespace = await fixture.namespace(actor);
+  await query(
+    sql`DELETE FROM memory_session_sources WHERE namespace_id=${namespace.id} AND event_id=${lost.eventId}`
+  );
+  await rm(sourcePath(fixture.root, namespace.id, lost));
+  const fresh = source(
+    sessionId,
+    "Fresh source cannot establish old completeness"
+  );
+  await captureSessionSource(actor, fresh);
+  await drainSessionSources();
+  await expect(
+    exportSessionSources(actor, sessionId, new AbortController().signal)
+  ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
 });

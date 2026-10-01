@@ -17,7 +17,7 @@ import { AccountMemoryArchiveUnavailable } from "../accounts/archive-entitlement
 import { SessionArchiveUnavailable } from "./session-export";
 import { operationSignal, TimeoutError } from "../operations/async";
 
-export class MemoryArchiveUploadTooLarge extends Error {
+class MemoryArchiveUploadTooLarge extends Error {
   constructor() {
     super("Memory archive exceeds its transfer limit");
     this.name = "MemoryArchiveUploadTooLarge";
