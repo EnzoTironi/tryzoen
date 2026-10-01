@@ -3,7 +3,7 @@ import { readFile, lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { claimSession } from "../../db/services/sessions";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import {
@@ -20,6 +20,7 @@ import {
   verifySessionClaimSource,
   rebuildSessionSourceReceipts,
   SessionArchiveUnavailable,
+  lockSessionSourceAllocation,
 } from "../../server/memory/session-export";
 import { PrivateMemoryRepository } from "../../server/memory/repository";
 import { workspaceFixture } from "./workspace-fixture";
@@ -393,3 +394,113 @@ for (const workspace of ["personal", "actor"] as const) {
     expect((await lstat(sources[0]?.path ?? "")).ino).toBe(inode.ino);
   });
 }
+
+async function sourceAllocationWaiters() {
+  const [row] = await query<{ count: number }>(sql`
+    SELECT count(*)::int AS count FROM pg_stat_activity
+    WHERE datname = current_database() AND wait_event_type = 'Lock'
+    AND query LIKE '%zoen-session-source-allocation%'`);
+  return row?.count ?? 0;
+}
+
+test("receipt recovery waits for native allocation commit and does not allocate a second sequence", async () => {
+  await using fixture = await workspaceFixture();
+  const originalSession = `source-allocation-${randomUUID()}`;
+  const nextSession = `source-allocation-${randomUUID()}`;
+  await claimSession(fixture.actor, originalSession);
+  await claimSession(fixture.guestPersonal, nextSession);
+  const original = userSource(originalSession);
+  const next = userSource(nextSession);
+  await captureSessionSource(fixture.actor, original);
+  await drainSessionSources();
+  const [before] = await query<{ sequence: string }>(sql`
+    SELECT capture_sequence::text AS sequence FROM memory_session_sources
+    WHERE event_id = ${original.eventId}`);
+  if (!before) throw new Error("Expected original native allocation");
+  await query(
+    sql`DELETE FROM memory_session_sources WHERE event_id = ${original.eventId}`
+  );
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const blocker = transaction(async () => {
+    await lockSessionSourceAllocation();
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const capture = captureSessionSource(fixture.guestPersonal, next);
+  let repair: ReturnType<typeof rebuildSessionSourceReceipts> = Promise.resolve(
+    { restored: 0, pending: 0 }
+  );
+  try {
+    await expect
+      .poll(sourceAllocationWaiters, { timeout: 3000, interval: 25 })
+      .toBe(1);
+    repair = rebuildSessionSourceReceipts(fixture.actor, originalSession);
+    await expect
+      .poll(sourceAllocationWaiters, { timeout: 3000, interval: 25 })
+      .toBe(2);
+  } finally {
+    release.resolve();
+    await Promise.allSettled([blocker, capture, repair]);
+  }
+  await blocker;
+  await capture;
+  expect(await repair).toEqual({ restored: 1, pending: 0 });
+  const receipts = await query<{ event: string; sequence: string }>(sql`
+    SELECT event_id AS event, capture_sequence::text AS sequence
+    FROM memory_session_sources WHERE event_id IN (${original.eventId}, ${next.eventId})`);
+  expect(
+    receipts.find((receipt) => receipt.event === original.eventId)?.sequence
+  ).toBe(before.sequence);
+  expect(
+    receipts.find((receipt) => receipt.event === next.eventId)?.sequence
+  ).toBe(String(BigInt(before.sequence) + 1n));
+  const [counter] = await query<{ high_water: string }>(sql`
+    SELECT pg_sequence_last_value(pg_get_serial_sequence('memory_session_sources', 'capture_sequence')::regclass)::text AS high_water`);
+  expect(counter?.high_water).toBe(String(BigInt(before.sequence) + 1n));
+});
+
+test("global retained receipt collision denies cross-namespace repair without replacing evidence", async () => {
+  await using fixture = await workspaceFixture();
+  const ownSession = `source-collision-${randomUUID()}`;
+  const otherSession = `source-collision-${randomUUID()}`;
+  await claimSession(fixture.actor, ownSession);
+  await claimSession(fixture.guestPersonal, otherSession);
+  const own = userSource(ownSession);
+  const other = userSource(otherSession);
+  await captureSessionSource(fixture.actor, own);
+  await captureSessionSource(fixture.guestPersonal, other);
+  await drainSessionSources();
+  const [original] = await query<{ sequence: string }>(sql`
+    SELECT capture_sequence::text AS sequence FROM memory_session_sources WHERE event_id = ${own.eventId}`);
+  if (!original) throw new Error("Expected own allocation");
+  // Only this fixture's synthetic stored row is corrupted; the native sequence
+  // remains untouched. Recovery must treat all namespaces as a collision fence.
+  await query(
+    sql`UPDATE memory_session_sources SET capture_sequence = ${original.sequence}::bigint WHERE event_id = ${other.eventId}`
+  );
+  await query(
+    sql`DELETE FROM memory_session_sources WHERE event_id = ${own.eventId}`
+  );
+  await expect(
+    rebuildSessionSourceReceipts(fixture.actor, ownSession)
+  ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
+  expect(
+    await query(
+      sql`SELECT event_id FROM memory_session_sources WHERE event_id = ${own.eventId}`
+    )
+  ).toEqual([]);
+  await query(
+    sql`DELETE FROM memory_session_sources WHERE event_id = ${other.eventId}`
+  );
+  expect(await rebuildSessionSourceReceipts(fixture.actor, ownSession)).toEqual(
+    { restored: 1, pending: 0 }
+  );
+  expect(
+    await verifySessionClaimSource(
+      fixture.actor,
+      citation(own, "weekly Cedar report")
+    )
+  ).toBe(true);
+});

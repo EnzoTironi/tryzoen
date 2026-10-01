@@ -659,10 +659,12 @@ coverage, all existing paths/files and all delivery receipts. A pending delivery
 conflicting immutable file, sequence collision, missing native allocator high-water
 or archive sequence ahead of that high-water blocks recovery. The same native
 allocator fence protects explicit source-index rebuilds. Default capture and
-repair both hold the namespace then a shared short allocation mutex; recovery
-cannot overlook a still-uncommitted allocation after a counter restore. This
-adds serialized SQL allocation admission, not a new allocator/queue. Its
-contention cost remains to be measured. No `setval` or reconstructed permissions
+repair both hold the namespace then the same allocation mutex; recovery cannot
+overlook a still-uncommitted allocation after a counter restore. Recovery retains
+that mutex through bounded filesystem repair. A nonpartial capture-sequence index
+covers collision checks for delivered receipts as well as pending deliveries.
+This adds serialized SQL allocation admission, not a new allocator/queue. Maximum
+restore contention remains unqualified. No `setval` or reconstructed permissions
 are used.
 
 Only after the entire preflight passes are missing immutable files fsynced and
@@ -676,9 +678,12 @@ publication history remain unchanged; operational receipt rebuild time is separa
 Processing limits are 10,000 cited events, 8 MiB per canonical file and 128 MiB
 source bytes per archive, in addition to the existing Git bundle bound. These are
 explicit refusal limits, not total conversation retention or production capacity
-claims. Source-only tests exercise native temporary Git/files and mocked SQL;
-personal/team database recovery journeys are authored but require isolated runtime
-qualification. Private archives cannot reconstruct lost session authority or prove
+claims. Timestamp metadata is bounded before ISO validation and segmentation;
+serialized chunks are bounded before final allocation. Source tests exercise
+native temporary Git/files and mocked SQL. Isolated PostgreSQL journeys cover
+personal/team recovery, allocation commit ordering and retained cross-namespace
+collision denial. A populated temporary-table plan verifies the additive index;
+it does not measure application throughput or maximum restore contention. Private archives cannot reconstruct lost session authority or prove
 completed erasure safety after a database rewind; installation recovery must retain
 the allocator, ownership and the non-restored erasure journal. Full K3 still requires
 active-consumer/recall/creator cutover and recovery/erasure qualification.

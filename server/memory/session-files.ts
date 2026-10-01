@@ -12,7 +12,7 @@ export const sessionSourceSchema = z.object({
   source: z.literal("eve"),
   sessionId: z.string().min(1).max(256),
   eventId: z.string().min(1).max(256),
-  occurredAt: z.iso.datetime().nullable(),
+  occurredAt: z.string().max(32).pipe(z.iso.datetime()).nullable(),
   kind: z.enum([
     "message.received",
     "message.completed",
@@ -164,18 +164,22 @@ export function encodeSessionSource(
   const parsed = sessionSourceSchema.parse(source);
   const sequence =
     SessionSourceBackupSchema.shape.captureSequence.parse(captureSequence);
-  const content = Buffer.from(
-    sessionSourceSegments(parsed)
-      .map(
-        (segment) =>
-          `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`
-      )
-      .join(""),
-    "utf8"
-  );
-  if (content.byteLength > sessionArchiveLimits.fileBytes)
-    throw new Error("Session source exceeds the archive limit.");
-  return content;
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for (const segment of sessionSourceSegments(parsed)) {
+    // Metadata is bounded before segmentation. Check each bounded serialized
+    // line before retaining it, so escaping cannot amplify a malformed source
+    // into an oversized concatenation or final allocation.
+    const chunk = Buffer.from(
+      `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`,
+      "utf8"
+    );
+    bytes += chunk.byteLength;
+    if (bytes > sessionArchiveLimits.fileBytes)
+      throw new Error("Session source exceeds the archive limit.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, bytes);
 }
 
 /** Bound line count before JSON parsing; exact re-encoding detects every coordinate,

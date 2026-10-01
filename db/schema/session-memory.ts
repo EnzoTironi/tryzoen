@@ -52,6 +52,8 @@ export const memorySessionSources = pgTable(
       "memory_session_source_failures",
       sql`${table.deliveryFailures} >= 0 AND (${table.deliveryFailures} = 0) = (${table.lastFailedAt} IS NULL)`
     ),
+    // Recovery checks every retained receipt, including delivered rows.
+    index("memory_session_sources_capture_idx").on(table.captureSequence),
     index("memory_session_sources_pending_idx")
       .on(table.availableAt, table.captureSequence)
       .where(sql`${table.storedAt} IS NULL`),

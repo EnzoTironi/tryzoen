@@ -151,6 +151,67 @@ test("canonical multibyte source round-trip preserves exact source metadata and 
   );
 });
 
+test("source timestamps are bounded before canonical segment reconstruction", () => {
+  const precise = { ...source, occurredAt: "2026-10-01T05:00:00.123456789Z" };
+  expect(decodeSessionSource(encodeSessionSource(precise, 7)).source).toEqual(
+    precise
+  );
+  const segments = Array.from({ length: 512 }, (_, index) => ({
+    ...source,
+    occurredAt:
+      index === 0
+        ? `2026-10-01T05:00:00.${"0".repeat(65_536)}Z`
+        : source.occurredAt,
+    text: "a",
+    segment: { index, count: 512 },
+    captureSequence: 7,
+  }));
+  // A small raw file cannot amplify its first timestamp across every segment.
+  const raw = Buffer.from(
+    segments.map((item) => JSON.stringify(item)).join("\n") + "\n"
+  );
+  expect(raw.byteLength).toBeLessThan(1_048_576);
+  expect(() => decodeSessionSource(raw)).toThrow(/<=32/u);
+  expect(() =>
+    encodeSessionSource(
+      { ...source, occurredAt: segments[0]?.occurredAt ?? null },
+      7
+    )
+  ).toThrow(/<=32/u);
+});
+
+test("escaping and repeated bounded metadata cannot exceed the canonical allocation budget", () => {
+  const controls = "\u0000".repeat(256);
+  const escaped = {
+    ...source,
+    sessionId: controls,
+    eventId: controls,
+    turnId: controls,
+    text: "\u0000".repeat(1_048_576),
+  };
+  const allocation = vi.spyOn(Buffer, "from");
+  try {
+    expect(() => encodeSessionSource(escaped, 7)).toThrow(
+      "Session source exceeds the archive limit."
+    );
+    // Observe actual byte-allocation requests without replacing the allocator.
+    // A post-allocation limit would fail this regression despite throwing.
+    expect(
+      allocation.mock.calls.some(
+        ([value]) =>
+          typeof value === "string" &&
+          Buffer.byteLength(value, "utf8") > 8_388_608
+      )
+    ).toBe(false);
+  } finally {
+    allocation.mockRestore();
+  }
+  const maximumText = { ...source, text: "a".repeat(1_048_576) };
+  expect(
+    decodeSessionSource(encodeSessionSource(maximumText, 7)).source
+  ).toEqual(maximumText);
+});
+
 test("authenticated exact source restoration fsyncs bytes before reconstructing the missing receipt", async () => {
   await expect(
     restoreSessionClaimSources(actor, namespace, [citation], [archive()])
