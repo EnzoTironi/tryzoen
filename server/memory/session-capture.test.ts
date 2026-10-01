@@ -59,7 +59,10 @@ const boundary = vi.hoisted(() => {
 vi.mock("../../db/index", () => ({
   db: { transaction: boundary.outer, execute: boundary.rootExecute },
 }));
-vi.mock("./namespace", () => ({ memoryNamespace: boundary.namespace }));
+vi.mock("./namespace", async (original) => ({
+  ...(await original<typeof import("./namespace")>()),
+  memoryNamespace: boundary.namespace,
+}));
 vi.mock("./session-files", async (original) => ({
   ...(await original<typeof import("./session-files")>()),
   writeSessionSource: boundary.write,
@@ -175,6 +178,7 @@ function batch(
   acknowledgements = records.length
 ) {
   boundary.savepointExecute.mockResolvedValueOnce({ rows: records });
+  boundary.savepointExecute.mockResolvedValueOnce({ rows: [] });
   for (let count = 0; count < acknowledgements; count++)
     boundary.savepointExecute.mockResolvedValueOnce({ rows: [] });
 }
@@ -280,7 +284,11 @@ test("file-only delivery preserves exact source coordinates and ACKs each source
   expect(delivered[0]?.sql).toContain(
     "ORDER BY capture_sequence LIMIT 25 FOR UPDATE"
   );
-  expect(delivered.slice(1)).toEqual(
+  expect(delivered[1]).toEqual({
+    sql: "SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = $1",
+    params: [namespaceA],
+  });
+  expect(delivered.slice(2)).toEqual(
     [first, second].map((item) => ({
       sql: "UPDATE memory_session_sources SET payload = NULL, stored_at = now() WHERE namespace_id = $1 AND event_id = $2",
       params: [namespaceA, item.eventId],
@@ -291,7 +299,7 @@ test("file-only delivery preserves exact source coordinates and ACKs each source
     order,
   ] of boundary.write.mock.invocationCallOrder.entries()) {
     const acknowledgement =
-      boundary.savepointExecute.mock.invocationCallOrder[index + 1];
+      boundary.savepointExecute.mock.invocationCallOrder[index + 2];
     if (acknowledgement === undefined)
       throw new Error("Expected source acknowledgement");
     expect(order).toBeLessThan(acknowledgement);
@@ -331,7 +339,7 @@ test.each([false, true])(
     const [writeOrder] = boundary.write.mock.invocationCallOrder;
     const [ingestOrder] = boundary.ingest.mock.invocationCallOrder;
     const acknowledgement =
-      boundary.savepointExecute.mock.invocationCallOrder[1];
+      boundary.savepointExecute.mock.invocationCallOrder[2];
     if (
       writeOrder === undefined ||
       ingestOrder === undefined ||
@@ -356,7 +364,7 @@ test("engine startup failure retains queued sources without file writes or ACK",
   expect(boundary.ingest).not.toHaveBeenCalled();
   expect(boundary.accept).not.toHaveBeenCalled();
   expect(boundary.dispose).not.toHaveBeenCalled();
-  expect(statements(boundary.savepointExecute)).toHaveLength(1);
+  expect(statements(boundary.savepointExecute)).toHaveLength(2);
   expect(boundary.rollback).toHaveBeenCalledTimes(1);
 });
 
@@ -371,7 +379,7 @@ test("a mismatched immutable source digest fails before file write or ACK", asyn
     ],
   });
   assertNoArchiveEffects();
-  expect(statements(boundary.savepointExecute)).toHaveLength(1);
+  expect(statements(boundary.savepointExecute)).toHaveLength(2);
   expect(boundary.rollback).toHaveBeenCalledTimes(1);
 });
 
@@ -390,7 +398,7 @@ test.each([
     await expect(drainSessionSources()).rejects.toMatchObject({
       errors: [failure],
     });
-    expect(statements(boundary.savepointExecute)).toHaveLength(1);
+    expect(statements(boundary.savepointExecute)).toHaveLength(2);
     expect(boundary.rollback).toHaveBeenCalledTimes(1);
     const retries = statements(boundary.execute).slice(1, 3);
     expect(retries).toEqual([
@@ -419,7 +427,7 @@ test("ingestion failure closes the engine and retains the source even after a su
   expect(boundary.ingest).toHaveBeenCalledTimes(1);
   expect(boundary.accept).not.toHaveBeenCalled();
   expect(boundary.dispose).toHaveBeenCalledTimes(1);
-  expect(statements(boundary.savepointExecute)).toHaveLength(1);
+  expect(statements(boundary.savepointExecute)).toHaveLength(2);
   expect(boundary.rollback).toHaveBeenCalledTimes(1);
 });
 
@@ -438,7 +446,7 @@ test("ACK failure stays in the batch savepoint and leaves namespace retry outsid
   expect(boundary.dispose).toHaveBeenCalledTimes(1);
   expect(boundary.accept).not.toHaveBeenCalled();
   expect(boundary.rollback).toHaveBeenCalledTimes(1);
-  expect(statements(boundary.savepointExecute)[1]?.params).toEqual([
+  expect(statements(boundary.savepointExecute)[2]?.params).toEqual([
     namespaceA,
     source.eventId,
   ]);

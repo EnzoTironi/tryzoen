@@ -34,6 +34,17 @@ export class LearnedMemoryError extends Error {
   }
 }
 
+/** Call under this namespace's existing row lock before any content or mutation.
+ * A presence read must not wait on a worker's receipt lock and then treat its
+ * later deletion as permission to access a restored generation.
+ */
+export async function requireMemoryNamespaceAvailable(namespaceId: string) {
+  const erasure = await dbQuery(sql`SELECT namespace_id FROM workspace_memory_erasure
+    WHERE namespace_id = ${namespaceId}`);
+  if (erasure.length)
+    throw new LearnedMemoryError({ reason: "stale_recall" });
+}
+
 export const memoryNamespace = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   scopeKey?: string
@@ -47,6 +58,7 @@ export const memoryNamespace = async function (
       pending_operation AS "pendingOperation", pending_hash AS "pendingHash" FROM workspace_memory_namespace
       WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId} FOR UPDATE`);
   const partition = await namespaceSchema.parseAsync(rows[0]);
+  await requireMemoryNamespaceAvailable(partition.id);
   if (scopeKey !== undefined) {
     if (
       !scopeKey ||
