@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   MarkdownSourceEditor,
+  useDarkAppearance,
   type MarkdownEditorProps,
   type MarkdownEditorHandle,
 } from "@zoen/companion-ui";
@@ -36,6 +37,7 @@ import {
 import styles from "./rich-text.module.css";
 
 export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
+  const darkAppearance = useDarkAppearance();
   const editor = useRef<MarkdownEditorHandle>(null);
   const [document, setDocument] = useState({
     text: props.initialMarkdown,
@@ -115,7 +117,10 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
       >
         <MoreHorizontal />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        className={darkAppearance ? "dark" : undefined}
+      >
         {(
           [
             ["source", source ? "Visual editor" : "View Markdown source"],

@@ -1,5 +1,9 @@
 import type { ReactNode, ComponentProps } from "react";
-import type { NewConversation, RoomConversation } from "@zoen/companion-ui";
+import type {
+  NewConversation,
+  RoomConversation,
+  useDarkAppearance,
+} from "@zoen/companion-ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConnectedCompanion } from "@app/companion/connected";
@@ -28,6 +32,7 @@ vi.mock("@trpc/client", async (importOriginal) => ({
   }),
 }));
 vi.mock("@zoen/companion-ui", async () => ({
+  useDarkAppearance: vi.fn<typeof useDarkAppearance>().mockReturnValue(false),
   parseRoomMessageLocation: (
     await import("../packages/companion-ui/src/rooms/links")
   ).parseRoomMessageLocation,

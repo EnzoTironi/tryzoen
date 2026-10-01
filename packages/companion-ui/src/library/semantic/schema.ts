@@ -4,6 +4,11 @@ import { WorkspacePathSchema, GitRevisionSchema } from "../files-schema";
 export const SemanticIdentifierSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]{0,39}$/);
+/** Exact decimal transport, including integers beyond JavaScript precision. */
+export const SemanticDecimalSchema = z
+  .string()
+  .max(4096)
+  .regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/);
 export const SemanticNumberSchema = z
   .number()
   .refine(
