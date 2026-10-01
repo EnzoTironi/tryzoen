@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   LearnedClaimChangeSchema,
+  type LearnedClaimBodySchema,
   LearnedClaimRecallSchema,
   learnedClaimLimits,
   type LearnedClaimFileSchema,
@@ -129,6 +130,14 @@ async function verifyEvidence(
   const sources = files.flatMap((file) =>
     file.state.kind === "active" ? file.state.body.sources : []
   );
+  return verifySources(actor, sources, current);
+}
+
+async function verifySources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  sources: readonly z.infer<typeof LearnedClaimBodySchema>["sources"][number][],
+  current: boolean
+) {
   for (const source of sources.filter((item) => item.kind === "session"))
     if (!(await verifySessionClaimSource(actor, source)))
       throw new PrivateMemoryError("invalid_input");
@@ -408,7 +417,14 @@ export const PrivateMemoryRepository = {
         throw new WorkspaceAccessDenied();
       const owner = await privateScope(actor);
       const repository = await stored(owner.namespace.id);
-      await readPrivateMemoryGit({ scope: owner.scope, ...repository });
+      const captured = await readPrivateMemoryGit({
+        scope: owner.scope,
+        ...repository,
+        includeRetainedSources: true,
+      });
+      // An export cannot bypass current permission on evidence cited by an
+      // older correction or a cleared claim. Authorize the complete lineage.
+      await verifySources(owner.actor, captured.retainedSources, false);
       await requireWorkspaceAccess(owner.actor);
       const archive = {
         version: 1 as const,
@@ -462,7 +478,9 @@ export const PrivateMemoryRepository = {
         scope: owner.scope,
         head: archive.revision,
         bundle: archive.bundle,
+        includeRetainedSources: true,
       });
+      await verifySources(owner.actor, restored.retainedSources, false);
       // Restoring retained history can advance the current lineage or rebuild a
       // lost projection. It cannot roll back a later correction/tombstone or
       // import a divergent history. Explicit reversal remains a separate write.

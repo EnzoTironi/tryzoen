@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import { z } from "zod";
 import {
   LearnedClaimFileSchema,
+  type LearnedClaimBodySchema,
   type LearnedClaimChangeSchema,
   LearnedClaimPublicationSchema,
   LearnedClaimOperationSchema,
@@ -75,16 +76,22 @@ function includesClaim(
     : operation.claimId === id;
 }
 
-async function validateClear(
+async function validateChanges(
   git: GitBundle["git"],
   scope: z.infer<typeof LearnedClaimScopeSchema>,
   entry: {
     revision: string;
     operation: z.infer<typeof LearnedClaimOperationSchema>;
-  }
+  },
+  changedPaths: readonly string[]
 ) {
-  if (entry.operation.claimId !== null) return;
-  const { operation, revision } = entry;
+  const { operation } = entry;
+  const paths = changedPaths.toSorted();
+  if (operation.claimId !== null) {
+    if (JSON.stringify(paths) !== JSON.stringify([pathFor(operation.claimId)]))
+      invalid();
+    return;
+  }
   const activeIds: string[] = [];
   if (operation.parentRevision) {
     const tree = await git([
@@ -93,10 +100,11 @@ async function validateClear(
       "--name-only",
       operation.parentRevision,
     ]);
-    const paths = tree.trim() ? tree.trim().split("\n") : [];
-    if (paths.length > learnedClaimLimits.claims)
+    const parentTree = tree.replace(/\n$/u, "");
+    const parentPaths = parentTree ? parentTree.split("\n") : [];
+    if (parentPaths.length > learnedClaimLimits.claims)
       throw new GitBundleError({ reason: "too_large" });
-    for (const path of paths) {
+    for (const path of parentPaths) {
       const match = /^claims\/([a-f0-9-]{36})\.json$/u.exec(path);
       const claimId = match?.[1] ?? invalid();
       const file = LearnedClaimFileSchema.parse(
@@ -116,17 +124,7 @@ async function validateClear(
     }) !== operation.requestHash
   )
     invalid();
-  const changed = (
-    await git([
-      "diff-tree",
-      "--root",
-      "-r",
-      "--no-commit-id",
-      "--name-only",
-      revision,
-    ])
-  ).trim();
-  const paths = changed ? changed.split("\n").toSorted() : [];
+
   if (
     JSON.stringify(paths) !== JSON.stringify(activeIds.map(pathFor).toSorted())
   )
@@ -177,7 +175,32 @@ async function readOperations(
       invalid();
   }
   if (operations[0]?.revision !== revision) invalid();
-  for (const entry of operations) await validateClear(git, scope, entry);
+  // One native Git walk validates all changed paths. Reconstructing an entire
+  // history must not launch another subprocess for every ordinary operation.
+  const changes = (
+    await git([
+      "log",
+      `--max-count=${privateMemoryGitLimits.operations + 1}`,
+      "--format=%x00%H%x00",
+      "--name-only",
+      "--no-renames",
+      "--root",
+      revision,
+      "--",
+    ])
+  ).split("\0");
+  if (changes.shift()?.trim() || changes.length !== operations.length * 2)
+    invalid();
+  for (const [index, entry] of operations.entries()) {
+    if (changes[index * 2]?.trim() !== entry.revision) invalid();
+    const changed = (changes[index * 2 + 1] ?? "").replace(/^\n+|\n+$/gu, "");
+    await validateChanges(
+      git,
+      scope,
+      entry,
+      changed ? changed.split("\n") : []
+    );
+  }
   return operations;
 }
 
@@ -289,6 +312,15 @@ async function capture(
     scope,
     GitRevisionSchema.parse(head)
   );
+  // A clear receipt must describe tombstones, even after a later reversal
+  // replaces them. Its historical blobs remain inside a recovery bundle.
+  for (const entry of operations)
+    if (entry.operation.claimId === null)
+      await mapAsync(
+        entry.operation.clearedClaimIds,
+        (id) => readVersion(git, scope, operations, id, entry.revision),
+        4
+      );
   if (recordedThrough !== undefined) {
     const cutoff =
       LearnedClaimPublicationSchema.shape.recordedAt.parse(recordedThrough);
@@ -357,6 +389,7 @@ export async function readPrivateMemoryGit(input: {
   revision?: string | null;
   recordedThrough?: string;
   historyClaimId?: string;
+  includeRetainedSources?: boolean;
 }) {
   const scope = LearnedClaimScopeSchema.parse(input.scope);
   if ((input.bundle === null) !== (input.head === null)) invalid();
@@ -393,7 +426,37 @@ export async function readPrivateMemoryGit(input: {
                 ),
               4
             );
-      return { ...captured, history };
+      // A recovery archive retains evidence from every historical active version,
+      // including later corrections and clears. The UI history window is never
+      // a source-retention policy. The caller must reauthorize these sources.
+      const retainedSources: z.infer<typeof LearnedClaimBodySchema>["sources"] =
+        [];
+      if (input.includeRetainedSources) {
+        const seen = new Set<string>();
+        let bytes = 2;
+        for (const entry of captured.operations) {
+          // Clear contains only tombstones. Its predecessors own the evidence.
+          if (entry.operation.claimId === null) continue;
+          const version = await readVersion(
+            git,
+            scope,
+            captured.operations,
+            entry.operation.claimId,
+            entry.revision
+          );
+          if (version.file.state.kind !== "active") continue;
+          for (const source of version.file.state.body.sources) {
+            const encoded = JSON.stringify(source);
+            if (seen.has(encoded)) continue;
+            bytes += Buffer.byteLength(encoded) + (seen.size ? 1 : 0);
+            if (bytes > privateMemoryGitLimits.outputBytes)
+              throw new GitBundleError({ reason: "too_large" });
+            seen.add(encoded);
+            retainedSources.push(source);
+          }
+        }
+      }
+      return { ...captured, history, retainedSources };
     }
   );
 }
