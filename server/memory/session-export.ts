@@ -18,6 +18,12 @@ import {
   writeSessionSource,
 } from "./session-files";
 import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
+import { memoryNamespace, requireMemoryNamespaceAvailable } from "./namespace";
+import { operationSignal } from "../operations/async";
+import {
+  archivedPrivateNamespace,
+  AccountMemoryArchiveUnavailable,
+} from "../accounts/archive-entitlement";
 
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -65,7 +71,11 @@ async function archiveNamespace(
 }
 
 /** Read one immutable file with a hard allocation bound, even if it grows. */
-async function sourceFile(path: string, sessionId: string, filename: string) {
+async function sourceFile(
+  path: string,
+  sessionId: string | undefined,
+  filename: string
+) {
   await using file = await open(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
@@ -85,7 +95,7 @@ async function sourceFile(path: string, sessionId: string, filename: string) {
   const content = bytes.subarray(0, length);
   const decoded = decodeSessionSource(content);
   if (
-    decoded.source.sessionId !== sessionId ||
+    (sessionId !== undefined && decoded.source.sessionId !== sessionId) ||
     filename !== `${hash(decoded.source.eventId)}.jsonl`
   )
     throw new Error(
@@ -221,21 +231,29 @@ async function verifiedSource(
   return transaction(async () => {
     if ((await archiveNamespace(actor, sessionId)) !== namespace)
       throw new WorkspaceAccessDenied();
-    const file = await sourceFile(path, sessionId, basename(path));
-    const receipt = (
-      await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
-          FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR SHARE`)
-    )[0];
-    if (
-      !receipt ||
-      receipt.digest !== file.digest ||
-      receipt.sequence !== String(file.captureSequence)
-    )
-      throw new Error(
-        "The saved conversation archive does not match its receipt."
-      );
-    return receipt.stored_at ? file : null;
+    return deliveredSource(namespace, sessionId, path);
   });
+}
+
+async function deliveredSource(
+  namespace: string,
+  sessionId: string,
+  path: string
+) {
+  const file = await sourceFile(path, sessionId, basename(path));
+  const receipt = (
+    await query(sql`SELECT digest, capture_sequence::text AS sequence, stored_at
+          FROM memory_session_sources WHERE namespace_id = ${namespace} AND event_id = ${file.source.eventId} FOR SHARE`)
+  )[0];
+  if (
+    !receipt ||
+    receipt.digest !== file.digest ||
+    receipt.sequence !== String(file.captureSequence)
+  )
+    throw new Error(
+      "The saved conversation archive does not match its receipt."
+    );
+  return receipt.stored_at ? file : null;
 }
 
 /** Exact immutable source evidence for a private claim. A completed stream block
@@ -343,6 +361,185 @@ export async function backupSessionClaimSources(
     );
 }
 
+/** Enumerate both inventories under the authorized namespace lock. A complete
+ * snapshot refuses pending delivery, orphan bytes and missing delivered bytes. */
+export async function backupCompleteSessionSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string
+) {
+  return transaction(async () => {
+    if ((await memoryNamespace(actor)).id !== namespace)
+      throw new WorkspaceAccessDenied();
+    return captureCompleteJournal(namespace, async (sessionId) => {
+      if ((await archiveNamespace(actor, sessionId)) !== namespace)
+        throw new WorkspaceAccessDenied();
+    });
+  });
+}
+
+async function requireArchivedSession(
+  owner: Awaited<ReturnType<typeof archivedPrivateNamespace>>,
+  sessionId: string
+) {
+  if (!owner.namespace) throw new AccountMemoryArchiveUnavailable();
+  const [session] = await query(sql`SELECT session_id FROM agent_sessions
+    WHERE session_id=${sessionId} AND workspace_id=${owner.scope.workspaceId}
+      AND created_by_user_id=${owner.scope.userId} FOR SHARE`);
+  if (!session) throw new WorkspaceAccessDenied();
+}
+
+/** A target's archive entitlement is not an ordinary source actor credential. */
+export async function verifyArchivedSessionClaimSource(
+  headers: Headers,
+  archiveId: string,
+  raw: z.infer<typeof LearnedClaimSessionSourceSchema>
+) {
+  const citation = LearnedClaimSessionSourceSchema.parse(raw);
+  return transaction(async () => {
+    const owner = await archivedPrivateNamespace(headers, archiveId);
+    if (!owner.namespace || !env.ZOEN_SESSION_ARCHIVE_DIR)
+      throw new AccountMemoryArchiveUnavailable();
+    await requireArchivedSession(owner, citation.sessionId);
+    const directory = await sessionDirectory(
+      env.ZOEN_SESSION_ARCHIVE_DIR,
+      owner.namespace.id,
+      citation.sessionId
+    );
+    const file = await deliveredSource(
+      owner.namespace.id,
+      citation.sessionId,
+      join(directory, `${hash(citation.eventId)}.jsonl`)
+    );
+    return file !== null && sessionClaimMatches(file, citation);
+  });
+}
+
+export async function backupArchivedCompleteSessionSources(
+  headers: Headers,
+  archiveId: string
+) {
+  return transaction(async () => {
+    const owner = await archivedPrivateNamespace(headers, archiveId);
+    if (!owner.namespace) throw new AccountMemoryArchiveUnavailable();
+    return captureCompleteJournal(owner.namespace.id, (sessionId) =>
+      requireArchivedSession(owner, sessionId)
+    );
+  });
+}
+
+async function captureCompleteJournal(
+  namespace: string,
+  authorizeSession: (sessionId: string) => Promise<void>
+) {
+  const root = env.ZOEN_SESSION_ARCHIVE_DIR;
+  if (!root) throw new SessionArchiveUnavailable();
+  const rows =
+    await query(sql`SELECT event_id AS "eventId", digest, capture_sequence::text AS sequence, stored_at
+    FROM memory_session_sources WHERE namespace_id=${namespace}
+    ORDER BY capture_sequence LIMIT ${sessionArchiveLimits.events + 1} FOR SHARE`);
+  const [checkpoint] =
+    await query(sql`SELECT journal_event_count::text AS count, journal_high_water::text AS "highWater"
+    FROM workspace_memory_namespace WHERE namespace_id=${namespace}`);
+  if (
+    !checkpoint ||
+    checkpoint.count !== String(rows.length) ||
+    (checkpoint.highWater ?? null) !== (rows.at(-1)?.sequence ?? null)
+  )
+    throw new SessionArchiveUnavailable();
+  if (
+    rows.length > sessionArchiveLimits.events ||
+    rows.some((row) => !row.stored_at)
+  )
+    throw new SessionArchiveUnavailable();
+  const receipts = new Map(
+    rows.map((row) => [z.string().parse(row.eventId), row])
+  );
+  const sources: z.infer<typeof SessionSourceBackupSchema>[] = [];
+  let bytes = 0;
+  let directories = 0;
+  const sessionRoot = join(root, namespace, "raw", "eve");
+  let exists = true;
+  for (const path of [
+    root,
+    join(root, namespace),
+    join(root, namespace, "raw"),
+    sessionRoot,
+  ]) {
+    const info = await lstat(path).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return null;
+      throw error;
+    });
+    if (!info) {
+      if (path === root) throw new SessionArchiveUnavailable();
+      exists = false;
+      break;
+    }
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      (info.mode & 0o077) !== 0
+    )
+      throw new SessionArchiveUnavailable();
+  }
+  if (exists)
+    for await (const directory of await opendir(sessionRoot)) {
+      operationSignal().throwIfAborted();
+      if (
+        ++directories > sessionArchiveLimits.events ||
+        !/^[a-f0-9]{64}$/u.test(directory.name) ||
+        !directory.isDirectory()
+      )
+        throw new SessionArchiveUnavailable();
+      const path = join(sessionRoot, directory.name);
+      const info = await lstat(path);
+      if (
+        !info.isDirectory() ||
+        info.isSymbolicLink() ||
+        (info.mode & 0o077) !== 0
+      )
+        throw new SessionArchiveUnavailable();
+      for await (const entry of await opendir(path)) {
+        operationSignal().throwIfAborted();
+        // A staged or unacknowledged file is not a complete delivered checkpoint.
+        if (
+          sources.length >= sessionArchiveLimits.events ||
+          !/^[a-f0-9]{64}\.jsonl$/u.test(entry.name) ||
+          !entry.isFile()
+        )
+          throw new SessionArchiveUnavailable();
+        const file = await sourceFile(
+          join(path, entry.name),
+          undefined,
+          entry.name
+        );
+        if (hash(file.source.sessionId) !== directory.name)
+          throw new SessionArchiveUnavailable();
+        await authorizeSession(file.source.sessionId);
+        const receipt = receipts.get(file.source.eventId);
+        if (
+          !receipt ||
+          receipt.digest !== file.digest ||
+          receipt.sequence !== String(file.captureSequence)
+        )
+          throw new SessionArchiveUnavailable();
+        receipts.delete(file.source.eventId);
+        bytes += file.content.byteLength;
+        if (bytes > exportLimit) throw new SessionArchiveUnavailable();
+        sources.push({
+          sessionId: file.source.sessionId,
+          eventId: file.source.eventId,
+          captureSequence: file.captureSequence,
+          content: Buffer.from(file.content),
+        });
+      }
+    }
+  if (receipts.size) throw new SessionArchiveUnavailable();
+  await requireMemoryNamespaceAvailable(namespace);
+  sources.sort((left, right) => left.captureSequence - right.captureSequence);
+  return { sources, capturedThrough: sources.at(-1)?.captureSequence ?? null };
+}
+
 /** Capture and receipt repair share namespace→allocation lock ordering. Default
  * nextval must commit before recovery can inspect its allocation/collision fence. */
 export async function lockSessionSourceAllocation() {
@@ -399,6 +596,50 @@ export async function restoreSessionClaimSources(
   citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[],
   archives: readonly z.infer<typeof SessionSourceBackupSchema>[]
 ) {
+  return restoreSessionSources(actor, namespace, citations, archives, "claims");
+}
+
+export async function restoreCompleteSessionSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string,
+  citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[],
+  archives: readonly z.infer<typeof SessionSourceBackupSchema>[]
+) {
+  return restoreSessionSources(
+    actor,
+    namespace,
+    citations,
+    archives,
+    "complete-journal"
+  );
+}
+
+/** Same ownership, collision and file preflight as apply, with no installation. */
+export async function inspectSessionSourceArchive(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string,
+  citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[],
+  archives: readonly z.infer<typeof SessionSourceBackupSchema>[],
+  coverage: "claims" | "complete-journal"
+) {
+  return restoreSessionSources(
+    actor,
+    namespace,
+    citations,
+    archives,
+    coverage,
+    false
+  );
+}
+
+async function restoreSessionSources(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  namespace: string,
+  citations: readonly z.infer<typeof LearnedClaimSessionSourceSchema>[],
+  archives: readonly z.infer<typeof SessionSourceBackupSchema>[],
+  coverage: "claims" | "complete-journal",
+  apply = true
+) {
   const root = env.ZOEN_SESSION_ARCHIVE_DIR;
   if (archives.length && !root) throw new SessionArchiveUnavailable();
   const files = new Map<string, ReturnType<typeof decodeSessionSource>>();
@@ -430,7 +671,8 @@ export async function restoreSessionClaimSources(
       throw new SessionArchiveUnavailable();
     cited.add(citation.eventId);
   }
-  if (cited.size !== files.size) throw new SessionArchiveUnavailable();
+  if (coverage === "claims" && cited.size !== files.size)
+    throw new SessionArchiveUnavailable();
   if (!files.size || !root) return { files: 0, receipts: 0 };
   for (const sessionId of new Set(
     [...files.values()].map((file) => file.source.sessionId)
@@ -489,6 +731,9 @@ export async function restoreSessionClaimSources(
     if (!receipt) missing.push(file);
   }
   await requireWorkspaceAccess(actor);
+  // Recheck after allocator/receipt waits at the immutable publication boundary.
+  await requireMemoryNamespaceAvailable(namespace);
+  if (!apply) return { files: files.size, receipts: missing.length };
   for (const file of files.values())
     await writeSessionSource(
       root,

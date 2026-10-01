@@ -10,27 +10,16 @@ import { readWorkspaceCapabilities } from "../workspaces/capabilities";
 const namespaceSchema = z.object({
   id: z.uuid(),
   enabled: z.boolean(),
+  preferenceRevision: z.uuid(),
+  journalEventCount: z.int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  journalHighWater: z.int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
   scopeKey: z.nullable(z.string()),
-  pendingOperation: z.nullable(z.string()),
-  pendingHash: z.nullable(z.string()),
 });
-export class LearnedMemoryError extends Error {
-  readonly _tag = "LearnedMemoryError";
-  declare readonly reason:
-    | "disabled"
-    | "invalid_input"
-    | "unavailable"
-    | "stale_recall";
-  constructor(input: {
-    readonly reason:
-      | "disabled"
-      | "invalid_input"
-      | "unavailable"
-      | "stale_recall";
-  }) {
-    super("LearnedMemoryError");
-    this.name = "LearnedMemoryError";
-    Object.assign(this, input);
+export class MemoryNamespaceError extends Error {
+  readonly _tag = "MemoryNamespaceError";
+  constructor(readonly reason: "invalid_input" | "erased") {
+    super("MemoryNamespaceError");
+    this.name = "MemoryNamespaceError";
   }
 }
 
@@ -42,7 +31,7 @@ export async function requireMemoryNamespaceAvailable(namespaceId: string) {
   const erasure =
     await dbQuery(sql`SELECT namespace_id FROM workspace_memory_erasure
     WHERE namespace_id = ${namespaceId}`);
-  if (erasure.length) throw new LearnedMemoryError({ reason: "stale_recall" });
+  if (erasure.length) throw new MemoryNamespaceError("erased");
 }
 
 export const memoryNamespace = async function (
@@ -50,12 +39,17 @@ export const memoryNamespace = async function (
   scopeKey?: string
 ) {
   await requireWorkspaceAccess(actor);
-  await dbQuery(
-    sql`INSERT INTO workspace_memory_namespace (workspace_id, user_id) VALUES (${actor.workspaceId}, ${actor.userId}) ON CONFLICT DO NOTHING`
-  );
+  const [created] =
+    await dbQuery(sql`INSERT INTO workspace_memory_namespace (workspace_id, user_id)
+    VALUES (${actor.workspaceId}, ${actor.userId}) ON CONFLICT DO NOTHING RETURNING namespace_id AS id`);
+  if (created)
+    await dbQuery(
+      sql`INSERT INTO private_memory_repository(namespace_id) VALUES (${z.uuid().parse(created.id)})`
+    );
   const rows =
-    await dbQuery(sql`SELECT namespace_id AS id, enabled, eve_scope_key AS "scopeKey",
-      pending_operation AS "pendingOperation", pending_hash AS "pendingHash" FROM workspace_memory_namespace
+    await dbQuery(sql`SELECT namespace_id AS id, enabled, preference_revision AS "preferenceRevision", eve_scope_key AS "scopeKey",
+      journal_event_count::float8 AS "journalEventCount", journal_high_water::float8 AS "journalHighWater"
+      FROM workspace_memory_namespace
       WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId} FOR UPDATE`);
   const partition = await namespaceSchema.parseAsync(rows[0]);
   await requireMemoryNamespaceAvailable(partition.id);
@@ -65,7 +59,7 @@ export const memoryNamespace = async function (
       scopeKey.length > 1024 ||
       (partition.scopeKey !== null && partition.scopeKey !== scopeKey)
     )
-      throw new LearnedMemoryError({ reason: "invalid_input" });
+      throw new MemoryNamespaceError("invalid_input");
     if (partition.scopeKey === null)
       await dbQuery(
         sql`UPDATE workspace_memory_namespace SET eve_scope_key = ${scopeKey} WHERE namespace_id = ${partition.id}`
@@ -75,6 +69,7 @@ export const memoryNamespace = async function (
   return {
     ...partition,
     workspaceEnabled: capabilities.enabled.includes("memory"),
-    enabled: partition.enabled && capabilities.enabled.includes("memory"),
+    automaticEnabled:
+      partition.enabled && capabilities.enabled.includes("memory"),
   };
 };

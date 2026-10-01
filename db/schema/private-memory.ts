@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   pgTable,
@@ -73,6 +74,32 @@ export const privateMemoryOperations = pgTable(
       table.namespaceId,
       table.recordedAt.desc(),
       table.revision
+    ),
+  ]
+);
+
+/** SQL consent receipts are separate from canonical Git claim publications. */
+export const privateMemoryPreferenceOperations = pgTable(
+  "private_memory_preference_operation",
+  {
+    namespaceId: uuid("namespace_id")
+      .notNull()
+      .references(() => workspaceMemoryNamespaces.namespaceId, {
+        onDelete: "cascade",
+      }),
+    operationId: text("operation_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    enabled: boolean("enabled").notNull(),
+    preferenceRevision: uuid("preference_revision").notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.namespaceId, table.operationId] }),
+    check(
+      "private_memory_preference_operation_identity_check",
+      sql`length(${table.operationId}) BETWEEN 1 AND 256 AND ${table.requestHash} ~ '^[a-f0-9]{64}$'`
     ),
   ]
 );

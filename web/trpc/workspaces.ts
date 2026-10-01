@@ -21,9 +21,17 @@ import {
   readReminderHistory,
 } from "../../server/schedules/queries";
 import {
-  learnedMemorySnapshotSchema,
-  learnedMemoryHistoryInputSchema,
-  learnedMemoryHistorySchema,
+  LearnedClaimReadInputSchema,
+  LearnedClaimReadSchema,
+  LearnedClaimSearchInputSchema,
+  LearnedClaimSearchSchema,
+  LearnedClaimChangeSchema,
+  LearnedClaimChangeResultSchema,
+  LearnedClaimHistoryInputSchema,
+  LearnedClaimHistorySchema,
+  LearnedClaimSetEnabledInputSchema,
+  LearnedClaimSetEnabledResultSchema,
+  LearnedClaimIndexRepairSchema,
 } from "@zoen/companion-ui/memory";
 import { withSignal } from "../../server/operations/async";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
@@ -70,9 +78,9 @@ import {
   revokeWorkspaceInvitation,
 } from "../../server/workspaces/team";
 import {
-  LearnedMemory,
-  LearnedMemoryWriteSchema,
-} from "../../server/memory/learned";
+  PrivateMemoryRepository,
+  PrivateMemoryError,
+} from "../../server/memory/repository";
 import {
   listKnowledgeProposals,
   readKnowledgeProposal,
@@ -80,6 +88,43 @@ import {
   ReviewKnowledgeSchema,
 } from "../../server/workspaces/knowledge";
 import { knowledgeProposalPathSchema } from "@zoen/companion-ui/knowledge";
+async function memoryRpc<Result>(run: () => Promise<Result>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof WorkspaceAccessDenied)
+      throw new TRPCError({ code: "FORBIDDEN" });
+    if (!(error instanceof PrivateMemoryError)) throw error;
+    switch (error.reason) {
+      case "conflict":
+      case "stale_recall":
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Memory changed. Review the current state before retrying.",
+        });
+      case "invalid_input":
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid private memory request.",
+        });
+      case "disabled":
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Automatic memory is paused.",
+        });
+      case "unavailable":
+        throw new TRPCError({
+          code: "SERVICE_UNAVAILABLE",
+          message: "Private memory is unavailable.",
+        });
+      default: {
+        const unhandled: never = error.reason;
+        throw unhandled;
+      }
+    }
+  }
+}
+
 export const workspacesRouter = {
   knowledge: {
     proposals: workspaceProcedure.query(({ ctx, signal }) =>
@@ -227,41 +272,54 @@ export const workspacesRouter = {
     withSignal(signal, async () => readWorkspaceCapabilities(ctx.actor))
   ),
   memory: {
-    history: workspaceProcedure
-      .input(learnedMemoryHistoryInputSchema)
-      .output(learnedMemoryHistorySchema)
+    read: workspaceProcedure
+      .input(LearnedClaimReadInputSchema.optional())
+      .output(LearnedClaimReadSchema)
       .query(({ ctx, input, signal }) =>
-        withSignal(signal, () => LearnedMemory.history(ctx.actor, input))
+        withSignal(signal, () =>
+          memoryRpc(() => PrivateMemoryRepository.read(ctx.actor, input ?? {}))
+        )
       ),
-    recover: workspaceProcedure.mutation(({ ctx, signal }) =>
-      withSignal(signal, async () => {
-        return await LearnedMemory.recover(ctx.actor);
-      })
-    ),
-    list: workspaceProcedure
-      .output(learnedMemorySnapshotSchema)
-      .query(({ ctx, signal }) =>
-        withSignal(signal, async () => {
-          return await LearnedMemory.read(ctx.actor, undefined, true);
-        })
+    search: workspaceProcedure
+      .input(LearnedClaimSearchInputSchema)
+      .output(LearnedClaimSearchSchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () =>
+          memoryRpc(() => PrivateMemoryRepository.search(ctx.actor, input))
+        )
       ),
-    write: workspaceProcedure
-      .input(LearnedMemoryWriteSchema)
+    history: workspaceProcedure
+      .input(LearnedClaimHistoryInputSchema)
+      .output(LearnedClaimHistorySchema)
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, () =>
+          memoryRpc(() =>
+            PrivateMemoryRepository.history(ctx.actor, input.claimId)
+          )
+        )
+      ),
+    change: workspaceProcedure
+      .input(LearnedClaimChangeSchema)
+      .output(LearnedClaimChangeResultSchema)
       .mutation(({ ctx, input, signal }) =>
-        withSignal(signal, async () => {
-          return await LearnedMemory.write(ctx.actor, input);
-        })
+        withSignal(signal, () =>
+          memoryRpc(() => PrivateMemoryRepository.change(ctx.actor, input))
+        )
       ),
     setEnabled: workspaceProcedure
-      .input(
-        z.object({
-          enabled: z.boolean(),
-        })
-      )
+      .input(LearnedClaimSetEnabledInputSchema)
+      .output(LearnedClaimSetEnabledResultSchema)
       .mutation(({ ctx, input, signal }) =>
-        withSignal(signal, async () => {
-          return await LearnedMemory.setEnabled(ctx.actor, input.enabled);
-        })
+        withSignal(signal, () =>
+          memoryRpc(() => PrivateMemoryRepository.setEnabled(ctx.actor, input))
+        )
+      ),
+    repairIndex: workspaceProcedure
+      .output(LearnedClaimIndexRepairSchema)
+      .mutation(({ ctx, signal }) =>
+        withSignal(signal, () =>
+          memoryRpc(() => PrivateMemoryRepository.rebuildOperations(ctx.actor))
+        )
       ),
   },
   list: workspaceProcedure.query(({ ctx, signal }) =>

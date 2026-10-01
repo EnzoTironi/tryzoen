@@ -1,6 +1,10 @@
 import { withSignal } from "../../../../../server/operations/async";
 import { SqlError } from "../../../../../db/queries";
-import { FileMemoryError } from "../../../../../server/memory/ai-memory/mutations";
+import { AccountMemoryArchiveUnavailable } from "../../../../../server/accounts/archive-entitlement";
+import { MemoryNamespaceError } from "../../../../../server/memory/namespace";
+import { WorkspaceAccessDenied } from "../../../../../server/workspaces/access";
+import { SessionArchiveUnavailable } from "../../../../../server/memory/session-export";
+import { PrivateMemoryArchiveError } from "../../../../../server/memory/archive";
 import { AuthUnavailable } from "../../../../../db/services/auth/index";
 import { ZodError as SchemaError } from "zod";
 import { AccountArchiveMissing } from "../../../../../server/accounts/archives";
@@ -21,6 +25,7 @@ export async function GET(
           const section = await z
             .enum([
               "memory",
+              "private-memory",
               "files",
               "attachment",
               "source",
@@ -54,9 +59,21 @@ export async function GET(
         throw error;
       }
     } catch (error) {
+      if (error instanceof WorkspaceAccessDenied)
+        return new Response("Archive access denied", {
+          status: 403,
+          headers: { "cache-control": "private, no-store" },
+        });
+      if (error instanceof MemoryNamespaceError && error.reason === "erased")
+        return new Response("Archive generation is being erased", {
+          status: 409,
+          headers: { "cache-control": "private, no-store" },
+        });
       if (
         error instanceof AuthUnavailable ||
-        error instanceof FileMemoryError ||
+        error instanceof AccountMemoryArchiveUnavailable ||
+        error instanceof SessionArchiveUnavailable ||
+        error instanceof PrivateMemoryArchiveError ||
         error instanceof SqlError
       )
         return new Response("Archive unavailable", {

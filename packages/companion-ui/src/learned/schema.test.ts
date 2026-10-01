@@ -8,6 +8,7 @@ import {
   LearnedClaimVersionSchema,
   LearnedClaimChangeResultSchema,
   LearnedClaimHistorySchema,
+  LearnedClaimRecallSchema,
   PrivateMemoryArchivePreviewSchema,
   normalizeLearnedClaimQuery,
   privateMemoryArchiveDownloads,
@@ -42,15 +43,30 @@ const claim = LearnedClaimVersionSchema.parse({
   recordedAt: "2026-10-01T00:00:00.000001Z",
   authorUserId: scope.userId,
   operationId: "publication",
-  file: { version: 1, id, scope, predecessor: null, restoredFrom: null,
-    state: { kind: "active", body: { text: "Cedar", sources: [], validTime: null, relations: [] } } },
+  file: {
+    version: 1,
+    id,
+    scope,
+    predecessor: null,
+    restoredFrom: null,
+    state: {
+      kind: "active",
+      body: { text: "Cedar", sources: [], validTime: null, relations: [] },
+    },
+  },
 });
 
 test("search rejects contradictory snapshot metadata and a future match", () => {
   const result = {
-    enabled: true, workspaceEnabled: true, automaticEnabled: true,
-    preferenceRevision: id, revision, recordedAt: claim.recordedAt,
-    sourceDigest: "a".repeat(64), matches: [{ claim, score: 1, validity: "unknown" }], hasMore: false,
+    enabled: true,
+    workspaceEnabled: true,
+    automaticEnabled: true,
+    preferenceRevision: id,
+    revision,
+    recordedAt: claim.recordedAt,
+    sourceDigest: "a".repeat(64),
+    matches: [{ claim, score: 1, validity: "unknown" }],
+    hasMore: false,
   };
   expect(LearnedClaimSearchSchema.safeParse(result).success).toBe(true);
   for (const invalid of [
@@ -58,13 +74,22 @@ test("search rejects contradictory snapshot metadata and a future match", () => 
     { ...result, recordedAt: null },
     { ...result, revision: null, recordedAt: null },
     { ...result, recordedAt: "2026-10-01T00:00:00.000000Z" },
-  ]) expect(LearnedClaimSearchSchema.safeParse(invalid).success).toBe(false);
-  expect(LearnedClaimHistorySchema.safeParse({ revision: null, versions: [claim] }).success).toBe(false);
+  ])
+    expect(LearnedClaimSearchSchema.safeParse(invalid).success).toBe(false);
+  expect(
+    LearnedClaimHistorySchema.safeParse({ revision: null, versions: [claim] })
+      .success
+  ).toBe(false);
 });
 
 test("applied change payloads bind every publication value to the receipt", () => {
-  const receipt = { scope, claimId: id, operationId: claim.operationId,
-    requestHash: "a".repeat(64), revision };
+  const receipt = {
+    scope,
+    claimId: id,
+    operationId: claim.operationId,
+    requestHash: "a".repeat(64),
+    revision,
+  };
   const value = { applied: true, claim, receipt };
   expect(LearnedClaimChangeResultSchema.safeParse(value).success).toBe(true);
   for (const invalid of [
@@ -74,28 +99,101 @@ test("applied change payloads bind every publication value to the receipt", () =
     { ...receipt, scope: { ...scope, workspaceId: "other" } },
     { ...receipt, revision: "b".repeat(40) },
     { ...receipt, operationId: "other" },
-  ]) expect(LearnedClaimChangeResultSchema.safeParse({ ...value, receipt: invalid }).success).toBe(false);
-  expect(LearnedClaimChangeResultSchema.safeParse({
-    ...value, claim: { ...claim, authorUserId: "other" },
-  }).success).toBe(false);
+  ])
+    expect(
+      LearnedClaimChangeResultSchema.safeParse({ ...value, receipt: invalid })
+        .success
+    ).toBe(false);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({
+      ...value,
+      claim: { ...claim, authorUserId: "other" },
+    }).success
+  ).toBe(false);
   // A replay receipt is historical and need not describe a newer current head.
-  expect(LearnedClaimChangeResultSchema.safeParse({ applied: false, receipt }).success).toBe(true);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({ applied: false, receipt })
+      .success
+  ).toBe(true);
 });
 
 test("clear results contain unique bound tombstones", () => {
   const tombstone = LearnedClaimVersionSchema.parse({
-    ...claim, file: { ...claim.file, predecessor: "b".repeat(40), state: { kind: "tombstone" } },
+    ...claim,
+    file: {
+      ...claim.file,
+      predecessor: "b".repeat(40),
+      state: { kind: "tombstone" },
+    },
   });
-  const receipt = { scope, claimId: null, operationId: claim.operationId,
-    requestHash: "a".repeat(64), revision };
+  const receipt = {
+    scope,
+    claimId: null,
+    operationId: claim.operationId,
+    requestHash: "a".repeat(64),
+    revision,
+  };
   const value = { applied: true, cleared: [tombstone], receipt };
   expect(LearnedClaimChangeResultSchema.safeParse(value).success).toBe(true);
-  expect(LearnedClaimChangeResultSchema.safeParse({ ...value, cleared: [claim] }).success).toBe(false);
-  expect(LearnedClaimChangeResultSchema.safeParse({ ...value, cleared: [tombstone, tombstone] }).success).toBe(false);
-  expect(LearnedClaimChangeResultSchema.safeParse({ ...value, receipt: { ...receipt, claimId: id } }).success).toBe(false);
-  expect(LearnedClaimChangeResultSchema.safeParse({ ...value,
-    cleared: [{ ...tombstone, revision: "c".repeat(40) }],
-  }).success).toBe(false);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({ ...value, cleared: [claim] })
+      .success
+  ).toBe(false);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({
+      ...value,
+      cleared: [tombstone, tombstone],
+    }).success
+  ).toBe(false);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({
+      ...value,
+      receipt: { ...receipt, claimId: id },
+    }).success
+  ).toBe(false);
+  expect(
+    LearnedClaimChangeResultSchema.safeParse({
+      ...value,
+      cleared: [{ ...tombstone, revision: "c".repeat(40) }],
+    }).success
+  ).toBe(false);
+});
+
+test("paused and empty-head recall cannot carry matches or more-result hints", () => {
+  const recall = {
+    enabled: true,
+    workspaceEnabled: true,
+    automaticEnabled: true,
+    preferenceRevision: id,
+    revision,
+    sourceDigest: "a".repeat(64),
+    queryHash: "b".repeat(64),
+    matches: [{ claim, score: 1, validity: "unknown" }],
+    hasMore: false,
+  };
+  expect(LearnedClaimRecallSchema.safeParse(recall).success).toBe(true);
+  for (const invalid of [
+    { ...recall, enabled: false, automaticEnabled: false },
+    {
+      ...recall,
+      enabled: false,
+      automaticEnabled: false,
+      matches: [],
+      hasMore: true,
+    },
+    { ...recall, revision: null },
+    { ...recall, revision: null, matches: [], hasMore: true },
+  ])
+    expect(LearnedClaimRecallSchema.safeParse(invalid).success).toBe(false);
+  expect(
+    LearnedClaimRecallSchema.safeParse({
+      ...recall,
+      enabled: false,
+      automaticEnabled: false,
+      matches: [],
+      hasMore: false,
+    }).success
+  ).toBe(true);
 });
 
 test("canonical bodies preserve evidence, time and claim relationships", () => {

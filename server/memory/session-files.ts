@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { HookEvent } from "eve/hooks";
 import type { MemoryTurnCompletedContext } from "eve/memory";
 import { redactSensitiveText } from "@shared/observability/redaction";
+import { privateMemoryArchiveLimits } from "../../packages/companion-ui/src/learned/archive";
 
 export const sessionSourceSchema = z.object({
   version: z.literal(2),
@@ -134,9 +135,9 @@ export function sessionSourceSegments(
 }
 
 export const sessionArchiveLimits = {
-  fileBytes: 8_388_608,
-  bytes: 134_217_728,
-  events: 10_000,
+  fileBytes: privateMemoryArchiveLimits.sourceFileBytes,
+  bytes: privateMemoryArchiveLimits.sourceBytes,
+  events: privateMemoryArchiveLimits.events,
 } as const;
 
 export const SessionSourceBackupSchema = z.strictObject({

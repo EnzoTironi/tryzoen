@@ -6,18 +6,9 @@ import type {
   LearnedClaimSnapshotSchema,
 } from "../../packages/companion-ui/src/learned/claim";
 import { learnedClaimLimits } from "../../packages/companion-ui/src/learned/claim";
+import { learnedClaimQueryTerms } from "../../packages/companion-ui/src/learned/query";
 import { LearnedClaimError, validateLearnedClaimSnapshot } from "./claims";
 
-function terms(text: string) {
-  return [
-    ...new Set(
-      text
-        .normalize("NFKC")
-        .toLowerCase()
-        .match(/[\p{L}\p{N}]+/gu) ?? []
-    ),
-  ];
-}
 const compare = (left: string, right: string) =>
   left < right ? -1 : left > right ? 1 : 0;
 
@@ -43,7 +34,9 @@ export function projectLearnedClaims(
         ? [
             {
               id: claim.file.id,
-              terms: terms(claim.file.state.body.text).toSorted(compare),
+              terms: learnedClaimQueryTerms(
+                claim.file.state.body.text
+              ).toSorted(compare),
             },
           ]
         : []
@@ -80,7 +73,7 @@ export function searchLearnedClaims(input: {
       "invalid_input",
       "Claim projection is stale, foreign, or inconsistent"
     );
-  const queryTerms = terms(query);
+  const queryTerms = learnedClaimQueryTerms(query);
   if (queryTerms.length > learnedClaimLimits.queryTerms)
     throw new LearnedClaimError(
       "invalid_input",
