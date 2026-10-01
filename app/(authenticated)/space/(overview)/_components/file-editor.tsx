@@ -123,6 +123,7 @@ export function FileEditor({
   return (
     <Dialog
       open
+      modal={true}
       onOpenChange={(open) => {
         if (!open) close();
       }}
@@ -131,6 +132,7 @@ export function FileEditor({
         showCloseButton={false}
         animated={false}
         aria-describedby={undefined}
+        aria-modal={true}
         className={cn(
           "fixed inset-0 flex h-dvh w-full max-w-none! translate-0 rounded-none bg-background p-0 ring-0",
           darkAppearance && "dark"
