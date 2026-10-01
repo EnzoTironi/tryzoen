@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
+import { env } from "@shared/environment/env";
+import { randomUUID } from "node:crypto";
 import { executeSemanticSnapshot } from "../../server/workspaces/semantic/execute";
 import { withSignal } from "../../server/operations/async";
 
@@ -274,10 +276,13 @@ async function capsuleMemory(name: string) {
 }
 
 test("the runtime requires authentication before accepting any calculation", async () => {
-  const response = await fetch("http://127.0.0.1:18130/execute", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  const response = await fetch(
+    new URL("execute", z.string().parse(env.ZOEN_SEMANTIC_URLS?.[0])),
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
   expect(response.status).toBe(401);
 });
 
@@ -285,7 +290,37 @@ const event = (value: string | undefined, name: string) =>
   Number(value?.match(new RegExp(`(?:^|\n)${name} (\\d+)`))?.[1]);
 
 test("a huge computed value stays in the bounded capsule; the application survives and admission recovers", async () => {
-  const container = "zoen-runtime-tests-semantic-1-1";
+  const databaseContainer = z
+    .string()
+    .regex(/^zoen-[a-z0-9-]+-postgres-1$/)
+    .parse(process.env.ZOEN_RESTORE_TEST_CONTAINER);
+  const expectedContainer = databaseContainer.replace(
+    /-postgres-1$/,
+    "-semantic-1-1"
+  );
+  const container = z
+    .literal(expectedContainer)
+    .parse(process.env.ZOEN_RUNTIME_SEMANTIC_CONTAINER ?? expectedContainer);
+  const origin = new URL(z.string().parse(env.ZOEN_SEMANTIC_URLS?.[0]));
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const { stdout } = await promisify(execFile)(
+    "docker",
+    ["inspect", "--format", "{{json .NetworkSettings.Ports}}", container],
+    { timeout: 5_000 }
+  );
+  const ports = z
+    .object({
+      "18130/tcp": z.array(
+        z.object({ HostIp: z.string(), HostPort: z.string() })
+      ),
+    })
+    .parse(JSON.parse(stdout));
+  expect(["localhost", "127.0.0.1", "[::1]"]).toContain(origin.hostname);
+  expect(ports["18130/tcp"]).toContainEqual({
+    HostIp: origin.hostname === "localhost" ? "127.0.0.1" : origin.hostname,
+    HostPort: origin.port,
+  });
   const before = await capsuleMemory(container);
   expect(before["memory.max"]).toBe("1610612736");
   expect(before["memory.swap.max"]).toBe("0");
@@ -318,7 +353,7 @@ test("a huge computed value stays in the bounded capsule; the application surviv
     // when an OOM, deadline or recovery expectation fails.
     const { writeFile } = await import("node:fs/promises");
     await writeFile(
-      "/tmp/zoen-semantic-memory-evidence.json",
+      `/tmp/zoen-semantic-memory-evidence-${container}-${randomUUID()}.json`,
       JSON.stringify(
         {
           before,

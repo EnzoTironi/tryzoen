@@ -7,7 +7,7 @@ import { query } from "@db/queries";
 import { env } from "@shared/environment/env";
 import { buildEveFixture, clearFixtureWorkflows, runtime } from "./eve-fixture";
 import { workspaceFixture, workspaceExecutionFor } from "./workspace-fixture";
-import { wakeMatrixService } from "./matrix-fixture";
+import { matrixCallbackPort, wakeMatrixService } from "./matrix-fixture";
 import {
   createMatrixRoom,
   readMatrixMessages,
@@ -24,7 +24,7 @@ afterAll(clearFixtureWorkflows);
 
 let matrixAwake = false;
 async function groupRuntime() {
-  const server = await runtime(4350, "0.0.0.0");
+  const server = await runtime(matrixCallbackPort, "0.0.0.0");
   if (!matrixAwake) {
     await wakeMatrixService();
     matrixAwake = true;
@@ -348,7 +348,8 @@ async function replayMatrixEvent(roomId: string, eventId: string) {
     `rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`
   );
   const response = await fetch(
-    "http://127.0.0.1:4350/_matrix/app/v1/transactions/" + randomUUID(),
+    `http://127.0.0.1:${matrixCallbackPort}/_matrix/app/v1/transactions/` +
+      randomUUID(),
     {
       method: "PUT",
       headers: {

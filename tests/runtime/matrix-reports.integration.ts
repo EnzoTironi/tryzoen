@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
+import { z } from "zod";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { query } from "@db/queries";
+import { env } from "@shared/environment/env";
+import { requireRuntimeDatabase } from "./database";
 import { workspaceFixture } from "./workspace-fixture";
 import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
 import { sendMatrixMessage } from "../../server/matrix/send";
@@ -12,14 +15,18 @@ import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import * as native from "../../server/matrix/client";
 
 // The ordinary app cannot read moderation records. This isolated test observes Synapse's queue.
+const database = new URL(env.DATABASE_URL);
 const moderation = new Client({
-  host: "127.0.0.1",
-  port: 15432,
+  host: database.hostname,
+  port: z.coerce.number().int().min(1).max(65535).parse(database.port),
   user: "synapse_runtime",
   password: "synthetic-matrix",
   database: "synapse_runtime",
 });
-beforeAll(() => moderation.connect());
+beforeAll(async () => {
+  await requireRuntimeDatabase();
+  await moderation.connect();
+});
 afterAll(() => moderation.end());
 
 test(
