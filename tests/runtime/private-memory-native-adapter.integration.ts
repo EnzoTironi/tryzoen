@@ -210,6 +210,70 @@ for (const scope of ["personal", "company"] as const) {
   });
 }
 
+test("native opaque session/call pairs remain distinct, bounded and replayable", async () => {
+  await using fixture = await workspaceFixture();
+  const actor = fixture.personal;
+  const context = contextFor(actor, [{ role: "user", content: "Cedar" }]);
+  try {
+    const tools = await learned.provider.tools(toolsContext(context));
+    const pairs = [
+      { sessionId: "opaque:a", callId: "b" },
+      { sessionId: "opaque", callId: "a:b" },
+      { sessionId: "s".repeat(256), callId: randomUUID() },
+    ];
+    const receipts = [];
+    let revision: string | null = null;
+    for (const [index, pair] of pairs.entries()) {
+      const changed: z.output<typeof changeResult>["result"] =
+        changeResult.parse(
+          await tools.change_memory.execute(
+            {
+              action: "assert",
+              expectedRevision: revision,
+              body: body(`Cedar opaque tuple ${index}`),
+            },
+            {
+              ...context,
+              callId: pair.callId,
+              session: { ...context.session, id: pair.sessionId },
+            }
+          )
+        ).result;
+      expect(changed.applied).toBe(true);
+      expect(changed.receipt.operationId.length).toBeLessThanOrEqual(256);
+      receipts.push(changed.receipt);
+      revision = changed.receipt.revision;
+    }
+    expect(new Set(receipts.map((receipt) => receipt.operationId)).size).toBe(
+      3
+    );
+    expect(new Set(receipts.map((receipt) => receipt.claimId)).size).toBe(3);
+    expect(
+      (await PrivateMemoryRepository.read(actor)).snapshot.claims
+    ).toHaveLength(3);
+    const replay = changeResult.parse(
+      await tools.change_memory.execute(
+        {
+          action: "assert",
+          expectedRevision: null,
+          body: body("Cedar opaque tuple 0"),
+        },
+        {
+          ...context,
+          callId: "b",
+          session: { ...context.session, id: "opaque:a" },
+        }
+      )
+    ).result;
+    expect(replay).toEqual({ applied: false, receipt: receipts[0] });
+    expect(
+      (await PrivateMemoryRepository.read(actor)).snapshot.claims
+    ).toHaveLength(3);
+  } finally {
+    await retireNamespace(actor);
+  }
+});
+
 test("native text/media and compaction recall use only the bounded current request", async () => {
   await using fixture = await workspaceFixture();
   const actor = fixture.personal;

@@ -192,7 +192,7 @@ test("rejects tampered content, public files and symlink replacements in a priva
   await symlink("/dev/null", path);
   await expect(
     exportSessionSources(actor, sessionId, new AbortController().signal)
-  ).rejects.toThrow("unexpected file");
+  ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
 });
 
 test("owns capture by persisted session and retires outbox content only after private disk delivery", async () => {

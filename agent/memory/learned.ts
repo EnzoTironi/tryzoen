@@ -212,7 +212,11 @@ export default defineMemory({
           execute: (input, execution) =>
             withSignal(execution.abortSignal, async () => {
               const actor = await actorFor(execution.session, scopeValue);
-              const operationId = `${execution.session.id}:${execution.callId}`;
+              const operationId = `eve-memory-change:${createHash("sha256")
+                .update(
+                  JSON.stringify([execution.session.id, execution.callId])
+                )
+                .digest("hex")}`;
               const change =
                 input.action === "assert"
                   ? {
