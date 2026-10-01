@@ -2,6 +2,7 @@ import { GitBundleError } from "../files/git";
 import { SemanticDefinitionSchema } from "./semantic/schema";
 import {
   GitRevisionSchema,
+  sourceBindingPathSchema,
   WorkspacePathSchema,
   workspaceRevisionSchema,
   WorkspaceChangeSchema,
@@ -38,7 +39,12 @@ import {
   validateOntology,
   OntologyInvalid,
 } from "./ontology-validation";
-import { validateKnowledgeProposal } from "./knowledge/validation";
+import {
+  validateKnowledgeProposal,
+  validateKnowledgeSources,
+  knowledgeSourceValidationLimits,
+} from "./knowledge/validation";
+import { sourceBindingSchema } from "@zoen/companion-ui/workspace-sources";
 import { createHash } from "node:crypto";
 import {
   requireWorkspaceAccess,
@@ -235,6 +241,16 @@ async function validateKnowledgeChange(
   source: WorkspacePublicationSource
 ) {
   let citations: z.output<typeof OntologySourceSchema>[] = [];
+  if (input.path.startsWith("knowledge/sources/")) {
+    if (source.kind !== "knowledge-publication")
+      throw new WorkspaceAccessDenied();
+    sourceBindingPathSchema.parse(input.path);
+    if (
+      input.content !== null &&
+      !jsonString(sourceBindingSchema).safeParse(input.content).success
+    )
+      throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+  }
   if (
     source.kind === "agent" &&
     (input.path === "knowledge/purpose.md" ||
@@ -717,12 +733,32 @@ export const WorkspaceRepository = {
         message: `Update ${input.changes.map(({ path }) => path).join(", ")}\n\nZoen-Metadata: ${JSON.stringify(metadata)}`,
       });
       if (
-        input.changes.some((change) => change.path.startsWith("knowledge/"))
+        input.changes.some(
+          (change) =>
+            change.path.startsWith("knowledge/") || change.path === ontologyPath
+        )
       ) {
         const tree = await readWorkspaceGit(
           candidate.bundle,
           candidate.revision
         );
+        const sourcePaths = tree.files.filter((path) =>
+          path.startsWith("knowledge/sources/")
+        );
+        if (sourcePaths.length > knowledgeSourceValidationLimits.bindings)
+          throw new WorkspaceRepositoryError({ reason: "invalid_input" });
+        if (sourcePaths.length) {
+          const documents = await readWorkspaceGitSelection(
+            candidate.bundle,
+            candidate.revision,
+            [
+              ...sourcePaths,
+              ...(tree.files.includes(ontologyPath) ? [ontologyPath] : []),
+            ]
+          );
+          // The immutable complete tree, including unchanged mappings, precedes CAS.
+          await validateKnowledgeSources(documents);
+        }
         const queryPaths = tree.files.filter((path) =>
           path.startsWith("knowledge/queries/")
         );

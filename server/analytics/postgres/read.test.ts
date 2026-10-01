@@ -1,3 +1,7 @@
+import { z } from "zod";
+import { jsonString } from "@shared/validation";
+import { createHash } from "node:crypto";
+import { SemanticDecimalSchema } from "@zoen/companion-ui/semantic-query";
 import { expect, test } from "vitest";
 import { postgresReadQuery, decodePostgresReadRows } from "./read";
 import { decodePostgresCatalog, postgresCatalogFingerprint } from "./catalog";
@@ -280,4 +284,90 @@ test("UTF-8 oversized text parameters fail during preparation", () => {
       signal
     )
   ).toThrow("4096 UTF-8 bytes");
+});
+
+test.each([
+  "-9007199254740993.0000",
+  "0.00000000000000000001",
+  "-0.00",
+  "1.2300e+40",
+  "9".repeat(4096),
+])(
+  "canonical decimal arguments, result serialization and digests retain exact text: %s",
+  (decimal) => {
+    expect(SemanticDecimalSchema.parse(decimal)).toBe(decimal);
+    expect(
+      postgresReadQuery(published, catalog, { minimum: decimal }, signal)
+        .values[0]
+    ).toBe(decimal);
+    const rows = decodePostgresReadRows(
+      binding,
+      [{ ...studioProjects[0], budget: decimal }],
+      signal
+    );
+    const serialized = JSON.stringify(rows);
+    expect(
+      jsonString(z.array(z.object({ budget: SemanticDecimalSchema }))).parse(
+        serialized
+      )[0]?.budget
+    ).toBe(decimal);
+    expect(createHash("sha256").update(serialized).digest("hex")).toBe(
+      createHash("sha256")
+        .update(
+          JSON.stringify([
+            {
+              id: "1",
+              title: "Atlas",
+              budget: decimal,
+              launch_day: "2026-09-30",
+              active: true,
+            },
+          ])
+        )
+        .digest("hex")
+    );
+  }
+);
+test.each([
+  "NaN",
+  "Infinity",
+  " 1",
+  "01",
+  "+1",
+  "1.",
+  "1e",
+  "1\n",
+  "\u0000",
+  "9".repeat(4097),
+  1,
+])("canonical decimals reject invalid or numeric transport", (decimal) => {
+  expect(SemanticDecimalSchema.safeParse(decimal).success).toBe(false);
+});
+test("nullable exact decimals retain null without manufacturing a number", () => {
+  const nullable = {
+    ...binding,
+    columns: binding.columns.map((column) =>
+      column.id === "budget" ? { ...column, nullable: true } : column
+    ),
+  };
+  expect(
+    decodePostgresReadRows(
+      nullable,
+      [{ ...studioProjects[0], budget: null }],
+      signal
+    )[0]?.budget
+  ).toBeNull();
+  const first = decodePostgresReadRows(
+    binding,
+    [{ ...studioProjects[0], budget: "100.00" }],
+    signal
+  );
+  const second = decodePostgresReadRows(
+    binding,
+    [{ ...studioProjects[0], budget: "100" }],
+    signal
+  );
+  expect(
+    createHash("sha256").update(JSON.stringify(first)).digest("hex")
+  ).not.toBe(createHash("sha256").update(JSON.stringify(second)).digest("hex"));
 });

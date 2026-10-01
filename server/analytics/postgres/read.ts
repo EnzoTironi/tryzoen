@@ -6,9 +6,9 @@ import {
   postgresSourceLimits,
   publishedSourceBindingSchema,
   sourceBindingSchema,
-  sourceNumericSchema,
   sourceTextSchema,
 } from "@zoen/companion-ui/workspace-sources";
+import { SemanticDecimalSchema } from "@zoen/companion-ui/semantic-query";
 import { postgresCatalogFingerprint } from "./catalog";
 
 /** Build only: metadata is not an access grant, admission or executed result. */
@@ -71,8 +71,8 @@ export function postgresReadQuery(
       throw new Error("Argument does not match the published type");
     if (value !== null) {
       const schema =
-        column.type === "numeric"
-          ? sourceNumericSchema
+        column.type === "decimal"
+          ? SemanticDecimalSchema
           : column.type === "date"
             ? z.iso.date()
             : column.type === "boolean"
@@ -87,7 +87,7 @@ export function postgresReadQuery(
         : filter.operator === "gte"
           ? ">="
           : "<";
-    return `${escapeIdentifier(column.source)} ${operator} $${values.length}::pg_catalog.${column.type === "boolean" ? "bool" : column.type}`;
+    return `${escapeIdentifier(column.source)} ${operator} $${values.length}::pg_catalog.${column.type === "boolean" ? "bool" : column.type === "decimal" ? "numeric" : column.type}`;
   });
   values.push(postgresSourceLimits.cellBytes);
   const cap = `$${values.length}`;
@@ -146,7 +146,7 @@ export function decodePostgresReadRows(
         throw new Error(
           "Source result does not match the published type or byte bound"
         );
-      if (column.type === "numeric") sourceNumericSchema.parse(value);
+      if (column.type === "decimal") SemanticDecimalSchema.parse(value);
       if (column.type === "date") z.iso.date().parse(value);
       if (column.type === "boolean" && value !== "true" && value !== "false")
         throw new Error("Source result does not match the published boolean");
