@@ -10,7 +10,7 @@ import {
 import { env } from "@shared/environment/env";
 import { openMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
-import { memoryNamespace } from "./namespace";
+import { memoryNamespace, requireMemoryNamespaceAvailable } from "./namespace";
 import { sessionSourceSchema, writeSessionSource } from "./session-files";
 import { lockSessionSourceAllocation } from "./session-export";
 import {
@@ -77,6 +77,7 @@ async function deliverNamespace(root: string, visited: readonly string[]) {
       JOIN workspace_memberships m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
       JOIN workspaces w ON w.id = n.workspace_id
       WHERE s.stored_at IS NULL AND n.enabled AND s.available_at <= statement_timestamp()
+        AND NOT EXISTS (SELECT 1 FROM workspace_memory_erasure e WHERE e.namespace_id = n.namespace_id)
         ${
           visited.length
             ? sql`AND s.namespace_id NOT IN (${sql.join(
@@ -135,6 +136,9 @@ async function deliverNamespaceBatch(root: string, namespaceId: string) {
   >(sql`SELECT event_id AS "eventId", capture_sequence::float8 AS "captureSequence", payload, digest
     FROM memory_session_sources WHERE namespace_id = ${namespaceId} AND stored_at IS NULL
     ORDER BY capture_sequence LIMIT 25 FOR UPDATE`);
+  // Admission owns the namespace lock. Recheck after any batch-row wait, before
+  // opening the engine or publishing files; candidate selection is not consent.
+  await requireMemoryNamespaceAvailable(namespaceId);
   // The namespace lock serializes engines and fences revocation/erasure.
   await using engine = env.ZOEN_AI_MEMORY_BINARY
     ? await openMemoryEngine(

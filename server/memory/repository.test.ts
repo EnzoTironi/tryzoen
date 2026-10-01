@@ -42,7 +42,11 @@ vi.mock("../workspaces/access", async (original) => ({
 vi.mock("../workspaces/repository", () => ({
   WorkspaceRepository: { selection: owners.selection },
 }));
-vi.mock("./namespace", () => ({ memoryNamespace: owners.namespace }));
+// Historical owner-boundary harness; runtime erasure acceptance uses real PostgreSQL.
+vi.mock("./namespace", async (original) => ({
+  ...(await original<typeof import("./namespace")>()),
+  memoryNamespace: owners.namespace,
+}));
 vi.mock("./session-export", () => ({
   verifySessionClaimSource: owners.session,
   backupSessionClaimSources: owners.backup,

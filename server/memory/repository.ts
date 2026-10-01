@@ -26,7 +26,7 @@ import {
 } from "../workspaces/access";
 import { WorkspaceRepository } from "../workspaces/repository";
 import { GitBundleError } from "../files/git";
-import { memoryNamespace } from "./namespace";
+import { memoryNamespace, LearnedMemoryError } from "./namespace";
 import { publishPrivateMemoryGit, readPrivateMemoryGit } from "./git";
 import {
   verifySessionClaimSource,
@@ -255,6 +255,8 @@ async function authorized<Result>(
       throw error;
     if (error instanceof LearnedClaimError)
       throw new PrivateMemoryError(error.reason);
+    if (error instanceof LearnedMemoryError && error.reason === "stale_recall")
+      throw new PrivateMemoryError("conflict");
     if (error instanceof GitBundleError && error.reason === "invalid_file")
       throw new PrivateMemoryError("invalid_input");
     if (
