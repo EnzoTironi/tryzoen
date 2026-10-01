@@ -1,6 +1,22 @@
-# File-based memory: Akita and Muse
+# File-memory qualification history
 
-## Accepted direction, 2026-09-28
+## Current direction
+
+The [unified knowledge plan](knowledge-plan.md) supersedes Akita as the permanent
+memory owner. Versioned ontology, learned claims and retained session files must
+converge on one file-backed authority; indexes remain rebuildable projections.
+Private memory is isolated from shared workspace knowledge, and authored files
+cannot grant themselves access.
+
+The private claim repository is implemented, but active learned-memory and
+session-capture consumers still use Akita. Their complete cutover, source-aware
+backup/restore and recovery gates remain open. Do not remove the engine or a
+creator corpus until its callers and behavior have a complete replacement.
+
+This page records the earlier Akita design and its qualification evidence. Its
+implementation order is historical; use the unified plan for current work.
+
+## Historical direction, 2026-09-28
 
 The user selected Muse's readable files and [Fabio Akita's ai-memory](https://github.com/akitaonrails/ai-memory), including persisted sessions, dreaming, relations and temporal recall. This supersedes the previous decision to retain Mem0 as the target learned-memory system. The local learned-memory path now uses Akita as described below. The hosted installation has not been cut over; Eve's separate profile adapter remains. Remove them with their complete replacement slices and callers, without a fallback or dual-write migration.
 
