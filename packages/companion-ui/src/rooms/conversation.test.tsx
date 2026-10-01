@@ -560,4 +560,3 @@ it.each(["native", "unsupported-blur"])(
     expect(mocks.capsule?.backgroundColor).toBe("#ffffff");
   }
 );
-
