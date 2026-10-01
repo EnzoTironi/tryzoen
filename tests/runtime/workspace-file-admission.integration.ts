@@ -37,13 +37,15 @@ async function connection() {
   if (!env.DATABASE_URL_UNPOOLED)
     throw new Error("Missing isolated barrier database URL");
   const url = new URL(env.DATABASE_URL_UNPOOLED);
+  const application = new URL(env.DATABASE_URL);
   if (
     url.hostname !== "127.0.0.1" ||
-    url.port !== "15455" ||
+    url.host !== application.host ||
+    url.pathname !== application.pathname ||
     url.pathname !== "/companion_runtime_test"
   )
     throw new Error(
-      "File admission barriers require the exclusively allocated loopback15455 database"
+      "File admission barriers require the same exclusively allocated loopback test database"
     );
   const client = new Client({
     connectionString: url.href,
