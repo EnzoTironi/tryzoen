@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { readFile, lstat, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { query } from "@db/queries";
@@ -267,3 +268,128 @@ test("a source index rebuild does not bypass an existing pending delivery after 
     )
   ).toBe(true);
 });
+
+for (const workspace of ["personal", "actor"] as const) {
+  test(`v2 same-head recovery restores complete cited journals and missing receipts in ${workspace} scope without reviving cleared claims`, async () => {
+    await using fixture = await workspaceFixture();
+    const actor = fixture[workspace];
+    const sessionId = `private-v2-${randomUUID()}`;
+    await claimSession(actor, sessionId);
+    const original = userSource(sessionId);
+    await captureSessionSource(actor, original);
+    await drainSessionSources();
+    const first = await PrivateMemoryRepository.change(actor, {
+      action: "assert",
+      operationId: randomUUID(),
+      claimId: randomUUID(),
+      expectedRevision: null,
+      body: {
+        text: "Weekly report",
+        sources: [citation(original, "weekly Cedar report")],
+        relations: [],
+        validTime: null,
+      },
+    });
+    if (!first.applied || !first.claim)
+      throw new Error("Expected original publication");
+    const corrected = {
+      ...original,
+      eventId: randomUUID(),
+      text: "I prefer a daily Cedar report.",
+    };
+    await captureSessionSource(actor, corrected);
+    await drainSessionSources();
+    const next = await PrivateMemoryRepository.change(actor, {
+      action: "correct",
+      operationId: randomUUID(),
+      claimId: first.claim.file.id,
+      expectedRevision: first.receipt.revision,
+      body: {
+        text: "Daily report",
+        sources: [citation(corrected, "daily Cedar report")],
+        relations: [],
+        validTime: null,
+      },
+    });
+    const cleared = await PrivateMemoryRepository.change(actor, {
+      action: "clear",
+      operationId: randomUUID(),
+      expectedRevision: next.receipt.revision,
+    });
+    const history = await PrivateMemoryRepository.history(
+      actor,
+      first.claim.file.id
+    );
+    const archive = await PrivateMemoryRepository.backup(actor);
+    expect(archive.version).toBe(2);
+    expect(archive.sources).toHaveLength(2);
+    const sources = archive.sources.map((source) => ({
+      source,
+      path: join(
+        directory,
+        archive.namespaceId,
+        "raw",
+        "eve",
+        createHash("sha256").update(source.sessionId).digest("hex"),
+        `${createHash("sha256").update(source.eventId).digest("hex")}.jsonl`
+      ),
+    }));
+    for (const { source, path } of sources)
+      expect(await readFile(path)).toEqual(Buffer.from(source.content));
+    await rm(join(directory, archive.namespaceId, "raw", "eve"), {
+      recursive: true,
+    });
+    await query(
+      sql`DELETE FROM memory_session_sources WHERE namespace_id = ${archive.namespaceId}`
+    );
+    const other = workspace === "personal" ? fixture.actor : fixture.personal;
+    await expect(
+      PrivateMemoryRepository.restore(other, {
+        expectedRevision: cleared.receipt.revision,
+        archive,
+      })
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+    expect(
+      await PrivateMemoryRepository.restore(actor, {
+        expectedRevision: cleared.receipt.revision,
+        archive,
+      })
+    ).toEqual({ applied: false, revision: cleared.receipt.revision });
+    for (const { source, path } of sources)
+      expect(await readFile(path)).toEqual(Buffer.from(source.content));
+    expect(
+      await verifySessionClaimSource(
+        actor,
+        citation(original, "weekly Cedar report")
+      )
+    ).toBe(true);
+    expect(
+      await verifySessionClaimSource(
+        actor,
+        citation(corrected, "daily Cedar report")
+      )
+    ).toBe(true);
+    expect(
+      (await PrivateMemoryRepository.read(actor)).snapshot.claims.map(
+        (claim) => claim.file.state
+      )
+    ).toEqual([{ kind: "tombstone" }]);
+    expect(
+      await PrivateMemoryRepository.history(actor, first.claim.file.id)
+    ).toEqual(history);
+    const before = await query(
+      sql`SELECT event_id, digest, capture_sequence::text AS sequence, captured_at, stored_at FROM memory_session_sources WHERE namespace_id = ${archive.namespaceId} ORDER BY event_id`
+    );
+    const inode = await lstat(sources[0]?.path ?? "");
+    await PrivateMemoryRepository.restore(actor, {
+      expectedRevision: cleared.receipt.revision,
+      archive,
+    });
+    expect(
+      await query(
+        sql`SELECT event_id, digest, capture_sequence::text AS sequence, captured_at, stored_at FROM memory_session_sources WHERE namespace_id = ${archive.namespaceId} ORDER BY event_id`
+      )
+    ).toEqual(before);
+    expect((await lstat(sources[0]?.path ?? "")).ino).toBe(inode.ino);
+  });
+}

@@ -31,7 +31,14 @@ import { publishPrivateMemoryGit, readPrivateMemoryGit } from "./git";
 import {
   verifySessionClaimSource,
   SessionArchiveUnavailable,
+  backupSessionClaimSources,
+  restoreSessionClaimSources,
 } from "./session-export";
+
+import {
+  sessionArchiveLimits,
+  SessionSourceBackupSchema,
+} from "./session-files";
 
 export class PrivateMemoryError extends Error {
   readonly _tag = "PrivateMemoryError";
@@ -53,7 +60,7 @@ const storedSchema = z.object({
 });
 
 export const PrivateMemoryBackupSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(2),
   namespaceId: z.uuid(),
   scope: LearnedClaimScopeSchema,
   revision: GitRevisionSchema.nullable(),
@@ -61,6 +68,41 @@ export const PrivateMemoryBackupSchema = z.strictObject({
     .instanceof(Uint8Array)
     .refine((bytes) => bytes.byteLength <= 25_165_824)
     .nullable(),
+  sources: z.preprocess(
+    (raw) => {
+      // Refuse count/byte overflows before Zod allocates a parsed entry array.
+      if (!Array.isArray(raw) || raw.length > sessionArchiveLimits.events)
+        return null;
+      let bytes = 0;
+      const entries: readonly unknown[] = raw;
+      for (const source of entries) {
+        if (
+          typeof source !== "object" ||
+          source === null ||
+          !("content" in source) ||
+          !(source.content instanceof Uint8Array)
+        )
+          return null;
+        bytes += source.content.byteLength;
+        if (
+          source.content.byteLength > sessionArchiveLimits.fileBytes ||
+          bytes > sessionArchiveLimits.bytes
+        )
+          return null;
+      }
+      return entries;
+    },
+    z
+      .array(SessionSourceBackupSchema)
+      .max(sessionArchiveLimits.events)
+      .refine(
+        (sources) =>
+          sources.reduce(
+            (total, source) => total + source.content.byteLength,
+            0
+          ) <= sessionArchiveLimits.bytes
+      )
+  ),
   integrity: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
@@ -76,7 +118,7 @@ function archiveIntegrity(
   return createHmac("sha256", Buffer.from(key, "base64"))
     .update(
       JSON.stringify([
-        "zoen-private-memory-backup-v1",
+        "zoen-private-memory-backup-v2",
         archive.version,
         archive.namespaceId,
         archive.scope.workspaceId,
@@ -85,6 +127,12 @@ function archiveIntegrity(
         archive.bundle === null
           ? null
           : createHash("sha256").update(archive.bundle).digest("hex"),
+        archive.sources.map((source) => [
+          source.sessionId,
+          source.eventId,
+          source.captureSequence,
+          createHash("sha256").update(source.content).digest("hex"),
+        ]),
       ])
     )
     .digest("hex");
@@ -419,6 +467,10 @@ export const PrivateMemoryRepository = {
       )
         throw new WorkspaceAccessDenied();
       const owner = await privateScope(actor);
+      const erasure =
+        await query(sql`SELECT namespace_id FROM workspace_memory_erasure
+        WHERE namespace_id = ${owner.namespace.id}`);
+      if (erasure.length) throw new PrivateMemoryError("conflict");
       const repository = await stored(owner.namespace.id);
       const captured = await readPrivateMemoryGit({
         scope: owner.scope,
@@ -427,14 +479,27 @@ export const PrivateMemoryRepository = {
       });
       // An export cannot bypass current permission on evidence cited by an
       // older correction or a cleared claim. Authorize the complete lineage.
-      await verifySources(owner.actor, captured.retainedSources, false);
+      await verifySources(
+        owner.actor,
+        captured.retainedSources.filter((source) => source.kind === "file"),
+        false
+      );
+      const sources = await backupSessionClaimSources(
+        owner.actor,
+        owner.namespace.id,
+        captured.retainedSources.filter((source) => source.kind === "session")
+      );
       await requireWorkspaceAccess(owner.actor);
       const archive = {
-        version: 1 as const,
+        version: 2 as const,
+        sources,
         namespaceId: owner.namespace.id,
         scope: owner.scope,
         revision: repository.head,
-        bundle: repository.bundle,
+        bundle:
+          repository.bundle === null
+            ? null
+            : Uint8Array.from(repository.bundle),
       };
       return PrivateMemoryBackupSchema.parse({
         ...archive,
@@ -449,6 +514,26 @@ export const PrivateMemoryRepository = {
       archive: z.infer<typeof PrivateMemoryBackupSchema>;
     }
   ) {
+    let archive: z.infer<typeof PrivateMemoryBackupSchema>;
+    let expected: string | null;
+    try {
+      // Old v1 artifacts remain untouched but are intentionally unsupported.
+      // Freeze caller-owned bytes before the first asynchronous boundary.
+      expected = GitRevisionSchema.nullable().parse(input.expectedRevision);
+      const parsed = PrivateMemoryBackupSchema.parse(input.archive);
+      archive = {
+        ...parsed,
+        bundle: parsed.bundle === null ? null : Uint8Array.from(parsed.bundle),
+        sources: parsed.sources.map((source) => ({
+          sessionId: source.sessionId,
+          eventId: source.eventId,
+          captureSequence: source.captureSequence,
+          content: Uint8Array.from(source.content),
+        })),
+      };
+    } catch {
+      return Promise.reject(new PrivateMemoryError("invalid_input"));
+    }
     return authorized(
       async () => {
         if (
@@ -458,10 +543,6 @@ export const PrivateMemoryRepository = {
         )
           throw new WorkspaceAccessDenied();
         const owner = await privateScope(actor);
-        const expected = GitRevisionSchema.nullable().parse(
-          input.expectedRevision
-        );
-        const archive = PrivateMemoryBackupSchema.parse(input.archive);
         if (
           archive.scope.workspaceId !== owner.scope.workspaceId ||
           archive.scope.userId !== owner.scope.userId ||
@@ -491,7 +572,11 @@ export const PrivateMemoryRepository = {
           bundle: archive.bundle,
           includeRetainedSources: true,
         });
-        await verifySources(owner.actor, restored.retainedSources, false);
+        await verifySources(
+          owner.actor,
+          restored.retainedSources.filter((source) => source.kind === "file"),
+          false
+        );
         // Restoring retained history can advance the current lineage or rebuild a
         // lost projection. It cannot roll back a later correction/tombstone or
         // import a divergent history. Explicit reversal remains a separate write.
@@ -500,9 +585,14 @@ export const PrivateMemoryRepository = {
           !restored.operations.some((entry) => entry.revision === current.head)
         )
           throw new PrivateMemoryError("conflict");
-        await verifyEvidence(
+        await verifySources(
           owner.actor,
-          restored.snapshot.claims.map((claim) => claim.file),
+          restored.snapshot.claims
+            .map((claim) => claim.file)
+            .flatMap((file) =>
+              file.state.kind === "active" ? file.state.body.sources : []
+            )
+            .filter((source) => source.kind === "file"),
           true
         );
         await requireWorkspaceAccess(owner.actor);
@@ -512,8 +602,6 @@ export const PrivateMemoryRepository = {
             ? archive.bundle === null
             : archive.bundle !== null &&
               Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)));
-        if (identical)
-          return { applied: false as const, revision: current.head };
         if (current.head !== archive.revision && current.head !== expected)
           throw new PrivateMemoryError("conflict");
         if (current.head === null && archive.revision !== null) {
@@ -528,6 +616,18 @@ export const PrivateMemoryRepository = {
           if (latest[0]?.revision !== archive.revision)
             throw new PrivateMemoryError("conflict");
         }
+        // Even an identical Git head may have lost immutable files/receipt indexes.
+        // Full lineage/CAS/high-water/current file access is checked before writes.
+        await restoreSessionClaimSources(
+          owner.actor,
+          owner.namespace.id,
+          restored.retainedSources.filter(
+            (source) => source.kind === "session"
+          ),
+          archive.sources
+        );
+        if (identical)
+          return { applied: false as const, revision: current.head };
         await query(
           sql`INSERT INTO private_memory_repository (namespace_id) VALUES (${owner.namespace.id}) ON CONFLICT DO NOTHING`
         );

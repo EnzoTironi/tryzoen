@@ -1,10 +1,15 @@
+import type { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { publishPrivateMemoryGit } from "./git";
 import type { memoryNamespace } from "./namespace";
-import { PrivateMemoryError, PrivateMemoryRepository } from "./repository";
+import {
+  PrivateMemoryError,
+  PrivateMemoryRepository,
+  PrivateMemoryBackupSchema,
+} from "./repository";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
 const owners = vi.hoisted(() => ({
@@ -20,7 +25,10 @@ const owners = vi.hoisted(() => ({
       documents: { path: string; content: string }[];
     }>
   >(),
-  session: vi.fn<() => Promise<boolean>>(),
+  session: vi.fn<(actor: unknown, citation: unknown) => Promise<boolean>>(),
+  backup: vi.fn<typeof import("./session-export").backupSessionClaimSources>(),
+  restore:
+    vi.fn<typeof import("./session-export").restoreSessionClaimSources>(),
 }));
 vi.mock("@db/queries", () => ({
   query: owners.query,
@@ -37,6 +45,8 @@ vi.mock("../workspaces/repository", () => ({
 vi.mock("./namespace", () => ({ memoryNamespace: owners.namespace }));
 vi.mock("./session-export", () => ({
   verifySessionClaimSource: owners.session,
+  backupSessionClaimSources: owners.backup,
+  restoreSessionClaimSources: owners.restore,
   SessionArchiveUnavailable: class extends Error {},
 }));
 
@@ -140,6 +150,29 @@ beforeEach(() => {
     pendingHash: null,
   });
   owners.session.mockReset().mockResolvedValue(true);
+  owners.backup
+    .mockReset()
+    .mockImplementation(async (principal, _namespace, citations) => {
+      for (const citation of citations)
+        if (!(await owners.session(principal, citation)))
+          throw new PrivateMemoryError("invalid_input");
+      return [
+        {
+          sessionId: sessionSource.sessionId,
+          eventId: sessionSource.eventId,
+          captureSequence: 7,
+          content: Buffer.from([1, 2, 3]),
+        },
+      ];
+    });
+  owners.restore
+    .mockReset()
+    .mockImplementation(async (principal, _namespace, citations) => {
+      for (const citation of citations)
+        if (!(await owners.session(principal, citation)))
+          throw new PrivateMemoryError("invalid_input");
+      return { files: 1, receipts: 0 };
+    });
   owners.selection.mockReset().mockImplementation(async (_actor, paths) => ({
     documents: paths.map((path) => ({
       path,
@@ -158,7 +191,7 @@ beforeEach(() => {
 test("cleared private backup reauthorizes original file and session evidence from its real Git lineage", async () => {
   const archive = await PrivateMemoryRepository.backup(actor);
   expect(archive).toMatchObject({
-    version: 1,
+    version: 2,
     scope,
     revision: retained.head,
     namespaceId: "3a3df84d-d3d8-4189-99ea-f2d49807067e",
@@ -174,7 +207,7 @@ test("cleared private backup reauthorizes original file and session evidence fro
     { revision: fileSource.revision }
   );
   expect(owners.access).toHaveBeenCalledTimes(2);
-  expect(owners.query).toHaveBeenCalledTimes(1);
+  expect(owners.query).toHaveBeenCalledTimes(2);
 });
 
 test("clearing or correcting a claim cannot export an older citation whose file permission was revoked", async () => {
@@ -187,7 +220,7 @@ test("clearing or correcting a claim cannot export an older citation whose file 
     [fileSource.path],
     { revision: fileSource.revision }
   );
-  expect(owners.query).toHaveBeenCalledTimes(1);
+  expect(owners.query).toHaveBeenCalledTimes(2);
 });
 
 test("backup refuses unverifiable retained session evidence even after clear", async () => {
@@ -196,7 +229,7 @@ test("backup refuses unverifiable retained session evidence even after clear", a
     reason: "invalid_input",
   });
   expect(owners.session).toHaveBeenCalledExactlyOnceWith(actor, sessionSource);
-  expect(owners.selection).not.toHaveBeenCalled();
+  expect(owners.selection).toHaveBeenCalledTimes(1);
 });
 
 test("backup refuses a recorded citation whose excerpt does not match the authorized version", async () => {
@@ -310,4 +343,135 @@ test("same-head restore refuses an outstanding exact-namespace erasure before re
   expect(owners.query).toHaveBeenCalledTimes(1);
   expect(owners.session).not.toHaveBeenCalled();
   expect(owners.selection).not.toHaveBeenCalled();
+});
+
+test("obsolete v1 backup is deliberately rejected without source/SQL work", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  const old = { ...archive, version: 1 };
+  expect(PrivateMemoryBackupSchema.safeParse(old).success).toBe(false);
+  vi.clearAllMocks();
+  Reflect.set(archive, "version", 1);
+  await expect(
+    PrivateMemoryRepository.restore(actor, {
+      expectedRevision: retained.head,
+      archive,
+    })
+  ).rejects.toMatchObject({ reason: "invalid_input" });
+  expect(owners.transaction).not.toHaveBeenCalled();
+  expect(owners.restore).not.toHaveBeenCalled();
+});
+
+test("v2 authentication binds exact raw-source bytes, sequence and coordinates", async () => {
+  for (const mutate of [
+    (source: z.output<typeof PrivateMemoryBackupSchema>["sources"][number]) =>
+      source.content.fill(9),
+    (source: z.output<typeof PrivateMemoryBackupSchema>["sources"][number]) => {
+      source.captureSequence++;
+    },
+    (source: z.output<typeof PrivateMemoryBackupSchema>["sources"][number]) => {
+      source.sessionId = "another-session";
+    },
+    (source: z.output<typeof PrivateMemoryBackupSchema>["sources"][number]) => {
+      source.eventId = "another-event";
+    },
+  ]) {
+    const archive = await PrivateMemoryRepository.backup(actor);
+    const source = archive.sources[0];
+    if (!source) throw new Error("Missing synthetic source");
+    mutate(source);
+    owners.restore.mockClear();
+    await expect(
+      PrivateMemoryRepository.restore(actor, {
+        expectedRevision: retained.head,
+        archive,
+      })
+    ).rejects.toMatchObject({ reason: "invalid_input" });
+    expect(owners.restore).not.toHaveBeenCalled();
+  }
+});
+
+test("same-head restore repairs sources before returning its Git no-op", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  await PrivateMemoryRepository.restore(actor, {
+    expectedRevision: retained.head,
+    archive,
+  });
+  expect(owners.restore).toHaveBeenCalledExactlyOnceWith(
+    actor,
+    archive.namespaceId,
+    [sessionSource],
+    archive.sources.map((source) => ({
+      sessionId: source.sessionId,
+      eventId: source.eventId,
+      captureSequence: source.captureSequence,
+      content: Uint8Array.from(source.content),
+    }))
+  );
+});
+
+test("restore snapshots authenticated mutable bytes before waiting for the native boundary", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  owners.transaction.mockImplementationOnce(async (run) => {
+    await Promise.resolve();
+    return run();
+  });
+  const pending = PrivateMemoryRepository.restore(actor, {
+    expectedRevision: retained.head,
+    archive,
+  });
+  archive.sources[0]?.content.fill(9);
+  archive.bundle?.fill(9);
+  await expect(pending).resolves.toEqual({
+    applied: false,
+    revision: retained.head,
+  });
+  expect(owners.restore.mock.calls.at(-1)?.[3][0]?.content).toEqual(
+    new Uint8Array([1, 2, 3])
+  );
+});
+
+test("backup withholds an exact namespace awaiting erasure before Git/source export", async () => {
+  owners.query.mockImplementation(async (statement) => {
+    const compiled = new PgDialect().sqlToQuery(statement);
+    expect(compiled.sql).toContain("FROM workspace_memory_erasure");
+    expect(compiled.sql).not.toMatch(
+      /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
+    );
+    expect(compiled.params).toEqual(["3a3df84d-d3d8-4189-99ea-f2d49807067e"]);
+    return [{ namespace_id: compiled.params[0] }];
+  });
+  await expect(PrivateMemoryRepository.backup(actor)).rejects.toMatchObject({
+    reason: "conflict",
+  });
+  expect(owners.query).toHaveBeenCalledTimes(1);
+  expect(owners.backup).not.toHaveBeenCalled();
+  expect(owners.selection).not.toHaveBeenCalled();
+});
+
+test("v2 source count and total bytes are rejected before parsing individual archive entries", async () => {
+  const archive = await PrivateMemoryRepository.backup(actor);
+  const parsed = vi.fn<() => never>(() => {
+    throw new Error("Oversize entry must not be parsed");
+  });
+  const item = {
+    sessionId: "bounded-session",
+    eventId: "bounded-event",
+    captureSequence: 7,
+    content: new Uint8Array(8_388_608),
+  };
+  Object.defineProperty(item, "sessionId", { get: parsed });
+  expect(
+    PrivateMemoryBackupSchema.safeParse({
+      ...archive,
+      sources: Array.from({ length: 17 }, () => item),
+    }).success
+  ).toBe(false);
+  expect(parsed).not.toHaveBeenCalled();
+  expect(
+    PrivateMemoryBackupSchema.safeParse({
+      ...archive,
+      sources: Array.from({ length: 10_001 }, () => item),
+    }).success
+  ).toBe(false);
+  expect(parsed).not.toHaveBeenCalled();
 });

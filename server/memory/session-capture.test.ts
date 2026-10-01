@@ -213,14 +213,17 @@ test("DB-only capture remains composable inside an enclosing transaction without
   expect(boundary.savepoint).toHaveBeenCalledTimes(1);
   expect(boundary.namespace).toHaveBeenCalledExactlyOnceWith(actor);
   const captured = statements(boundary.savepointExecute);
-  expect(captured).toHaveLength(4);
+  expect(captured).toHaveLength(5);
   expect(captured[0]?.params).toEqual([
     source.sessionId,
     actor.workspaceId,
     actor.userId,
   ]);
-  expect(captured[3]?.sql).toContain("INSERT INTO memory_session_sources");
-  expect(captured[3]?.params).toEqual([
+  expect(captured[3]?.sql).toContain(
+    "pg_advisory_xact_lock(hashtextextended('zoen-session-source-allocation', 0))"
+  );
+  expect(captured[4]?.sql).toContain("INSERT INTO memory_session_sources");
+  expect(captured[4]?.params).toEqual([
     namespaceA,
     source.eventId,
     record().digest,
@@ -485,4 +488,26 @@ test("one drain retains the five-namespace work bound", async () => {
   expect(boundary.outer).toHaveBeenCalledTimes(5);
   expect(boundary.savepoint).toHaveBeenCalledTimes(5);
   expect(boundary.write).toHaveBeenCalledTimes(5);
+});
+
+test("native sequence allocation cannot occur before the shared repair fence admits capture", async () => {
+  boundary.execute
+    .mockResolvedValueOnce({ rows: [{ session_id: source.sessionId }] })
+    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: [{ count: "0", bytes: "0" }] });
+  boundary.execute.mockImplementation(async (statement) => {
+    const compiled = dialect.sqlToQuery(statement);
+    if (compiled.sql.includes("pg_advisory_xact_lock"))
+      throw new Error("Synthetic allocation fence rejection");
+    return { rows: [] };
+  });
+  await expect(captureSessionSource(actor, source)).rejects.toBeInstanceOf(
+    SqlError
+  );
+  expect(
+    statements(boundary.execute).some((item) =>
+      item.sql.includes("INSERT INTO memory_session_sources")
+    )
+  ).toBe(false);
+  assertNoArchiveEffects();
 });

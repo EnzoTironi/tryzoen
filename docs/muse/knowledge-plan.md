@@ -642,3 +642,43 @@ audit fact, not the service principal's OAuth or private-memory authority. Ident
 registration inhibits Matrix login and is not external runtime connectivity. The
 integration owner retains grant/resolver/migration/offboarding changes; new member
 schema/service and roster projections require coordinated ownership before edits.
+
+### Private claim recovery archive v2 — 2026-10-01
+
+The private repository backup now authenticates the Git bundle and the exact
+canonical JSONL bytes of every session event cited anywhere in its retained
+lineage, including claims corrected or cleared later. The envelope binds the
+private namespace/scope, Git revision, session/event coordinates, capture sequence
+and byte hashes with the installation key. Version 1 is deliberately rejected;
+old artifacts are not deleted or silently upgraded. This internal format does not
+yet replace the active Akita ZIP download or its callers.
+
+Restore first checks current private app/session ownership, the erasure receipt,
+Git ancestry/CAS, historical and current file-source permissions, exact citation
+coverage, all existing paths/files and all delivery receipts. A pending delivery,
+conflicting immutable file, sequence collision, missing native allocator high-water
+or archive sequence ahead of that high-water blocks recovery. The same native
+allocator fence protects explicit source-index rebuilds. Default capture and
+repair both hold the namespace then a shared short allocation mutex; recovery
+cannot overlook a still-uncommitted allocation after a counter restore. This
+adds serialized SQL allocation admission, not a new allocator/queue. Its
+contention cost remains to be measured. No `setval` or reconstructed permissions
+are used.
+
+Only after the entire preflight passes are missing immutable files fsynced and
+missing stored-receipt indexes inserted. Existing pending receipts are never
+acknowledged. SQL rollback can leave authenticated immutable files without indexes;
+exact replay repairs those indexes without overwriting/deleting bytes. Identical
+Git heads still run source repair; `applied` continues to describe Git publication,
+not whether a missing source/index was recovered. Recorded source dates and Git
+publication history remain unchanged; operational receipt rebuild time is separate.
+
+Processing limits are 10,000 cited events, 8 MiB per canonical file and 128 MiB
+source bytes per archive, in addition to the existing Git bundle bound. These are
+explicit refusal limits, not total conversation retention or production capacity
+claims. Source-only tests exercise native temporary Git/files and mocked SQL;
+personal/team database recovery journeys are authored but require isolated runtime
+qualification. Private archives cannot reconstruct lost session authority or prove
+completed erasure safety after a database rewind; installation recovery must retain
+the allocator, ownership and the non-restored erasure journal. Full K3 still requires
+active-consumer/recall/creator cutover and recovery/erasure qualification.

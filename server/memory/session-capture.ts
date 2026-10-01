@@ -12,6 +12,7 @@ import { openMemoryEngine } from "./ai-memory/engine";
 import { ingestSessionSource } from "./ai-memory/session-ingestion";
 import { memoryNamespace } from "./namespace";
 import { sessionSourceSchema, writeSessionSource } from "./session-files";
+import { lockSessionSourceAllocation } from "./session-export";
 import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
@@ -50,6 +51,9 @@ export async function captureSessionSource(
       );
     // Capture holds the namespace lock. A new event must not bypass a failed
     // earlier event or move a noisy account ahead of accounts already waiting.
+    // This producer uses the same short allocation fence as receipt recovery.
+    // A restored counter's uncommitted nextval cannot escape its collision scan.
+    await lockSessionSourceAllocation();
     await query(sql`INSERT INTO memory_session_sources (namespace_id, event_id, digest, payload, available_at)
       VALUES (${partition.id}, ${source.eventId}, ${digest}, ${payload}::jsonb,
         COALESCE((SELECT available_at FROM memory_session_sources

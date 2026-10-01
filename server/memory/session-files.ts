@@ -21,7 +21,7 @@ export const sessionSourceSchema = z.object({
     "turn.cancelled",
     "turn.failed",
   ]),
-  turnId: z.string().nullable(),
+  turnId: z.string().max(256).nullable(),
   sequence: z.number().int().nonnegative().nullable(),
   stepIndex: z.number().int().nonnegative().nullable(),
   role: z.enum(["user", "assistant"]).nullable(),
@@ -133,6 +133,88 @@ export function sessionSourceSegments(
   return segments;
 }
 
+export const sessionArchiveLimits = {
+  fileBytes: 8_388_608,
+  bytes: 134_217_728,
+  events: 10_000,
+} as const;
+
+export const SessionSourceBackupSchema = z.strictObject({
+  sessionId: sessionSourceSchema.shape.sessionId,
+  eventId: sessionSourceSchema.shape.eventId,
+  captureSequence: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+  content: z
+    .instanceof(Uint8Array)
+    .refine((bytes) => bytes.byteLength <= sessionArchiveLimits.fileBytes),
+});
+
+const segmentSchema = sessionSourceSchema.extend({
+  segment: z.object({
+    index: z.int().nonnegative(),
+    count: z.int().positive().max(512),
+  }),
+  captureSequence: SessionSourceBackupSchema.shape.captureSequence,
+});
+
+/** One canonical encoder owns persisted files and authenticated recovery bytes. */
+export function encodeSessionSource(
+  source: z.infer<typeof sessionSourceSchema>,
+  captureSequence: number
+) {
+  const parsed = sessionSourceSchema.parse(source);
+  const sequence =
+    SessionSourceBackupSchema.shape.captureSequence.parse(captureSequence);
+  const content = Buffer.from(
+    sessionSourceSegments(parsed)
+      .map(
+        (segment) =>
+          `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`
+      )
+      .join(""),
+    "utf8"
+  );
+  if (content.byteLength > sessionArchiveLimits.fileBytes)
+    throw new Error("Session source exceeds the archive limit.");
+  return content;
+}
+
+/** Bound line count before JSON parsing; exact re-encoding detects every coordinate,
+ * UTF-8, segment, whitespace and sequence mismatch without trusting prose. */
+export function decodeSessionSource(content: Uint8Array) {
+  if (content.byteLength > sessionArchiveLimits.fileBytes)
+    throw new Error("Session source exceeds the archive limit.");
+  const bytes = Buffer.from(
+    content.buffer,
+    content.byteOffset,
+    content.byteLength
+  );
+  const lines = bytes.toString("utf8").split("\n", 514);
+  if (lines.length > 513 || lines.at(-1) !== "")
+    throw new Error("Invalid session source segments.");
+  lines.pop();
+  if (lines.some((line) => line.length === 0))
+    throw new Error("Invalid session source segments.");
+  const segments = lines.map((line) => segmentSchema.parse(JSON.parse(line)));
+  const first = segments[0];
+  if (!first || first.segment.count !== segments.length)
+    throw new Error("Invalid session source coordinates.");
+  const source = sessionSourceSchema.parse({
+    ...first,
+    text:
+      first.text === null
+        ? null
+        : segments.map((segment) => segment.text).join(""),
+  });
+  if (!bytes.equals(encodeSessionSource(source, first.captureSequence)))
+    throw new Error("Inconsistent session source bytes.");
+  return {
+    content: bytes,
+    source,
+    captureSequence: first.captureSequence,
+    digest: digest(JSON.stringify(source)),
+  };
+}
+
 export async function privateMemoryDirectory(path: string) {
   const created = await mkdir(path, { recursive: true, mode: 0o700 });
   const info = await lstat(path);
@@ -157,12 +239,8 @@ export async function writeSessionSource(
   captureSequence: number
 ) {
   const namespace = z.uuid().parse(namespaceId);
-  const sequence = z
-    .number()
-    .int()
-    .positive()
-    .max(Number.MAX_SAFE_INTEGER)
-    .parse(captureSequence);
+  source = sessionSourceSchema.parse(source);
+  const content = encodeSessionSource(source, captureSequence);
   await privateMemoryDirectory(root);
   const owner = join(root, namespace);
   await privateMemoryDirectory(owner);
@@ -173,16 +251,10 @@ export async function writeSessionSource(
   const session = join(eve, digest(source.sessionId));
   await privateMemoryDirectory(session);
   const path = join(session, `${digest(source.eventId)}.jsonl`);
-  const content = sessionSourceSegments(source)
-    .map(
-      (segment) =>
-        `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`
-    )
-    .join("");
   const temporary = join(session, `.${randomUUID()}.tmp`);
   try {
     await using file = await open(temporary, "wx", 0o600);
-    await file.writeFile(content, "utf8");
+    await file.writeFile(content);
     await file.sync();
     try {
       await link(temporary, path);
@@ -199,7 +271,7 @@ export async function writeSessionSource(
           constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
         );
         const info = await existing.stat();
-        const expected = Buffer.from(content, "utf8");
+        const expected = content;
         if (
           !info.isFile() ||
           (info.mode & 0o077) !== 0 ||
