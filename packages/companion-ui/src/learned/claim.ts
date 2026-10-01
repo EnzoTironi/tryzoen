@@ -4,10 +4,7 @@ import {
   OntologyClaimSchema,
   OntologySourceSchema,
 } from "../library/ontology/schema";
-import {
-  LearnedMemoryItemSchema,
-  learnedMemoryRelationsSchema,
-} from "./schema";
+import { LearnedClaimTextSchema, LearnedClaimRelationsSchema } from "./body";
 
 /** Per supplied snapshot, not a retention policy. Exceeding a bound must fail;
  * callers must never discard tombstones or audit history to fit these limits. */
@@ -29,7 +26,7 @@ const identifier = z
     (value) => value === value.trim(),
     "Expected an exact trimmed identifier"
   );
-const operationId = z
+export const LearnedClaimOperationIdSchema = z
   .string()
   .min(1)
   .max(256)
@@ -40,6 +37,7 @@ const operationId = z
     }
     return true;
   }, "Operation identifiers cannot contain control characters");
+const operationId = LearnedClaimOperationIdSchema;
 export const LearnedClaimScopeSchema = z.strictObject({
   workspaceId: identifier,
   userId: identifier,
@@ -54,15 +52,13 @@ export const LearnedClaimSessionSourceSchema = z.strictObject({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   excerpt: OntologySourceSchema.shape.excerpt,
 });
-const LearnedClaimSourceSchema = z.discriminatedUnion("kind", [
+export const LearnedClaimSourceSchema = z.discriminatedUnion("kind", [
   OntologySourceSchema.extend({ kind: z.literal("file") }),
   LearnedClaimSessionSourceSchema,
 ]);
 export const LearnedClaimBodySchema = z
   .strictObject({
-    text: LearnedMemoryItemSchema.shape.memory
-      .min(1)
-      .refine((value) => value.trim().length > 0, "A claim requires text"),
+    text: LearnedClaimTextSchema,
     sources: z
       .array(LearnedClaimSourceSchema)
       .max(10)
@@ -73,7 +69,7 @@ export const LearnedClaimBodySchema = z
         "Each source must be unique"
       ),
     validTime: OntologyClaimSchema.shape.validTime,
-    relations: learnedMemoryRelationsSchema,
+    relations: LearnedClaimRelationsSchema,
   })
   .refine(
     (body) => body.validTime === null || body.sources.length > 0,
@@ -221,20 +217,28 @@ export const LearnedClaimReceiptSchema = z.strictObject({
 
 /** Durable recall is derived from the current authorized file snapshot. A receipt
  * cannot confer access or outlive a correction, permission change or source loss. */
-export const LearnedClaimRecallSchema = z.strictObject({
-  enabled: z.boolean(),
-  workspaceEnabled: z.boolean(),
-  revision: GitRevisionSchema.nullable(),
-  sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  queryHash: z.string().regex(/^[a-f0-9]{64}$/),
-  matches: z
-    .array(
-      z.strictObject({
-        claim: LearnedClaimVersionSchema,
-        score: z.int().positive(),
-        validity: z.enum(["unknown", "in-range", "not-filtered"]),
-      })
-    )
-    .max(learnedClaimLimits.resultCount),
-  hasMore: z.boolean(),
-});
+export const LearnedClaimRecallSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    workspaceEnabled: z.boolean(),
+    automaticEnabled: z.boolean(),
+    preferenceRevision: z.uuid(),
+    revision: GitRevisionSchema.nullable(),
+    sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    queryHash: z.string().regex(/^[a-f0-9]{64}$/),
+    matches: z
+      .array(
+        z.strictObject({
+          claim: LearnedClaimVersionSchema,
+          score: z.int().positive(),
+          validity: z.enum(["unknown", "in-range", "not-filtered"]),
+        })
+      )
+      .max(learnedClaimLimits.resultCount),
+    hasMore: z.boolean(),
+  })
+  .refine(
+    (recall) =>
+      recall.automaticEnabled === (recall.enabled && recall.workspaceEnabled),
+    "Automatic memory requires personal preference and workspace capability"
+  );
