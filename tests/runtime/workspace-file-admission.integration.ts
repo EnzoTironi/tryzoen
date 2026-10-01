@@ -33,10 +33,14 @@ function outcome<T>(promise: Promise<T>) {
     (error: unknown) => ({ ok: false as const, error })
   );
 }
-async function connection() {
+async function connection(
+  role: "zoen_migrator" | "zoen_app" = "zoen_migrator"
+) {
   if (!env.DATABASE_URL_UNPOOLED)
     throw new Error("Missing isolated barrier database URL");
-  const url = new URL(env.DATABASE_URL_UNPOOLED);
+  const url = new URL(
+    role === "zoen_migrator" ? env.DATABASE_URL_UNPOOLED : env.DATABASE_URL
+  );
   const application = new URL(env.DATABASE_URL);
   if (
     url.hostname !== "127.0.0.1" ||
@@ -49,29 +53,35 @@ async function connection() {
     );
   const client = new Client({
     connectionString: url.href,
-    application_name: "file-admission-barrier",
+    application_name:
+      role === "zoen_app" ? "file-admission-monitor" : "file-admission-barrier",
     statement_timeout: 10_000,
     lock_timeout: 8_000,
   });
   await client.connect();
-  const identity = await client.query<{
-    pid: number;
-    name: string;
-    role: string;
-  }>(
-    "SELECT pg_backend_pid() AS pid, current_database() AS name, current_user AS role"
-  );
-  const row = identity.rows[0];
-  if (row?.name !== "companion_runtime_test" || row.role !== "zoen_migrator")
-    throw new Error("Barrier database identity mismatch");
-  return {
-    client,
-    pid: row.pid,
-    async [Symbol.asyncDispose]() {
-      await client.query("ROLLBACK");
-      await client.end();
-    },
-  };
+  try {
+    const identity = await client.query<{
+      pid: number;
+      name: string;
+      role: string;
+    }>(
+      "SELECT pg_backend_pid() AS pid, current_database() AS name, current_user AS role"
+    );
+    const row = identity.rows[0];
+    if (row?.name !== "companion_runtime_test" || row.role !== role)
+      throw new Error("Barrier database identity mismatch");
+    return {
+      client,
+      pid: row.pid,
+      async [Symbol.asyncDispose]() {
+        await client.query("ROLLBACK");
+        await client.end();
+      },
+    };
+  } catch (cause) {
+    await client.end();
+    throw cause;
+  }
 }
 // SQL polling asserts a real waiter; diagnostic rejection is not an alternate assertion.
 // oxlint-disable vitest/no-conditional-expect
@@ -145,7 +155,8 @@ test.each(
     }
     await using table = await connection();
     await using session = await connection();
-    await using monitor = await connection();
+    await using monitor = await connection("zoen_app");
+    await using barrierMonitor = await connection();
     await table.client.query("BEGIN");
     await table.client.query(
       "LOCK workspace_repository IN ACCESS EXCLUSIVE MODE"
@@ -159,7 +170,7 @@ test.each(
         "SELECT id FROM public.session WHERE id = $1 FOR UPDATE",
         [actor.authSessionId]
       );
-      await blocked(monitor.client, reader, "FOR UPDATE");
+      await blocked(barrierMonitor.client, reader, "FOR UPDATE");
       await table.client.query("COMMIT");
       await holding;
       await blocked(monitor.client, session.pid, "public.session");
@@ -380,7 +391,8 @@ test.each(
     });
     await using table = await connection();
     await using session = await connection();
-    await using monitor = await connection();
+    await using monitor = await connection("zoen_app");
+    await using barrierMonitor = await connection();
     await table.client.query("BEGIN");
     await table.client.query(
       "LOCK workspace_revision IN ACCESS EXCLUSIVE MODE"
@@ -409,7 +421,7 @@ test.each(
               "SELECT id FROM public.session WHERE id = $1 FOR UPDATE",
               [actor.authSessionId]
             );
-      await blocked(monitor.client, reader, "FOR UPDATE");
+      await blocked(barrierMonitor.client, reader, "FOR UPDATE");
       await table.client.query("COMMIT");
       await holding;
       await blocked(
@@ -561,7 +573,7 @@ test.each(
       bot.username
     );
     await using table = await connection();
-    await using monitor = await connection();
+    await using monitor = await connection("zoen_app");
     await table.client.query("BEGIN");
     await table.client.query(
       "LOCK workspace_revision IN ACCESS EXCLUSIVE MODE"
@@ -763,7 +775,8 @@ test.each(["publication", "session"])(
     await using table = await connection();
     await using first = await connection();
     await using next = await connection();
-    await using monitor = await connection();
+    await using monitor = await connection("zoen_app");
+    await using barrierMonitor = await connection();
     await table.client.query("BEGIN");
     await table.client.query(
       "LOCK workspace_revision IN ACCESS EXCLUSIVE MODE"
@@ -784,7 +797,7 @@ test.each(["publication", "session"])(
         "SELECT id FROM public.session WHERE id = $1 FOR UPDATE",
         [actor.authSessionId]
       );
-      await blocked(monitor.client, dataReader, "FOR UPDATE");
+      await blocked(barrierMonitor.client, dataReader, "FOR UPDATE");
       await table.client.query("COMMIT");
       await firstLock;
       const finalCatalog = await blocked(
@@ -798,7 +811,7 @@ test.each(["publication", "session"])(
         [actor.authSessionId]
       );
       // The next holder must queue behind the final catalog's tuple waiter.
-      await blocked(monitor.client, finalCatalog, "FOR UPDATE");
+      await blocked(barrierMonitor.client, finalCatalog, "FOR UPDATE");
       await first.client.query("COMMIT");
       await nextLock;
       await blocked(monitor.client, next.pid, "public.session");
