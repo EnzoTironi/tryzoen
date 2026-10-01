@@ -529,6 +529,170 @@ describe("mapAsync inside a strict deadline scope", () => {
     }
   );
 
+  it("does not start a callback when iterator.next aborts its current context before yielding", async () => {
+    const external = new AbortController();
+    const cancelled = new Error("Iterator cancelled before yielding");
+    const next = vi.fn<() => IteratorResult<number>>(() => {
+      external.abort(cancelled);
+      return { done: false, value: 0 };
+    });
+    const inputs = {
+      [Symbol.iterator]() {
+        return { next };
+      },
+    };
+    const worker = vi.fn<(input: number) => number>((input) => input);
+    const reason = await rejection(
+      withDeadline(
+        () => withSignal(external.signal, () => mapAsync(inputs, worker, 1)),
+        now + 100
+      )
+    );
+    expect(reason).toBe(cancelled);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(worker).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not start a callback when iterator.next consumes the remaining deadline before yielding", async () => {
+    const next = vi.fn<() => IteratorResult<number>>(() => {
+      vi.setSystemTime(now + 10);
+      return { done: false, value: 0 };
+    });
+    const inputs = {
+      [Symbol.iterator]() {
+        return { next };
+      },
+    };
+    const worker = vi.fn<(input: number) => number>((input) => input);
+    const reason = await rejection(
+      withDeadline(() => mapAsync(inputs, worker, 1), now + 10)
+    );
+    expect(reason).toBeInstanceOf(TimeoutError);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(worker).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(
+    [
+      {
+        label: "original Error",
+        abort: false,
+        primary: new Error("Primary failure"),
+      },
+      { label: "undefined rejection", abort: false, primary: undefined },
+      {
+        label: "external abort",
+        abort: true,
+        primary: new Error("Primary cancellation"),
+      },
+    ].flatMap((scenario) =>
+      [false, true].map((closeThrows) => ({
+        label: scenario.label,
+        abort: scenario.abort,
+        primary: scenario.primary,
+        closeThrows,
+      }))
+    )
+  )(
+    "closes an unexhausted generator once after draining for $label; close throws=$closeThrows",
+    async ({ abort, primary, closeThrows }) => {
+      const external = new AbortController();
+      const initial = Promise.withResolvers<number>();
+      const later = Promise.withResolvers<number>();
+      const started = Promise.withResolvers<void>();
+      const order: string[] = [];
+      const closeFailure = new Error("Generator close failure");
+      const close = vi.fn<() => void>(() => {
+        order.push("generator closed");
+        if (closeThrows) {
+          throw closeFailure;
+        }
+      });
+      function* values() {
+        try {
+          yield 0;
+          yield 1;
+          yield 2;
+        } finally {
+          close();
+        }
+      }
+      const inputs = values();
+      const returnIterator = vi.spyOn(inputs, "return");
+      let starts = 0;
+      const worker = vi.fn<(input: number) => Promise<number>>(
+        async (input) => {
+          starts++;
+          if (starts === 2) {
+            started.resolve();
+          }
+          try {
+            return await (input === 0 ? initial.promise : later.promise);
+          } finally {
+            order.push(`worker ${input} settled`);
+          }
+        }
+      );
+      const result = observe(
+        withDeadline(
+          () => withSignal(external.signal, () => mapAsync(inputs, worker, 2)),
+          now + 1_000
+        )
+      );
+      await started.promise;
+      try {
+        if (abort) {
+          external.abort(primary);
+          initial.resolve(0);
+        } else {
+          initial.reject(primary);
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        expect(order).toEqual(["worker 0 settled"]);
+        expect(result.settled()).toBe(false);
+        expect(returnIterator).not.toHaveBeenCalled();
+        expect(close).not.toHaveBeenCalled();
+        expect(worker).toHaveBeenCalledTimes(2);
+      } finally {
+        later.resolve(1);
+      }
+      expect(await result.rejection()).toBe(primary);
+      expect(order).toEqual([
+        "worker 0 settled",
+        "worker 1 settled",
+        "generator closed",
+      ]);
+      expect(worker).toHaveBeenCalledTimes(2);
+      expect(returnIterator).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  );
+
+  it("does not return an already exhausted generator or repeat its normal cleanup", async () => {
+    const close = vi.fn<() => void>();
+    function* values() {
+      try {
+        yield 1;
+        yield 2;
+      } finally {
+        close();
+      }
+    }
+    const inputs = values();
+    const returnIterator = vi.spyOn(inputs, "return");
+    const worker = vi.fn<(input: number) => number>((input) => input * 2);
+    expect(
+      await withDeadline(() => mapAsync(inputs, worker, 2), now + 100)
+    ).toEqual([2, 4]);
+    expect(worker).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(returnIterator).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("finite inputs bound worker creation even with infinite concurrency", async () => {
     const worker = vi.fn<(input: number) => number>((input) => input * 2);
     const result = await withDeadline(

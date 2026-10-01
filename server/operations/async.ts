@@ -145,11 +145,11 @@ export async function mapAsync<Input, Output>(
   const results: Output[] = [];
   const controller = new AbortController();
   if (operationDeadline() !== undefined) {
-    const iterator = inputs[Symbol.iterator]();
     let index = 0;
     const work = { failed: false, exhausted: false };
     let failure: unknown;
     await withSignal(controller.signal, async () => {
+      const iterator = inputs[Symbol.iterator]();
       const workers: Promise<void>[] = [];
       const capacity = Math.max(1, Math.floor(concurrency));
       for (let worker = 0; worker < capacity; worker++) {
@@ -164,8 +164,10 @@ export async function mapAsync<Input, Output>(
                   work.exhausted = true;
                   return;
                 }
+                const item = next.value;
+                operationSignal().throwIfAborted();
                 const current = index++;
-                results[current] = await run(next.value, current);
+                results[current] = await run(item, current);
               }
             } catch (error) {
               if (!work.failed) {
@@ -178,6 +180,24 @@ export async function mapAsync<Input, Output>(
         );
       }
       await Promise.allSettled(workers);
+      if (!work.failed) {
+        try {
+          operationSignal().throwIfAborted();
+        } catch (error) {
+          work.failed = true;
+          failure = error;
+        }
+      }
+      if (!work.exhausted) {
+        try {
+          iterator.return?.();
+        } catch (error) {
+          if (!work.failed) {
+            work.failed = true;
+            failure = error;
+          }
+        }
+      }
       if (work.failed) throw failure;
     });
     return results;
