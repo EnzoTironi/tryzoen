@@ -15,7 +15,7 @@ export default defineEval({
   timeoutMs: 240_000,
   async test(t) {
     const started = await t.send(
-      "Use the browser to visually inspect https://example.com and report its exact primary heading. This requires a browser, not web_fetch. Close the browser after reading it. Do not log in, submit forms or send external messages."
+      "Use the browser to visually inspect https://example.com and report its exact document title. Verify the title through the browser DOM. This requires a browser, not web_fetch. Close the browser after reading it. Do not log in, submit forms or send external messages."
     );
     const replyIndex = requireStreamIndex(started.session);
     const childId = await requireWorkerSessionId(t, started);
@@ -85,7 +85,7 @@ export default defineEval({
       ? deliveries.join("\n")
       : (committedReply ?? "");
     t.check(answer, includes("Example Domain")).label(
-      "parent delivers the verified browser heading in web chat"
+      "parent delivers the verified browser document title in web chat"
     );
   },
 });
