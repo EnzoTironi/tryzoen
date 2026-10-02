@@ -1,6 +1,6 @@
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
-import { generateText } from "ai";
+import { generateText, type JSONSchema7 } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 async function models(configuration: Record<string, string | undefined>) {
@@ -75,7 +75,9 @@ describe("installation model configuration", () => {
       doStream: async () => ({
         warnings: [],
         stream: new ReadableStream({
-          start: (controller) => controller.close(),
+          start(controller) {
+            controller.close();
+          },
         }),
       }),
     });
@@ -86,9 +88,11 @@ describe("installation model configuration", () => {
     const selected = await configuration.installationModel();
     if (!selected || typeof selected.model === "string")
       throw new Error("Expected a Codex model");
-    const inputSchema = z.toJSONSchema(
-      z.strictObject({ revision: z.string().optional() })
-    );
+    const inputSchema = {
+      type: "object",
+      properties: { revision: { type: "string" } },
+      additionalProperties: false,
+    } satisfies JSONSchema7;
     await selected.model.doStream({
       prompt: [],
       tools: [
