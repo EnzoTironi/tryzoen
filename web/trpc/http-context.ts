@@ -1,3 +1,4 @@
+import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { TRPCError } from "@trpc/server";
 import {
   requireRequestScope,
@@ -21,6 +22,9 @@ export async function createHTTPContext(
   } catch (error) {
     if (error instanceof UnauthenticatedError) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+    if (error instanceof WorkspaceAccessDenied) {
+      throw new TRPCError({ code: "FORBIDDEN" });
     }
     throw error;
   }
