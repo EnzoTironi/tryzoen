@@ -71,7 +71,7 @@ function parseRecall(
   result: Awaited<ReturnType<(typeof learned.provider.recall)["turn.started"]>>
 ) {
   const message = result.messages[0];
-  if (!message || message.id !== "learned-current")
+  if (message?.id !== "learned-current")
     throw new Error("Expected the current learned-memory replacement");
   const content = message.content.split("\n").at(-1);
   if (!content) throw new Error("Expected canonical recall content");

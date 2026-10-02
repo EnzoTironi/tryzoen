@@ -119,9 +119,12 @@ async function memoryRpc<Result>(run: () => Promise<Result>) {
         });
       default: {
         const unhandled: never = error.reason;
-        throw new Error(`Unknown private memory failure: ${unhandled}`, {
-          cause: error,
-        });
+        throw new Error(
+          `Unknown private memory failure: ${String(unhandled)}`,
+          {
+            cause: error,
+          }
+        );
       }
     }
   }
