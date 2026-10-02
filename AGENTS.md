@@ -73,7 +73,7 @@ Run the validation the task requests. When it does not establish the behavior yo
 ## Repository contract
 
 - The repository root owns the single Next.js application and Eve agent. `packages/companion-ui` owns the shared React Native UI; `apps/desktop` owns Electron and `apps/mobile` owns Expo. Keep the connected web adapter under `app/companion`.
-- The workspace manager lives on `/` and the agent chat on `/chat`. Eve owns tools, connections, skill discovery, approvals and durable execution. Keep product functions direct and colocated with their concrete owner.
+- Companion is the product at `/`, with conversations under `/companion/:sessionId`. First-time setup lives at `/onboarding`. The preserved workspace manager lives under `/legacy`; its entire route group is disabled unless `ZOEN_LEGACY_APP_ENABLED=true` is explicitly configured. Keep that flag off in the active production deployment. Eve owns tools, connections, skill discovery, approvals and durable execution. Keep product functions direct and colocated with their concrete owner.
 - Browser execution belongs only to the declared browser-agent's native tools. Keep each browser tool's schema and implementation together; share the Kernel SDK client through `agent/subagents/browser-agent/lib/kernel.ts`. The coordinator delegates browser work to that agent.
 - `agent/subagents/browser-agent/lib` is for code genuinely shared by worker tools. Group a shared worker domain in a lower-case folder, such as `trace/domains.ts` or `autofill/provider.ts`; do not use it as a holding area for a tool's one-off logic.
 - Validate runtime environment variables through `shared/environment/env.ts`. `KERNEL_API_KEY` is optional for application startup and required when browser execution is invoked.

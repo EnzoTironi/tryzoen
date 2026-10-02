@@ -4,7 +4,7 @@ import { PanelLink } from "../_components/panel-link";
 import { headers } from "next/headers";
 import { googleWorkspaceReturnTo } from "@shared/google-workspace/connection";
 import { requireRequestScope } from "@web/auth/request-scope";
-import { FirstRunStatus } from "./_components/first-run-status";
+import { FirstRunStatus } from "../(workspace)/_components/first-run-status";
 import { readLinkedChannelIdentities } from "../../../server/accounts/controls";
 import styles from "../_components/home.module.css";
 

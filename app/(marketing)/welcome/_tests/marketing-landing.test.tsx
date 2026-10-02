@@ -57,7 +57,7 @@ describe("marketing landing", () => {
     }
   );
 
-  it("sends every landing start control to the weekend iMessage draft", () => {
+  it("sends primary start controls to Companion and retains the messenger shortcut", () => {
     const html = renderToStaticMarkup(
       <OnboardingProvider destinations={weekendPublicDestinations}>
         <MarketingLanding />
@@ -81,7 +81,8 @@ describe("marketing landing", () => {
     expect(html).not.toContain('aria-label="WhatsApp"');
     expect(html).not.toContain('aria-label="Telegram"');
     expect(html).toContain(`href="${weekendHref}"`);
-    expect(html.match(/href="sms:\+16282463032\?&amp;body=/g)?.length).toBe(5);
+    expect(html.match(/href="https:\/\/app\.tryzoen\.com\/"/g)?.length).toBe(4);
+    expect(html.match(/href="sms:\+16282463032\?&amp;body=/g)?.length).toBe(1);
     expect(html).not.toContain('target="_blank"');
   });
 

@@ -2804,5 +2804,18 @@
   "O arquivo não existe nesta versão.": "El archivo no existe en esta versión.",
   "O arquivo deve ter no máximo 262144 caracteres.": "El archivo debe tener como máximo 262144 caracteres.",
   "Conexão PostgreSQL registrada. Consultas de dados ainda indisponíveis.": "Conexión PostgreSQL registrada. Las consultas de datos todavía no están disponibles.",
-  "Request closed": "Solicitud cerrada"
+  "Request closed": "Solicitud cerrada",
+  "Seu Companion": "Tu Companion",
+  "Como você quer me chamar?": "¿Cómo quieres llamarme?",
+  "Um nome para o Companion que vai acompanhar seu dia.": "Un nombre para el Companion que te acompañará cada día.",
+  "Seu dia, mais perto.": "Tu día, más cerca.",
+  "Conecte seus serviços e mensageiros. Você também pode fazer isso depois.": "Conecta tus servicios y aplicaciones de mensajería. También puedes hacerlo después.",
+  "Nome do Companion": "Nombre del Companion",
+  "Você pode mudar o nome e a personalidade depois.": "Puedes cambiar el nombre y la personalidad después.",
+  "Não foi possível preparar seu Companion.": "No se pudo preparar tu Companion.",
+  "Não foi possível salvar. Tente novamente.": "No se pudo guardar. Inténtalo de nuevo.",
+  "Configure seu Companion no seu espaço pessoal.": "Configura tu Companion en tu espacio personal.",
+  "Preparar meu cofre": "Preparar mi bóveda",
+  "Adicione somente os acessos que você quer usar com seu Companion.": "Añade solo los accesos que quieras usar con tu Companion.",
+  "As conexões são opcionais. Você controla as permissões e pode revisar tudo nas configurações.": "Las conexiones son opcionales. Tú controlas los permisos y puedes revisar todo en la configuración."
 }

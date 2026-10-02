@@ -242,6 +242,10 @@ export const env = createEnv({
     ),
 
     ZOEN_REGISTRATION_MODE: z.enum(["open", "closed"]).default("open"),
+    ZOEN_LEGACY_APP_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     ZOEN_BETA_FULL_TELEMETRY: z
       .enum(["true", "false"])
       .default("false")

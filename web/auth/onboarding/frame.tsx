@@ -18,17 +18,17 @@ const steps = [
     eyebrow: "SEU DIA, COM MAIS LEVEZA",
   },
   {
-    label: "Conexões",
-    title: "Tudo começa com um oi.",
-    description: "Seu Zoen, no mensageiro que já faz parte do seu dia.",
+    label: "Seu Companion",
+    title: "Como você quer me chamar?",
+    description: "Um nome para o Companion que vai acompanhar seu dia.",
     image: "/marketing/panel/zoen-integration.png",
     eyebrow: "PERTO DE VOCÊ",
   },
   {
-    label: "Seu espaço",
-    title: "Uma conta. Seus mundos.",
+    label: "Conexões",
+    title: "Seu dia, mais perto.",
     description:
-      "Um espaço só seu. Outros para suas equipes. Você escolhe onde estar.",
+      "Conecte seus serviços e mensageiros. Você também pode fazer isso depois.",
     image: "/marketing/panel/zoen-together.jpg",
     eyebrow: "CADA COISA NO SEU LUGAR",
   },
@@ -38,11 +38,13 @@ export function OnboardingFrame({
   step,
   onStep,
   signedIn = false,
+  furthestStep = 2,
   children,
 }: {
   readonly step: number;
   readonly onStep: (step: number) => void;
   readonly signedIn?: boolean;
+  readonly furthestStep?: number;
   readonly children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -51,7 +53,7 @@ export function OnboardingFrame({
   const current = steps[step] ?? steps[0];
   const first = signedIn ? 1 : 0;
   function navigate(next: number) {
-    onStep(Math.max(first, Math.min(steps.length - 1, next)));
+    onStep(Math.max(first, Math.min(furthestStep, next)));
     heading.current?.focus({ preventScroll: true });
   }
   return (
@@ -133,7 +135,7 @@ export function OnboardingFrame({
               className={styles.step}
               aria-label={t(item.label)}
               aria-current={index === step ? "step" : undefined}
-              disabled={signedIn && index === 0}
+              disabled={(signedIn && index === 0) || index > furthestStep}
               onClick={() => {
                 navigate(index);
               }}
@@ -149,7 +151,7 @@ export function OnboardingFrame({
         <Button
           variant="plain"
           size="icon-lg"
-          disabled={step === 2}
+          disabled={step >= furthestStep}
           aria-label={t("Próxima etapa")}
           onClick={() => {
             navigate(step + 1);

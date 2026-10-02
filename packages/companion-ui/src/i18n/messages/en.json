@@ -2804,5 +2804,18 @@
   "O arquivo não existe nesta versão.": "The file does not exist in this version.",
   "O arquivo deve ter no máximo 262144 caracteres.": "The file must have at most 262144 characters.",
   "Conexão PostgreSQL registrada. Consultas de dados ainda indisponíveis.": "PostgreSQL connection registered. Data queries are not available yet.",
-  "Request closed": "Request closed"
+  "Request closed": "Request closed",
+  "Seu Companion": "Your Companion",
+  "Como você quer me chamar?": "What would you like to call me?",
+  "Um nome para o Companion que vai acompanhar seu dia.": "A name for the Companion that will be part of your day.",
+  "Seu dia, mais perto.": "Bring your day together.",
+  "Conecte seus serviços e mensageiros. Você também pode fazer isso depois.": "Connect your services and messengers. You can also do this later.",
+  "Nome do Companion": "Companion name",
+  "Você pode mudar o nome e a personalidade depois.": "You can change the name and personality later.",
+  "Não foi possível preparar seu Companion.": "Could not prepare your Companion.",
+  "Não foi possível salvar. Tente novamente.": "Could not save. Try again.",
+  "Configure seu Companion no seu espaço pessoal.": "Set up your Companion in your personal space.",
+  "Preparar meu cofre": "Set up my vault",
+  "Adicione somente os acessos que você quer usar com seu Companion.": "Add only the credentials you want to use with your Companion.",
+  "As conexões são opcionais. Você controla as permissões e pode revisar tudo nas configurações.": "Connections are optional. You control permissions and can review everything in settings."
 }
