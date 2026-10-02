@@ -642,7 +642,7 @@ test("atomic clear keeps all history, rolls back on receipt failure and concurre
     (
       await PrivateMemoryRepository.recall(
         actor,
-        `clear-${randomUUID()}`,
+        scopeKey,
         randomUUID(),
         "confidential"
       )
