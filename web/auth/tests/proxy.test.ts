@@ -214,10 +214,12 @@ describe("auth proxy matcher", () => {
     expect(response.headers.has("location")).toBe(false);
   });
 
-  it("sends signed-out app home and marketing paths to the apex", async () => {
+  it("sends signed-out app home to sign-in and marketing paths to the apex", async () => {
     const home = await proxy(new NextRequest("https://app.tryzoen.com/"));
-    expect(home.status).toBe(308);
-    expect(home.headers.get("location")).toBe("https://tryzoen.com/");
+    expect(home.status).toBe(307);
+    expect(home.headers.get("location")).toBe(
+      "https://app.tryzoen.com/sign-in?callbackUrl=%2F"
+    );
 
     const docs = await proxy(new NextRequest("https://app.tryzoen.com/docs"));
     expect(docs.status).toBe(308);

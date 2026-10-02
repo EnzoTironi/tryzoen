@@ -5,9 +5,7 @@ import { safeCallbackUrl } from "@web/auth/channel/client";
 import { OnboardingShell } from "@web/auth/onboarding/shell";
 import { OnboardingSetup } from "@web/auth/onboarding/setup";
 import { getI18n } from "@web/i18n/server";
-import { resolveWorkspaceActor } from "../../server/workspaces/session";
-import { listUserWorkspaces } from "../../server/workspaces/directory";
-import { readLinkedChannelIdentities } from "../../server/accounts/controls";
+import { TRPCProvider } from "@web/trpc/client";
 import { conversationDestinations } from "../../server/channels/destination";
 
 export async function generateMetadata() {
@@ -27,24 +25,21 @@ export default async function OnboardingPage({
       ? params.callbackUrl[0]
       : params.callbackUrl
   );
-  const setup = await (async function () {
-    const actor = await resolveWorkspaceActor(requestHeaders);
-    const workspaces = await listUserWorkspaces(actor);
-    const identities = await readLinkedChannelIdentities(requestHeaders);
-    const destinations = conversationDestinations();
-    return { workspaces, identities, destinations };
-  })();
+  const destinations = conversationDestinations();
   return (
     <OnboardingShell>
-      <OnboardingSetup
-        workspaces={setup.workspaces}
-        identities={setup.identities}
-        callbackUrl={callbackUrl}
-        available={[
-          ...(setup.destinations.telegram ? ["telegram" as const] : []),
-          ...(setup.destinations.whatsapp ? ["kapso" as const] : []),
-        ]}
-      />
+      <TRPCProvider>
+        <OnboardingSetup
+          initialStep={
+            params.step === "connections" ? "connections" : "companion"
+          }
+          callbackUrl={callbackUrl}
+          available={[
+            ...(destinations.telegram ? ["telegram" as const] : []),
+            ...(destinations.whatsapp ? ["kapso" as const] : []),
+          ]}
+        />
+      </TRPCProvider>
     </OnboardingShell>
   );
 }

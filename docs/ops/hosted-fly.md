@@ -314,3 +314,17 @@ before `COMPANION_FLY_DEPOT=true`.
 - [Alchemy Postgres](../../infrastructure/README.md)
 - [Credential rotation F01](credential-rotation.md)
 - [Enzo live blockers](enzo-live-actions.md)
+
+## Companion entry and legacy isolation
+
+`app.tryzoen.com/` opens Companion. Signed-out visitors stay on the app host for
+sign-in. An account without a saved `agent/IDENTITY.md` goes to `/onboarding` to
+name its Companion and optionally connect Google, messengers or its vault.
+Finishing setup opens a new conversation. Connection consent returns to that
+same setup step; services can also be added later in Companion settings.
+
+The previous workspace interface remains in the `(authenticated)` route group
+and its saved shell. Its home is `/legacy`; the group returns 404 by default.
+`ZOEN_LEGACY_APP_ENABLED` is a validated server flag, defaulting to false. Keep
+it unset or false for Companion production. Enabling it is a deliberate future
+reactivation of the preserved interface, not part of current onboarding.

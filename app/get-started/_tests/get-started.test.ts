@@ -80,13 +80,11 @@ describe("conversation entry", () => {
       "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen"
     );
   });
-  it("sends every public start to the weekend iMessage draft", () => {
+  it("sends public app entry to Companion", () => {
     expect(() => {
       GetStartedPage();
     }).toThrow("redirect");
-    expect(redirect).toHaveBeenCalledWith(
-      "sms:+16282463032?&body=Set%20this%20up%20for%20me%3A%20aiworthusing.com%2Fagent-index%2Fzoen"
-    );
+    expect(redirect).toHaveBeenCalledWith("https://app.tryzoen.com/");
   });
   it("offers direct conversation links without a signup form or pricing page", () => {
     const html = renderToStaticMarkup(

@@ -3,6 +3,21 @@ import { googleWorkspaceReturnTo } from "./connection";
 
 describe("Google connection return destination", () => {
   it.each([
+    "/onboarding?step=connections&callbackUrl=%2F",
+    "/?compose=1",
+    "/companion/session-123?space=team-1",
+  ])("returns to Companion setup or the active conversation %s", (path) => {
+    expect(googleWorkspaceReturnTo(path)).toBe(path);
+  });
+  it.each([
+    "/companion/../vault",
+    "/companion/%2e%2e",
+    "/onboarding?next=https://other.example",
+    "//other.example/onboarding",
+  ])("rejects a return outside Companion %s", (path) => {
+    expect(googleWorkspaceReturnTo(path)).toBe("/");
+  });
+  it.each([
     "/chat/wrun_01M20W65G78HTMYSP8HKD2Y8VV",
     "/chat/session-123",
     "/chat/" + "a".repeat(256),
