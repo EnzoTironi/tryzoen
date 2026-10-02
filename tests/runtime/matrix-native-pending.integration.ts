@@ -133,7 +133,12 @@ async function matrixProxy() {
         receipt,
         release,
       };
-      return { received: receipt.promise, release: () => release.resolve() };
+      return {
+        received: receipt.promise,
+        release: () => {
+          release.resolve();
+        },
+      };
     },
     async nativeMembership(roomId: string, matrixId: string) {
       const response = await fetch(
@@ -151,7 +156,10 @@ async function matrixProxy() {
       Reflect.set(env, "ZOEN_MATRIX_URL", config.url);
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
       });
     },
   };
@@ -159,13 +167,12 @@ async function matrixProxy() {
 
 async function bounded<Value>(promise: Promise<Value>) {
   const expired = Promise.withResolvers<never>();
-  const timeout = setTimeout(
-    () => expired.reject(new Error("Matrix proof barrier timed out.")),
-    5000
-  );
-  return Promise.race([promise, expired.promise]).finally(() =>
-    clearTimeout(timeout)
-  );
+  const timeout = setTimeout(() => {
+    expired.reject(new Error("Matrix proof barrier timed out."));
+  }, 5000);
+  return Promise.race([promise, expired.promise]).finally(() => {
+    clearTimeout(timeout);
+  });
 }
 
 async function pendingParticipant(
