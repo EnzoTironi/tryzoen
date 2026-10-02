@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../tests/helpers/companion-i18n";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RecordingStatus } from "expo-audio";
 import { useAudioRecording } from "./audio-recording.native";

@@ -7,7 +7,7 @@ import {
   type ChatAgent,
 } from "@zoen/companion-ui/session";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function HistoryEdge({
   history,

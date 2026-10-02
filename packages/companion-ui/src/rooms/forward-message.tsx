@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import {
   useMemo,
   useEffect,
@@ -46,6 +48,7 @@ export function ForwardRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const flow = useMessageForward({ data, cacheScope, roomId, item });
@@ -55,7 +58,7 @@ export function ForwardRoomMessage({
   };
   return (
     <CompanionSheet
-      title="Encaminhar mensagem"
+      title={t("Encaminhar mensagem")}
       onClose={close}
       scrollable={false}
     >
@@ -63,9 +66,12 @@ export function ForwardRoomMessage({
         <View style={styles.confirmation}>
           <Check size={32} color={colors.accent} />
           <Text accessibilityRole="alert" style={styles.name}>
-            Enviada para {destination?.label}
+            <Translated
+              message="Enviada para {value1}"
+              values={{ value1: destination?.label }}
+            />
           </Text>
-          <ActionButton onPress={onClose}>Concluído</ActionButton>
+          <ActionButton onPress={onClose}>{t("Concluído")}</ActionButton>
         </View>
       ) : destination ? (
         <ForwardReview
@@ -92,13 +98,14 @@ function useMessageForward({
   roomId,
   item,
 }: Omit<ComponentProps<typeof ForwardRoomMessage>, "onClose">) {
+  const { t } = useI18n();
   const client = useQueryClient();
   const [preview, setPreview] = useState(item);
   const [destination, setDestination] = useState<z.infer<typeof roomSchema>>();
   const operation = useRef<{ intent: string; id: string } | null>(null);
   const send = useMutation({
     mutationFn: () => {
-      if (!destination) throw new Error("Escolha uma conversa");
+      if (!destination) throw new Error(t("Escolha uma conversa"));
       const revision = preview.editId ?? preview.id;
       const intent = JSON.stringify([destination.id, revision]);
       if (operation.current?.intent !== intent)
@@ -148,6 +155,7 @@ function ForwardReview({
 > & {
   readonly flow: ReturnType<typeof useMessageForward>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { preview, destination, send } = flow;
@@ -160,7 +168,7 @@ function ForwardReview({
           group={destination?.kind === "group"}
         />
         <View style={styles.identity}>
-          <Text style={styles.detail}>Para</Text>
+          <Text style={styles.detail}>{t("Para")}</Text>
           <Text style={styles.name}>{destination?.label ?? ""}</Text>
         </View>
       </View>
@@ -168,7 +176,7 @@ function ForwardReview({
         style={styles.preview}
         contentContainerStyle={styles.previewContent}
       >
-        <Text style={styles.detail}>Encaminhada</Text>
+        <Text style={styles.detail}>{t("Encaminhada")}</Text>
         {preview.media ? (
           <RoomAttachment
             item={preview}
@@ -181,20 +189,23 @@ function ForwardReview({
         )}
       </ScrollView>
       <Text style={styles.detail}>
-        Uma cópia será compartilhada nesta conversa. Alterações no original não
-        atualizam a cópia.
+        {t(
+          "Uma cópia será compartilhada nesta conversa. Alterações no original não atualizam a cópia."
+        )}
       </Text>
       {send.isError && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Não foi possível confirmar o envio. Seu destino foi mantido; tente
-          novamente.
+          {t(
+            "Não foi possível confirmar o envio. Seu destino foi mantido; tente novamente."
+          )}
         </Text>
       )}
       {send.data?.status === "changed" && (
         <>
           <Text accessibilityRole="alert" style={styles.error}>
-            O original mudou. Confira o destino antes de encaminhar uma nova
-            versão.
+            {t(
+              "O original mudou. Confira o destino antes de encaminhar uma nova versão."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -202,7 +213,7 @@ function ForwardReview({
               flow.reviewCurrent();
             }}
           >
-            Revisar versão atual
+            {t("Revisar versão atual")}
           </ActionButton>
         </>
       )}
@@ -212,7 +223,7 @@ function ForwardReview({
           send.mutate();
         }}
       >
-        {send.isPending ? "Enviando…" : "Encaminhar mensagem"}
+        {send.isPending ? t("Enviando…") : t("Encaminhar mensagem")}
       </ActionButton>
       <ActionButton
         quiet
@@ -221,7 +232,7 @@ function ForwardReview({
           flow.choose(undefined);
         }}
       >
-        Alterar destino
+        {t("Alterar destino")}
       </ActionButton>
     </>
   );
@@ -238,6 +249,7 @@ function ForwardDestinations({
   readonly roomId: string;
   readonly onSelect: (room: z.infer<typeof roomSchema>) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState("");
@@ -282,8 +294,8 @@ function ForwardDestinations({
       <View style={styles.search}>
         <Search size={18} color={colors.muted} />
         <TextInput
-          accessibilityLabel="Buscar destino"
-          placeholder="Nome ou username"
+          accessibilityLabel={t("Buscar destino")}
+          placeholder={t("Nome ou username")}
           value={text}
           onChangeText={setText}
           maxLength={80}
@@ -291,7 +303,9 @@ function ForwardDestinations({
           autoCorrect={false}
         />
       </View>
-      <Text style={styles.detail}>Escolha uma conversa deste espaço.</Text>
+      <Text style={styles.detail}>
+        {t("Escolha uma conversa deste espaço.")}
+      </Text>
       <FlatList
         style={styles.list}
         data={items}
@@ -305,7 +319,9 @@ function ForwardDestinations({
         renderItem={({ item: room }) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Encaminhar para ${room.label}`}
+            accessibilityLabel={t("Encaminhar para {value1}", {
+              value1: room.label,
+            })}
             onPress={() => {
               onSelect(room);
             }}
@@ -325,29 +341,31 @@ function ForwardDestinations({
               </Text>
               <Text style={styles.detail}>
                 {room.kind === "group"
-                  ? "Grupo"
+                  ? t("Grupo")
                   : room.username
                     ? `@${room.username}`
-                    : "Conversa privada"}
+                    : t("Conversa privada")}
               </Text>
             </View>
           </Pressable>
         )}
         ListEmptyComponent={
           !results.isPending && !results.isError && text.trim() === query ? (
-            <Text style={styles.detail}>Nenhuma conversa encontrada.</Text>
+            <Text style={styles.detail}>
+              {t("Nenhuma conversa encontrada.")}
+            </Text>
           ) : null
         }
         ListFooterComponent={
           results.isFetching || text.trim() !== query ? (
-            <ActivityIndicator accessibilityLabel="Carregando destinos" />
+            <ActivityIndicator accessibilityLabel={t("Carregando destinos")} />
           ) : null
         }
       />
       {results.isError && (
         <>
           <Text accessibilityRole="alert" style={styles.error}>
-            Não foi possível carregar as conversas.
+            {t("Não foi possível carregar as conversas.")}
           </Text>
           <ActionButton
             quiet
@@ -355,7 +373,7 @@ function ForwardDestinations({
               void results.refetch();
             }}
           >
-            Tentar novamente
+            {t("Tentar novamente")}
           </ActionButton>
         </>
       )}

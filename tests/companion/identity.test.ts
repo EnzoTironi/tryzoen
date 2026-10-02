@@ -1,3 +1,4 @@
+import { catalogs, createTranslator } from "@zoen/companion-ui/i18n";
 import { expect, it, vi } from "vitest";
 import { companionAgentData } from "@shared/companion/agent-data";
 import { agentFiles } from "@shared/workspaces/agent-files";
@@ -19,10 +20,15 @@ it("shows missing documents as unsaved templates and keeps stored content intact
       }),
     mutation: vi.fn<Parameters<typeof companionAgentData>[0]["mutation"]>(),
   };
-  const data = companionAgentData(rpc, () => "operation", {
-    backup: vi.fn<() => Promise<void>>(),
-    inspect: vi.fn<() => Promise<null>>(),
-  });
+  const data = companionAgentData(
+    rpc,
+    () => "operation",
+    {
+      backup: vi.fn<() => Promise<void>>(),
+      inspect: vi.fn<() => Promise<null>>(),
+    },
+    { locale: "en", t: createTranslator(catalogs.en) }
+  );
   const identity = await data.identity();
   expect(rpc.query).toHaveBeenCalledWith("companion.identity");
   expect(identity.name).toBe("Reader");
@@ -45,10 +51,15 @@ it("preserves the revision and operation ID on save and propagates conflicts", a
       .fn<Parameters<typeof companionAgentData>[0]["mutation"]>()
       .mockRejectedValue(new Error("This file changed.")),
   };
-  const data = companionAgentData(rpc, () => "same-operation", {
-    backup: vi.fn<() => Promise<void>>(),
-    inspect: vi.fn<() => Promise<null>>(),
-  });
+  const data = companionAgentData(
+    rpc,
+    () => "same-operation",
+    {
+      backup: vi.fn<() => Promise<void>>(),
+      inspect: vi.fn<() => Promise<null>>(),
+    },
+    { locale: "en", t: createTranslator(catalogs.en) }
+  );
   const draft = {
     path: "agent/SOUL.md",
     content: "Be clear.",

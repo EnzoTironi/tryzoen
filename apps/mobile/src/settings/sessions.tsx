@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "@zoen/companion-ui/i18n";
+
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -5,6 +7,7 @@ import { ActionButton } from "@zoen/companion-ui";
 import { auth } from "../auth";
 
 function useSessionList() {
+  const { t } = useI18n();
   const account = auth.useSession();
   const userId = account.data?.user.id;
   const currentId = account.data?.session.id;
@@ -14,7 +17,7 @@ function useSessionList() {
     queryFn: async () => {
       const result = await auth.listSessions();
       if (result.error)
-        throw new Error("Could not load signed-in sessions.", {
+        throw new Error(t("Could not load signed-in sessions."), {
           cause: result.error.code,
         });
       return result.data;
@@ -32,10 +35,12 @@ function useSessionList() {
         id === currentId ||
         !target
       )
-        throw new Error("Refresh your signed-in sessions before trying again.");
+        throw new Error(
+          t("Refresh your signed-in sessions before trying again.")
+        );
       const result = await auth.revokeSession({ token: target.token });
       if (result.error)
-        throw new Error("Could not sign out this session.", {
+        throw new Error(t("Could not sign out this session."), {
           cause: result.error.code,
         });
     },
@@ -47,12 +52,14 @@ function useSessionList() {
 }
 
 export function SignedInSessions() {
+  const { t } = useI18n();
   const state = useSessionList();
   return (
     <View style={styles.content}>
       <Text style={styles.description}>
-        These are your signed-in apps and browsers. Device control requires
-        separate permission.
+        {t(
+          "These are your signed-in apps and browsers. Device control requires separate permission."
+        )}
       </Text>
       <SessionList state={state} />
     </View>
@@ -64,12 +71,17 @@ function SessionList({
 }: {
   readonly state: ReturnType<typeof useSessionList>;
 }) {
+  const { t } = useI18n();
   const { account, userId, currentId, sessions, revoke } = state;
   if (account.isPending)
-    return <Text accessibilityLiveRegion="polite">Loading your account…</Text>;
+    return (
+      <Text accessibilityLiveRegion="polite">{t("Loading your account…")}</Text>
+    );
   if (!userId || !currentId)
     return (
-      <Text accessibilityRole="alert">Sign in to review your sessions.</Text>
+      <Text accessibilityRole="alert">
+        {t("Sign in to review your sessions.")}
+      </Text>
     );
   if (
     sessions.error?.cause === "SESSION_NOT_FRESH" ||
@@ -80,20 +92,23 @@ function SessionList({
     return (
       <View style={styles.content}>
         <Text accessibilityRole="alert">
-          Could not load signed-in sessions. Check your connection and try
-          again.
+          {t(
+            "Could not load signed-in sessions. Check your connection and try again."
+          )}
         </Text>
         <ActionButton onPress={() => void sessions.refetch()}>
-          Try again
+          {t("Try again")}
         </ActionButton>
       </View>
     );
   if (sessions.isPending)
-    return <Text accessibilityLiveRegion="polite">Loading sessions…</Text>;
+    return (
+      <Text accessibilityLiveRegion="polite">{t("Loading sessions…")}</Text>
+    );
   return (
     <>
       {sessions.data.length === 0 && (
-        <Text>No signed-in sessions found. Refresh to check again.</Text>
+        <Text>{t("No signed-in sessions found. Refresh to check again.")}</Text>
       )}
       {sessions.data.map((session) => (
         <SessionEntry
@@ -105,7 +120,7 @@ function SessionList({
       ))}
       {revoke.isError && (
         <Text accessibilityRole="alert">
-          Could not sign out this session. Refresh and try again.
+          {t("Could not sign out this session. Refresh and try again.")}
         </Text>
       )}
       <ActionButton
@@ -113,7 +128,7 @@ function SessionList({
         disabled={sessions.isFetching || revoke.isPending}
         onPress={() => void sessions.refetch()}
       >
-        {sessions.isFetching ? "Refreshing…" : "Refresh sessions"}
+        {sessions.isFetching ? t("Refreshing…") : t("Refresh sessions")}
       </ActionButton>
     </>
   );
@@ -124,6 +139,7 @@ function SessionReauthentication({
 }: {
   readonly onRefreshed: () => Promise<unknown>;
 }) {
+  const { t } = useI18n();
   const account = auth.useSession();
   const signIn = useMutation({
     mutationFn: async () => {
@@ -133,15 +149,16 @@ function SessionReauthentication({
         loginHint: account.data?.user.email,
       });
       if (result.error)
-        throw new Error("Sign-in could not be completed. Try again.");
+        throw new Error(t("Sign-in could not be completed. Try again."));
       await onRefreshed();
     },
   });
   return (
     <View style={styles.content}>
       <Text accessibilityRole="alert">
-        For your security, sign in again to manage your signed-in sessions. Your
-        current login stays active if you cancel.
+        {t(
+          "For your security, sign in again to manage your signed-in sessions. Your current login stays active if you cancel."
+        )}
       </Text>
       <ActionButton
         disabled={signIn.isPending}
@@ -149,11 +166,11 @@ function SessionReauthentication({
           signIn.mutate();
         }}
       >
-        {signIn.isPending ? "Signing in…" : "Sign in again with Google"}
+        {signIn.isPending ? t("Signing in…") : t("Sign in again with Google")}
       </ActionButton>
       {signIn.isError && (
         <Text accessibilityRole="alert">
-          Sign-in could not be completed. Try again.
+          {t("Sign-in could not be completed. Try again.")}
         </Text>
       )}
     </View>
@@ -171,29 +188,35 @@ function SessionEntry({
   readonly current: boolean;
   readonly revoke: ReturnType<typeof useSessionList>["revoke"];
 }) {
+  const { t, locale } = useI18n();
   const [confirming, setConfirming] = useState(false);
   return (
     <View style={styles.card}>
       <Text accessibilityRole="header" style={styles.title}>
-        {current ? "This device" : "App or browser"}
+        {current ? t("This device") : t("App or browser")}
       </Text>
       <Text style={styles.description}>
-        {session.userAgent ?? "Unknown device"}
+        {session.userAgent ?? t("Unknown device")}
       </Text>
       <Text style={styles.description}>
-        Session updated: {new Date(session.updatedAt).toLocaleString()}
+        <Translated
+          message="Session updated: {value1}"
+          values={{
+            value1: new Date(session.updatedAt).toLocaleString(locale),
+          }}
+        />
       </Text>
       {!current &&
         (confirming ? (
           <>
-            <Text>This app or browser will need to sign in again.</Text>
+            <Text>{t("This app or browser will need to sign in again.")}</Text>
             <ActionButton
               disabled={revoke.isPending}
               onPress={() => {
                 revoke.mutate(session.id);
               }}
             >
-              {revoke.isPending ? "Signing out…" : "Confirm sign out"}
+              {revoke.isPending ? t("Signing out…") : t("Confirm sign out")}
             </ActionButton>
             <ActionButton
               quiet
@@ -203,7 +226,7 @@ function SessionEntry({
                 revoke.reset();
               }}
             >
-              Cancel
+              {t("Cancel")}
             </ActionButton>
           </>
         ) : (
@@ -215,7 +238,7 @@ function SessionEntry({
               setConfirming(true);
             }}
           >
-            Sign out this session
+            {t("Sign out this session")}
           </ActionButton>
         ))}
     </View>

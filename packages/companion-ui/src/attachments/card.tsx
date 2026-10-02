@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import {
   Image,
@@ -17,6 +18,7 @@ import { ResourceCard } from "../cards/resource";
 import { CompanionSheet } from "../sheet";
 
 export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const attachments = useAttachments();
@@ -38,7 +40,7 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
     valid && attachments ? (
       <IconButton
         icon={Download}
-        label={`Save ${file.filename ?? "attachment"}`}
+        label={t("Save {value1}", { value1: file.filename ?? t("attachment") })}
         disabled={saving}
         onPress={() => {
           setSaving(true);
@@ -67,14 +69,16 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
             {preview ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Ampliar ${file.filename ?? "imagem"}`}
+                accessibilityLabel={t("Ampliar {value1}", {
+                  value1: file.filename ?? t("imagem"),
+                })}
                 onPress={() => {
                   setExpanded(true);
                 }}
               >
                 <Image
                   source={{ uri: file.url }}
-                  accessibilityLabel={file.filename ?? "Attached image"}
+                  accessibilityLabel={file.filename ?? t("Attached image")}
                   style={{ width: "100%", aspectRatio: ratio }}
                   resizeMode="contain"
                   onLoad={(event) => {
@@ -104,11 +108,11 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
         </View>
       ) : (
         <ResourceCard
-          title={file.filename ?? "Attachment"}
+          title={file.filename ?? t("Attachment")}
           detail={
             file.mediaType === "application/pdf"
-              ? "PDF"
-              : (file.filename?.split(".").pop()?.toUpperCase() ?? "Arquivo")
+              ? t("PDF")
+              : (file.filename?.split(".").pop()?.toUpperCase() ?? t("Arquivo"))
           }
           icon={FileText}
           tint={file.mediaType === "application/pdf" ? "#e64063" : "#4e87d8"}
@@ -117,19 +121,19 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
       )}
       {failed && (
         <Text accessibilityRole="alert" style={styles.error}>
-          The file couldn’t be saved. Try again.
+          {t("The file couldn’t be saved. Try again.")}
         </Text>
       )}
       {expanded && (
         <CompanionSheet
-          title={file.filename ?? "Imagem"}
+          title={file.filename ?? t("Imagem")}
           onClose={() => {
             setExpanded(false);
           }}
         >
           <Image
             source={{ uri: file.url }}
-            accessibilityLabel={file.filename ?? "Imagem"}
+            accessibilityLabel={file.filename ?? t("Imagem")}
             style={styles.expanded}
             resizeMode="contain"
           />

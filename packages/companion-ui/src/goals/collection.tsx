@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState, type ComponentProps } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -54,6 +55,7 @@ export function GoalCollection({
   readonly cacheScope: string;
   readonly onPrompt: (prompt: string) => void;
 }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string>();
   const [actions, setActions] = useState<string>();
   const queryClient = useQueryClient();
@@ -122,7 +124,10 @@ export function GoalCollection({
         }}
         onCreate={(category) => {
           onPrompt(
-            `Help me create a goal in ${category}. Ask what I want to achieve and save the agreed goal as a workstream. Confirm any schedule separately before enabling it.`
+            t(
+              "Help me create a goal in {value1}. Ask what I want to achieve and save the agreed goal as a workstream. Confirm any schedule separately before enabling it.",
+              { value1: category }
+            )
           );
         }}
       />

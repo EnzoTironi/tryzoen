@@ -1,3 +1,4 @@
+import { useI18n, Translated } from "./../i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Text, Pressable } from "react-native";
@@ -13,6 +14,7 @@ export function ClearUnavailableSaved({
   readonly data: RoomData;
   readonly cacheScope: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const [open, setOpen] = useState(false);
   const client = useQueryClient();
@@ -24,7 +26,8 @@ export function ClearUnavailableSaved({
   });
   const clear = useMutation({
     mutationFn: async () => {
-      if (!state.data || state.isError) throw new Error("Estado indisponível");
+      if (!state.data || state.isError)
+        throw new Error(t("Estado indisponível"));
       return data.clearUnavailableSavedMessages({
         revision: state.data.revision,
       });
@@ -57,28 +60,37 @@ export function ClearUnavailableSaved({
         <Text
           style={{ fontFamily: systemFont, color: colors.muted, fontSize: 13 }}
         >
-          Limpar referências sem acesso
+          {t("Limpar referências sem acesso")}
         </Text>
       </Pressable>
       {open && (
         <CompanionSheet
-          title="Limpar referências sem acesso?"
+          title={t("Limpar referências sem acesso?")}
           onClose={() => {
             if (!clear.isPending) setOpen(false);
           }}
         >
           <Text>
-            {state.data && !state.isError
-              ? `${state.data.count} referências sem acesso serão removidas das suas mensagens salvas, incluindo espaços dos quais você saiu.`
-              : "Conferindo acesso às referências…"}{" "}
-            As mensagens originais não serão alteradas.
+            <Translated
+              message="{value1} As mensagens originais não serão alteradas."
+              values={{
+                value1:
+                  state.data && !state.isError
+                    ? t(
+                        "{value1} referências sem acesso serão removidas das suas mensagens salvas, incluindo espaços dos quais você saiu.",
+                        { value1: state.data.count }
+                      )
+                    : t("Conferindo acesso às referências…"),
+              }}
+            />
           </Text>
           {(state.isError ||
             clear.isError ||
             clear.data?.status === "conflict") && (
             <Text accessibilityRole="alert">
-              Não foi possível concluir ou a lista mudou. Atualize antes de
-              tentar novamente.
+              {t(
+                "Não foi possível concluir ou a lista mudou. Atualize antes de tentar novamente."
+              )}
             </Text>
           )}
           <ActionButton
@@ -87,7 +99,7 @@ export function ClearUnavailableSaved({
               void state.refetch();
             }}
           >
-            Atualizar contagem
+            {t("Atualizar contagem")}
           </ActionButton>
           <ActionButton
             disabled={
@@ -100,7 +112,7 @@ export function ClearUnavailableSaved({
               clear.mutate();
             }}
           >
-            Remover referências sem acesso
+            {t("Remover referências sem acesso")}
           </ActionButton>
           <ActionButton
             quiet
@@ -109,7 +121,7 @@ export function ClearUnavailableSaved({
               setOpen(false);
             }}
           >
-            Cancelar
+            {t("Cancelar")}
           </ActionButton>
         </CompanionSheet>
       )}

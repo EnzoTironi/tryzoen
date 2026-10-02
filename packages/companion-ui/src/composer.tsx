@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import {
   AudioMessageRecorder,
   type AudioRecorderHandle,
@@ -56,8 +57,8 @@ export function Composer({
   selectedFiles,
   onFilesChange,
   maxLength = 10000,
-  label = "Message Zoen",
-  placeholder = "Message",
+  label,
+  placeholder,
 }: {
   readonly onSend: (message: ConversationDraft) => Promise<void>;
   readonly onCancel?: () => void;
@@ -78,6 +79,7 @@ export function Composer({
   readonly placeholder?: string;
   readonly onDraftChange?: (draft: ConversationDraft) => void;
 }) {
+  const { t, errorText } = useI18n();
   const colors = useColors();
   const preferences = useAccessibilityPreferences();
   const increasedContrast =
@@ -193,8 +195,8 @@ export function Composer({
     } catch (cause) {
       setError(
         cause instanceof Error
-          ? cause.message
-          : "The files could not be opened. Try again."
+          ? errorText(cause.message)
+          : t("The files could not be opened. Try again.")
       );
     } finally {
       setPicking(false);
@@ -211,7 +213,7 @@ export function Composer({
         input.current?.read ? await input.current.read() : draft
       ).trim();
       if (!submitted && submittedFiles.length === 0) return;
-      if (submitted.length > maxLength) throw new Error("Message too long");
+      if (submitted.length > maxLength) throw new Error(t("Message too long"));
       await onSend({
         text: submitted,
         files: submittedFiles.map(({ file }) => file),
@@ -225,7 +227,9 @@ export function Composer({
       );
     } catch {
       setError(
-        "Your message couldn’t be sent. Your draft is still here — try again."
+        t(
+          "Your message couldn’t be sent. Your draft is still here — try again."
+        )
       );
     } finally {
       inFlight.current = false;
@@ -274,7 +278,7 @@ export function Composer({
         {(Boolean(pick) || sheet.source) && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Adicionar à mensagem"
+            accessibilityLabel={t("Adicionar à mensagem")}
             disabled={disabled || sending || picking || recording}
             onPress={sheet.open}
             style={({ pressed }) => [
@@ -292,7 +296,7 @@ export function Composer({
         )}
         {picking && (
           <ActivityIndicator
-            accessibilityLabel="Reading attachments"
+            accessibilityLabel={t("Reading attachments")}
             color={colors.muted}
           />
         )}
@@ -301,8 +305,8 @@ export function Composer({
             <editorAdapter.Input
               ref={input}
               value={draft}
-              label={label}
-              placeholder={placeholder}
+              label={label ?? t("Message Zoen")}
+              placeholder={placeholder ?? t("Message")}
               disabled={disabled || recording}
               maxLength={maxLength}
               onChange={sheet.changeText}
@@ -315,8 +319,8 @@ export function Composer({
             />
           ) : (
             <TextInput
-              accessibilityLabel={label}
-              placeholder={placeholder}
+              accessibilityLabel={label ?? t("Message Zoen")}
+              placeholder={placeholder ?? t("Message")}
               placeholderTextColor={
                 increasedContrast || !opaque ? colors.ink : colors.muted
               }
@@ -369,7 +373,7 @@ export function Composer({
               files.length === 0 && (
                 <IconButton
                   icon={Mic}
-                  label="Record voice message"
+                  label={t("Record voice message")}
                   disabled={disabled || sending || picking || recording}
                   onPress={() => {
                     audioRecorder.current?.start();
@@ -380,7 +384,7 @@ export function Composer({
             {busy && onCancel && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Stop response"
+                accessibilityLabel={t("Stop response")}
                 hitSlop={6}
                 onPress={onCancel}
                 style={styles.stop}
@@ -391,7 +395,7 @@ export function Composer({
             {(Boolean(draft.trim()) || files.length > 0 || sending) && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Send message"
+                accessibilityLabel={t("Send message")}
                 hitSlop={6}
                 accessibilityState={{ disabled: !canSend, busy: sending }}
                 aria-disabled={!canSend}
@@ -418,7 +422,9 @@ export function Composer({
       {(Boolean(error) || sendStatus === "failed") && (
         <Text accessibilityRole="alert" style={styles.error}>
           {error ??
-            "Your message couldn’t be sent. Your draft is still here — try again."}
+            t(
+              "Your message couldn’t be sent. Your draft is still here — try again."
+            )}
         </Text>
       )}
     </View>
@@ -434,6 +440,7 @@ function AttachmentStrip({
   readonly disabled: boolean;
   readonly onRemove: (key: number) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const renderMedia = useAttachments()?.renderMedia;
@@ -448,13 +455,15 @@ function AttachmentStrip({
             <>
               <FileText size={20} color={colors.muted} />
               <Text style={styles.attachmentName} numberOfLines={1}>
-                {file.filename ?? "Attachment"}
+                {file.filename ?? t("Attachment")}
               </Text>
             </>
           )}
           <IconButton
             icon={X}
-            label={`Remove ${file.filename ?? "attachment"}`}
+            label={t("Remove {value1}", {
+              value1: file.filename ?? t("attachment"),
+            })}
             disabled={disabled}
             onPress={() => {
               onRemove(key);
@@ -474,6 +483,7 @@ function ReplyPreview({
   ComponentProps<typeof Composer>,
   "reply" | "disabled" | "onRemoveReply"
 >) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   if (!reply) return null;
@@ -482,8 +492,12 @@ function ReplyPreview({
       <View style={styles.quoteText}>
         <Text style={styles.quoteAuthor}>
           {reply.id.startsWith("feed:")
-            ? "Discussing a Feed post"
-            : `Replying to ${reply.sender ?? (reply.role === "user" ? "you" : "Zoen")}`}
+            ? t("Discussing a Feed post")
+            : t("Replying to {value1}", {
+                value1:
+                  reply.sender ??
+                  (reply.role === "user" ? t("you") : t("Zoen")),
+              })}
         </Text>
         <Text numberOfLines={3} style={styles.quoteExcerpt}>
           {reply.text}
@@ -491,7 +505,7 @@ function ReplyPreview({
       </View>
       <IconButton
         icon={X}
-        label="Remove reply"
+        label={t("Remove reply")}
         disabled={disabled}
         onPress={() => onRemoveReply?.()}
       />

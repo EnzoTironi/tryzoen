@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useRef, useState } from "react";
 import { AtSignIcon, KeyRoundIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import {
@@ -20,7 +20,7 @@ import panel from "../../_components/panel.module.css";
 import styles from "../space.module.css";
 
 export default function WorkspaceBotPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const state = api.workspaces.bot.read.useQuery();
   const members = api.workspaces.members.list.useInfiniteQuery(
     { limit: 50 },
@@ -343,7 +343,7 @@ export default function WorkspaceBotPage() {
                   <small>
                     {t(grant.revokedAt ? "Revogado" : "Expira em")}{" "}
                     {!grant.revokedAt &&
-                      new Date(grant.expiresAt).toLocaleDateString()}
+                      new Date(grant.expiresAt).toLocaleDateString(locale)}
                   </small>
                 </span>
                 {!grant.revokedAt && (

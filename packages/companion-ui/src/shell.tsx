@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import type { ComponentProps, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
@@ -92,6 +93,7 @@ export function CompanionShell({
   ComponentProps<typeof ConversationNavigation>,
   "renderConversations"
 >) {
+  const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -115,15 +117,15 @@ export function CompanionShell({
         {!compact && (
           <View
             testID="global-navigation"
-            accessibilityLabel="Navegação do Zoen"
+            accessibilityLabel={t("Navegação do Zoen")}
             style={[styles.rail, expanded && styles.expandedRail]}
           >
             <View style={styles.railHeader}>
-              {expanded && <Text style={styles.brand}>Zoen</Text>}
+              {expanded && <Text style={styles.brand}>{t("Zoen")}</Text>}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={
-                  expanded ? "Recolher navegação" : "Expandir navegação"
+                  expanded ? t("Recolher navegação") : t("Expandir navegação")
                 }
                 aria-expanded={expanded}
                 onPress={() => {
@@ -135,7 +137,7 @@ export function CompanionShell({
               </Pressable>
             </View>
             <NavigationItem
-              label="Nova conversa com Zoen"
+              label={t("Nova conversa com Zoen")}
               icon={SquarePen}
               expanded={expanded}
               onPress={onNewConversation}
@@ -150,7 +152,7 @@ export function CompanionShell({
                 .map(({ id, label, icon }) => (
                   <NavigationItem
                     key={id}
-                    label={label}
+                    label={t(label)}
                     icon={icon}
                     expanded={expanded}
                     selected={id === section}
@@ -161,7 +163,7 @@ export function CompanionShell({
                 ))}
             </ScrollView>
             <NavigationItem
-              label="Ajustes"
+              label={t("Ajustes")}
               icon={Settings}
               expanded={expanded}
               selected={section === "settings"}
@@ -212,7 +214,7 @@ export function CompanionShell({
                     <View style={styles.sectionHeader}>
                       <IconButton
                         icon={ChevronLeft}
-                        label="Voltar às conversas"
+                        label={t("Voltar às conversas")}
                         onPress={() => {
                           onShowInbox?.();
                           onNavigate("chat");
@@ -222,11 +224,14 @@ export function CompanionShell({
                         accessibilityRole="header"
                         style={styles.sectionTitle}
                       >
-                        {sections.find(({ id }) => id === section)?.label}
+                        {t(
+                          sections.find(({ id }) => id === section)?.label ??
+                            "Conversas"
+                        )}
                       </Text>
                       <IconButton
                         icon={Menu}
-                        label="Menu do Zoen"
+                        label={t("Menu do Zoen")}
                         onPress={openMenu}
                       />
                     </View>
@@ -249,7 +254,7 @@ export function CompanionShell({
           {compact && !(section === "chat" && conversationOpen) && (
             <View
               testID="mobile-navigation"
-              accessibilityLabel="Navegação do Zoen"
+              accessibilityLabel={t("Navegação do Zoen")}
               style={styles.bottomNavigation}
             >
               {sections
@@ -259,7 +264,7 @@ export function CompanionShell({
                 .map(({ id, label, icon }) => (
                   <NavigationItem
                     key={id}
-                    label={label}
+                    label={t(label)}
                     icon={icon}
                     mobile
                     selected={id === section}
@@ -269,7 +274,7 @@ export function CompanionShell({
                   />
                 ))}
               <NavigationItem
-                label="Mais"
+                label={t("Mais")}
                 icon={Menu}
                 mobile
                 selected={
@@ -283,7 +288,7 @@ export function CompanionShell({
       </View>
       {showMenu && (
         <CompanionSheet
-          title="Zoen"
+          title={t("Zoen")}
           onClose={() => {
             setShowMenu(false);
           }}
@@ -298,7 +303,7 @@ export function CompanionShell({
               style={styles.menuRow}
             >
               <SquarePen size={21} color={colors.accent} />
-              <Text style={styles.menuText}>Nova conversa com Zoen</Text>
+              <Text style={styles.menuText}>{t("Nova conversa com Zoen")}</Text>
             </Pressable>
             {sections.map(({ id, label, icon: Icon }) => (
               <Pressable
@@ -315,7 +320,7 @@ export function CompanionShell({
                   size={21}
                   color={id === section ? colors.accent : colors.ink}
                 />
-                <Text style={styles.menuText}>{label}</Text>
+                <Text style={styles.menuText}>{t(label)}</Text>
               </Pressable>
             ))}
           </View>
@@ -414,6 +419,7 @@ function CompanionHeader({
   readonly onOpenConversations: () => void;
   readonly onOpenMenu: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const preferences = useAccessibilityPreferences();
   const increasedContrast =
@@ -441,13 +447,13 @@ function CompanionHeader({
           {compact && canGoBack ? (
             <IconButton
               icon={ChevronLeft}
-              label="Voltar às conversas"
+              label={t("Voltar às conversas")}
               onPress={onOpenConversations}
             />
           ) : (
             <IconButton
               icon={compact ? Menu : SquarePen}
-              label={compact ? "Menu do Zoen" : "Nova conversa com Zoen"}
+              label={compact ? t("Menu do Zoen") : t("Nova conversa com Zoen")}
               onPress={compact ? onOpenMenu : onNewConversation}
             />
           )}
@@ -456,7 +462,7 @@ function CompanionHeader({
       <Pressable
         accessibilityRole={onOpenAgent ? "button" : undefined}
         accessibilityLabel={
-          onOpenAgent ? "Atividade e memória do Zoen" : undefined
+          onOpenAgent ? t("Atividade e memória do Zoen") : undefined
         }
         disabled={!onOpenAgent}
         onPress={onOpenAgent}
@@ -483,7 +489,7 @@ function CompanionHeader({
           <View style={styles.headerControl}>
             <IconButton
               icon={Info}
-              label="Detalhes da conversa"
+              label={t("Detalhes da conversa")}
               onPress={onOpenAgent}
             />
           </View>

@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
@@ -30,6 +32,7 @@ export function LearnedClaimConflictReview({
   readonly onReviewed: (draft: LearnedClaimEdit) => void;
   readonly onBack: () => void;
 }) {
+  const { t } = useI18n();
   const styles = usePageStyles();
   const claim = current.snapshot.claims.find(
     (item) => item.file.id === draft.claimId
@@ -38,23 +41,24 @@ export function LearnedClaimConflictReview({
     (draft.action === "assert" && !claim) ||
     claim?.file.state.kind === "active";
   return (
-    <CompanionSheet title="Review the newer memory" onClose={onBack}>
+    <CompanionSheet title={t("Review the newer memory")} onClose={onBack}>
       <View style={{ gap: 16 }}>
         <Text accessibilityRole="alert" style={styles.copy}>
-          Someone changed this memory while you were editing. Your draft has
-          been kept and has not overwritten that change.
+          {t(
+            "Someone changed this memory while you were editing. Your draft has been kept and has not overwritten that change."
+          )}
         </Text>
         <Text accessibilityRole="header" style={styles.heading}>
-          Your draft
+          {t("Your draft")}
         </Text>
         <Text selectable style={styles.copy}>
           {draft.body.text}
         </Text>
         {edited === "relations" && (
           <>
-            <Text style={styles.rowTitle}>Draft relationships</Text>
+            <Text style={styles.rowTitle}>{t("Draft relationships")}</Text>
             {!draft.body.relations.length && (
-              <Text style={styles.copy}>No relationships.</Text>
+              <Text style={styles.copy}>{t("No relationships.")}</Text>
             )}
             {draft.body.relations.map((relation) => (
               <Text
@@ -68,7 +72,7 @@ export function LearnedClaimConflictReview({
           </>
         )}
         <Text accessibilityRole="header" style={styles.heading}>
-          Current saved memory
+          {t("Current saved memory")}
         </Text>
         {claim?.file.state.kind === "active" ? (
           <>
@@ -77,9 +81,11 @@ export function LearnedClaimConflictReview({
             </Text>
             {edited === "relations" && (
               <>
-                <Text style={styles.rowTitle}>Current relationships</Text>
+                <Text style={styles.rowTitle}>
+                  {t("Current relationships")}
+                </Text>
                 {!claim.file.state.body.relations.length && (
-                  <Text style={styles.copy}>No relationships.</Text>
+                  <Text style={styles.copy}>{t("No relationships.")}</Text>
                 )}
                 {claim.file.state.body.relations.map((relation) => (
                   <Text
@@ -97,26 +103,34 @@ export function LearnedClaimConflictReview({
         ) : (
           <Text style={styles.copy}>
             {draft.action === "assert"
-              ? "Other changes advanced the workspace memory revision."
-              : "This memory was removed. A stale draft cannot restore it."}
+              ? t("Other changes advanced the workspace memory revision.")
+              : t("This memory was removed. A stale draft cannot restore it.")}
           </Text>
         )}
         <Text selectable style={styles.copy}>
-          Current head: {current.snapshot.revision ?? "empty memory"}
+          <Translated
+            message="Current head: {value1}"
+            values={{ value1: current.snapshot.revision ?? t("empty memory") }}
+          />
         </Text>
         {mayReview && (
           <>
             {draft.action === "assert" &&
               claim?.file.state.kind === "active" && (
                 <Text style={styles.copy}>
-                  This claim identity is already saved. Continuing after review
-                  makes a correction of this saved claim, not another assertion.
+                  {t(
+                    "This claim identity is already saved. Continuing after review makes a correction of this saved claim, not another assertion."
+                  )}
                 </Text>
               )}
             <Text style={styles.copy}>
               {edited === "text"
-                ? "After review, keep your draft text with the current saved evidence, dates and relationships."
-                : "After review, apply your drafted relationships while preserving the current text, evidence and dates."}
+                ? t(
+                    "After review, keep your draft text with the current saved evidence, dates and relationships."
+                  )
+                : t(
+                    "After review, apply your drafted relationships while preserving the current text, evidence and dates."
+                  )}
             </Text>
             <ActionButton
               onPress={() => {
@@ -125,12 +139,12 @@ export function LearnedClaimConflictReview({
                 );
               }}
             >
-              Use this reviewed revision
+              {t("Use this reviewed revision")}
             </ActionButton>
           </>
         )}
         <ActionButton quiet onPress={onBack}>
-          Keep editing the original draft
+          {t("Keep editing the original draft")}
         </ActionButton>
       </View>
     </CompanionSheet>
@@ -148,6 +162,7 @@ export function LearnedClaimEditor({
   readonly onSaved: () => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(initialDraft);
   const [review, setReview] =
     useState<z.output<typeof LearnedClaimReadSchema>>();
@@ -172,16 +187,18 @@ export function LearnedClaimEditor({
   return (
     <DocumentEditor
       markdown
-      title="Learned memory.md"
-      label="Learned memory"
-      description="Edit the text. Saved evidence, world-valid dates and relationships are preserved. New notes have no cited evidence and unknown world-valid dates."
+      title={t("Learned memory.md")}
+      label={t("Learned memory")}
+      description={t(
+        "Edit the text. Saved evidence, world-valid dates and relationships are preserved. New notes have no cited evidence and unknown world-valid dates."
+      )}
       initialText={draft.body.text}
       maxLength={8000}
       allowUnchanged={reviewed}
       initiallyDirty={draft.body.text !== initialDraft.body.text || reviewed}
       onClose={onClose}
       onSave={async (text) => {
-        if (!text.trim()) throw new Error("Write a note before saving.");
+        if (!text.trim()) throw new Error(t("Write a note before saving."));
         const command = updateLearnedClaimText(
           draft,
           text,

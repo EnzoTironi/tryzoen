@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo, Fragment, useContext, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { usePageStyles } from "./page";
@@ -42,6 +43,7 @@ export function DocumentEditor({
   readonly onSave: (text: string) => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const { t, locale, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -54,7 +56,9 @@ export function DocumentEditor({
             {...props}
             notice={
               markdown
-                ? "Visual editing is unavailable. Edit Markdown here to preserve its formatting."
+                ? t(
+                    "Visual editing is unavailable. Edit Markdown here to preserve its formatting."
+                  )
                 : ""
             }
           />
@@ -83,18 +87,22 @@ export function DocumentEditor({
     try {
       const content = await editor.current?.read();
       if (content === undefined)
-        throw new Error("The editor is still loading. Try again.");
-      if (content.length > maxLength)
-        throw new Error(
-          `Keep this document under ${maxLength.toLocaleString()} characters.`
+        throw new Error(t("The editor is still loading. Try again."));
+      if (content.length > maxLength) {
+        setError(
+          t("Keep this document under {count} characters.", {
+            count: maxLength.toLocaleString(locale),
+          })
         );
+        return;
+      }
       await onSave(content);
       onClose();
     } catch (cause) {
       setError(
         cause instanceof Error
-          ? cause.message
-          : "Changes could not be saved. Try again."
+          ? errorText(cause.message)
+          : t("Changes could not be saved. Try again.")
       );
     } finally {
       setSaving(false);
@@ -102,7 +110,9 @@ export function DocumentEditor({
   };
   const discardConfirmation = confirmDiscard && (
     <View style={styles.discard}>
-      <Text style={pageStyles.rowTitle}>Discard your unsaved changes?</Text>
+      <Text style={pageStyles.rowTitle}>
+        {t("Discard your unsaved changes?")}
+      </Text>
       <View style={styles.actions}>
         <ActionButton
           quiet
@@ -110,9 +120,9 @@ export function DocumentEditor({
             setConfirmDiscard(false);
           }}
         >
-          Keep editing
+          {t("Keep editing")}
         </ActionButton>
-        <ActionButton onPress={onClose}>Discard changes</ActionButton>
+        <ActionButton onPress={onClose}>{t("Discard changes")}</ActionButton>
       </View>
     </View>
   );
@@ -136,7 +146,7 @@ export function DocumentEditor({
                   setShowHistory(!showHistory);
                 }}
               >
-                {showHistory ? "Hide history" : "History"}
+                {showHistory ? t("Hide history") : t("History")}
               </ActionButton>
             )}
             {!readOnly && (
@@ -147,11 +157,11 @@ export function DocumentEditor({
                   void save();
                 }}
               >
-                {saving ? "Saving…" : (saveLabel ?? "Save")}
+                {saving ? t("Saving…") : (saveLabel ?? t("Save"))}
               </ActionButton>
             )}
             <ActionButton quiet disabled={saving} onPress={close}>
-              Close
+              {t("Close")}
             </ActionButton>
           </View>
         </View>

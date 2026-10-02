@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Flag, CheckCircle2 } from "lucide-react-native";
@@ -26,6 +27,7 @@ export function ReportRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [category, setCategory] = useState<string>();
@@ -55,7 +57,11 @@ export function ReportRoomMessage({
         "A mensagem foi alterada. Feche este painel e confira a versão atual antes de denunciar.",
     }[status];
   return (
-    <CompanionSheet title="Denunciar mensagem" maxWidth={480} onClose={onClose}>
+    <CompanionSheet
+      title={t("Denunciar mensagem")}
+      maxWidth={480}
+      onClose={onClose}
+    >
       {feedback ? (
         <View style={styles.content}>
           {status === "submitted" ? (
@@ -66,23 +72,26 @@ export function ReportRoomMessage({
           <Text accessibilityLiveRegion="polite" style={styles.description}>
             {feedback}
           </Text>
-          <ActionButton onPress={onClose}>Concluir</ActionButton>
+          <ActionButton onPress={onClose}>{t("Concluir")}</ActionButton>
         </View>
       ) : (
         <View style={styles.content}>
           <View style={styles.preview}>
             <Text style={styles.author}>{item.sender}</Text>
             <Text numberOfLines={4} style={styles.previewText}>
-              {item.text.trim() ? item.text : (item.media?.filename ?? "Anexo")}
+              {item.text.trim()
+                ? item.text
+                : (item.media?.filename ?? t("Anexo"))}
             </Text>
           </View>
           <Text style={styles.description}>
-            A mensagem selecionada, sua autoria e o motivo serão enviados à
-            moderação do serviço. Nenhuma outra mensagem será anexada.
+            {t(
+              "A mensagem selecionada, sua autoria e o motivo serão enviados à moderação do serviço. Nenhuma outra mensagem será anexada."
+            )}
           </Text>
           <View
             accessibilityRole="radiogroup"
-            accessibilityLabel="Motivo da denúncia"
+            accessibilityLabel={t("Motivo da denúncia")}
             style={styles.reasons}
           >
             {reasons.map((reason) => (
@@ -108,8 +117,8 @@ export function ReportRoomMessage({
             ))}
           </View>
           <TextInput
-            accessibilityLabel="Detalhes da denúncia"
-            placeholder="Conte mais (opcional)"
+            accessibilityLabel={t("Detalhes da denúncia")}
+            placeholder={t("Conte mais (opcional)")}
             placeholderTextColor={colors.muted}
             multiline
             maxLength={1500}
@@ -120,8 +129,9 @@ export function ReportRoomMessage({
           />
           {report.isError && (
             <Text accessibilityRole="alert" style={styles.error}>
-              Não foi possível confirmar o envio. Você pode tentar novamente;
-              denúncias já iniciadas não são duplicadas.
+              {t(
+                "Não foi possível confirmar o envio. Você pode tentar novamente; denúncias já iniciadas não são duplicadas."
+              )}
             </Text>
           )}
           <ActionButton
@@ -134,10 +144,10 @@ export function ReportRoomMessage({
               if (category && !report.isPending) report.mutate();
             }}
           >
-            {report.isPending ? "Enviando…" : "Enviar denúncia"}
+            {report.isPending ? t("Enviando…") : t("Enviar denúncia")}
           </ActionButton>
           <ActionButton quiet onPress={onClose}>
-            Cancelar
+            {t("Cancelar")}
           </ActionButton>
         </View>
       )}

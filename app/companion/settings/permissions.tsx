@@ -1,7 +1,7 @@
 "use client";
 import { api } from "@web/trpc/client";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function SettingsPermissions() {
   const { t, locale } = useI18n();

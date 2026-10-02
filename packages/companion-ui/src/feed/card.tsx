@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { Ellipsis, Heart, MessageCircle } from "lucide-react-native";
@@ -21,6 +22,7 @@ export function FeedCard({
   readonly onDiscuss: () => void;
   readonly onOptions: () => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -32,13 +34,13 @@ export function FeedCard({
           {post.title}
         </Text>
         <Text style={styles.date}>
-          {new Date(post.createdAt).toLocaleDateString(undefined, {
+          {new Date(post.createdAt).toLocaleDateString(locale, {
             month: "short",
             day: "numeric",
           })}
         </Text>
         <IconButton
-          label={`Options for ${post.title}`}
+          label={t("Options for {value1}", { value1: post.title })}
           icon={Ellipsis}
           onPress={onOptions}
         />
@@ -46,7 +48,7 @@ export function FeedCard({
       <AssistantMarkdown text={post.content} />
       {post.sources.length > 0 && (
         <View style={styles.sources}>
-          <Text style={pageStyles.rowTitle}>Sources</Text>
+          <Text style={pageStyles.rowTitle}>{t("Sources")}</Text>
           {post.sources.map((source) => (
             <Pressable
               key={source.url}
@@ -65,13 +67,13 @@ export function FeedCard({
       )}
       {linkError && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          Couldn’t open the source. Try again.
+          {t("Couldn’t open the source. Try again.")}
         </Text>
       )}
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${post.liked ? "Unlike" : "Like"} ${post.title}`}
+          accessibilityLabel={`${post.liked ? t("Unlike") : t("Like")} ${post.title}`}
           accessibilityState={{ selected: post.liked, disabled: pending }}
           disabled={pending}
           onPress={onLike}
@@ -85,12 +87,12 @@ export function FeedCard({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Discuss ${post.title}`}
+          accessibilityLabel={t("Discuss {value1}", { value1: post.title })}
           onPress={onDiscuss}
           style={styles.action}
         >
           <MessageCircle size={21} color={colors.ink} />
-          <Text style={styles.discuss}>Discuss</Text>
+          <Text style={styles.discuss}>{t("Discuss")}</Text>
         </Pressable>
       </View>
     </View>

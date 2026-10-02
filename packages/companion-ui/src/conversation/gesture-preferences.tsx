@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, createContext, useContext, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -70,6 +71,7 @@ export function useQuickReaction() {
 }
 
 export function MessageGestureSettings() {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const value = useContext(GesturePreferenceContext);
@@ -78,15 +80,16 @@ export function MessageGestureSettings() {
   return (
     <View style={styles.section}>
       <Text accessibilityRole="header" style={styles.title}>
-        Gestos das mensagens
+        {t("Gestos das mensagens")}
       </Text>
       <Text style={styles.description}>
-        Toque duas vezes para reagir. A preferência vale neste aparelho. No
-        computador, o duplo clique continua selecionando texto.
+        {t(
+          "Toque duas vezes para reagir. A preferência vale neste aparelho. No computador, o duplo clique continua selecionando texto."
+        )}
       </Text>
       <View
         accessibilityRole="radiogroup"
-        accessibilityLabel="Reação do duplo toque"
+        accessibilityLabel={t("Reação do duplo toque")}
         style={styles.choices}
       >
         {[...quickReactions.map((item) => item.emoji), null].map((emoji) => (
@@ -94,7 +97,9 @@ export function MessageGestureSettings() {
             key={emoji ?? "off"}
             accessibilityRole="radio"
             accessibilityLabel={
-              emoji ? `Reagir com ${emoji}` : "Desativar duplo toque"
+              emoji
+                ? t("Reagir com {value1}", { value1: emoji })
+                : t("Desativar duplo toque")
             }
             aria-checked={preference.data === emoji}
             aria-disabled={preference.isPending || save.isPending}
@@ -108,14 +113,16 @@ export function MessageGestureSettings() {
             ]}
           >
             <Text style={emoji ? styles.emoji : styles.description}>
-              {emoji ?? "Não"}
+              {emoji ?? t("Não")}
             </Text>
           </Pressable>
         ))}
       </View>
       {(preference.isError || save.isError) && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Não foi possível salvar a preferência. Tente escolher novamente.
+          {t(
+            "Não foi possível salvar a preferência. Tente escolher novamente."
+          )}
         </Text>
       )}
     </View>

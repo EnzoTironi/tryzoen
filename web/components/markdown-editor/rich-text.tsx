@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   useEffect,
   useImperativeHandle,
@@ -37,6 +38,7 @@ import {
 import styles from "./rich-text.module.css";
 
 export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
+  const { t, errorText } = useI18n();
   const darkAppearance = useDarkAppearance();
   const editor = useRef<MarkdownEditorHandle>(null);
   const [document, setDocument] = useState({
@@ -76,7 +78,7 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
         setSource(!source);
       } else if (action === "copy") {
         await navigator.clipboard.writeText(text);
-        setStatus("Markdown copied.");
+        setStatus(t("Markdown copied."));
       } else if (action === "download") {
         const url = URL.createObjectURL(
           new Blob([text], { type: "text/markdown;charset=utf-8" })
@@ -89,15 +91,15 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
         window.setTimeout(() => {
           URL.revokeObjectURL(url);
         }, 60000);
-        setStatus("Markdown downloaded.");
+        setStatus(t("Markdown downloaded."));
       } else {
         window.print();
       }
     } catch (error) {
       props.onError(
         error instanceof Error
-          ? error.message
-          : "The document action failed. Try again."
+          ? errorText(error.message)
+          : t("The document action failed. Try again.")
       );
     } finally {
       setBusy(false);
@@ -110,7 +112,7 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
           <Button
             variant="ghost"
             size="icon-lg"
-            aria-label="Document actions"
+            aria-label={t("Document actions")}
             disabled={busy}
           />
         }
@@ -123,10 +125,10 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
       >
         {(
           [
-            ["source", source ? "Visual editor" : "View Markdown source"],
-            ["copy", "Copy Markdown"],
-            ["download", "Download Markdown"],
-            ["print", "Print / save as PDF"],
+            ["source", source ? t("Visual editor") : t("View Markdown source")],
+            ["copy", t("Copy Markdown")],
+            ["download", t("Download Markdown")],
+            ["print", t("Print / save as PDF")],
           ] as const
         ).map(([action, label]) => (
           <DropdownMenuItem
@@ -152,7 +154,7 @@ export default function RichTextEditor({ ref, ...props }: MarkdownEditorProps) {
             key={document.version}
             ref={editor}
             {...editorProps}
-            notice="Markdown source"
+            notice={t("Markdown source")}
           />
         </>
       ) : (
@@ -176,6 +178,7 @@ function VisualEditor({
   onChange,
   ref,
 }: MarkdownEditorProps & { readonly actions: ReactNode }) {
+  const { t } = useI18n();
   const [initial] = useState(() => {
     const content = documentMarkdown.parse(initialMarkdown);
     return { content, canonical: documentMarkdown.serialize(content) };
@@ -236,44 +239,44 @@ function VisualEditor({
   });
   const commands = [
     {
-      label: "Bold",
+      label: t("Bold"),
       active: state?.bold,
       icon: <Bold />,
       run: () => editor?.chain().focus().toggleBold().run(),
     },
     {
-      label: "Italic",
+      label: t("Italic"),
       active: state?.italic,
       icon: <Italic />,
       run: () => editor?.chain().focus().toggleItalic().run(),
     },
     ...([1, 2, 3] as const).map((level) => ({
-      label: `Heading ${level}`,
+      label: t("Heading {level}", { level }),
       active: state?.[`h${level}`],
       icon: <>H{level}</>,
       run: () => editor?.chain().focus().toggleHeading({ level }).run(),
     })),
     {
-      label: "Bullet list",
+      label: t("Bullet list"),
       active: state?.bullet,
       icon: <List />,
       run: () => editor?.chain().focus().toggleBulletList().run(),
     },
     {
-      label: "Numbered list",
+      label: t("Numbered list"),
       active: state?.ordered,
       icon: <ListOrdered />,
       run: () => editor?.chain().focus().toggleOrderedList().run(),
     },
     {
-      label: "Undo",
+      label: t("Undo"),
       active: false,
       disabled: !state?.undo,
       icon: <Undo2 />,
       run: () => editor?.chain().focus().undo().run(),
     },
     {
-      label: "Redo",
+      label: t("Redo"),
       active: false,
       disabled: !state?.redo,
       icon: <Redo2 />,
@@ -284,7 +287,7 @@ function VisualEditor({
     <div className={styles.root}>
       <div
         role="toolbar"
-        aria-label="Text formatting"
+        aria-label={t("Text formatting")}
         className={styles.toolbar}
       >
         {commands.map(({ label: name, icon, run, active, ...command }) => (
@@ -312,7 +315,7 @@ function VisualEditor({
       <div className={styles.scroller}>
         <div className={styles.document}>
           {description && <p className={styles.about}>{description}</p>}
-          {!editor && <output>Opening editor…</output>}
+          {!editor && <output>{t("Opening editor…")}</output>}
           <EditorContent editor={editor} className={styles.prose} />
         </div>
       </div>

@@ -4,7 +4,7 @@ import type { ConversationDraft } from "@zoen/companion-ui/messages";
 
 import { readFileDataUrl } from "@web/files/attachments";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 import {
   Command,

@@ -133,6 +133,18 @@ function memo<T>(create: () => T, deps: readonly unknown[]) {
   return hook.value as T;
 }
 
+vi.mock("./i18n", async () => {
+  const { I18nProvider, catalogs } = await import("@zoen/companion-ui/i18n");
+  return {
+    MobileI18n: ({ children }: { children: ReactNode }) => (
+      <I18nProvider locale="en" messages={catalogs.en}>
+        {children}
+      </I18nProvider>
+    ),
+    MobileLanguagePicker: () => null,
+  };
+});
+
 vi.mock("react", async (original) => {
   const actual = await original<typeof import("react")>();
   return {

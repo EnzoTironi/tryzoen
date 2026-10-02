@@ -114,7 +114,8 @@
       "outputs": []
     },
     "build:desktop": {
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**"],
+      "dependsOn": ["^build:ui"]
     }
   }
 }

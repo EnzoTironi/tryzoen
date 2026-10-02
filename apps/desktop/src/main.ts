@@ -1,3 +1,5 @@
+import { desktopText as t, refreshDesktopLanguage } from "./i18n.js";
+import { localeCookie } from "@zoen/companion-ui/i18n/locale";
 import { registerAudioAccess } from "./audio-access.js";
 import {
   app,
@@ -6,6 +8,7 @@ import {
   globalShortcut,
   Menu,
   shell,
+  type Cookie,
 } from "electron";
 import { env } from "./env.js";
 import {
@@ -30,8 +33,8 @@ async function openExternal(url: string) {
   } catch {
     await dialog.showMessageBox({
       type: "error",
-      message: "Unable to open your browser.",
-      detail: "Please try again from the conversation.",
+      message: t("Unable to open your browser."),
+      detail: t("Please try again from the conversation."),
     });
   }
 }
@@ -81,6 +84,22 @@ function createWindow() {
   window.webContents.on("will-attach-webview", (event) => {
     event.preventDefault();
   });
+  const session = window.webContents.session;
+  const refreshLanguage = () => {
+    void refreshDesktopLanguage(session, startUrl.href)
+      .then(updateMenu)
+      .catch(() => {
+        // Keep the current native language if the session's preference cannot be read.
+      });
+  };
+  const languageChanged = (_event: Electron.Event, cookie: Cookie) => {
+    if (cookie.name === localeCookie) refreshLanguage();
+  };
+  session.cookies.on("changed", languageChanged);
+  window.once("closed", () => {
+    session.cookies.off("changed", languageChanged);
+  });
+  refreshLanguage();
   registerAudioAccess(window, startUrl.origin);
   void window.loadURL(startUrl.href).catch(showLoadError);
   return window;
@@ -90,9 +109,11 @@ async function showLoadError() {
   mainWindow?.show();
   const { response } = await dialog.showMessageBox({
     type: "error",
-    message: "Zoen couldn’t connect.",
-    detail: `Check that ${startUrl.origin} is available, then try again.`,
-    buttons: ["Retry", "Close"],
+    message: t("Zoen couldn’t connect."),
+    detail: t("Check that {origin} is available, then try again.", {
+      origin: startUrl.origin,
+    }),
+    buttons: [t("Retry"), t("Close")],
     defaultId: 0,
     cancelId: 1,
   });
@@ -111,6 +132,104 @@ function focusWindow() {
   return window;
 }
 
+function updateMenu() {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: "Zoen",
+              submenu: [
+                { role: "about" as const, label: t("About Zoen") },
+                { type: "separator" as const },
+                { role: "services" as const, label: t("Services") },
+                { type: "separator" as const },
+                { role: "hide" as const, label: t("Hide Zoen") },
+                { role: "hideOthers" as const, label: t("Hide others") },
+                { role: "unhide" as const, label: t("Show all") },
+                { type: "separator" as const },
+                { role: "quit" as const, label: t("Quit Zoen") },
+              ],
+            },
+          ]
+        : []),
+      {
+        label: t("File"),
+        submenu: [
+          {
+            label: t("New conversation"),
+            accelerator: "CommandOrControl+N",
+            click: () => {
+              void focusWindow().loadURL(startUrl.href).catch(showLoadError);
+            },
+          },
+          { role: "close", label: t("Close") },
+        ],
+      },
+      {
+        label: t("Edit"),
+        submenu: [
+          { role: "undo", label: t("Undo") },
+          { role: "redo", label: t("Redo") },
+          { type: "separator" },
+          { role: "cut", label: t("Cut") },
+          { role: "copy", label: t("Copy") },
+          { role: "paste", label: t("Paste") },
+          ...(process.platform === "darwin"
+            ? [
+                {
+                  role: "pasteAndMatchStyle" as const,
+                  label: t("Paste and match style"),
+                },
+              ]
+            : []),
+          { role: "delete", label: t("Delete") },
+          { role: "selectAll", label: t("Select all") },
+          ...(process.platform === "darwin"
+            ? [
+                {
+                  label: t("Speech"),
+                  submenu: [
+                    {
+                      role: "startSpeaking" as const,
+                      label: t("Start speaking"),
+                    },
+                    {
+                      role: "stopSpeaking" as const,
+                      label: t("Stop speaking"),
+                    },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        label: t("View"),
+        submenu: [
+          { role: "reload", label: t("Reload") },
+          { role: "forceReload", label: t("Force reload") },
+          { role: "toggleDevTools", label: t("Developer tools") },
+          { type: "separator" },
+          { role: "resetZoom", label: t("Actual size") },
+          { role: "zoomIn", label: t("Zoom in") },
+          { role: "zoomOut", label: t("Zoom out") },
+          { role: "togglefullscreen", label: t("Toggle full screen") },
+        ],
+      },
+      {
+        label: t("Window"),
+        submenu: [
+          { role: "minimize", label: t("Minimize") },
+          { role: "zoom", label: t("Zoom") },
+          { role: "front", label: t("Bring all to front") },
+          { role: "close", label: t("Close") },
+        ],
+      },
+    ])
+  );
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -127,29 +246,7 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
   });
   void app.whenReady().then(() => {
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        ...(process.platform === "darwin"
-          ? [{ role: "appMenu" as const }]
-          : []),
-        {
-          label: "File",
-          submenu: [
-            {
-              label: "New conversation",
-              accelerator: "CommandOrControl+N",
-              click: () => {
-                void focusWindow().loadURL(startUrl.href).catch(showLoadError);
-              },
-            },
-            { role: "close" },
-          ],
-        },
-        { role: "editMenu" },
-        { role: "viewMenu" },
-        { role: "windowMenu" },
-      ])
-    );
+    updateMenu();
     createWindow();
     globalShortcut.register("CommandOrControl+Shift+Space", () => {
       if (mainWindow?.isFocused()) mainWindow.hide();

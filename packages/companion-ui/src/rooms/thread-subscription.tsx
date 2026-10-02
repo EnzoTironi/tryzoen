@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellRing } from "lucide-react-native";
@@ -18,6 +19,7 @@ export function ThreadSubscription({
   readonly rootId: string;
   readonly active: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
@@ -56,10 +58,10 @@ export function ThreadSubscription({
         accessibilityRole="button"
         accessibilityLabel={
           failed
-            ? "Conferir assinatura da thread"
+            ? t("Conferir assinatura da thread")
             : following
-              ? "Deixar de acompanhar thread"
-              : "Acompanhar thread"
+              ? t("Deixar de acompanhar thread")
+              : t("Acompanhar thread")
         }
         aria-pressed={following}
         aria-disabled={!active || current.isPending}
@@ -75,20 +77,20 @@ export function ThreadSubscription({
         <Icon size={18} color={colors.ink} />
         <Text style={styles.label}>
           {failed
-            ? "Conferir novamente"
+            ? t("Conferir novamente")
             : following
-              ? "Acompanhando"
-              : "Acompanhar thread"}
+              ? t("Acompanhando")
+              : t("Acompanhar thread")}
         </Text>
         <Text style={styles.caption}>
-          {change.isPending ? "Salvando…" : ""}
+          {change.isPending ? t("Salvando…") : ""}
         </Text>
       </Pressable>
       {failed && (
         <Text accessibilityRole="alert" style={styles.error}>
           {current.data?.status === "unconfirmed"
-            ? "Resposta enviada. Confira os alertas desta thread."
-            : "Não foi possível confirmar os alertas desta thread."}
+            ? t("Resposta enviada. Confira os alertas desta thread.")
+            : t("Não foi possível confirmar os alertas desta thread.")}
         </Text>
       )}
     </View>

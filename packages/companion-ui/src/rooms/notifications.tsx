@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOff } from "lucide-react-native";
@@ -21,6 +22,7 @@ export function RoomNotificationSettings({
   readonly cacheScope: string;
   readonly roomId: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
@@ -53,11 +55,13 @@ export function RoomNotificationSettings({
         <View style={styles.icon}>
           <BellOff size={20} color={colors.surface} />
         </View>
-        <Text style={styles.label}>Silenciar conversa</Text>
+        <Text style={styles.label}>{t("Silenciar conversa")}</Text>
         {preference.data && !preference.isError ? (
           <Switch
-            accessibilityLabel="Silenciar conversa"
-            accessibilityHint="Silencia novos alertas e menções desta conversa para você."
+            accessibilityLabel={t("Silenciar conversa")}
+            accessibilityHint={t(
+              "Silencia novos alertas e menções desta conversa para você."
+            )}
             value={displayedMuted}
             onValueChange={(muted) => {
               change.mutate(muted);
@@ -66,19 +70,26 @@ export function RoomNotificationSettings({
             trackColor={{ false: "#e5e5ea", true: "#34c759" }}
           />
         ) : busy ? (
-          <ActivityIndicator accessibilityLabel="Carregando notificações da conversa" />
+          <ActivityIndicator
+            accessibilityLabel={t("Carregando notificações da conversa")}
+          />
         ) : null}
       </View>
       <Text style={styles.caption}>
         {displayedMuted && !preference.isError
-          ? "Silenciada até você reativar. Você continua recebendo as mensagens, sem novos alertas nem menções."
-          : "Silencie novos alertas, inclusive menções. As mensagens continuam na conversa."}
+          ? t(
+              "Silenciada até você reativar. Você continua recebendo as mensagens, sem novos alertas nem menções."
+            )
+          : t(
+              "Silencie novos alertas, inclusive menções. As mensagens continuam na conversa."
+            )}
       </Text>
       {failed && (
         <View style={styles.error}>
           <Text accessibilityRole="alert" style={styles.caption}>
-            Não foi possível confirmar a preferência. Confira novamente antes de
-            alterar.
+            {t(
+              "Não foi possível confirmar a preferência. Confira novamente antes de alterar."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -88,7 +99,7 @@ export function RoomNotificationSettings({
               void preference.refetch();
             }}
           >
-            Conferir novamente
+            {t("Conferir novamente")}
           </ActionButton>
         </View>
       )}

@@ -3,7 +3,7 @@
 import { sentMessages } from "@zoen/companion-ui/messages";
 import { isTerminalSession } from "@zoen/companion-ui/session";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { AlertCircleIcon, BrainIcon } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import type { EveMessage } from "eve/react";

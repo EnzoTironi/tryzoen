@@ -1,5 +1,6 @@
-import { createTranslator } from "@web/i18n/translate";
-import ptBR from "@web/i18n/messages/pt-br.json";
+import { createTranslator } from "@zoen/companion-ui/i18n";
+import { catalogs } from "@zoen/companion-ui/i18n";
+const ptBR = catalogs["pt-BR"];
 import { createElement } from "react";
 import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { renderToStaticMarkup } from "@tests/helpers/i18n";

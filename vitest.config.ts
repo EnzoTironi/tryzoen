@@ -3,7 +3,20 @@ import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
+    dedupe: ["react", "react-dom"],
     alias: [
+      {
+        find: /^@zoen\/companion-ui$/u,
+        replacement: fileURLToPath(
+          new URL("packages/companion-ui/src/index.ts", import.meta.url)
+        ),
+      },
+      {
+        find: /^@zoen\/companion-ui\/i18n$/u,
+        replacement: fileURLToPath(
+          new URL("packages/companion-ui/src/i18n/index.ts", import.meta.url)
+        ),
+      },
       {
         find: "server-only",
         replacement: fileURLToPath(

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Composer } from "../composer";
@@ -21,6 +22,7 @@ export function RoomComposer({
   readonly direct?: boolean;
   readonly onTyping?: (typing: boolean) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const compact = useWindowDimensions().width < 720;
   const styles = useMemo(
@@ -32,7 +34,7 @@ export function RoomComposer({
     <View pointerEvents="box-none" style={styles.composer}>
       {paused && visible && !disabled && (
         <Text accessibilityLiveRegion="polite" style={styles.connection}>
-          Reconectando… Você pode continuar escrevendo.
+          {t("Reconectando… Você pode continuar escrevendo.")}
         </Text>
       )}
       <Composer
@@ -47,7 +49,7 @@ export function RoomComposer({
                 id: reply.id,
                 text: reply.text,
                 role: reply.bot ? "assistant" : "user",
-                sender: reply.mine ? "você" : reply.sender,
+                sender: reply.mine ? t("você") : reply.sender,
               }
             : undefined
         }
@@ -59,12 +61,12 @@ export function RoomComposer({
         maxLength={8000}
         label={
           thread
-            ? "Responder à thread"
+            ? t("Responder à thread")
             : direct
-              ? "Mensagem direta"
-              : "Mensagem ao grupo"
+              ? t("Mensagem direta")
+              : t("Mensagem ao grupo")
         }
-        placeholder={thread ? "Responder…" : "Mensagem…"}
+        placeholder={thread ? t("Responder…") : t("Mensagem…")}
         disabled={disabled}
         sendDisabled={!visible}
         onSend={(message) => {

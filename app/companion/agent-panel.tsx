@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
@@ -16,16 +17,22 @@ import { downloadMemoryBackup } from "@web/files/download";
 import { chooseMemoryArchive } from "@web/files/memory";
 
 function useAgentData() {
+  const { locale, t } = useI18n();
   const { client } = api.useUtils();
   const params = useSearchParams();
   const space = params.get("space");
   const data = useMemo(
     () =>
-      companionAgentData(getUntypedClient(client), () => crypto.randomUUID(), {
-        backup: () => downloadMemoryBackup(window.location.origin, space),
-        inspect: () => chooseMemoryArchive(window.location.origin, space),
-      }),
-    [client, space]
+      companionAgentData(
+        getUntypedClient(client),
+        () => crypto.randomUUID(),
+        {
+          backup: () => downloadMemoryBackup(window.location.origin, space),
+          inspect: () => chooseMemoryArchive(window.location.origin, space),
+        },
+        { locale, t }
+      ),
+    [client, space, locale, t]
   );
   return { data, cacheScope: space ?? "personal" };
 }

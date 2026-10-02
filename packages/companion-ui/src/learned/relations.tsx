@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ export function MemoryRelations({
   readonly onSaved: () => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const claim = memory.snapshot.claims.find((item) => item.file.id === claimId);
   const [draft, setDraft] = useState(() =>
@@ -43,7 +45,7 @@ export function MemoryRelations({
   const [query, setQuery] = useState("");
   const save = useMutation({
     mutationFn: async () => {
-      if (!draft) throw new Error("This memory is no longer available.");
+      if (!draft) throw new Error(t("This memory is no longer available."));
       await data.change(draft);
     },
     onSuccess: async () => {
@@ -84,24 +86,25 @@ export function MemoryRelations({
     );
   return (
     <CompanionSheet
-      title="Memory relationships"
+      title={t("Memory relationships")}
       onClose={() => {
         if (!save.isPending) onClose();
       }}
     >
       <Text style={pageStyles.copy}>
-        Private to you in this workspace. Relationship edits create a recorded
-        version and preserve the reviewed text, evidence and world-valid dates.
+        {t(
+          "Private to you in this workspace. Relationship edits create a recorded version and preserve the reviewed text, evidence and world-valid dates."
+        )}
       </Text>
       <Text selectable style={pageStyles.rowTitle}>
         {draft
           ? summary(draft.body.text)
-          : "This memory is no longer available."}
+          : t("This memory is no longer available.")}
       </Text>
       <View style={styles.group}>
-        <Text style={pageStyles.rowTitle}>This note…</Text>
+        <Text style={pageStyles.rowTitle}>{t("This note…")}</Text>
         {!draft?.body.relations.length && (
-          <Text style={pageStyles.copy}>No relationships yet.</Text>
+          <Text style={pageStyles.copy}>{t("No relationships yet.")}</Text>
         )}
         {draft?.body.relations.map((relation) => (
           <View
@@ -109,10 +112,10 @@ export function MemoryRelations({
             style={styles.relation}
           >
             <Text style={pageStyles.copy}>
-              {labels[relation.kind]}:{" "}
+              {t(labels[relation.kind])}:{" "}
               {summary(
                 documents.find((item) => item.id === relation.claimId)?.body
-                  .text ?? "Removed note"
+                  .text ?? t("Removed note")
               )}
             </Text>
             <ActionButton
@@ -131,7 +134,7 @@ export function MemoryRelations({
                 });
               }}
             >
-              Remove relationship
+              {t("Remove relationship")}
             </ActionButton>
           </View>
         ))}
@@ -146,20 +149,20 @@ export function MemoryRelations({
               setKind(value);
             }}
           >
-            {labels[value]}
+            {t(labels[value])}
           </ActionButton>
         ))}
       </View>
       <TextInput
-        accessibilityLabel="Find a memory to connect"
-        placeholder="Find a memory to connect"
+        accessibilityLabel={t("Find a memory to connect")}
+        placeholder={t("Find a memory to connect")}
         value={query}
         onChangeText={setQuery}
         style={pageStyles.field}
         maxLength={8000}
       />
       <Text style={pageStyles.copy}>
-        Choose the other note. Up to 20 relationships per note.
+        {t("Choose the other note. Up to 20 relationships per note.")}
       </Text>
       {matches.slice(0, 20).map((target) => (
         <View key={target.id} style={styles.relation}>
@@ -191,23 +194,25 @@ export function MemoryRelations({
                 });
             }}
           >
-            Connect note
+            {t("Connect note")}
           </ActionButton>
         </View>
       ))}
       {matches.length > 20 && (
         <Text style={pageStyles.copy}>
-          Showing the first 20 matches. Refine your search to find another note.
+          {t(
+            "Showing the first 20 matches. Refine your search to find another note."
+          )}
         </Text>
       )}
       {!matches.length && (
-        <Text style={pageStyles.copy}>No other matching memories.</Text>
+        <Text style={pageStyles.copy}>{t("No other matching memories.")}</Text>
       )}
       {save.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The relationships could not be saved. Your full draft and original
-          revision are retained. Review a newer revision explicitly before
-          retrying a conflict.
+          {t(
+            "The relationships could not be saved. Your full draft and original revision are retained. Review a newer revision explicitly before retrying a conflict."
+          )}
         </Text>
       )}
       <View style={styles.actions}>
@@ -217,10 +222,10 @@ export function MemoryRelations({
             save.mutate();
           }}
         >
-          {save.isPending ? "Saving…" : "Save relationships"}
+          {save.isPending ? t("Saving…") : t("Save relationships")}
         </ActionButton>
         <ActionButton quiet disabled={save.isPending} onPress={onClose}>
-          Discard relationship draft
+          {t("Discard relationship draft")}
         </ActionButton>
       </View>
     </CompanionSheet>

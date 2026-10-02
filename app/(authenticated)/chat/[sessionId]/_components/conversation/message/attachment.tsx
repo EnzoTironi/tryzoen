@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import type { EveMessagePart } from "eve/react";
 import { ExternalLinkIcon, FileIcon, ImageIcon } from "lucide-react";
 import { Button } from "@web/components/ui/button";
@@ -9,9 +9,9 @@ import { Card, CardContent } from "@web/components/ui/card";
 type EveFilePart = Extract<EveMessagePart, { type: "file" }>;
 
 export function AttachmentPart({ part }: { readonly part: EveFilePart }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const label = part.filename ?? t("Attachment");
-  const detail = [part.mediaType, formatBytes(part.size)]
+  const detail = [part.mediaType, formatBytes(part.size, locale)]
     .filter(Boolean)
     .join(" · ");
   const isImage = part.mediaType.startsWith("image/") && part.url !== undefined;
@@ -66,9 +66,13 @@ export function AttachmentPart({ part }: { readonly part: EveFilePart }) {
   );
 }
 
-function formatBytes(size: number | undefined): string | undefined {
+function formatBytes(
+  size: number | undefined,
+  locale: string
+): string | undefined {
   if (size === undefined) return undefined;
   if (size < 1024) return `${String(size)} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1024 * 1024)
+    return `${(size / 1024).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`;
+  return `${(size / (1024 * 1024)).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }

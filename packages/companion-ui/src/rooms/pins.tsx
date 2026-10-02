@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,6 +30,7 @@ export function PinRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
@@ -68,7 +70,7 @@ export function PinRoomMessage({
   const pinned = state.data?.messageIds.includes(item.id);
   return (
     <CompanionSheet
-      title="Mensagem fixada"
+      title={t("Mensagem fixada")}
       onClose={() => {
         if (!change.isPending) onClose();
       }}
@@ -80,27 +82,32 @@ export function PinRoomMessage({
         </Text>
       </View>
       <Text style={styles.caption}>
-        As mensagens fixadas ficam disponíveis para todas as pessoas desta
-        conversa.
+        {t(
+          "As mensagens fixadas ficam disponíveis para todas as pessoas desta conversa."
+        )}
       </Text>
       {state.isPending && (
-        <ActivityIndicator accessibilityLabel="Carregando mensagens fixadas" />
+        <ActivityIndicator
+          accessibilityLabel={t("Carregando mensagens fixadas")}
+        />
       )}
       {state.data && !state.data.mayManage && (
         <Text style={styles.caption}>
-          Você não tem permissão para alterar as mensagens fixadas nesta
-          conversa.
+          {t(
+            "Você não tem permissão para alterar as mensagens fixadas nesta conversa."
+          )}
         </Text>
       )}
       {(state.isError || change.isError) && (
         <Text accessibilityRole="alert">
-          Não foi possível atualizar. Tente novamente.
+          {t("Não foi possível atualizar. Tente novamente.")}
         </Text>
       )}
       {change.data?.status === "conflict" && (
         <Text accessibilityRole="alert">
-          A lista mudou em outro dispositivo. Confira o estado atualizado e
-          tente novamente.
+          {t(
+            "A lista mudou em outro dispositivo. Confira o estado atualizado e tente novamente."
+          )}
         </Text>
       )}
       {state.isError ? (
@@ -109,7 +116,7 @@ export function PinRoomMessage({
             void state.refetch();
           }}
         >
-          Tentar novamente
+          {t("Tentar novamente")}
         </ActionButton>
       ) : (
         <ActionButton
@@ -127,10 +134,10 @@ export function PinRoomMessage({
           }}
         >
           {change.isPending
-            ? "Atualizando…"
+            ? t("Atualizando…")
             : pinned
-              ? "Desafixar mensagem"
-              : "Fixar mensagem"}
+              ? t("Desafixar mensagem")
+              : t("Fixar mensagem")}
         </ActionButton>
       )}
     </CompanionSheet>
@@ -150,6 +157,7 @@ export function RoomPins({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [selected, setSelected] = useState<string>();
@@ -175,7 +183,7 @@ export function RoomPins({
     );
   return (
     <CompanionSheet
-      title="Mensagens fixadas"
+      title={t("Mensagens fixadas")}
       onClose={onClose}
       scrollable={false}
     >
@@ -186,7 +194,9 @@ export function RoomPins({
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Ver mensagem fixada de ${item.sender}`}
+            accessibilityLabel={t("Ver mensagem fixada de {value1}", {
+              value1: item.sender,
+            })}
             onPress={() => {
               setSelected(item.id);
             }}
@@ -199,17 +209,19 @@ export function RoomPins({
                 {item.media?.filename ?? item.text}
               </Text>
               <Text style={styles.caption}>
-                {new Date(item.timestamp).toLocaleString()}
+                {new Date(item.timestamp).toLocaleString(locale)}
               </Text>
             </View>
           </Pressable>
         )}
         ListEmptyComponent={
           result.isPending ? (
-            <ActivityIndicator accessibilityLabel="Carregando mensagens fixadas" />
+            <ActivityIndicator
+              accessibilityLabel={t("Carregando mensagens fixadas")}
+            />
           ) : !result.isError ? (
             <Text style={styles.caption}>
-              As mensagens que você fixar aparecerão aqui.
+              {t("As mensagens que você fixar aparecerão aqui.")}
             </Text>
           ) : null
         }
@@ -217,14 +229,14 @@ export function RoomPins({
       {result.isError && (
         <>
           <Text accessibilityRole="alert">
-            Não foi possível carregar as mensagens fixadas.
+            {t("Não foi possível carregar as mensagens fixadas.")}
           </Text>
           <ActionButton
             onPress={() => {
               void result.refetch();
             }}
           >
-            Tentar novamente
+            {t("Tentar novamente")}
           </ActionButton>
         </>
       )}

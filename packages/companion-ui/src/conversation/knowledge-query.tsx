@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMemo, useState } from "react";
 import type { EveDynamicToolPart } from "eve/react";
 import {
@@ -53,6 +55,7 @@ export function KnowledgeQueryCard({
 }: {
   readonly part: EveDynamicToolPart;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { width } = useWindowDimensions();
@@ -103,7 +106,7 @@ export function KnowledgeQueryCard({
   const resultRows = result && (
     <View
       role={compact ? "list" : "table"}
-      accessibilityLabel={`${count}, ${columns.length} ${compact ? "campos por resultado" : "colunas"}`}
+      accessibilityLabel={`${count}, ${columns.length} ${compact ? t("campos por resultado") : t("colunas")}`}
       style={compact ? undefined : { width: tableWidth }}
     >
       {!compact && (
@@ -122,7 +125,7 @@ export function KnowledgeQueryCard({
               ]}
             >
               <Text style={[styles.columnTitle, numeric && styles.numeric]}>
-                {columnName(column)}
+                {t(columnName(column))}
               </Text>
             </View>
           ))}
@@ -163,7 +166,7 @@ export function KnowledgeQueryCard({
                       column !== columns[0] && styles.compactColumnTitle,
                     ]}
                   >
-                    {columnName(column)}
+                    {t(columnName(column))}
                   </Text>
                 )}
                 {status ? (
@@ -181,10 +184,10 @@ export function KnowledgeQueryCard({
                     />
                     <Text
                       selectable
-                      accessibilityLabel={`${status} (${valueText(value)})`}
+                      accessibilityLabel={`${t(status)} (${valueText(value)})`}
                       style={styles.statusText}
                     >
-                      {status}
+                      {t(status)}
                     </Text>
                   </View>
                 ) : (
@@ -214,7 +217,7 @@ export function KnowledgeQueryCard({
       <Pressable
         style={styles.resource}
         accessibilityRole="button"
-        accessibilityLabel={`Abrir análise ${title}`}
+        accessibilityLabel={t("Abrir análise {value1}", { value1: title })}
         disabled={!result}
         onPress={() => {
           setOpen(true);
@@ -229,14 +232,14 @@ export function KnowledgeQueryCard({
           }
           detail={
             result
-              ? `${result.rows.length} ${result.rows.length === 1 ? "linha" : "linhas"} · calculado`
+              ? `${result.rows.length} ${result.rows.length === 1 ? t("linha") : t("linhas")} · calculado`
               : part.state === "output-error"
-                ? "Não foi possível concluir a análise"
+                ? t("Não foi possível concluir a análise")
                 : part.state === "output-denied"
-                  ? "Não autorizado"
+                  ? t("Não autorizado")
                   : part.state === "output-available"
-                    ? "Resultado indisponível"
-                    : "Calculando…"
+                    ? t("Resultado indisponível")
+                    : t("Calculando…")
           }
         />
       </Pressable>
@@ -257,7 +260,7 @@ export function KnowledgeQueryCard({
               <Text style={styles.caption}>{count}</Text>
             </View>
             <IconButton
-              label={`Fechar análise ${title}`}
+              label={t("Fechar análise {value1}", { value1: title })}
               icon={X}
               quiet
               onPress={() => {
@@ -269,19 +272,19 @@ export function KnowledgeQueryCard({
             style={styles.scroll}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
-            accessibilityLabel="Resultado e fontes da análise"
+            accessibilityLabel={t("Resultado e fontes da análise")}
           >
             <View style={styles.freshness}>
               <Clock3 size={13} color={colors.muted} />
               <Text style={styles.caption}>
-                Snapshot publicado · Atualização da origem desconhecida
+                {t("Snapshot publicado · Atualização da origem desconhecida")}
               </Text>
             </View>
             {!result.rows.length ? (
               <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>Nenhum resultado</Text>
+                <Text style={styles.emptyTitle}>{t("Nenhum resultado")}</Text>
                 <Text style={styles.caption}>
-                  A consulta não retornou linhas para estes argumentos.
+                  {t("A consulta não retornou linhas para estes argumentos.")}
                 </Text>
               </View>
             ) : (
@@ -292,7 +295,7 @@ export function KnowledgeQueryCard({
                   <ScrollView
                     horizontal
                     style={styles.tableScroll}
-                    accessibilityLabel="Tabela de resultados"
+                    accessibilityLabel={t("Tabela de resultados")}
                   >
                     {resultRows}
                   </ScrollView>
@@ -302,35 +305,40 @@ export function KnowledgeQueryCard({
             {result.rows.length > visible && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Mostrar mais linhas"
+                accessibilityLabel={t("Mostrar mais linhas")}
                 style={styles.more}
                 onPress={() => {
                   setVisible((value) => value + 20);
                 }}
               >
-                <Text style={styles.moreText}>Mostrar mais linhas</Text>
+                <Text style={styles.moreText}>{t("Mostrar mais linhas")}</Text>
                 <Text style={styles.caption}>
-                  {Math.min(visible, result.rows.length)} de{" "}
-                  {result.rows.length}
+                  <Translated
+                    message="{value1} de {value2}"
+                    values={{
+                      value1: Math.min(visible, result.rows.length),
+                      value2: result.rows.length,
+                    }}
+                  />
                 </Text>
               </Pressable>
             )}
             <View style={styles.provenance}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Fontes da análise"
+                accessibilityLabel={t("Fontes da análise")}
                 aria-expanded={sourcesOpen}
                 style={styles.disclosure}
                 onPress={() => {
                   setSourcesOpen((value) => !value);
                 }}
               >
-                <Text style={styles.disclosureTitle}>Fontes</Text>
+                <Text style={styles.disclosureTitle}>{t("Fontes")}</Text>
                 <Text style={styles.caption}>
                   {result.manifest.sources.length}{" "}
                   {result.manifest.sources.length === 1
-                    ? "arquivo"
-                    : "arquivos"}
+                    ? t("arquivo")
+                    : t("arquivos")}
                 </Text>
                 {sourcesOpen ? (
                   <ChevronDown size={16} color={colors.muted} />
@@ -369,14 +377,16 @@ export function KnowledgeQueryCard({
               )}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Detalhes da execução"
+                accessibilityLabel={t("Detalhes da execução")}
                 aria-expanded={executionOpen}
                 style={[styles.disclosure, styles.executionDisclosure]}
                 onPress={() => {
                   setExecutionOpen((value) => !value);
                 }}
               >
-                <Text style={styles.disclosureTitle}>Detalhes da execução</Text>
+                <Text style={styles.disclosureTitle}>
+                  {t("Detalhes da execução")}
+                </Text>
                 {executionOpen ? (
                   <ChevronDown size={16} color={colors.muted} />
                 ) : (
@@ -388,18 +398,22 @@ export function KnowledgeQueryCard({
                   <View style={styles.metadata}>
                     {[
                       [
-                        "Concluída",
-                        new Date(result.manifest.completedAt).toLocaleString(),
+                        t("Concluída"),
+                        new Date(result.manifest.completedAt).toLocaleString(
+                          locale
+                        ),
                       ],
                       [
-                        "Iniciada",
-                        new Date(result.manifest.startedAt).toLocaleString(),
+                        t("Iniciada"),
+                        new Date(result.manifest.startedAt).toLocaleString(
+                          locale
+                        ),
                       ],
-                      ["Versão", result.manifest.revision],
-                      ["Execução", result.manifest.id],
-                      ["Engine", result.manifest.engine],
-                      ["Ator da execução", result.manifest.actor],
-                      ["Workspace", result.manifest.workspaceId],
+                      [t("Versão"), result.manifest.revision],
+                      [t("Execução"), result.manifest.id],
+                      [t("Engine"), result.manifest.engine],
+                      [t("Ator da execução"), result.manifest.actor],
+                      [t("Workspace"), result.manifest.workspaceId],
                     ].map(([label, value]) => (
                       <View
                         key={label}
@@ -416,20 +430,22 @@ export function KnowledgeQueryCard({
                     ))}
                   </View>
                   <View style={styles.detailGroup}>
-                    <Text style={styles.sectionTitle}>Consulta</Text>
+                    <Text style={styles.sectionTitle}>{t("Consulta")}</Text>
                     <Text selectable style={styles.technical}>
                       {result.manifest.query}
                     </Text>
-                    <Text style={styles.fieldLabel}>Argumentos</Text>
+                    <Text style={styles.fieldLabel}>{t("Argumentos")}</Text>
                     <Text selectable style={styles.code}>
                       {JSON.stringify(result.manifest.arguments, null, 2)}
                     </Text>
                   </View>
                   <View style={styles.detailGroup}>
-                    <Text style={styles.sectionTitle}>SQL executado</Text>
+                    <Text style={styles.sectionTitle}>
+                      {t("SQL executado")}
+                    </Text>
                     <ScrollView
                       horizontal
-                      accessibilityLabel="SQL executado"
+                      accessibilityLabel={t("SQL executado")}
                       style={styles.codeFrame}
                     >
                       <Text selectable style={styles.code}>
@@ -438,10 +454,10 @@ export function KnowledgeQueryCard({
                     </ScrollView>
                   </View>
                   <View style={styles.detailGroup}>
-                    <Text style={styles.sectionTitle}>Integridade</Text>
+                    <Text style={styles.sectionTitle}>{t("Integridade")}</Text>
                     {[
-                      ["SHA-256 da entrada", result.manifest.inputSha256],
-                      ["SHA-256 do SQL", result.manifest.sqlSha256],
+                      [t("SHA-256 da entrada"), result.manifest.inputSha256],
+                      [t("SHA-256 do SQL"), result.manifest.sqlSha256],
                       ...result.manifest.sources.map((source) => [
                         source.path,
                         source.sha256,
@@ -459,7 +475,7 @@ export function KnowledgeQueryCard({
                   </View>
                   <View style={styles.detailGroup}>
                     <Text style={styles.sectionTitle}>
-                      Limites e atualização
+                      {t("Limites e atualização")}
                     </Text>
                     <Text selectable style={styles.code}>
                       {JSON.stringify(result.manifest.limits, null, 2)}
@@ -469,10 +485,12 @@ export function KnowledgeQueryCard({
                     </Text>
                   </View>
                   <View style={styles.detailGroup}>
-                    <Text style={styles.sectionTitle}>Dados originais</Text>
+                    <Text style={styles.sectionTitle}>
+                      {t("Dados originais")}
+                    </Text>
                     <ScrollView
                       horizontal
-                      accessibilityLabel="Dados originais"
+                      accessibilityLabel={t("Dados originais")}
                       style={styles.codeFrame}
                     >
                       <Text selectable style={styles.code}>

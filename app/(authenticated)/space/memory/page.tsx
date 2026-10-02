@@ -20,7 +20,7 @@ import type {
   LearnedClaimSetEnabledInputSchema,
 } from "@zoen/companion-ui/memory";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 import { companionAgentData } from "@shared/companion/agent-data";
 import { downloadMemoryBackup } from "@web/files/download";
@@ -50,17 +50,22 @@ export default function LearnedMemoryPage() {
 }
 
 function LearnedMemoryContent({ space }: { readonly space: string | null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { client } = api.useUtils();
   const cacheScope = space ?? "personal";
   const cache = useQueryClient();
   const data = useMemo(
     () =>
-      companionAgentData(getUntypedClient(client), () => crypto.randomUUID(), {
-        backup: () => downloadMemoryBackup(window.location.origin, space),
-        inspect: () => chooseMemoryArchive(window.location.origin, space),
-      }).learned,
-    [client, space]
+      companionAgentData(
+        getUntypedClient(client),
+        () => crypto.randomUUID(),
+        {
+          backup: () => downloadMemoryBackup(window.location.origin, space),
+          inspect: () => chooseMemoryArchive(window.location.origin, space),
+        },
+        { locale, t }
+      ).learned,
+    [client, space, locale, t]
   );
   const memory = useQuery({
     queryKey: ["companion-learned-memory", cacheScope],

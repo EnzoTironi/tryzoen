@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState, type ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -33,6 +34,7 @@ export function RoomMessageContext({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [focus, setFocus] = useState(reference);
   const [profileId, setProfileId] = useState<string>();
   const result = useQuery({
@@ -64,24 +66,26 @@ export function RoomMessageContext({
     );
   return (
     <CompanionSheet
-      title={value?.room.label ?? "Mensagem original"}
+      title={value?.room.label ?? t("Mensagem original")}
       onClose={onClose}
       scrollable={false}
     >
       {result.isFetching && (
-        <ActivityIndicator accessibilityLabel="Localizando mensagem original" />
+        <ActivityIndicator
+          accessibilityLabel={t("Localizando mensagem original")}
+        />
       )}
       {result.isError && (
         <>
           <Text accessibilityRole="alert">
-            Não foi possível acessar a mensagem original.
+            {t("Não foi possível acessar a mensagem original.")}
           </Text>
           <ActionButton
             onPress={() => {
               void result.refetch();
             }}
           >
-            Tentar novamente
+            {t("Tentar novamente")}
           </ActionButton>
         </>
       )}
@@ -117,12 +121,17 @@ function ContextMessage({
     | undefined;
   readonly onProfile: (id: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   return (
     <View style={{ paddingVertical: 12, gap: 6 }}>
       <Pressable
         accessibilityRole={person ? "button" : undefined}
-        accessibilityLabel={person ? `Ver perfil de ${person.name}` : undefined}
+        accessibilityLabel={
+          person
+            ? t("Ver perfil de {value1}", { value1: person.name })
+            : undefined
+        }
         disabled={!person}
         onPress={() => {
           if (person) onProfile(person.id);
@@ -143,7 +152,7 @@ function ContextMessage({
         />
         <View>
           <Text style={{ fontWeight: "600" }}>
-            {item.mine ? "Você" : item.sender}
+            {item.mine ? t("Você") : item.sender}
           </Text>
           <Text
             style={{
@@ -152,8 +161,8 @@ function ContextMessage({
               fontSize: 12,
             }}
           >
-            {new Date(item.timestamp).toLocaleString()}
-            {item.editId ? " · Editada" : ""}
+            {new Date(item.timestamp).toLocaleString(locale)}
+            {item.editId ? t(" · Editada") : ""}
           </Text>
         </View>
       </Pressable>
@@ -195,10 +204,11 @@ function ContextContent({
   readonly onFocus: (value: z.infer<typeof roomMediaReadSchema>) => void;
   readonly onProfile: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   return (
     <ScrollView style={{ maxHeight: 560 }}>
-      <Text style={{ fontWeight: "600" }}>Mensagem selecionada</Text>
+      <Text style={{ fontWeight: "600" }}>{t("Mensagem selecionada")}</Text>
       <ContextMessage
         item={value.target}
         data={data}
@@ -219,7 +229,7 @@ function ContextContent({
             });
           }}
         >
-          Ver mensagem inicial da thread
+          {t("Ver mensagem inicial da thread")}
         </ActionButton>
       )}
       <ActionButton
@@ -229,10 +239,10 @@ function ContextContent({
           onClose();
         }}
       >
-        Abrir conversa
+        {t("Abrir conversa")}
       </ActionButton>
       <Text style={{ fontWeight: "600", marginTop: 18 }}>
-        Contexto da conversa
+        {t("Contexto da conversa")}
       </Text>
       {value.messages.map((item) => (
         <View

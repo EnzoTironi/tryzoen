@@ -8,7 +8,7 @@ import {
   RefreshCwIcon,
 } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 import { DiagnosticSession } from "./session";
 import styles from "../_components/panel.module.css";
@@ -91,7 +91,7 @@ export function Insights() {
             t("Latência p95"),
             totals?.p95_ms == null
               ? "—"
-              : `${(totals.p95_ms / 1000).toFixed(1)} s`,
+              : `${(totals.p95_ms / 1000).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`,
           ],
         ].map(([label, value]) => (
           <div key={label} className={styles.sectionCard}>

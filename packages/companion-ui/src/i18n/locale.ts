@@ -1,4 +1,3 @@
-import { isValid } from "@shared/validation";
 import { z } from "zod";
 
 export const localeSchema = z.enum(["pt-BR", "en", "es"]);
@@ -15,7 +14,8 @@ export function resolveLocale(
   preference?: string,
   acceptLanguage?: string | null
 ): Locale {
-  if (isValid(localeSchema, preference)) return preference;
+  const saved = localeSchema.safeParse(preference);
+  if (saved.success) return saved.data;
   const languages = (acceptLanguage ?? "")
     .split(",")
     .map((part) => {
@@ -28,11 +28,12 @@ export function resolveLocale(
         quality: quality ? Number(quality.trim().slice(2)) : 1,
       };
     })
-    .filter(({ quality }) => quality > 0 && quality <= 1)
-    .toSorted((a, b) => b.quality - a.quality);
-  for (const { tag } of languages) {
-    if (tag === "pt") return "pt-BR";
-    if (tag === "en" || tag === "es") return tag;
+    .filter(({ quality }) => quality > 0 && quality <= 1);
+  let best: { locale: Locale; quality: number } | undefined;
+  for (const { tag, quality } of languages) {
+    const locale =
+      tag === "pt" ? "pt-BR" : tag === "en" || tag === "es" ? tag : undefined;
+    if (locale && (!best || quality > best.quality)) best = { locale, quality };
   }
-  return "pt-BR";
+  return best?.locale ?? "pt-BR";
 }

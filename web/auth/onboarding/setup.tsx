@@ -9,7 +9,7 @@ import { agentFiles } from "@shared/workspaces/agent-files";
 import { api } from "@web/trpc/client";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { safeCallbackUrl } from "@web/auth/channel/client";
 import { ConnectionList } from "@app/(authenticated)/connections/_components/connection-list";
 import { SettingsVault } from "@app/companion/settings/vault";

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -37,6 +38,7 @@ export function CreateConversation({
   readonly onGroup: () => void;
   readonly onOpened: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [search, setSearch] = useState("");
@@ -49,12 +51,12 @@ export function CreateConversation({
   });
   const open = useDirectConversation(data, cacheScope, onOpened);
   return (
-    <CompanionSheet title="Nova conversa" onClose={onClose}>
+    <CompanionSheet title={t("Nova conversa")} onClose={onClose}>
       <View style={styles.search}>
         <Search size={18} color={colors.muted} />
         <TextInput
-          accessibilityLabel="Buscar pessoas por nome ou username"
-          placeholder="Nome ou @username"
+          accessibilityLabel={t("Buscar pessoas por nome ou username")}
+          placeholder={t("Nome ou @username")}
           value={search}
           onChangeText={setSearch}
           maxLength={80}
@@ -73,8 +75,10 @@ export function CreateConversation({
           >
             <ConversationAvatar name="Zoen" uri={avatarUri} size={44} />
             <View style={styles.copy}>
-              <Text style={styles.name}>Zoen</Text>
-              <Text style={styles.caption}>Uma conversa com seu agente</Text>
+              <Text style={styles.name}>{t("Zoen")}</Text>
+              <Text style={styles.caption}>
+                {t("Uma conversa com seu agente")}
+              </Text>
             </View>
             <MessageCircle size={22} color={colors.accent} />
           </Pressable>
@@ -88,20 +92,22 @@ export function CreateConversation({
               <View style={styles.icon}>
                 <Users size={22} color={colors.accent} />
               </View>
-              <Text style={styles.name}>Novo grupo</Text>
+              <Text style={styles.name}>{t("Novo grupo")}</Text>
             </Pressable>
           )}
         </View>
       )}
       <Text style={styles.caption}>
         {configured
-          ? "Busque pessoas deste espaço para conversar a dois."
-          : "As conversas entre pessoas ainda não estão disponíveis neste ambiente."}
+          ? t("Busque pessoas deste espaço para conversar a dois.")
+          : t(
+              "As conversas entre pessoas ainda não estão disponíveis neste ambiente."
+            )}
       </Text>
       <ScrollView keyboardShouldPersistTaps="handled" style={styles.results}>
         {needle.length >= 2 && people.isFetching && (
           <ActivityIndicator
-            accessibilityLabel="Buscando pessoas"
+            accessibilityLabel={t("Buscando pessoas")}
             color={colors.muted}
           />
         )}
@@ -110,7 +116,10 @@ export function CreateConversation({
             <Pressable
               key={person.username}
               accessibilityRole="button"
-              accessibilityLabel={`Conversar com ${person.name}, @${person.username}`}
+              accessibilityLabel={t("Conversar com {value1}, @{value2}", {
+                value1: person.name,
+                value2: person.username,
+              })}
               disabled={open.isPending}
               onPress={() => {
                 open.mutate(person.username);
@@ -135,18 +144,19 @@ export function CreateConversation({
           ))}
         {needle.length >= 2 && people.isSuccess && !people.data.length && (
           <Text style={styles.caption}>
-            Nenhuma pessoa encontrada neste espaço.
+            {t("Nenhuma pessoa encontrada neste espaço.")}
           </Text>
         )}
         {people.isError && (
           <Text accessibilityRole="alert" style={styles.error}>
-            Não foi possível buscar pessoas. Tente outra vez.
+            {t("Não foi possível buscar pessoas. Tente outra vez.")}
           </Text>
         )}
         {open.isError && (
           <Text accessibilityRole="alert" style={styles.error}>
-            Não foi possível abrir a conversa. Toque na pessoa para tentar
-            novamente.
+            {t(
+              "Não foi possível abrir a conversa. Toque na pessoa para tentar novamente."
+            )}
           </Text>
         )}
       </ScrollView>

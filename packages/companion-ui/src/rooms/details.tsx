@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { RoomPrivacySettings } from "./privacy";
 import { GroupMembership } from "./membership";
 import { RoomNotificationSettings } from "./notifications";
@@ -47,6 +48,7 @@ export function RoomDetails({
     person: z.infer<typeof roomPageSchema>["members"][number]
   ) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
@@ -96,14 +98,18 @@ export function RoomDetails({
     );
   return (
     <SheetSurface
-      title="Informações do grupo"
+      title={t("Informações do grupo")}
       onClose={onClose}
       maxWidth={480}
       panelStyle={styles.panel}
     >
       <View style={styles.toolbar}>
-        <Text style={styles.eyebrow}>Informações do grupo</Text>
-        <IconButton label="Fechar informações" icon={X} onPress={onClose} />
+        <Text style={styles.eyebrow}>{t("Informações do grupo")}</Text>
+        <IconButton
+          label={t("Fechar informações")}
+          icon={X}
+          onPress={onClose}
+        />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
@@ -127,7 +133,7 @@ export function RoomDetails({
             <View style={{ flexDirection: "row" }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Editar nome do grupo"
+                accessibilityLabel={t("Editar nome do grupo")}
                 onPress={() => {
                   setPanel("rename");
                 }}
@@ -137,11 +143,11 @@ export function RoomDetails({
                   paddingHorizontal: 16,
                 }}
               >
-                <Text style={styles.actionText}>Editar nome</Text>
+                <Text style={styles.actionText}>{t("Editar nome")}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Editar foto do grupo"
+                accessibilityLabel={t("Editar foto do grupo")}
                 onPress={() => {
                   setPanel("avatar");
                 }}
@@ -151,19 +157,19 @@ export function RoomDetails({
                   paddingHorizontal: 16,
                 }}
               >
-                <Text style={styles.actionText}>Editar foto</Text>
+                <Text style={styles.actionText}>{t("Editar foto")}</Text>
               </Pressable>
             </View>
           )}
           <Text style={styles.subtitle}>
             {people}
             {page.membersTruncated ? "+" : ""}{" "}
-            {people === 1 ? "pessoa" : "pessoas"}
+            {people === 1 ? t("pessoa") : t("pessoas")}
             {bots > 0 && ` · ${bots} ${bots === 1 ? "bot" : "bots"}`}
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Voltar à conversa do grupo"
+            accessibilityLabel={t("Voltar à conversa do grupo")}
             onPress={onConversation}
             style={({ pressed }) => [
               styles.messageAction,
@@ -171,24 +177,24 @@ export function RoomDetails({
             ]}
           >
             <MessageCircle size={20} strokeWidth={1.8} color={colors.accent} />
-            <Text style={styles.actionText}>Mensagem</Text>
+            <Text style={styles.actionText}>{t("Mensagem")}</Text>
           </Pressable>
         </View>
         <View style={styles.section}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
-            Participantes
+            {t("Participantes")}
           </Text>
           {permissions.data?.mayManage && !permissions.isError && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Gerenciar participantes"
+              accessibilityLabel={t("Gerenciar participantes")}
               onPress={() => {
                 setPanel("manage");
               }}
               style={styles.more}
             >
               <Text style={styles.actionText}>
-                Adicionar ou remover pessoas
+                {t("Adicionar ou remover pessoas")}
               </Text>
             </Pressable>
           )}
@@ -197,7 +203,9 @@ export function RoomDetails({
               <Pressable
                 key={member.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Perfil de ${member.name}`}
+                accessibilityLabel={t("Perfil de {value1}", {
+                  value1: member.name,
+                })}
                 onPress={() => {
                   onProfile(member);
                 }}
@@ -218,7 +226,7 @@ export function RoomDetails({
                     <Text numberOfLines={1} style={styles.memberName}>
                       {member.name}
                     </Text>
-                    {member.bot && <Text style={styles.badge}>IA</Text>}
+                    {member.bot && <Text style={styles.badge}>{t("IA")}</Text>}
                     {!member.bot && !member.mine && (
                       <PresenceIndicator
                         state={
@@ -230,10 +238,10 @@ export function RoomDetails({
                   </View>
                   <Text style={styles.memberCaption}>
                     {member.bot
-                      ? "Seu agente nesta conversa"
+                      ? t("Seu agente nesta conversa")
                       : member.mine
-                        ? "Você"
-                        : "Membro do espaço"}
+                        ? t("Você")
+                        : t("Membro do espaço")}
                   </Text>
                 </View>
               </Pressable>
@@ -247,7 +255,7 @@ export function RoomDetails({
                 style={styles.more}
               >
                 <Text style={styles.actionText}>
-                  Ver todos os participantes
+                  {t("Ver todos os participantes")}
                 </Text>
                 <ChevronDown size={16} color={colors.accent} />
               </Pressable>
@@ -255,7 +263,7 @@ export function RoomDetails({
           </View>
           {page.membersTruncated && (
             <Text style={styles.footnote}>
-              Mostrando os primeiros 100 participantes.
+              {t("Mostrando os primeiros 100 participantes.")}
             </Text>
           )}
         </View>
@@ -271,7 +279,7 @@ export function RoomDetails({
         />
         <View style={styles.section}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
-            Sobre esta conversa
+            {t("Sobre esta conversa")}
           </Text>
           <View style={styles.card}>
             <View style={styles.aboutRow}>
@@ -279,9 +287,11 @@ export function RoomDetails({
                 <Sparkles size={20} color={colors.accent} strokeWidth={1.7} />
               </View>
               <View style={[styles.aboutCopy, styles.divider]}>
-                <Text style={styles.aboutTitle}>Zoen faz parte do grupo</Text>
+                <Text style={styles.aboutTitle}>
+                  {t("Zoen faz parte do grupo")}
+                </Text>
                 <Text style={styles.aboutDescription}>
-                  Mencione Zoen para pedir ajuda na conversa.
+                  {t("Mencione Zoen para pedir ajuda na conversa.")}
                 </Text>
               </View>
             </View>
@@ -291,28 +301,30 @@ export function RoomDetails({
               </View>
               <View style={styles.aboutCopy}>
                 <Text style={styles.aboutTitle}>
-                  Suas memórias continuam privadas
+                  {t("Suas memórias continuam privadas")}
                 </Text>
                 <Text style={styles.aboutDescription}>
-                  Participar do grupo não compartilha suas memórias pessoais.
+                  {t(
+                    "Participar do grupo não compartilha suas memórias pessoais."
+                  )}
                 </Text>
               </View>
             </View>
           </View>
           <Text style={styles.footnote}>
-            Uma conversa compartilhada com os membros deste espaço.
+            {t("Uma conversa compartilhada com os membros deste espaço.")}
           </Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Sair do grupo"
+          accessibilityLabel={t("Sair do grupo")}
           onPress={() => {
             setPanel("leave");
           }}
           style={styles.messageAction}
         >
           <Text style={[styles.actionText, { color: colors.danger }]}>
-            Sair do grupo
+            {t("Sair do grupo")}
           </Text>
         </Pressable>
       </ScrollView>

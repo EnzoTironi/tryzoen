@@ -2,7 +2,7 @@
 
 import type { z } from "zod";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -33,10 +33,8 @@ export function NativeDeviceForm({
   const action = useAuthorizationRequest();
   const [loading, setLoading] = useState(true);
   const [resumeError, setResumeError] = useState<ChannelAuthorizationError>();
-  const bind = (archivePreviousAccount?: true) => {
+  const bind = () => {
     const input = { id, purpose, token: window.location.hash.slice(1) };
-    if (archivePreviousAccount)
-      Object.assign(input, { archivePreviousAccount });
     action.run(
       (signal) => bindNativeBrowser(input, signal),
       (result) => {
@@ -97,7 +95,7 @@ export function NativeDeviceForm({
       <p>
         {purpose === "link"
           ? t(
-              "Use a conta aberta neste navegador e confirme a vinculação no mensageiro. Se houver outra conta, você poderá revisar a recuperação antes de continuar."
+              "Use a mesma conta Zoen neste navegador e no mensageiro para confirmar a vinculação."
             )
           : t(
               "Bind this browser, then return to your messenger conversation and tell the assistant you are ready. You will be asked to approve this browser’s sign-in there."
@@ -114,24 +112,6 @@ export function NativeDeviceForm({
       </Button>
       {action.error ? (
         <p role="alert">{t(channelFailureMessage(action.error, purpose))}</p>
-      ) : null}
-      {purpose === "link" && action.error?.status === 409 ? (
-        <section className="space-y-4">
-          <p>
-            {t(
-              "Use a conta atual para novas conversas. A conta anterior ficará como arquivo acessível; suas sessões e rotinas serão interrompidas. Memórias e acessos de equipes não serão misturados."
-            )}
-          </p>
-          <Button
-            type="button"
-            disabled={action.busy}
-            onClick={() => {
-              bind(true);
-            }}
-          >
-            {t("Preservar conta anterior e vincular")}
-          </Button>
-        </section>
       ) : null}
       {purpose === "link" && action.error?.status === 401 ? (
         <SignInAgain callbackUrl="/?view=settings" />

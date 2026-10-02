@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -54,6 +55,7 @@ export function GroupMembership({
   readonly onLeft: () => void;
   readonly onChanged: () => Promise<unknown>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -97,7 +99,7 @@ export function GroupMembership({
   };
   return (
     <CompanionSheet
-      title={selection ? labels[selection.action] : "Participantes"}
+      title={selection ? t(labels[selection.action]) : t("Participantes")}
       onClose={close}
     >
       {selection ? (
@@ -128,14 +130,16 @@ export function GroupMembership({
       )}
       {change.isError && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Não foi possível confirmar a alteração. Confira sua conexão e suas
-          permissões antes de tentar novamente.
+          {t(
+            "Não foi possível confirmar a alteração. Confira sua conexão e suas permissões antes de tentar novamente."
+          )}
         </Text>
       )}
       {change.data?.nativePending && (
         <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
-          O acesso foi removido. A atualização do serviço de mensagens será
-          tentada novamente automaticamente.
+          {t(
+            "O acesso foi removido. A atualização do serviço de mensagens será tentada novamente automaticamente."
+          )}
         </Text>
       )}
     </CompanionSheet>
@@ -153,6 +157,7 @@ function GroupMemberConfirmation({
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -166,12 +171,12 @@ function GroupMemberConfirmation({
         />
         <Text style={styles.name}>{selection.name}</Text>
       </View>
-      <Text style={pageStyles.copy}>{explanations[selection.action]}</Text>
+      <Text style={pageStyles.copy}>{t(explanations[selection.action])}</Text>
       <ActionButton disabled={pending} onPress={onConfirm}>
-        {pending ? "Atualizando…" : labels[selection.action]}
+        {pending ? t("Atualizando…") : t(labels[selection.action])}
       </ActionButton>
       <ActionButton quiet disabled={pending} onPress={onCancel}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </>
   );
@@ -188,6 +193,7 @@ function GroupPeople({
   readonly page: z.infer<typeof roomPageSchema>;
   readonly onSelect: (selection: MembershipSelection) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -209,19 +215,20 @@ function GroupPeople({
   return (
     <>
       <Text style={pageStyles.copy}>
-        Pessoas deste espaço. Administradores são gerenciados nas configurações
-        do espaço.
+        {t(
+          "Pessoas deste espaço. Administradores são gerenciados nas configurações do espaço."
+        )}
       </Text>
       <TextInput
-        accessibilityLabel="Buscar pessoas para adicionar"
-        placeholder="Nome ou @username"
+        accessibilityLabel={t("Buscar pessoas para adicionar")}
+        placeholder={t("Nome ou @username")}
         value={search}
         onChangeText={setSearch}
         style={pageStyles.field}
         autoCapitalize="none"
       />
       {people.isFetching && (
-        <ActivityIndicator accessibilityLabel="Buscando pessoas" />
+        <ActivityIndicator accessibilityLabel={t("Buscando pessoas")} />
       )}
       {people.isError && (
         <ActionButton
@@ -230,17 +237,17 @@ function GroupPeople({
             void people.refetch();
           }}
         >
-          Tentar buscar novamente
+          {t("Tentar buscar novamente")}
         </ActionButton>
       )}
       {!!results?.length && (
-        <Text style={styles.label}>Adicionar ao grupo</Text>
+        <Text style={styles.label}>{t("Adicionar ao grupo")}</Text>
       )}
       {results?.map((person) => (
         <Pressable
           key={person.username}
           accessibilityRole="button"
-          accessibilityLabel={`Adicionar ${person.name}`}
+          accessibilityLabel={t("Adicionar {value1}", { value1: person.name })}
           onPress={() => {
             onSelect({
               id: page.room.id,
@@ -265,10 +272,10 @@ function GroupPeople({
       ))}
       {search.trim().length >= 2 && people.isSuccess && !results?.length && (
         <Text style={pageStyles.copy}>
-          Nenhuma outra pessoa encontrada neste espaço.
+          {t("Nenhuma outra pessoa encontrada neste espaço.")}
         </Text>
       )}
-      <Text style={styles.label}>No grupo</Text>
+      <Text style={styles.label}>{t("No grupo")}</Text>
       {members.map((member) => (
         <View key={member.id} style={styles.row}>
           <ConversationAvatar
@@ -280,16 +287,18 @@ function GroupPeople({
             <Text style={styles.name}>{member.name}</Text>
             <Text style={pageStyles.copy}>
               {member.mine
-                ? "Você"
+                ? t("Você")
                 : member.mayRemove
-                  ? "Participante"
-                  : "Administrador do espaço"}
+                  ? t("Participante")
+                  : t("Administrador do espaço")}
             </Text>
           </View>
           {member.username && member.mayRemove && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Remover ${member.name}`}
+              accessibilityLabel={t("Remover {value1}", {
+                value1: member.name,
+              })}
               style={styles.action}
               onPress={() => {
                 onSelect({
@@ -308,7 +317,7 @@ function GroupPeople({
       ))}
       {page.membersTruncated && (
         <Text style={pageStyles.copy}>
-          Mostrando os primeiros 100 participantes.
+          {t("Mostrando os primeiros 100 participantes.")}
         </Text>
       )}
     </>

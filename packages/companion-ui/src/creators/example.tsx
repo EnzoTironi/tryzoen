@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -28,6 +30,7 @@ export function CreatorExample({
   readonly onRemove?: () => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const { t, locale, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -51,11 +54,11 @@ export function CreatorExample({
     else onClose();
   };
   return (
-    <CompanionSheet title="Authored example" onClose={close}>
-      <Text style={pageStyles.rowTitle}>Title</Text>
+    <CompanionSheet title={t("Authored example")} onClose={close}>
+      <Text style={pageStyles.rowTitle}>{t("Title")}</Text>
       <TextInput
-        accessibilityLabel="Example title"
-        placeholder="A useful expert decision"
+        accessibilityLabel={t("Example title")}
+        placeholder={t("A useful expert decision")}
         style={pageStyles.field}
         maxLength={120}
         value={value.title}
@@ -64,10 +67,10 @@ export function CreatorExample({
           setValue({ ...value, title });
         }}
       />
-      <Text style={pageStyles.rowTitle}>Source and permission</Text>
+      <Text style={pageStyles.rowTitle}>{t("Source and permission")}</Text>
       <TextInput
-        accessibilityLabel="Example source and permission"
-        placeholder="Where this came from and how you may use it"
+        accessibilityLabel={t("Example source and permission")}
+        placeholder={t("Where this came from and how you may use it")}
         style={pageStyles.field}
         maxLength={1000}
         value={value.source}
@@ -78,14 +81,14 @@ export function CreatorExample({
       />
       <View
         accessibilityRole="radiogroup"
-        accessibilityLabel="Usage rights"
+        accessibilityLabel={t("Usage rights")}
         style={{ gap: 8 }}
       >
         {rightsOptions.map((option) => (
           <Pressable
             key={option.value}
             accessibilityRole="radio"
-            accessibilityLabel={option.label}
+            accessibilityLabel={t(option.label)}
             aria-checked={confirmed && value.rights === option.value}
             aria-disabled={busy}
             disabled={busy}
@@ -98,13 +101,14 @@ export function CreatorExample({
             <Text style={pageStyles.rowTitle}>
               {confirmed && value.rights === option.value ? "●" : "○"}
             </Text>
-            <Text style={pageStyles.copy}>{option.label}</Text>
+            <Text style={pageStyles.copy}>{t(option.label)}</Text>
           </Pressable>
         ))}
       </View>
       <Text style={pageStyles.copy}>
-        Confirm the source rights for this saved version. This is your
-        declaration; Zoen has not verified the permission.
+        {t(
+          "Confirm the source rights for this saved version. This is your declaration; Zoen has not verified the permission."
+        )}
       </Text>
       <ActionButton
         quiet
@@ -113,10 +117,13 @@ export function CreatorExample({
           setEditing(true);
         }}
       >
-        Write the example
+        {t("Write the example")}
       </ActionButton>
       <Text style={pageStyles.copy}>
-        {value.content.length.toLocaleString()} characters in your draft
+        <Translated
+          message="{value1} characters in your draft"
+          values={{ value1: value.content.length.toLocaleString(locale) }}
+        />
       </Text>
       <ActionButton
         disabled={
@@ -126,11 +133,11 @@ export function CreatorExample({
           save.mutate(value);
         }}
       >
-        {save.isPending ? "Saving…" : "Save example"}
+        {save.isPending ? t("Saving…") : t("Save example")}
       </ActionButton>
       {save.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {save.error.message}
+          {errorText(save.error.message)}
         </Text>
       )}
       {onRemove && (
@@ -141,13 +148,13 @@ export function CreatorExample({
             setRemoving(true);
           }}
         >
-          Remove example
+          {t("Remove example")}
         </ActionButton>
       )}
       {removing && (
         <View style={{ gap: 8 }}>
           <Text style={pageStyles.rowTitle}>
-            Remove this example from your draft?
+            {t("Remove this example from your draft?")}
           </Text>
           <ActionButton
             quiet
@@ -156,7 +163,7 @@ export function CreatorExample({
               setRemoving(false);
             }}
           >
-            Keep example
+            {t("Keep example")}
           </ActionButton>
           <ActionButton
             disabled={busy}
@@ -164,34 +171,38 @@ export function CreatorExample({
               remove.mutate();
             }}
           >
-            {remove.isPending ? "Removing…" : "Confirm removal"}
+            {remove.isPending ? t("Removing…") : t("Confirm removal")}
           </ActionButton>
           {remove.isError && (
             <Text accessibilityRole="alert" style={pageStyles.copy}>
-              {remove.error.message}
+              {errorText(remove.error.message)}
             </Text>
           )}
         </View>
       )}
       {discarding && (
         <View style={{ gap: 8 }}>
-          <Text style={pageStyles.rowTitle}>Discard your unsaved example?</Text>
+          <Text style={pageStyles.rowTitle}>
+            {t("Discard your unsaved example?")}
+          </Text>
           <ActionButton
             quiet
             onPress={() => {
               setDiscarding(false);
             }}
           >
-            Keep editing
+            {t("Keep editing")}
           </ActionButton>
-          <ActionButton onPress={onClose}>Discard changes</ActionButton>
+          <ActionButton onPress={onClose}>{t("Discard changes")}</ActionButton>
         </View>
       )}
       {editing && (
         <DocumentEditor
-          title="Example.md"
-          label="Expert example"
-          description="Describe the case, your observations, strategy, alternatives and useful response. This editor updates your draft; use Save example to save it to your account."
+          title={t("Example.md")}
+          label={t("Expert example")}
+          description={t(
+            "Describe the case, your observations, strategy, alternatives and useful response. This editor updates your draft; use Save example to save it to your account."
+          )}
           initialText={value.content}
           maxLength={24000}
           markdown

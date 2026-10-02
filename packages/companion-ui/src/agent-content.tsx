@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useState, type ComponentProps } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
@@ -119,6 +120,7 @@ function ActivitySection({
   ComponentProps<typeof AgentPanelContent>,
   "client" | "data" | "cacheScope"
 > & { readonly approvals: boolean }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string>();
   if (!selected)
     return (
@@ -137,7 +139,7 @@ function ActivitySection({
           setSelected(undefined);
         }}
       >
-        Voltar à atividade
+        {t("Voltar à atividade")}
       </ActionButton>
       <ConversationReview
         key={`${cacheScope}:${selected}`}
@@ -159,8 +161,9 @@ function UpcomingSection({
   ComponentProps<typeof AgentPanelContent>,
   "data" | "cacheScope" | "onPrompt" | "onConversation"
 >) {
+  const { t, locale } = useI18n();
   const schedules = useQuery({
-    queryKey: ["companion-schedules", cacheScope],
+    queryKey: ["companion-schedules", cacheScope, locale],
     queryFn: data.schedules,
   });
   const update = useMutation({
@@ -168,7 +171,7 @@ function UpcomingSection({
       const item = schedules.data?.items.find(
         (candidate) => candidate.id === id
       );
-      if (!item) throw new Error("Refresh to see the current schedule.");
+      if (!item) throw new Error(t("Refresh to see the current schedule."));
       await data.setScheduleActive(id, item.revision, item.status !== "active");
     },
     onSuccess: async () => {
@@ -185,9 +188,11 @@ function UpcomingSection({
       loading={schedules.isPending}
       error={
         schedules.error
-          ? "Schedules couldn’t be loaded. Try again."
+          ? t("Schedules couldn’t be loaded. Try again.")
           : update.error
-            ? "This schedule could not be changed. Refresh to see its current state."
+            ? t(
+                "This schedule could not be changed. Refresh to see its current state."
+              )
             : undefined
       }
       pendingId={update.isPending ? update.variables : undefined}
@@ -201,7 +206,9 @@ function UpcomingSection({
       onConversation={onConversation}
       onCreate={() => {
         onPrompt(
-          "Help me schedule a task. Ask what to do, how often, and in which timezone, then confirm the schedule before saving it."
+          t(
+            "Help me schedule a task. Ask what to do, how often, and in which timezone, then confirm the schedule before saving it."
+          )
         );
       }}
     />
@@ -217,9 +224,10 @@ export function PersonalMemorySection({
   ComponentProps<typeof AgentPanelContent>,
   "data" | "cacheScope" | "onPrompt"
 > & { readonly onBack?: () => void }) {
+  const { t, locale } = useI18n();
   const [showLearned, setShowLearned] = useState(false);
   const memory = useQuery({
-    queryKey: ["companion-personal-memory", cacheScope],
+    queryKey: ["companion-personal-memory", cacheScope, locale],
     queryFn: data.memory,
   });
   if (showLearned)
@@ -227,7 +235,7 @@ export function PersonalMemorySection({
       <View style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: 16 }}>
           <IconButton
-            label="Back to personal memory"
+            label={t("Back to personal memory")}
             icon={ChevronLeft}
             onPress={() => {
               setShowLearned(false);
@@ -246,7 +254,7 @@ export function PersonalMemorySection({
       {onBack && (
         <View style={{ paddingHorizontal: 16 }}>
           <IconButton
-            label="Back to agent identity"
+            label={t("Back to agent identity")}
             icon={ChevronLeft}
             onPress={onBack}
           />
@@ -262,7 +270,7 @@ export function PersonalMemorySection({
         loading={memory.isPending}
         error={
           memory.error
-            ? "Your personal memory couldn’t be loaded. Try again."
+            ? t("Your personal memory couldn’t be loaded. Try again.")
             : undefined
         }
         onRetry={() => {
@@ -274,7 +282,9 @@ export function PersonalMemorySection({
         }}
         onCorrectProfile={() => {
           onPrompt(
-            "Help me review and update my saved personal profile. Ask which details I want to change, and save only the changes I confirm."
+            t(
+              "Help me review and update my saved personal profile. Ask which details I want to change, and save only the changes I confirm."
+            )
           );
         }}
       />

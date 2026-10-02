@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -22,6 +24,7 @@ export function CreatorEvaluationCase({
   readonly onSaved: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [value, setValue] = useState(initial);
   const [editing, setEditing] = useState<"question" | "criteria">();
@@ -53,12 +56,12 @@ export function CreatorEvaluationCase({
   };
   return (
     <CompanionSheet
-      title={existing ? "Evaluation case" : "New evaluation case"}
+      title={existing ? t("Evaluation case") : t("New evaluation case")}
       onClose={close}
     >
       <TextInput
-        accessibilityLabel="Evaluation case title"
-        placeholder="Case title"
+        accessibilityLabel={t("Evaluation case title")}
+        placeholder={t("Case title")}
         maxLength={120}
         value={value.title}
         editable={!readOnly && !save.isPending}
@@ -68,8 +71,9 @@ export function CreatorEvaluationCase({
         }}
       />
       <Text style={pageStyles.copy}>
-        Use a fictional situation or material you have permission to use.
-        Include difficult or inappropriate requests as well as ordinary cases.
+        {t(
+          "Use a fictional situation or material you have permission to use. Include difficult or inappropriate requests as well as ordinary cases."
+        )}
       </Text>
       <ActionButton
         quiet
@@ -78,7 +82,9 @@ export function CreatorEvaluationCase({
           setEditing("question");
         }}
       >
-        {value.question ? "Read or edit test question" : "Write test question"}
+        {value.question
+          ? t("Read or edit test question")
+          : t("Write test question")}
       </ActionButton>
       <ActionButton
         quiet
@@ -88,12 +94,13 @@ export function CreatorEvaluationCase({
         }}
       >
         {value.criteria
-          ? "Read or edit evaluation criteria"
-          : "Write evaluation criteria"}
+          ? t("Read or edit evaluation criteria")
+          : t("Write evaluation criteria")}
       </ActionButton>
       <Text style={pageStyles.copy}>
-        Criteria stay hidden from the specialist. Saved runs keep their original
-        question and criteria even after you edit or remove this case.
+        {t(
+          "Criteria stay hidden from the specialist. Saved runs keep their original question and criteria even after you edit or remove this case."
+        )}
       </Text>
       {!readOnly && (
         <ActionButton
@@ -105,7 +112,7 @@ export function CreatorEvaluationCase({
             save.mutate(false);
           }}
         >
-          {save.isPending ? "Saving…" : "Save evaluation case"}
+          {save.isPending ? t("Saving…") : t("Save evaluation case")}
         </ActionButton>
       )}
       {!readOnly && existing && (
@@ -116,20 +123,25 @@ export function CreatorEvaluationCase({
             setConfirming("remove");
           }}
         >
-          Remove case
+          {t("Remove case")}
         </ActionButton>
       )}
       {save.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {save.error.message} Your draft is still here.
+          <Translated
+            message="{value1} Your draft is still here."
+            values={{ value1: errorText(save.error.message) }}
+          />
         </Text>
       )}
       {confirming && (
         <View style={{ gap: 8 }}>
           <Text style={pageStyles.rowTitle}>
             {confirming === "remove"
-              ? "Remove this case from future evaluations? Saved runs will remain."
-              : "Discard unsaved changes?"}
+              ? t(
+                  "Remove this case from future evaluations? Saved runs will remain."
+                )
+              : t("Discard unsaved changes?")}
           </Text>
           <ActionButton
             quiet
@@ -138,7 +150,7 @@ export function CreatorEvaluationCase({
               setConfirming(undefined);
             }}
           >
-            Keep editing
+            {t("Keep editing")}
           </ActionButton>
           <ActionButton
             disabled={save.isPending}
@@ -147,25 +159,31 @@ export function CreatorEvaluationCase({
               else onClose();
             }}
           >
-            {confirming === "remove" ? "Confirm removal" : "Discard changes"}
+            {confirming === "remove"
+              ? t("Confirm removal")
+              : t("Discard changes")}
           </ActionButton>
         </View>
       )}
       {editing && (
         <DocumentEditor
           title={
-            editing === "question" ? "Test question" : "Evaluation criteria"
+            editing === "question"
+              ? t("Test question")
+              : t("Evaluation criteria")
           }
           label={
             editing === "question"
-              ? "Evaluation test question"
-              : "Predeclared evaluation criteria"
+              ? t("Evaluation test question")
+              : t("Predeclared evaluation criteria")
           }
           initialText={value[editing]}
           maxLength={4000}
           markdown
           readOnly={readOnly}
-          description="This edits your case draft. Use Save evaluation case to save the question and criteria together."
+          description={t(
+            "This edits your case draft. Use Save evaluation case to save the question and criteria together."
+          )}
           onSave={async (text) => {
             setValue({ ...value, [editing]: text });
           }}

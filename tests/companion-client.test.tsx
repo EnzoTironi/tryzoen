@@ -4,7 +4,7 @@ import type {
   RoomConversation,
   useDarkAppearance,
 } from "@zoen/companion-ui";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "./helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConnectedCompanion } from "@app/companion/connected";
 const mocks = vi.hoisted(() => ({

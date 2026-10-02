@@ -7,7 +7,7 @@ import { Sky } from "@web/components/sky/sky";
 import { getLocalDay } from "@web/components/sky/local-day";
 import { useLocalTime } from "@web/components/sky/use-local-time";
 import { LanguagePicker } from "@web/i18n/language-picker";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import styles from "./onboarding.module.css";
 
 export function OnboardingShell({

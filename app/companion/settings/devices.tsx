@@ -2,23 +2,23 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { authClient } from "@web/auth/client";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function SettingsDevices() {
-  const { t, locale } = useI18n();
+  const { t, locale, errorText } = useI18n();
   const account = authClient.useSession();
   const sessions = useQuery({
     queryKey: ["settings", "sessions", account.data?.user.id],
     queryFn: async () => {
       const result = await authClient.listSessions();
-      if (result.error) throw new Error(result.error.message);
+      if (result.error) throw new Error(errorText(result.error.message));
       return result.data;
     },
   });
   const revoke = useMutation({
     mutationFn: async (token: string) => {
       const result = await authClient.revokeSession({ token });
-      if (result.error) throw new Error(result.error.message);
+      if (result.error) throw new Error(errorText(result.error.message));
     },
     onSuccess: async () => {
       await sessions.refetch();

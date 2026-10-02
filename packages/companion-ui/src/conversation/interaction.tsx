@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   createContext,
   useCallback,
@@ -58,6 +59,7 @@ export function MessageInteraction({
   readonly outgoing: boolean;
   readonly disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const bubble = useRef<View>(null);
@@ -211,8 +213,8 @@ export function MessageInteraction({
                 disabled
                   ? []
                   : [
-                      { name: "reply", label: "Responder à mensagem" },
-                      { name: "menu", label: "Ações da mensagem" },
+                      { name: "reply", label: t("Responder à mensagem") },
+                      { name: "menu", label: t("Ações da mensagem") },
                     ]
               }
               onAccessibilityAction={(event) => {
@@ -271,14 +273,14 @@ export function MessageInteraction({
         </View>
         {tap.status === "pending" && (
           <ActivityIndicator
-            accessibilityLabel="Salvando reação"
+            accessibilityLabel={t("Salvando reação")}
             size="small"
             style={styles.quickStatus}
           />
         )}
         {tap.status === "failed" && (
           <Text accessibilityRole="alert" style={styles.error}>
-            Não foi possível salvar a reação. Tente novamente.
+            {t("Não foi possível salvar a reação. Tente novamente.")}
           </Text>
         )}
         {footer}

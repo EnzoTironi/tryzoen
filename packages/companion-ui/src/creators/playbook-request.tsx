@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useRef, useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -19,6 +21,7 @@ export function CreatorPlaybookRequest({
   readonly disabled: boolean;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [open, setOpen] = useState(false);
   const [guidance, setGuidance] = useState(
@@ -53,25 +56,24 @@ export function CreatorPlaybookRequest({
           setOpen(true);
         }}
       >
-        Draft a playbook from my examples
+        {t("Draft a playbook from my examples")}
       </ActionButton>
       {!draft.content.examples.length && (
         <Text style={pageStyles.copy}>
-          Add an authored example to draft a playbook.
+          {t("Add an authored example to draft a playbook.")}
         </Text>
       )}
       {open && (
         <CompanionSheet
-          title="Draft a playbook"
+          title={t("Draft a playbook")}
           onClose={() => {
             if (!generate.isPending) setOpen(false);
           }}
         >
           <Text style={pageStyles.copy}>
-            Your selected model will use the examples listed below and your
-            guidance. It receives no existing playbook, evaluation cases,
-            personal memory, conversations or tools. Review and edit the
-            proposal before choosing to replace your playbook.
+            {t(
+              "Your selected model will use the examples listed below and your guidance. It receives no existing playbook, evaluation cases, personal memory, conversations or tools. Review and edit the proposal before choosing to replace your playbook."
+            )}
           </Text>
           {draft.content.examples.map((example) => (
             <Text key={example.id} style={pageStyles.copy}>
@@ -79,7 +81,7 @@ export function CreatorPlaybookRequest({
             </Text>
           ))}
           <TextInput
-            accessibilityLabel="Playbook guidance"
+            accessibilityLabel={t("Playbook guidance")}
             multiline
             maxLength={4000}
             value={guidance}
@@ -97,13 +99,15 @@ export function CreatorPlaybookRequest({
             }}
           >
             {generate.isPending
-              ? "Starting proposal…"
-              : "Generate private proposal"}
+              ? t("Starting proposal…")
+              : t("Generate private proposal")}
           </ActionButton>
           {generate.error && (
             <Text accessibilityRole="alert" style={pageStyles.copy}>
-              {generate.error.message} Any accepted proposal will appear in the
-              saved results.
+              <Translated
+                message="{value1} Any accepted proposal will appear in the saved results."
+                values={{ value1: errorText(generate.error.message) }}
+              />
             </Text>
           )}
         </CompanionSheet>

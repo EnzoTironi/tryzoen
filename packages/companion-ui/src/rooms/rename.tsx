@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import {
   useMutation,
@@ -28,6 +30,7 @@ export function RenameRoom({
   readonly room: z.infer<typeof roomSchema>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   const [name, setName] = useState(room.label);
@@ -65,10 +68,12 @@ export function RenameRoom({
     if (!save.isPending) onClose();
   };
   return (
-    <CompanionSheet title="Nome do grupo" onClose={close}>
-      <Text style={pageStyles.copy}>Visível para todos os participantes.</Text>
+    <CompanionSheet title={t("Nome do grupo")} onClose={close}>
+      <Text style={pageStyles.copy}>
+        {t("Visível para todos os participantes.")}
+      </Text>
       <TextInput
-        accessibilityLabel="Nome do grupo"
+        accessibilityLabel={t("Nome do grupo")}
         value={name}
         onChangeText={setName}
         editable={!save.isPending}
@@ -81,15 +86,18 @@ export function RenameRoom({
       />
       {save.isError && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          Não foi possível confirmar a alteração. O nome digitado foi
-          preservado; tente novamente.
+          {t(
+            "Não foi possível confirmar a alteração. O nome digitado foi preservado; tente novamente."
+          )}
         </Text>
       )}
       {conflict && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            O grupo foi renomeado para “{save.data?.room.label}” em outro lugar.
-            Confira o nome atual antes de editar.
+            <Translated
+              message="O grupo foi renomeado para “{value1}” em outro lugar. Confira o nome atual antes de editar."
+              values={{ value1: save.data?.room.label }}
+            />
           </Text>
           <ActionButton
             quiet
@@ -102,7 +110,7 @@ export function RenameRoom({
               }
             }}
           >
-            Carregar nome atual
+            {t("Carregar nome atual")}
           </ActionButton>
         </>
       )}
@@ -112,10 +120,10 @@ export function RenameRoom({
           save.mutate();
         }}
       >
-        {save.isPending ? "Salvando…" : "Salvar nome"}
+        {save.isPending ? t("Salvando…") : t("Salvar nome")}
       </ActionButton>
       <ActionButton quiet disabled={save.isPending} onPress={close}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </CompanionSheet>
   );

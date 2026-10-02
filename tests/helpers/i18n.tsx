@@ -1,13 +1,10 @@
+import { catalogs } from "@zoen/companion-ui/i18n";
 import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import { I18nProvider } from "@web/i18n/provider";
-import type { Locale } from "@web/i18n/locale";
-import ptBR from "@web/i18n/messages/pt-br.json";
-import en from "@web/i18n/messages/en.json";
-import es from "@web/i18n/messages/es.json";
+import { I18nProvider } from "@zoen/companion-ui/i18n";
+import type { Locale } from "@zoen/companion-ui/i18n";
 
-const catalogs = { "pt-BR": ptBR, en, es };
 const searchParams = new URLSearchParams();
 
 export function renderToStaticMarkup(

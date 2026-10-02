@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -43,6 +45,7 @@ export function KnowledgeProposals({
   readonly data: KnowledgeProposalData;
   readonly query: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -61,15 +64,16 @@ export function KnowledgeProposals({
   return (
     <View style={styles.collection}>
       <Text style={pageStyles.copy}>
-        Review the changes Zoen suggests for your shared knowledge. Publishing
-        updates all the files together.
+        {t(
+          "Review the changes Zoen suggests for your shared knowledge. Publishing updates all the files together."
+        )}
       </Text>
       {proposals.isPending && (
-        <Text style={pageStyles.copy}>Loading proposals…</Text>
+        <Text style={pageStyles.copy}>{t("Loading proposals…")}</Text>
       )}
       {proposals.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Proposals could not be loaded.
+          {t("Proposals could not be loaded.")}
         </Text>
       )}
       {(proposals.isError || !items?.length) && (
@@ -79,14 +83,14 @@ export function KnowledgeProposals({
             void proposals.refetch();
           }}
         >
-          Refresh proposals
+          {t("Refresh proposals")}
         </ActionButton>
       )}
       {items?.map((item) => (
         <Pressable
           key={item.path}
           accessibilityRole="button"
-          accessibilityLabel={`Review ${item.title}`}
+          accessibilityLabel={t("Review {value1}", { value1: item.title })}
           onPress={() => {
             setPath(item.path);
           }}
@@ -101,8 +105,13 @@ export function KnowledgeProposals({
               {item.summary}
             </Text>
             <Text style={styles.detail}>
-              {item.files} {item.files === 1 ? "file" : "files"} · Awaiting
-              review
+              <Translated
+                message="{value1} {value2} · Awaiting review"
+                values={{
+                  value1: item.files,
+                  value2: item.files === 1 ? t("file") : t("files"),
+                }}
+              />
             </Text>
           </View>
           <ChevronRight size={18} color={colors.muted} />
@@ -111,8 +120,10 @@ export function KnowledgeProposals({
       {items?.length === 0 && (
         <Text style={pageStyles.copy}>
           {query
-            ? "No matching proposals."
-            : "No changes awaiting review. Ask Zoen to propose records, connections, a definition or an analysis model."}
+            ? t("No matching proposals.")
+            : t(
+                "No changes awaiting review. Ask Zoen to propose records, connections, a definition or an analysis model."
+              )}
         </Text>
       )}
       {path && (
@@ -138,6 +149,7 @@ function KnowledgeReview({
   readonly data: KnowledgeProposalData;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -158,7 +170,7 @@ function KnowledgeReview({
   const decision = useMutation({
     mutationFn: async (choice: "approve" | "reject") => {
       if (!review.data)
-        throw new Error("Refresh the proposal before reviewing it.");
+        throw new Error(t("Refresh the proposal before reviewing it."));
       const revision = review.data.revision;
       if (
         intent.current?.decision !== choice ||
@@ -194,13 +206,17 @@ function KnowledgeReview({
   const snapshot = review.isError ? undefined : review.data;
   const change = snapshot?.changes[selected];
   return (
-    <CompanionSheet title="Review changes" onClose={onClose} maxWidth={960}>
+    <CompanionSheet
+      title={t("Review changes")}
+      onClose={onClose}
+      maxWidth={960}
+    >
       {review.isPending && (
-        <Text style={pageStyles.copy}>Loading changes…</Text>
+        <Text style={pageStyles.copy}>{t("Loading changes…")}</Text>
       )}
       {review.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The proposal is unavailable. Refresh to try again.
+          {t("The proposal is unavailable. Refresh to try again.")}
         </Text>
       )}
       {(review.isError ||
@@ -209,7 +225,9 @@ function KnowledgeReview({
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
             {decision.error?.message ??
-              "The source files changed. Ask Zoen to reconcile the proposal before publishing it."}
+              t(
+                "The source files changed. Ask Zoen to reconcile the proposal before publishing it."
+              )}
           </Text>
           <ActionButton
             quiet
@@ -219,7 +237,7 @@ function KnowledgeReview({
               void review.refetch();
             }}
           >
-            Refresh changes
+            {t("Refresh changes")}
           </ActionButton>
         </>
       )}
@@ -250,13 +268,13 @@ function KnowledgeReview({
           {change && (
             <View style={[styles.comparison, !compact && styles.columns]}>
               <KnowledgeSource
-                label="Current"
+                label={t("Current")}
                 content={change.before}
                 columns={!compact}
                 ontology={change.path === ontologyPath}
               />
               <KnowledgeSource
-                label="Proposed"
+                label={t("Proposed")}
                 content={change.after}
                 columns={!compact}
                 ontology={change.path === ontologyPath}
@@ -264,7 +282,7 @@ function KnowledgeReview({
             </View>
           )}
           <Text accessibilityRole="header" style={pageStyles.rowTitle}>
-            Sources
+            {t("Sources")}
           </Text>
           {snapshot.proposal.evidence.map((source) => (
             <View key={JSON.stringify(source)} style={styles.evidence}>
@@ -284,7 +302,10 @@ function KnowledgeReview({
                 <>
                   <Text style={pageStyles.rowTitle}>{source.path}</Text>
                   <Text style={styles.detail}>
-                    Revision {source.revision.slice(0, 7)}
+                    <Translated
+                      message="Revision {value1}"
+                      values={{ value1: source.revision.slice(0, 7) }}
+                    />
                   </Text>
                 </>
               )}
@@ -295,12 +316,18 @@ function KnowledgeReview({
           ))}
           {snapshot.proposal.dependencies.length > 0 && (
             <Text style={styles.detail}>
-              Also checks: {snapshot.proposal.dependencies.join(", ")}
+              <Translated
+                message="Also checks: {value1}"
+                values={{ value1: snapshot.proposal.dependencies.join(", ") }}
+              />
             </Text>
           )}
           {snapshot.conflicts.length > 0 && (
             <Text style={styles.detail}>
-              Changed sources: {snapshot.conflicts.join(", ")}
+              <Translated
+                message="Changed sources: {value1}"
+                values={{ value1: snapshot.conflicts.join(", ") }}
+              />
             </Text>
           )}
           {snapshot.canReview ? (
@@ -313,8 +340,8 @@ function KnowledgeReview({
                 }}
               >
                 {decision.isPending && decision.variables === "reject"
-                  ? "Rejecting…"
-                  : "Reject proposal"}
+                  ? t("Rejecting…")
+                  : t("Reject proposal")}
               </ActionButton>
               <ActionButton
                 disabled={
@@ -327,13 +354,17 @@ function KnowledgeReview({
                 }}
               >
                 {decision.isPending && decision.variables === "approve"
-                  ? "Publishing…"
-                  : `Publish ${snapshot.changes.length} ${snapshot.changes.length === 1 ? "file" : "files"}`}
+                  ? t("Publishing…")
+                  : t("Publish {value1} {value2}", {
+                      value1: snapshot.changes.length,
+                      value2:
+                        snapshot.changes.length === 1 ? t("file") : t("files"),
+                    })}
               </ActionButton>
             </View>
           ) : (
             <Text style={pageStyles.copy}>
-              An administrator can publish or reject this proposal.
+              {t("An administrator can publish or reject this proposal.")}
             </Text>
           )}
         </>
@@ -353,6 +384,7 @@ function KnowledgeSource({
   readonly columns: boolean;
   readonly ontology: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -363,7 +395,9 @@ function KnowledgeSource({
       ) : (
         <Text selectable style={styles.sourceText}>
           {content ??
-            (label === "Current" ? "New file" : "File will be removed")}
+            (label === t("Current")
+              ? t("New file")
+              : t("File will be removed"))}
         </Text>
       )}
     </View>

@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import type { Client } from "eve/client";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -17,6 +18,7 @@ export function ConversationReview({
   readonly sessionId: string;
   readonly approvals?: boolean;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const agent = useSessionAgent(sessionId, client, cacheScope);
   const [error, setError] = useState<string>();
@@ -32,18 +34,18 @@ export function ConversationReview({
   const newestFirst = [...parts].reverse();
   return (
     <CompanionPage
-      title={approvals ? "Approval history" : "Conversation activity"}
+      title={approvals ? t("Approval history") : t("Conversation activity")}
       loading={agent.status === "resuming"}
       error={error ?? agent.error?.message}
       onRetry={() => {
         setError(undefined);
         void agent.resume().catch(() => {
-          setError("Activity couldn’t be loaded. Try again.");
+          setError(t("Activity couldn’t be loaded. Try again."));
         });
       }}
     >
       <Text style={pageStyles.copy}>
-        This conversation · most recent activity first
+        {t("This conversation · most recent activity first")}
       </Text>
       {newestFirst.map((part, index) => (
         <View
@@ -61,8 +63,8 @@ export function ConversationReview({
       {!parts.length && agent.status !== "resuming" && (
         <Text style={[pageStyles.copy, pageStyles.section]}>
           {approvals
-            ? "No approvals in the loaded history."
-            : "No tool activity in the loaded history."}
+            ? t("No approvals in the loaded history.")
+            : t("No tool activity in the loaded history.")}
         </Text>
       )}
       {agent.hasOlder && (
@@ -73,11 +75,11 @@ export function ConversationReview({
             onPress={() => {
               setError(undefined);
               void agent.loadOlder().catch(() => {
-                setError("Earlier activity couldn’t be loaded. Try again.");
+                setError(t("Earlier activity couldn’t be loaded. Try again."));
               });
             }}
           >
-            {agent.isLoadingOlder ? "Loading…" : "Load earlier activity"}
+            {agent.isLoadingOlder ? t("Loading…") : t("Load earlier activity")}
           </ActionButton>
         </View>
       )}

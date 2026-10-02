@@ -1,19 +1,22 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { useState } from "react";
 import type { FileUIPart } from "ai";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 
 function BrowserMedia({ file }: { readonly file: FileUIPart }) {
+  const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   if (!inlineAttachmentSchema.safeParse(file).success) return null;
   if (failed)
     return (
       <output>
-        Este formato não pode ser reproduzido aqui. Salve o arquivo para
-        abri-lo.
+        {t(
+          "Este formato não pode ser reproduzido aqui. Salve o arquivo para abri-lo."
+        )}
       </output>
     );
-  const label = file.filename ?? "Mídia anexada";
+  const label = file.filename ?? t("Mídia anexada");
   return file.mediaType.startsWith("video/") ? (
     // oxlint-disable-next-line jsx-a11y/media-has-caption -- User-supplied files may not include captions; preserve embedded tracks without inventing transcripts.
     <video

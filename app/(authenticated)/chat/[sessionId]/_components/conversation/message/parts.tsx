@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import type { EveMessagePart } from "eve/react";
 import { MessageResponse } from "@web/components/ai-elements/message";
 import {

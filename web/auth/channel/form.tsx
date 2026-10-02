@@ -1,7 +1,7 @@
 "use client";
 
 import type { z } from "zod";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import type { ChannelAuthorizationStatus } from "@web/auth/channel/client";
 import { ChannelAuthorizationError } from "@web/auth/channel/client";
 import { useEffect, useRef, useState, type ReactNode } from "react";

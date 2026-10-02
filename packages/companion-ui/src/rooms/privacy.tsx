@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Circle } from "lucide-react-native";
@@ -21,6 +22,7 @@ export function RoomPrivacySettings({
   readonly cacheScope: string;
   readonly roomId: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -28,9 +30,11 @@ export function RoomPrivacySettings({
       <PrivacyPreference
         cacheKey="matrix-presence-preference"
         cacheScope={cacheScope}
-        label="Mostrar quando estou online"
+        label={t("Mostrar quando estou online")}
         icon={Circle}
-        description="Sua presença fica visível para as pessoas nas conversas em comum enquanto você usa o chat. Esta escolha vale para todos os seus dispositivos."
+        description={t(
+          "Sua presença fica visível para as pessoas nas conversas em comum enquanto você usa o chat. Esta escolha vale para todos os seus dispositivos."
+        )}
         read={async (signal) =>
           (await data.presencePreference({ id: roomId }, signal)).sharing
         }
@@ -41,9 +45,11 @@ export function RoomPrivacySettings({
       <PrivacyPreference
         cacheKey="matrix-read-receipt-preference"
         cacheScope={cacheScope}
-        label="Confirmações de leitura"
+        label={t("Confirmações de leitura")}
         icon={CheckCheck}
-        description="Mostra quando você lê mensagens, em todas as suas conversas e dispositivos. Desativar interrompe novas confirmações; as já compartilhadas continuam visíveis."
+        description={t(
+          "Mostra quando você lê mensagens, em todas as suas conversas e dispositivos. Desativar interrompe novas confirmações; as já compartilhadas continuam visíveis."
+        )}
         read={async (signal) =>
           (await data.readReceiptPreference({ id: roomId }, signal)).enabled
         }
@@ -72,6 +78,7 @@ function PrivacyPreference({
   readonly read: (signal: AbortSignal) => Promise<boolean>;
   readonly save: (enabled: boolean) => Promise<boolean>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
@@ -113,14 +120,16 @@ function PrivacyPreference({
             thumbColor="white"
           />
         ) : preference.isPending ? (
-          <ActivityIndicator accessibilityLabel={`Carregando: ${label}`} />
+          <ActivityIndicator
+            accessibilityLabel={t("Carregando: {value1}", { value1: label })}
+          />
         ) : null}
       </View>
       <Text style={styles.caption}>{description}</Text>
       {(preference.isError || change.isError) && (
         <View style={styles.section}>
           <Text accessibilityRole="alert" style={styles.caption}>
-            Não foi possível confirmar sua preferência.
+            {t("Não foi possível confirmar sua preferência.")}
           </Text>
           <ActionButton
             quiet
@@ -129,7 +138,7 @@ function PrivacyPreference({
               void preference.refetch();
             }}
           >
-            Conferir novamente
+            {t("Conferir novamente")}
           </ActionButton>
         </View>
       )}

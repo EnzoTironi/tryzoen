@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Markdown, { Renderer } from "react-native-marked";
@@ -6,7 +7,10 @@ import { systemFont, useColors } from "./theme";
 import { isSafeWebLink } from "./links";
 
 class AssistantRenderer extends Renderer {
-  constructor(private readonly allowImages: boolean) {
+  constructor(
+    private readonly allowImages: boolean,
+    private readonly imageLabel: string
+  ) {
     super();
   }
   override link(...args: Parameters<Renderer["link"]>) {
@@ -25,7 +29,7 @@ class AssistantRenderer extends Renderer {
     return this.allowImages && isSafeWebLink(uri) ? (
       super.image(...args)
     ) : (
-      <Text key={this.getKey()}>{alt ?? "Image"}</Text>
+      <Text key={this.getKey()}>{alt ?? this.imageLabel}</Text>
     );
   }
 }
@@ -43,10 +47,11 @@ export function AssistantMarkdown({
   readonly compact?: boolean;
   readonly outgoing?: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const renderer = useMemo(
-    () => new AssistantRenderer(allowImages),
-    [allowImages]
+    () => new AssistantRenderer(allowImages, t("Image")),
+    [allowImages, t]
   );
   return (
     <Markdown

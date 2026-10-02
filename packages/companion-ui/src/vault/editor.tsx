@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useEffect, useRef, useState } from "react";
 import { AppState, Text, View } from "react-native";
 import { ActionButton } from "../button";
@@ -16,6 +18,7 @@ export function VaultItemEditor({
   readonly data: VaultData;
   readonly onDone: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [value, setValue] = useState<VaultCreateItem | null>();
   const [failed, setFailed] = useState(false);
@@ -52,7 +55,7 @@ export function VaultItemEditor({
   return (
     <View style={{ gap: 16 }}>
       <Text accessibilityRole="header" style={pageStyles.heading}>
-        Edit {item.label}
+        <Translated message="Edit {value1}" values={{ value1: item.label }} />
       </Text>
       {value && (value.kind === "login" || value.kind === "payment") ? (
         <VaultItemForm
@@ -67,16 +70,18 @@ export function VaultItemEditor({
             accessibilityRole={failed || value === null ? "alert" : undefined}
           >
             {failed || value === null
-              ? "This item changed or could not be opened. Return to saved items and try again."
-              : "Opening saved item…"}
+              ? t(
+                  "This item changed or could not be opened. Return to saved items and try again."
+                )
+              : t("Opening saved item…")}
           </Text>
           <ActionButton quiet onPress={onDone}>
-            Back to item
+            {t("Back to item")}
           </ActionButton>
         </>
       )}
       <Text style={pageStyles.copy}>
-        This editor closes when you leave the app or after five minutes.
+        {t("This editor closes when you leave the app or after five minutes.")}
       </Text>
     </View>
   );

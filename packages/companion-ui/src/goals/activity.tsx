@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, Fragment } from "react";
 import { CircleCheck } from "lucide-react-native";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -18,6 +19,7 @@ export function GoalActivity({
   readonly revision: number;
   readonly cacheScope: string;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -35,10 +37,10 @@ export function GoalActivity({
         accessibilityRole="header"
         style={[styles.heading, compact && styles.compactHeading]}
       >
-        Activity
+        {t("Activity")}
       </Text>
       {history.isPending && (
-        <Text style={pageStyles.copy}>Loading activity…</Text>
+        <Text style={pageStyles.copy}>{t("Loading activity…")}</Text>
       )}
       {history.error && (
         <ActionButton
@@ -47,12 +49,12 @@ export function GoalActivity({
             void history.refetch();
           }}
         >
-          Retry activity
+          {t("Retry activity")}
         </ActionButton>
       )}
       {!history.isPending && !history.error && entries.length === 0 && (
         <Text style={pageStyles.copy}>
-          Activity will appear here after the next update.
+          {t("Activity will appear here after the next update.")}
         </Text>
       )}
       {entries.map((entry, index) => {
@@ -64,9 +66,9 @@ export function GoalActivity({
             {newDay && (
               <Text style={styles.day}>
                 {day === new Date().toDateString()
-                  ? "TODAY"
+                  ? t("TODAY")
                   : new Date(entry.date)
-                      .toLocaleDateString(undefined, {
+                      .toLocaleDateString(locale, {
                         month: "long",
                         day: "numeric",
                         year: "numeric",
@@ -103,7 +105,7 @@ export function GoalActivity({
             void history.fetchNextPage();
           }}
         >
-          Show earlier updates
+          {t("Show earlier updates")}
         </ActionButton>
       )}
     </View>

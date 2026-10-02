@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronRight, Ellipsis } from "lucide-react-native";
@@ -27,6 +28,7 @@ export function GoalRow({
   readonly onToggle: () => void;
   readonly onOptions?: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -38,7 +40,7 @@ export function GoalRow({
         aria-checked={item.completed}
         aria-disabled={pending}
         hitSlop={12}
-        accessibilityLabel={`${item.completed ? "Reopen" : "Complete"} ${item.title}`}
+        accessibilityLabel={`${item.completed ? t("Reopen") : t("Complete")} ${item.title}`}
         disabled={pending}
         onPress={onToggle}
         style={[styles.checkbox, item.completed && styles.checked]}
@@ -60,7 +62,7 @@ export function GoalRow({
       {onOptions ? (
         <IconButton
           icon={Ellipsis}
-          label={`Actions for ${item.title}`}
+          label={t("Actions for {value1}", { value1: item.title })}
           disabled={pending}
           onPress={onOptions}
         />

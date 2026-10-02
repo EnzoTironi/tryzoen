@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import {
   useMemo,
   lazy,
@@ -67,6 +68,7 @@ export function MessageActions({
   readonly reactionSummary?: ReactNode;
   readonly onReact?: (emoji: string | null) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const interaction = useMessageInteraction();
@@ -89,8 +91,10 @@ export function MessageActions({
     <View style={styles.actions}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Message actions"
-        accessibilityHint="Reply, react, copy and more. You can also hold the message or swipe right to reply."
+        accessibilityLabel={t("Message actions")}
+        accessibilityHint={t(
+          "Reply, react, copy and more. You can also hold the message or swipe right to reply."
+        )}
         onFocus={() => {
           setFocused(true);
         }}
@@ -112,7 +116,16 @@ export function MessageActions({
           (reaction && onReact && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Your reaction ${reaction}${reactionCount ? `, ${reactionCount} reactions` : ""}. ${onViewReactions ? "View reactions" : "Change or remove reaction"}`}
+              accessibilityLabel={t(
+                "Your reaction {value1}{value2}. {value3}",
+                {
+                  value1: reaction,
+                  value2: reactionCount ? `, ${reactionCount} reactions` : "",
+                  value3: onViewReactions
+                    ? t("View reactions")
+                    : t("Change or remove reaction"),
+                }
+              )}
               onPress={onViewReactions ?? open}
               style={styles.reaction}
               hitSlop={{ top: 7, bottom: 7 }}
@@ -143,20 +156,24 @@ export function MessageActions({
             <MessageMenuGroup
               onClose={close}
               items={[
-                { icon: Smile, label: "Ver reações", onPress: onViewReactions },
+                {
+                  icon: Smile,
+                  label: t("Ver reações"),
+                  onPress: onViewReactions,
+                },
               ]}
             />
             <View style={styles.group}>
               <MessageMenuGroup
                 onClose={close}
                 items={[
-                  { icon: Reply, label: "Responder", onPress: onReply },
+                  { icon: Reply, label: t("Responder"), onPress: onReply },
                   {
                     icon: MessageCircle,
-                    label: "Responder na thread",
+                    label: t("Responder na thread"),
                     onPress: onThread,
                   },
-                  { icon: Forward, label: "Encaminhar", onPress: onForward },
+                  { icon: Forward, label: t("Encaminhar"), onPress: onForward },
                 ]}
               />
             </View>
@@ -164,7 +181,7 @@ export function MessageActions({
               {copy && text.trim() && (
                 <MessageMenuItem
                   icon={Copy}
-                  label="Copiar texto"
+                  label={t("Copiar texto")}
                   onPress={() => {
                     void copy(text);
                   }}
@@ -173,7 +190,7 @@ export function MessageActions({
               {copy && messageLink && (
                 <MessageMenuItem
                   icon={Link}
-                  label="Copiar link da mensagem"
+                  label={t("Copiar link da mensagem")}
                   onPress={() => {
                     void copy(messageLink);
                   }}
@@ -184,12 +201,20 @@ export function MessageActions({
                 items={[
                   {
                     icon: Mail,
-                    label: "Marcar como não lida",
+                    label: t("Marcar como não lida"),
                     onPress: onUnread,
                   },
-                  { icon: Pin, label: "Fixar / desafixar", onPress: onPin },
-                  { icon: Bookmark, label: "Salvar mensagem", onPress: onSave },
-                  { icon: Pencil, label: "Editar mensagem", onPress: onEdit },
+                  { icon: Pin, label: t("Fixar / desafixar"), onPress: onPin },
+                  {
+                    icon: Bookmark,
+                    label: t("Salvar mensagem"),
+                    onPress: onSave,
+                  },
+                  {
+                    icon: Pencil,
+                    label: t("Editar mensagem"),
+                    onPress: onEdit,
+                  },
                 ]}
               />
             </View>
@@ -200,13 +225,13 @@ export function MessageActions({
                   items={[
                     {
                       icon: Flag,
-                      label: "Denunciar mensagem",
+                      label: t("Denunciar mensagem"),
                       onPress: onReport,
                       destructive: true,
                     },
                     {
                       icon: Trash2,
-                      label: "Excluir mensagem",
+                      label: t("Excluir mensagem"),
                       onPress: onDelete,
                       destructive: true,
                     },
@@ -216,7 +241,7 @@ export function MessageActions({
             )}
             {copyError && (
               <Text accessibilityRole="alert" style={styles.error}>
-                Não foi possível copiar. Tente novamente.
+                {t("Não foi possível copiar. Tente novamente.")}
               </Text>
             )}
           </ReactionPicker>

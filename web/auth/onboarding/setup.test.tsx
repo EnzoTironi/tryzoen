@@ -74,6 +74,54 @@ beforeEach(() => {
   mocks.saveError = false;
 });
 describe("Companion onboarding", () => {
+  it.each([
+    [
+      "en",
+      "Companion name",
+      "Set up my vault",
+      "Start a conversation",
+      "Connections are optional.",
+    ],
+    [
+      "es",
+      "Nombre del Companion",
+      "Preparar mi bóveda",
+      "Iniciar una conversación",
+      "Las conexiones son opcionales.",
+    ],
+    [
+      "pt-BR",
+      "Nome do Companion",
+      "Preparar meu cofre",
+      "Começar uma conversa",
+      "As conexões são opcionais.",
+    ],
+  ] as const)(
+    "localizes the new personal setup and optional connections in %s",
+    (locale, name, vault, start, optional) => {
+      const personal = renderToStaticMarkup(
+        <OnboardingSetup
+          available={[]}
+          callbackUrl="/"
+          initialStep="companion"
+        />,
+        locale
+      );
+      expect(personal).toContain(name);
+      expect(personal).toContain('value="Sol"');
+      const connections = renderToStaticMarkup(
+        <OnboardingSetup
+          available={["telegram"]}
+          callbackUrl="/"
+          initialStep="connections"
+        />,
+        locale
+      );
+      expect(connections).toContain(vault);
+      expect(connections).toContain(start);
+      expect(connections).toContain(optional);
+    }
+  );
   it("keeps an existing Companion name and offers personalization without a team selection", () => {
     const html = renderToStaticMarkup(
       <OnboardingSetup available={[]} callbackUrl="/" initialStep="companion" />

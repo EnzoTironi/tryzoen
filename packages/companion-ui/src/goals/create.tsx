@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   BriefcaseBusiness,
   CircleDollarSign,
@@ -38,6 +39,7 @@ export function GoalCreation({
 }: {
   readonly onCreate: (category: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   const [category, setCategory] = useState<(typeof goalCategories)[number]>();
@@ -45,7 +47,7 @@ export function GoalCreation({
     <>
       <View style={pageStyles.section}>
         <Text accessibilityRole="header" style={pageStyles.heading}>
-          Create a goal
+          {t("Create a goal")}
         </Text>
         {goalCategories.map(({ name, icon: Icon, ...item }) => (
           <Pressable
@@ -57,29 +59,30 @@ export function GoalCreation({
             style={pageStyles.row}
           >
             <Icon size={23} color={colors.muted} strokeWidth={1.7} />
-            <Text style={[pageStyles.rowTitle, { flex: 1 }]}>{name}</Text>
+            <Text style={[pageStyles.rowTitle, { flex: 1 }]}>{t(name)}</Text>
             <Plus size={18} color={colors.muted} />
           </Pressable>
         ))}
       </View>
       {category && (
         <CompanionSheet
-          title={category.title}
+          title={t(category.title)}
           onClose={() => {
             setCategory(undefined);
           }}
         >
           <Text style={pageStyles.copy}>
-            Let’s work out what you want to achieve together. Zoen will ask a
-            few questions, then save the goal and track your progress here.
+            {t(
+              "Let’s work out what you want to achieve together. Zoen will ask a few questions, then save the goal and track your progress here."
+            )}
           </Text>
           <ActionButton
             onPress={() => {
               setCategory(undefined);
-              onCreate(category.name);
+              onCreate(t(category.name));
             }}
           >
-            Let’s go
+            {t("Let’s go")}
           </ActionButton>
         </CompanionSheet>
       )}

@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSMicrophoneUsageDescription": "Permite que Zoen grabe mensajes de voz cuando pulses el micrófono."
+  }
+}

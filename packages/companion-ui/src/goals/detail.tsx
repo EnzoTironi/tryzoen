@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState, type ReactNode, type ComponentProps } from "react";
 import type { GoalRow } from "./row";
 import { Ellipsis, X } from "lucide-react-native";
@@ -38,6 +39,7 @@ export function GoalDetail({
   readonly onClose: () => void;
   readonly onPrompt: (prompt: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -58,7 +60,7 @@ export function GoalDetail({
         </Text>
         <View style={styles.roundControl}>
           <IconButton
-            label="Goal actions"
+            label={t("Goal actions")}
             icon={Ellipsis}
             onPress={() => {
               setMenu(true);
@@ -66,7 +68,11 @@ export function GoalDetail({
           />
         </View>
         <View style={styles.roundControl}>
-          <IconButton label="Close goal details" icon={X} onPress={onClose} />
+          <IconButton
+            label={t("Close goal details")}
+            icon={X}
+            onPress={onClose}
+          />
         </View>
       </View>
       <ScrollView
@@ -78,7 +84,7 @@ export function GoalDetail({
         </Text>
         {Boolean(subgoals?.length) && (
           <View>
-            <Text style={pageStyles.heading}>Subgoals</Text>
+            <Text style={pageStyles.heading}>{t("Subgoals")}</Text>
             {subgoals}
           </View>
         )}

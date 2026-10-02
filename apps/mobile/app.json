@@ -8,7 +8,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tryzoen.mobile"
+      "bundleIdentifier": "com.tryzoen.mobile",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
       "package": "com.tryzoen.mobile"
@@ -39,6 +42,11 @@
         }
       ],
       "expo-video"
-    ]
+    ],
+    "locales": {
+      "en": "./locales/en.json",
+      "es": "./locales/es.json",
+      "pt-BR": "./locales/pt-br.json"
+    }
   }
 }

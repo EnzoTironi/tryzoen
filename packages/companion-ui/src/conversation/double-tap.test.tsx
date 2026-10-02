@@ -1,5 +1,5 @@
 import { useEffect, type EffectCallback } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import type { GestureResponderEvent } from "react-native";
 import { afterEach, expect, it, vi } from "vitest";
 import { useDoubleTap } from "./double-tap";

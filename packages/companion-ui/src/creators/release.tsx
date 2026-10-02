@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Text } from "react-native";
@@ -20,6 +22,7 @@ export function CreatorRelease({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const release = useQuery({
     queryKey: ["creator-release", cacheScope, id],
@@ -29,33 +32,38 @@ export function CreatorRelease({
   const [readingNotes, setReadingNotes] = useState(false);
   const [inviting, setInviting] = useState(false);
   return (
-    <CompanionSheet title="Approved private version" onClose={onClose}>
+    <CompanionSheet title={t("Approved private version")} onClose={onClose}>
       {release.isPending && (
-        <Text style={pageStyles.copy}>Loading approved version…</Text>
+        <Text style={pageStyles.copy}>{t("Loading approved version…")}</Text>
       )}
       {release.isError && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            This version is unavailable.
+            {t("This version is unavailable.")}
           </Text>
           <ActionButton
             onPress={() => {
               void release.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </>
       )}
       {release.data && !release.isError && (
         <>
           <Text style={pageStyles.copy}>
-            Approved {new Date(release.data.createdAt).toLocaleString()} ·
-            Private
+            <Translated
+              message="Approved {value1} · Private"
+              values={{
+                value1: new Date(release.data.createdAt).toLocaleString(locale),
+              }}
+            />
           </Text>
           <Text style={pageStyles.copy}>
-            This saved version stays unchanged when you edit the draft or its
-            reviews. It has not been published.
+            {t(
+              "This saved version stays unchanged when you edit the draft or its reviews. It has not been published."
+            )}
           </Text>
           <CreatorReleaseEvidence
             content={release.data.content}
@@ -67,10 +75,10 @@ export function CreatorRelease({
               setInviting(true);
             }}
           >
-            Invite to a private pilot
+            {t("Invite to a private pilot")}
           </ActionButton>
           <Text accessibilityRole="header" style={pageStyles.heading}>
-            Approval notes
+            {t("Approval notes")}
           </Text>
           <ActionButton
             quiet
@@ -78,7 +86,7 @@ export function CreatorRelease({
               setReadingNotes(true);
             }}
           >
-            Read approval notes
+            {t("Read approval notes")}
           </ActionButton>
           <ActionButton
             disabled={download.isPending}
@@ -86,20 +94,22 @@ export function CreatorRelease({
               download.mutate();
             }}
           >
-            Export approved version
+            {t("Export approved version")}
           </ActionButton>
           {download.isError && (
             <Text accessibilityRole="alert" style={pageStyles.copy}>
-              The export failed. Your approved version is still saved.
+              {t("The export failed. Your approved version is still saved.")}
             </Text>
           )}
         </>
       )}
       {readingNotes && release.data && (
         <DocumentEditor
-          title="Approval notes.md"
-          label="Saved approval notes"
-          description="The creator's review recorded when this private version was approved."
+          title={t("Approval notes.md")}
+          label={t("Saved approval notes")}
+          description={t(
+            "The creator's review recorded when this private version was approved."
+          )}
           initialText={release.data.notes}
           maxLength={8000}
           markdown
@@ -108,7 +118,7 @@ export function CreatorRelease({
             setReadingNotes(false);
           }}
           onSave={async () => {
-            throw new Error("Approved versions cannot be edited.");
+            throw new Error(t("Approved versions cannot be edited."));
           }}
         />
       )}

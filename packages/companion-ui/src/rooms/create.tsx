@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useRef, useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ export function CreateRoom({
   readonly onCreated: (id: string) => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [name, setName] = useState("");
   const operationId = useRef<string | undefined>(undefined);
@@ -36,17 +38,17 @@ export function CreateRoom({
   });
   return (
     <CompanionSheet
-      title="Criar grupo"
+      title={t("Criar grupo")}
       onClose={() => {
         if (!create.isPending) onClose();
       }}
     >
       <Text style={pageStyles.copy}>
-        Um espaço para conversar com as pessoas e o Zoen da sua equipe.
+        {t("Um espaço para conversar com as pessoas e o Zoen da sua equipe.")}
       </Text>
       <TextInput
-        accessibilityLabel="Nome do grupo"
-        placeholder="Nome do grupo"
+        accessibilityLabel={t("Nome do grupo")}
+        placeholder={t("Nome do grupo")}
         value={name}
         onChangeText={(value) => {
           setName(value);
@@ -62,11 +64,11 @@ export function CreateRoom({
           create.mutate();
         }}
       >
-        Criar grupo
+        {t("Criar grupo")}
       </ActionButton>
       {create.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Não foi possível criar o grupo. Tente novamente.
+          {t("Não foi possível criar o grupo. Tente novamente.")}
         </Text>
       )}
     </CompanionSheet>

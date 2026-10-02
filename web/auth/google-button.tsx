@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@web/components/ui/button";
 import { GoogleIcon } from "@web/components/ui/google-icon";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { authClient } from "./client";
 import { safeCallbackUrl } from "./channel/client";
 

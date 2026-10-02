@@ -1,3 +1,5 @@
+import { catalogs, createTranslator } from "@zoen/companion-ui/i18n";
+import { deviceLocale, readLocalePreference } from "../locale";
 import { randomUUID } from "expo-crypto";
 import {
   Directory,
@@ -21,6 +23,9 @@ export async function shareFile(
 ) {
   if (!(await isAvailableAsync()))
     throw new Error("Sharing is not available on this device.");
+  const locale =
+    (await readLocalePreference().catch(() => undefined)) ?? deviceLocale();
+  const t = createTranslator(catalogs[locale], locale);
   const directory = new Directory(Paths.cache, `document-${randomUUID()}`);
   directory.create();
   try {
@@ -36,7 +41,7 @@ export async function shareFile(
       ...(mediaType === "text/markdown"
         ? { UTI: "net.daringfireball.markdown" }
         : {}),
-      dialogTitle: "Save or share file",
+      dialogTitle: t("Save or share file"),
     });
   } finally {
     try {

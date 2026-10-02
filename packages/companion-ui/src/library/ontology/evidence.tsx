@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../../i18n";
+
 import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +27,7 @@ export function OntologyEvidence({
   readonly record: z.output<typeof OntologyReadResultSchema>;
   readonly data: OntologyData;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -40,11 +43,14 @@ export function OntologyEvidence({
     <View style={styles.evidence}>
       <Text style={pageStyles.copy}>
         {claim.validTime
-          ? `Valid from ${claim.validTime.from ?? "an unknown start"} · Until ${claim.validTime.until ?? "an unknown end"} (exclusive)`
-          : "World-valid dates not established"}
+          ? t("Valid from {value1} · Until {value2} (exclusive)", {
+              value1: claim.validTime.from ?? t("an unknown start"),
+              value2: claim.validTime.until ?? t("an unknown end"),
+            })
+          : t("World-valid dates not established")}
       </Text>
       {!claim.sources.length && (
-        <Text style={pageStyles.copy}>No cited evidence</Text>
+        <Text style={pageStyles.copy}>{t("No cited evidence")}</Text>
       )}
       {claim.sources.map((citation) => {
         const status = record.sources.find(
@@ -60,7 +66,9 @@ export function OntologyEvidence({
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Open source ${citation.path}`}
+              accessibilityLabel={t("Open source {value1}", {
+                value1: citation.path,
+              })}
               onPress={() => {
                 setSelected(citation);
               }}
@@ -75,21 +83,22 @@ export function OntologyEvidence({
             {status !== "passage-present" && (
               <Text style={styles.warning}>
                 {status === "passage-changed"
-                  ? "This passage changed in the current source."
-                  : "The current source is unavailable."}
+                  ? t("This passage changed in the current source.")
+                  : t("The current source is unavailable.")}
               </Text>
             )}
           </View>
         );
       })}
       {selected && source.isPending && (
-        <Text style={pageStyles.copy}>Opening the recorded source…</Text>
+        <Text style={pageStyles.copy}>{t("Opening the recorded source…")}</Text>
       )}
       {selected && source.isError && (
         <View style={styles.evidence}>
           <Text accessibilityRole="alert" style={styles.warning}>
-            This source could not be opened. It may no longer be available to
-            you.
+            {t(
+              "This source could not be opened. It may no longer be available to you."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -97,17 +106,20 @@ export function OntologyEvidence({
               void source.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </View>
       )}
       {selected && source.isSuccess && (
         <View style={styles.original}>
           <Text style={pageStyles.copy}>
-            Recorded source · {selected.revision.slice(0, 8)}
+            <Translated
+              message="Recorded source · {value1}"
+              values={{ value1: selected.revision.slice(0, 8) }}
+            />
           </Text>
           <Text selectable style={styles.passage}>
-            {source.data ?? "This file was absent at the recorded revision."}
+            {source.data ?? t("This file was absent at the recorded revision.")}
           </Text>
         </View>
       )}

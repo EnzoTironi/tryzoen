@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
@@ -19,6 +21,7 @@ export function CreatorEvaluation({
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<{
     draft: typeof draft;
@@ -26,16 +29,16 @@ export function CreatorEvaluation({
   }>();
   const cases = draft.evaluation?.cases ?? [];
   return (
-    <CompanionSheet title="Evaluation cases" onClose={onClose}>
+    <CompanionSheet title={t("Evaluation cases")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Write new situations that are not covered by your teaching examples.
-        Decide what a useful answer must do before running the specialist.
+        {t(
+          "Write new situations that are not covered by your teaching examples. Decide what a useful answer must do before running the specialist."
+        )}
       </Text>
       <Text style={pageStyles.copy}>
-        Cases stay private and separate from the playbook. Only the selected
-        question reaches the specialist; your criteria and other cases stay
-        hidden. Repeated cases help you compare revisions, but do not prove
-        performance on unseen situations.
+        {t(
+          "Cases stay private and separate from the playbook. Only the selected question reaches the specialist; your criteria and other cases stay hidden. Repeated cases help you compare revisions, but do not prove performance on unseen situations."
+        )}
       </Text>
       {!draft.archivedAt && (
         <ActionButton
@@ -52,11 +55,14 @@ export function CreatorEvaluation({
             });
           }}
         >
-          Add evaluation case
+          {t("Add evaluation case")}
         </ActionButton>
       )}
       <Text style={pageStyles.copy}>
-        {cases.length} of 20 cases · Run a saved case from Try this specialist.
+        <Translated
+          message="{value1} of 20 cases · Run a saved case from Try this specialist."
+          values={{ value1: cases.length }}
+        />
       </Text>
       {cases.map((item) => (
         <View key={item.id} style={{ gap: 8, paddingVertical: 12 }}>
@@ -68,7 +74,10 @@ export function CreatorEvaluation({
               setEditing({ draft, value: item });
             }}
           >
-            {`${draft.archivedAt ? "Read" : "Edit"} case: ${item.title}`}
+            {t("{value1} case: {value2}", {
+              value1: draft.archivedAt ? t("Read") : t("Edit"),
+              value2: item.title,
+            })}
           </ActionButton>
         </View>
       ))}

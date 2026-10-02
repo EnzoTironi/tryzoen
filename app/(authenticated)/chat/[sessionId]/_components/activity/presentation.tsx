@@ -1,6 +1,6 @@
 import type { SubagentStatus } from "@app/_lib/subagent-sessions";
 import { Badge } from "@web/components/ui/badge";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function agentLabel(name: string) {
   return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;

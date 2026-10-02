@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { useInputResponse } from "@zoen/companion-ui/input-response";
 import { approvalMessageSchema } from "@agent/lib/approval-message";
 import type { EveDynamicToolPart, EveMessageInputRequest } from "eve/react";

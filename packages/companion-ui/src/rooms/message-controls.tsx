@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { ReportRoomMessage } from "./report-message";
 import { PinRoomMessage } from "./pins";
@@ -118,6 +119,7 @@ export function RoomThreadAction({
   item,
   onThread,
 }: Pick<ComponentProps<typeof RoomMessageControls>, "item" | "onThread">) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -125,14 +127,17 @@ export function RoomThreadAction({
       {onThread && item.replies > 0 && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Abrir thread de ${item.sender}: ${item.text.slice(0, 80)}`}
+          accessibilityLabel={t("Abrir thread de {value1}: {value2}", {
+            value1: item.sender,
+            value2: item.text.slice(0, 80),
+          })}
           onPress={() => {
             onThread(item);
           }}
           style={({ pressed }) => [styles.reply, pressed && styles.pressed]}
         >
           <Text style={styles.replyText}>
-            {item.replies} {item.replies === 1 ? "resposta" : "respostas"}
+            {item.replies} {item.replies === 1 ? t("resposta") : t("respostas")}
           </Text>
         </Pressable>
       )}
@@ -146,6 +151,7 @@ function RoomReactionSummary({
 }: Pick<ComponentProps<typeof RoomMessageControls>, "reaction"> & {
   readonly onOpen: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   if (!reaction?.reactions.length) return null;
@@ -161,7 +167,7 @@ function RoomReactionSummary({
       style={[styles.reaction, reaction.mine && styles.myReaction]}
       hitSlop={{ top: 7, bottom: 7 }}
       accessibilityRole="button"
-      accessibilityLabel={`Ver quem reagiu. ${label}`}
+      accessibilityLabel={t("Ver quem reagiu. {value1}", { value1: label })}
       onPress={onOpen}
     >
       <Text

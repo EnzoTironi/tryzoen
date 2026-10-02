@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useEffect, useState, type ComponentProps } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -37,6 +38,7 @@ export function RoomSearch({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
@@ -77,7 +79,7 @@ export function RoomSearch({
     );
   return (
     <CompanionSheet
-      title="Buscar na conversa"
+      title={t("Buscar na conversa")}
       onClose={onClose}
       scrollable={false}
     >
@@ -93,8 +95,8 @@ export function RoomSearch({
       >
         <Search size={18} color={colors.muted} />
         <TextInput
-          accessibilityLabel="Buscar mensagens"
-          placeholder="Palavra ou expressão"
+          accessibilityLabel={t("Buscar mensagens")}
+          placeholder={t("Palavra ou expressão")}
           value={text}
           onChangeText={setText}
           maxLength={200}
@@ -116,14 +118,14 @@ export function RoomSearch({
       {results.isError ? (
         <View>
           <Text accessibilityRole="alert">
-            Não foi possível buscar nesta conversa.
+            {t("Não foi possível buscar nesta conversa.")}
           </Text>
           <ActionButton
             onPress={() => {
               void results.refetch();
             }}
           >
-            Tentar novamente
+            {t("Tentar novamente")}
           </ActionButton>
         </View>
       ) : (
@@ -143,17 +145,17 @@ export function RoomSearch({
           ListEmptyComponent={
             <Text style={{ color: colors.muted, paddingVertical: 20 }}>
               {!query
-                ? "Encontre uma mensagem nesta conversa."
+                ? t("Encontre uma mensagem nesta conversa.")
                 : results.isFetching
-                  ? "Buscando…"
+                  ? t("Buscando…")
                   : results.hasNextPage
-                    ? "Verificando os próximos resultados…"
-                    : "Nenhuma mensagem atual encontrada."}
+                    ? t("Verificando os próximos resultados…")
+                    : t("Nenhuma mensagem atual encontrada.")}
             </Text>
           }
           ListFooterComponent={
             results.isFetching ? (
-              <ActivityIndicator accessibilityLabel="Buscando mensagens" />
+              <ActivityIndicator accessibilityLabel={t("Buscando mensagens")} />
             ) : !items.length && results.hasNextPage ? (
               <ActionButton
                 quiet
@@ -161,7 +163,7 @@ export function RoomSearch({
                   void results.fetchNextPage({ cancelRefetch: false });
                 }}
               >
-                Continuar busca
+                {t("Continuar busca")}
               </ActionButton>
             ) : null
           }
@@ -186,11 +188,15 @@ function SearchResult({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onSelect: () => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Abrir mensagem de ${item.sender}: ${item.text}`}
+      accessibilityLabel={t("Abrir mensagem de {value1}: {value2}", {
+        value1: item.sender,
+        value2: item.text,
+      })}
       onPress={onSelect}
       style={({ pressed }) => ({
         paddingVertical: 16,
@@ -202,7 +208,7 @@ function SearchResult({
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Text style={{ fontWeight: "600", color: colors.ink, flex: 1 }}>
-          {item.mine ? "Você" : item.sender}
+          {item.mine ? t("Você") : item.sender}
         </Text>
         <ChevronRight size={16} color={colors.muted} />
       </View>
@@ -220,9 +226,9 @@ function SearchResult({
       <Text
         style={{ fontFamily: systemFont, fontSize: 12, color: colors.muted }}
       >
-        {new Date(item.timestamp).toLocaleString()}
-        {item.editId ? " · Editada" : ""}
-        {item.rootId ? " · Thread" : ""}
+        {new Date(item.timestamp).toLocaleString(locale)}
+        {item.editId ? t(" · Editada") : ""}
+        {item.rootId ? t(" · Thread") : ""}
       </Text>
     </Pressable>
   );
@@ -237,6 +243,7 @@ function SearchAuthors({
   readonly senderId: string | undefined;
   readonly onSelect: (id: string | undefined) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   return (
     <ScrollView
@@ -248,7 +255,9 @@ function SearchAuthors({
         <Pressable
           key={person.id ?? "all"}
           accessibilityRole="button"
-          accessibilityLabel={`Mensagens de ${person.name}`}
+          accessibilityLabel={t("Mensagens de {value1}", {
+            value1: person.name,
+          })}
           accessibilityState={{ selected: person.id === senderId }}
           onPress={() => {
             onSelect(person.id);

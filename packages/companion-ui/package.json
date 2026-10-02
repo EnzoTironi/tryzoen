@@ -115,7 +115,22 @@
     "./workspace-sources": {
       "types": "./dist/library/sources-schema.d.ts",
       "default": "./dist/library/sources-schema.js"
-    }
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "default": "./dist/i18n/index.js"
+    },
+    "./i18n/locale": {
+      "types": "./dist/i18n/locale.d.ts",
+      "default": "./dist/i18n/locale.js"
+    },
+    "./i18n/translate": {
+      "types": "./dist/i18n/translate.d.ts",
+      "default": "./dist/i18n/translate.js"
+    },
+    "./i18n/messages/en": "./dist/i18n/messages/en.json",
+    "./i18n/messages/es": "./dist/i18n/messages/es.json",
+    "./i18n/messages/pt-br": "./dist/i18n/messages/pt-br.json"
   },
   "dependencies": {
     "@tanstack/react-query": "5.102.6",
@@ -123,13 +138,14 @@
     "@tiptap/markdown": "3.31.3",
     "@tiptap/pm": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
+    "credit-card-type": "^10.3.0",
+    "emojibase-data": "17.0.0",
     "linkifyjs": "4.3.3",
     "lucide-react-native": "1.48.0",
     "react-native-marked": "8.3.2",
     "react-native-svg": "15.15.4",
     "unicode-emoji-json": "0.9.0",
-    "zod": "4.5.4",
-    "credit-card-type": "^10.3.0"
+    "zod": "4.5.4"
   },
   "peerDependencies": {
     "ai": "^7.0.107",
