@@ -1,7 +1,7 @@
 name: Zoen native agent evals
 
-# Each manual dispatch needs a fresh dedicated Codex login in ZOEN_EVAL_PROVIDERS.
-# Never reuse a desktop/production refresh grant; this ephemeral job discards its grant.
+# Each manual dispatch needs a current Codex login in ZOEN_EVAL_CODEX_AUTH.
+# The runner deletes credential files after the run and cannot update repository secrets.
 on:
   workflow_dispatch:
     inputs:
@@ -100,6 +100,7 @@ jobs:
       - name: Prepare the dedicated evaluation login and browser credentials
         env:
           EVAL_PROVIDERS: ${{ secrets.ZOEN_EVAL_PROVIDERS }}
+          EVAL_CODEX_AUTH: ${{ secrets.ZOEN_EVAL_CODEX_AUTH }}
         run: |
           umask 077
           mkdir -p .eve
@@ -110,6 +111,7 @@ jobs:
           import { join } from 'node:path';
           import { parseEnv } from 'node:util';
           const source = parseEnv(process.env.EVAL_PROVIDERS ?? '');
+          source.CODEX_AUTH_JSON = process.env.EVAL_CODEX_AUTH ?? '';
           const mask = value => {
             if (typeof value === 'string' && value.length >= 8) {
               console.log('::add-mask::' + value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A'));

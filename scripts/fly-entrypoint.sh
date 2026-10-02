@@ -8,11 +8,12 @@ umask 077
 # Workspace Git bundles and authority use the application's durable Postgres.
 : "${DATABASE_URL:?DATABASE_URL is required}"
 
-if [ "${ZOEN_SESSION_ARCHIVE_DIR:-}" = /var/lib/zoen/memory ]; then
-  if ! mountpoint -q /var/lib/zoen; then
-    echo 'The persistent file-memory volume is not mounted.' >&2
+if [ "${ZOEN_SESSION_ARCHIVE_DIR:-}" = /root/.eve/auth/session-memory ]; then
+  if ! mountpoint -q /root/.eve/auth; then
+    echo 'The persistent web volume is not mounted.' >&2
     exit 1
   fi
+  mkdir -p "$ZOEN_SESSION_ARCHIVE_DIR"
 fi
 
 if [ -n "${CODEX_AUTH_JSON:-}" ]; then

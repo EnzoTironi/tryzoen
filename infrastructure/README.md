@@ -6,27 +6,30 @@ providers. PostgreSQL is self-hosted; no managed Postgres product is provisioned
 
 ## Production layout
 
-The file-memory replacement is implemented locally and has **not been deployed**.
-The table below records the previous installation; the old memory machine/database
-must be preserved until existing records and erasure obligations are reconciled.
-See [file-memory deployment](file-memory/README.md) before applying this branch.
-The active hosted definition now uses a retained web/Eve memory volume and no Mem0 API.
+The hosted definition uses the existing encrypted web volume for the native model
+login and file memory. Fly permits one volume per machine, so both directories live
+under `/root/.eve/auth`; memory uses its `session-memory` subdirectory. The volume
+and web machine identities are pinned in `production.ts`. The old Mem0 machine is
+retained but can be stopped after the new web release passes its health checks;
+its database and historical backups remain available.
 
 | Resource                 | Configuration                                                                                                                                                                                                  |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Web + Eve                | companion-tironi, gru, 2 shared CPUs / 2 GB                                                                                                                                                                    |
 | PostgreSQL 17 + pgvector | companion-pg-prod, gru, 1 shared CPU / 1 GB, encrypted 10 GB volume                                                                                                                                            |
-| Private Mem0 API         | zoen-memory-tironi, gru, 1 shared CPU / 1 GB                                                                                                                                                                   |
+| Semantic executor        | zoen-semantic-tironi, gru, 1 shared CPU / 2 GB; authenticated HTTPS, 1.5 GiB process group, no swap, 64 processes                                                                                              |
 | Private vault            | zoen-vault-tironi, gru, 1 shared CPU / 512 MB; Vaultwarden 1.37.3, restricted database zoen_vaultwarden, encrypted 3 GB volume                                                                                 |
 | Private Matrix           | zoen-matrix-tironi, gru, 1 shared CPU / 1 GB; Synapse 1.160.0, database zoen_matrix                                                                                                                            |
 | Private WhatsApp bridge  | zoen-whatsapp-tironi, gru, 1 shared CPU / 512 MB; mautrix-whatsapp v0.2608.0, restricted database zoen_whatsapp; not started in CI                                                                             |
-| Memory persistence       | PostgreSQL database zoen_memory and separate login; stateless API without a local memory volume                                                                                                                |
+| Memory persistence       | Encrypted 10 GB model_auth volume shared with the native model login; 14-day Fly snapshot retention                                                                                                            |
 | Backups                  | Private Tigris bucket, pgBackRest client-side AES-256 encryption, continuous WAL archive                                                                                                                       |
 | Domain                   | Alchemy still manages Cloudflare A + AAAA + Fly TLS for zoen.tironi.xyz. Public split is tryzoen.com (marketing) + app.tryzoen.com (product); see [docs/ops/tryzoen-domain.md](../docs/ops/tryzoen-domain.md). |
 | Infrastructure state     | Alchemy Cloudflare remote state, encrypted with a separate key in Cloudflare Secrets Store                                                                                                                     |
 
-All machines remain running. PostgreSQL, memory, Matrix and the WhatsApp bridge have no public service or IP.
-Fly private networking carries their traffic. The memory and Matrix database
+Production machines remain running. PostgreSQL, Matrix and the WhatsApp bridge
+have no public service or IP. Fly private networking carries their traffic. The
+semantic executor requires a bearer token and returns no query diagnostics in
+error responses. The retired memory and active Matrix database
 logins cannot connect to the application database. Application credentials are
 Fly vault secrets; they do not enter Git, image layers or public CI artifacts.
 
@@ -68,7 +71,8 @@ service token and does not need an interactive login.
 
 `ZOEN_RELEASE` must be the full tested Git commit SHA. Alchemy builds and pushes
 Linux amd64 images and deploys their immutable digests. Optional
-`ZOEN_POSTGRES_IMAGE`, `ZOEN_MEMORY_IMAGE`, `ZOEN_MATRIX_IMAGE`, `ZOEN_VAULTWARDEN_IMAGE`, and `ZOEN_WEB_IMAGE` digest references
+`ZOEN_POSTGRES_IMAGE`, `ZOEN_SEMANTIC_IMAGE`, `ZOEN_MATRIX_IMAGE`,
+`ZOEN_VAULTWARDEN_IMAGE`, `ZOEN_WHATSAPP_IMAGE`, and `ZOEN_WEB_IMAGE` digest references
 support adoption or a deliberate rollback. Keep the database on PostgreSQL major
 17; a major upgrade requires a separate migration and recovery plan.
 Which SHA has actually been published is recorded in the
@@ -107,13 +111,20 @@ operations, not routine deployment. Apps, machines, volumes, backup
 storage and encryption keys are retained on stack removal. Do not use `--force`
 or `destroy` as a way to clear an adoption error.
 
-The web service uses `WebPersistent` and a dedicated encrypted `model_auth`
-volume. Fly cannot attach a volume on another physical host to an existing
-machine. The first migration creates `zoen-web` on that volume, checks its exact
-image, mount and `alive` readiness check, then removes public services from the
-legacy machine and stops it. Alchemy retains the old machine for recovery; the
-database is unchanged. Repeated deployments update the persistent web machine.
-If readiness fails, the cutover never stops the serving legacy machine.
+The web service uses `WebPersistent` and the retained encrypted `model_auth`
+volume. Alchemy adopts the exact existing `zoen-web` machine and volume, grows
+the volume to 10 GB, and updates the image. After the image, mount and `alive`
+readiness check pass, it removes public services from the three recorded obsolete
+web machines and stops them. Repeated deployments update the same persistent
+machine. A failed readiness check prevents retirement of the other serving
+web machine. Updating the persistent machine can cause a brief restart.
+
+The semantic executor runs in a dedicated Fly VM. Its entrypoint moves the
+service into a cgroup v2 with 1.5 GiB of memory, no swap and a 64-process limit,
+then makes its filesystem read-only and drops root privileges and capabilities.
+Deployment requires anonymous access to fail, authenticated health to pass, and
+a synthetic calculation to return 30. The web machine repeats this probe during
+the final production check.
 
 For an application rollback, keep this infrastructure definition and set
 `ZOEN_WEB_IMAGE` to a previously verified immutable image digest, then plan and
@@ -217,14 +228,13 @@ Rotate Fly deploy/probe tokens before their 90-day expiry. State and backup
 credentials are never included in uploaded artifacts.
 
 `Zoen native agent evals` is manually dispatched and uses an isolated `CODEX_HOME`.
-Before **each** dispatch, create a fresh dedicated managed Codex login and replace
-`CODEX_AUTH_JSON` inside the protected `ZOEN_EVAL_PROVIDERS` repository secret,
-preserving its `KERNEL_API_KEY`. The runner discards that CI grant after the run;
-it has no secret-write permission and does not maintain reusable CI credentials.
-Never copy an active desktop or production refresh grant into CI. Production
-refresh remains independent on its retained volume. This follows the official
-[one-grant-per-stream requirement](https://learn.chatgpt.com/docs/auth/ci-cd-auth)
-without adding a secret writer or storing auth in build artifacts.
+Supply the complete managed Codex `auth.json` through the protected repository
+secret `ZOEN_EVAL_CODEX_AUTH`. Browser credentials remain in
+`ZOEN_EVAL_PROVIDERS` as `KERNEL_API_KEY`; replacing the evaluation login does
+not replace browser credentials. Prefer a dedicated evaluation login so parallel
+refreshes cannot affect another client. The runner deletes its credential files
+after the run and has no secret-write permission. Production keeps its separate
+retained login. No credential is included in build artifacts.
 
 ## Matrix operations
 

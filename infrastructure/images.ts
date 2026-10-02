@@ -10,9 +10,11 @@ export const releaseImage = Effect.fn(function* (
     | "Memory"
     | "Matrix"
     | "Vaultwarden"
-    | "WhatsApp",
-  appName: string,
-  context: string
+    | "WhatsApp"
+    | "Semantic",
+  appName: string | Output.Output<string>,
+  context: string,
+  dockerfile?: string
 ) {
   const pinned = yield* Config.string(
     `ZOEN_${component.toUpperCase()}_IMAGE`
@@ -33,11 +35,12 @@ export const releaseImage = Effect.fn(function* (
   }
   const token = yield* Config.redacted("FLY_API_TOKEN");
   const image = yield* Docker.Image(`${component}Image`, {
-    name: `registry.fly.io/${appName}`,
+    name: Output.interpolate`registry.fly.io/${appName}`,
     tag: release,
     registry: { server: "registry.fly.io", username: "x", password: token },
     build: {
       context,
+      dockerfile,
       platform: "linux/amd64",
       // Attestation timestamps otherwise change the OCI index on a cached
       // build, making an unchanged plan restart the database and memory.

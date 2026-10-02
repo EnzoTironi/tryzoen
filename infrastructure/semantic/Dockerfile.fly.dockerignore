@@ -1,0 +1,9 @@
+**
+!.output
+!.output/server
+!.output/server/semantic
+!.output/server/semantic/**
+!infrastructure
+!infrastructure/semantic
+!infrastructure/semantic/fly-entrypoint.sh
+!infrastructure/semantic/probe.mjs

@@ -4,10 +4,12 @@
     "moduleResolution": "Bundler",
     "target": "ES2022",
     "strict": true,
+    "allowJs": true,
+    "checkJs": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["*.ts", "tests/*.ts"]
+  "include": ["*.ts", "tests/*.ts", "semantic/probe.mjs"]
 }

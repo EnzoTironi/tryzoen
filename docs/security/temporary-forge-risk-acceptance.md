@@ -57,3 +57,18 @@ deployment and distribution commands remain unchanged. The reviewed configuratio
 fingerprint is `fd686230109caeae94737d9da39a856be98db47f38c31679ffe29e360bea3b59`.
 The accepted advisory, versions and dependency paths remain unchanged, and the
 acceptance still expires at **2026-10-04T02:59:00Z**.
+
+The 2026-10-02 production rollout review covers the Fly volume correction, the
+isolated semantic executor and its authenticated calculation probe, and separate
+evaluation authentication input. Dependency versions, locks, Expo updates and
+code-signing settings are unchanged. The new executor bundle and deployment code
+do not import node-forge or add RSA certificate/signature verification. Public TLS
+terminates at Fly; the executor authenticates requests with a generated bearer
+token. The full web image still includes the existing Expo dependency path through
+`@better-auth/expo`, so this review does not claim that node-forge is absent.
+The reviewed configuration fingerprint is `31497f4c2c00c5c278eaf46b7ef6e40f1c455ad8ea38a697e5e4ae89339b5087`. The advisory
+remains unfixed, its exact version/path constraints are unchanged, and acceptance
+still ends at **2026-10-04T02:59:00Z**.
+
+The deployment workflow reruns both dependency audits immediately before applying
+infrastructure, so an earlier CI success cannot carry this exception past expiry.
