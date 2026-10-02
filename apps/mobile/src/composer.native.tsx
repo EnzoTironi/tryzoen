@@ -1,3 +1,4 @@
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   useEffect,
   useLayoutEffect,
@@ -40,6 +41,7 @@ import {
 import { documentMarkdown } from "@zoen/companion-ui/markdown";
 
 function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
+  const { t } = useI18n();
   const latest = useRef(props);
   useLayoutEffect(() => {
     latest.current = props;
@@ -175,37 +177,37 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
   );
   const commands = [
     {
-      label: "Negrito",
+      label: t("Negrito"),
       Icon: Bold,
       active: state.isBoldActive,
       run: editor.toggleBold,
     },
     {
-      label: "Itálico",
+      label: t("Itálico"),
       Icon: Italic,
       active: state.isItalicActive,
       run: editor.toggleItalic,
     },
     {
-      label: "Lista",
+      label: t("Lista"),
       Icon: List,
       active: state.isBulletListActive,
       run: editor.toggleBulletList,
     },
     {
-      label: "Lista numerada",
+      label: t("Lista numerada"),
       Icon: ListOrdered,
       active: state.isOrderedListActive,
       run: editor.toggleOrderedList,
     },
     {
-      label: "Citação",
+      label: t("Citação"),
       Icon: Quote,
       active: state.isBlockquoteActive,
       run: editor.toggleBlockquote,
     },
     {
-      label: "Inserir link",
+      label: t("Inserir link"),
       Icon: Link,
       active: link !== undefined,
       run: () => {
@@ -213,7 +215,7 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
       },
     },
     {
-      label: "Código",
+      label: t("Código"),
       Icon: Code,
       active: state.isCodeActive,
       run: editor.toggleCode,
@@ -224,7 +226,7 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
       <View style={styles.toolbar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Formatação da mensagem"
+          accessibilityLabel={t("Formatação da mensagem")}
           accessibilityState={{ expanded: formatting }}
           onPress={() => {
             setFormatting(!formatting);
@@ -261,8 +263,8 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
       {link !== undefined && (
         <View style={styles.toolbar}>
           <TextInput
-            accessibilityLabel="Endereço do link"
-            placeholder="https://"
+            accessibilityLabel={t("Endereço do link")}
+            placeholder={t("https://")}
             value={link}
             onChangeText={setLink}
             autoCapitalize="none"
@@ -270,24 +272,24 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Aplicar link"
+            accessibilityLabel={t("Aplicar link")}
             disabled={!isSafeWebLink(link)}
             onPress={() => {
               if (isSafeWebLink(link)) editor.setLink(link);
               setLink(undefined);
             }}
           >
-            <Text>Aplicar</Text>
+            <Text>{t("Aplicar")}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Cancelar link"
+            accessibilityLabel={t("Cancelar link")}
             onPress={() => {
               setLink(undefined);
               editor.focus();
             }}
           >
-            <Text>Cancelar</Text>
+            <Text>{t("Cancelar")}</Text>
           </Pressable>
         </View>
       )}
@@ -298,7 +300,7 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
         originWhitelist={["about:blank"]}
         onShouldStartLoadWithRequest={({ url }) => url === "about:blank"}
         onError={() => {
-          props.onError("Não foi possível carregar o campo de mensagem.");
+          props.onError(t("Não foi possível carregar o campo de mensagem."));
         }}
         onLoadEnd={() => {
           editor.injectCSS(
@@ -307,7 +309,7 @@ function NativePromptEditor({ ref, ...props }: ComposerEditorProps) {
         }}
       />
       {props.value.length > props.maxLength && (
-        <Text accessibilityRole="alert">A mensagem é muito longa.</Text>
+        <Text accessibilityRole="alert">{t("A mensagem é muito longa.")}</Text>
       )}
     </View>
   );

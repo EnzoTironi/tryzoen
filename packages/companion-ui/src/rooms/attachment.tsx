@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, StyleSheet } from "react-native";
@@ -19,6 +20,7 @@ export function RoomAttachment({
   roomId: string;
   cacheScope: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const [opened, setOpened] = useState(false);
   const file = useQuery({
@@ -41,7 +43,7 @@ export function RoomAttachment({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Abrir ${item.media.filename}`}
+      accessibilityLabel={t("Abrir {value1}", { value1: item.media.filename })}
       disabled={file.isFetching}
       style={styles.card}
       onPress={() => {
@@ -54,11 +56,11 @@ export function RoomAttachment({
         icon={Icon}
         detail={
           file.isFetching
-            ? "Carregando…"
+            ? t("Carregando…")
             : file.isError
-              ? "Não foi possível abrir. Toque para tentar novamente."
+              ? t("Não foi possível abrir. Toque para tentar novamente.")
               : item.media.size === undefined
-                ? "Toque para abrir"
+                ? t("Toque para abrir")
                 : `${Math.max(1, Math.round(item.media.size / 1024))} KB · Toque para abrir`
         }
         action={<Download size={20} color={colors.muted} />}

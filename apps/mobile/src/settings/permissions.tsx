@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "@zoen/companion-ui/i18n";
+
 import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +9,7 @@ import { auth } from "../auth";
 import { rpc } from "../api";
 
 function useCredentialPermissions() {
+  const { t } = useI18n();
   const account = auth.useSession();
   const userId = account.data?.user.id;
   const sessionId = account.data?.session.id;
@@ -43,13 +46,13 @@ function useCredentialPermissions() {
         current.data?.user.id !== userId ||
         current.data.session.id !== sessionId
       )
-        throw new Error("Sign in again before changing permissions.");
+        throw new Error(t("Sign in again before changing permissions."));
       const fresh = credentialPermissionsSchema.parse(
         await rpc.query("workspaces.vault.delegations")
       );
       if (!fresh.mayManage || !fresh.items.some((item) => item.id === id))
         throw new Error(
-          "This permission has changed. Refresh before trying again."
+          t("This permission has changed. Refresh before trying again.")
         );
       await rpc.mutation("workspaces.vault.revoke", { id });
       return { id, permissions: fresh };
@@ -87,16 +90,17 @@ function useCredentialPermissions() {
 }
 
 export function CredentialPermissions() {
+  const { t } = useI18n();
   const state = useCredentialPermissions();
   return (
     <View style={styles.content}>
       <Text accessibilityRole="header" style={styles.heading}>
-        Saved credential access
+        {t("Saved credential access")}
       </Text>
       <Text style={styles.description}>
-        Review credentials Zoen is allowed to use. Revoking access keeps the
-        saved credential in your vault. These permissions do not control browser
-        actions or device access.
+        {t(
+          "Review credentials Zoen is allowed to use. Revoking access keeps the saved credential in your vault. These permissions do not control browser actions or device access."
+        )}
       </Text>
       <PermissionContent state={state} />
     </View>
@@ -108,6 +112,7 @@ function PermissionContent({
 }: {
   readonly state: ReturnType<typeof useCredentialPermissions>;
 }) {
+  const { t, locale } = useI18n();
   const {
     account,
     userId,
@@ -120,25 +125,28 @@ function PermissionContent({
     setRevoked,
     retry,
   } = state;
-  if (account.isPending) return <Text>Loading your account…</Text>;
+  if (account.isPending) return <Text>{t("Loading your account…")}</Text>;
   if (!userId || !sessionId)
     return (
       <Text accessibilityRole="alert">
-        Sign in to review credential permissions.
+        {t("Sign in to review credential permissions.")}
       </Text>
     );
   if (account.error || grants.isError || revoke.isError)
     return (
       <View style={styles.content}>
         <Text accessibilityRole="alert">
-          Could not verify credential access. Your account or permissions may
-          have changed. Refresh to try again.
+          {t(
+            "Could not verify credential access. Your account or permissions may have changed. Refresh to try again."
+          )}
         </Text>
-        <ActionButton onPress={retry}>Try again</ActionButton>
+        <ActionButton onPress={retry}>{t("Try again")}</ActionButton>
       </View>
     );
   if (grants.isPending || grants.isFetching)
-    return <Text accessibilityLiveRegion="polite">Loading permissions…</Text>;
+    return (
+      <Text accessibilityLiveRegion="polite">{t("Loading permissions…")}</Text>
+    );
   const items = grants.data.items;
   const selectedGrant = grants.data.mayManage
     ? items.find((item) => item.id === selected)
@@ -147,22 +155,32 @@ function PermissionContent({
     <>
       {revoked && (
         <Text accessibilityLiveRegion="polite">
-          Zoen’s access was revoked. Your saved credential was kept.
+          {t("Zoen’s access was revoked. Your saved credential was kept.")}
         </Text>
       )}
       {!grants.data.mayManage && (
         <Text style={styles.description}>
-          Only a workspace owner or administrator can revoke access.
+          {t("Only a workspace owner or administrator can revoke access.")}
         </Text>
       )}
-      {items.length === 0 && <Text>No active credential permissions.</Text>}
+      {items.length === 0 && (
+        <Text>{t("No active credential permissions.")}</Text>
+      )}
       {items.map((item) => (
         <View key={item.id} style={styles.row}>
           <Text style={styles.label}>
-            {item.label ?? `Saved credential · ${item.itemId.slice(-8)}`}
+            {item.label ??
+              t("Saved credential · {value1}", {
+                value1: item.itemId.slice(-8),
+              })}
           </Text>
           <Text style={styles.description}>
-            Expires {new Date(item.expiresAt).toLocaleString()}
+            <Translated
+              message="Expires {value1}"
+              values={{
+                value1: new Date(item.expiresAt).toLocaleString(locale),
+              }}
+            />
           </Text>
           <ActionButton
             quiet
@@ -174,16 +192,22 @@ function PermissionContent({
               setRevoked(false);
             }}
           >
-            Revoke Zoen’s access
+            {t("Revoke Zoen’s access")}
           </ActionButton>
           {selectedGrant?.id === item.id && (
             <View style={styles.confirmation}>
               <Text style={styles.label}>
-                Revoke access to {selectedGrant.label ?? "this credential"}?
+                <Translated
+                  message="Revoke access to {value1}?"
+                  values={{
+                    value1: selectedGrant.label ?? t("this credential"),
+                  }}
+                />
               </Text>
               <Text style={styles.description}>
-                Zoen will no longer be able to use this saved credential through
-                this permission.
+                {t(
+                  "Zoen will no longer be able to use this saved credential through this permission."
+                )}
               </Text>
               <ActionButton
                 disabled={revoke.isPending}
@@ -191,7 +215,7 @@ function PermissionContent({
                   revoke.mutate(selectedGrant.id);
                 }}
               >
-                {revoke.isPending ? "Revoking…" : "Confirm revocation"}
+                {revoke.isPending ? t("Revoking…") : t("Confirm revocation")}
               </ActionButton>
               <ActionButton
                 quiet
@@ -200,14 +224,14 @@ function PermissionContent({
                   setSelected(undefined);
                 }}
               >
-                Keep access
+                {t("Keep access")}
               </ActionButton>
             </View>
           )}
         </View>
       ))}
       <ActionButton quiet disabled={revoke.isPending} onPress={retry}>
-        Refresh permissions
+        {t("Refresh permissions")}
       </ActionButton>
     </>
   );

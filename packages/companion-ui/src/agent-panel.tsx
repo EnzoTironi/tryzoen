@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -23,13 +24,14 @@ export function AgentPanel({
   readonly renderHeader?: (onEdit: () => void) => ReactNode;
   readonly children: (tab: AgentPanelTab) => ReactNode;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [tab, setTab] = useState<AgentPanelTab>("activity");
   const compact = useWindowDimensions().width < 720;
   return (
     <SheetSurface
-      title="Agent activity and memory"
+      title={t("Agent activity and memory")}
       onClose={onClose}
       panelStyle={styles.panel}
       maxWidth={560}
@@ -37,7 +39,11 @@ export function AgentPanel({
       {!compact && (
         <>
           <View style={styles.close}>
-            <IconButton label="Close agent panel" icon={X} onPress={onClose} />
+            <IconButton
+              label={t("Close agent panel")}
+              icon={X}
+              onPress={onClose}
+            />
           </View>
           {renderHeader?.(() => {
             setTab("identity");
@@ -50,7 +56,7 @@ export function AgentPanel({
             <Pressable
               key={id}
               accessibilityRole="tab"
-              accessibilityLabel={label}
+              accessibilityLabel={t(label)}
               aria-selected={tab === id}
               onPress={() => {
                 setTab(id);
@@ -66,7 +72,11 @@ export function AgentPanel({
           ))}
         </View>
         {compact && (
-          <IconButton label="Close agent panel" icon={X} onPress={onClose} />
+          <IconButton
+            label={t("Close agent panel")}
+            icon={X}
+            onPress={onClose}
+          />
         )}
       </View>
       <View style={styles.content}>{children(tab)}</View>

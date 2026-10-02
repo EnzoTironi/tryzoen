@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import type { EveAuthorizationPart } from "eve/react";
 import {
   CheckCircleIcon,

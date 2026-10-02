@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import type { ComponentProps, ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MobileSettings } from "./index";
@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   mutation: undefined as undefined | (() => Promise<void>),
   memoryPrompt: undefined as undefined | ((text: string) => void),
 }));
+vi.mock("../i18n", () => ({ MobileLanguagePicker: () => null }));
+
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useState: () => [state.page, state.select],

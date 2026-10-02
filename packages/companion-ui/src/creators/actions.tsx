@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -15,6 +16,7 @@ export function CreatorDraftActions({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const archive = useMutation({
     mutationFn: () =>
@@ -39,7 +41,7 @@ export function CreatorDraftActions({
             download.mutate();
           }}
         >
-          {download.isPending ? "Preparing export…" : "Export draft"}
+          {download.isPending ? t("Preparing export…") : t("Export draft")}
         </ActionButton>
         <ActionButton
           quiet
@@ -49,26 +51,27 @@ export function CreatorDraftActions({
           }}
         >
           {archive.isPending
-            ? "Updating…"
+            ? t("Updating…")
             : draft.archivedAt
-              ? "Restore draft"
-              : "Archive draft"}
+              ? t("Restore draft")
+              : t("Archive draft")}
         </ActionButton>
       </View>
       <Text style={pageStyles.copy}>
-        Archiving a draft does not end access to an approved pilot. Manage
-        shared access in Private pilots.
+        {t(
+          "Archiving a draft does not end access to an approved pilot. Manage shared access in Private pilots."
+        )}
       </Text>
       {(archive.error ?? download.error) && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
           {archive.error?.message ??
             download.error?.message ??
-            "This draft could not be updated. Try again."}
+            t("This draft could not be updated. Try again.")}
         </Text>
       )}
       {download.isSuccess && (
         <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
-          Your draft export is ready.
+          {t("Your draft export is ready.")}
         </Text>
       )}
     </View>

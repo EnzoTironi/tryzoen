@@ -7,7 +7,7 @@ import { XIcon } from "lucide-react";
 
 import { cn } from "@web/components/class-names";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;

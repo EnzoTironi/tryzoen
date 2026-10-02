@@ -9,9 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@web/components/ui/select";
-import { localeNames } from "./locale";
+import { localeNames } from "@zoen/companion-ui/i18n";
 import { changeLocale } from "./actions";
-import { useI18n } from "./context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function LanguagePicker({
   compact = false,

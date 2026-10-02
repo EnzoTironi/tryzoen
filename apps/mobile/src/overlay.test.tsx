@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../tests/helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MobileOverlayProvider } from "./overlay.web";
 import { MobileOverlayProvider as NativeProvider } from "./overlay";

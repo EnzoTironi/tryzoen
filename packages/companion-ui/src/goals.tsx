@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useState, type ComponentProps } from "react";
 import { Text } from "react-native";
 import { Ellipsis } from "lucide-react-native";
@@ -33,12 +34,13 @@ export function Goals({
   readonly preferenceError?: string;
   readonly onPreference: ComponentProps<typeof GoalOptions>["onChange"];
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [view, setView] = useState<"options" | "completed">();
   const sorted = preferences.sortAutomatically
     ? items
     : // oxlint-disable-next-line unicorn/no-array-sort -- The shared native package targets ES2022; sort an owned copy.
-      [...items].sort((a, b) => a.title.localeCompare(b.title));
+      [...items].sort((a, b) => a.title.localeCompare(b.title, locale));
   const completed = sorted.filter((item) => item.completed);
   const active = sorted.filter((item) => !item.completed);
   const rootIds = new Set(active.map((item) => item.parentId));
@@ -55,11 +57,11 @@ export function Goals({
   return (
     <>
       <CompanionPage
-        title="Goals"
+        title={t("Goals")}
         {...state}
         actions={
           <IconButton
-            label="Goal options"
+            label={t("Goal options")}
             icon={Ellipsis}
             onPress={() => {
               setView("options");
@@ -68,14 +70,14 @@ export function Goals({
         }
       >
         <GoalGroup
-          title="Tracking"
+          title={t("Tracking")}
           tracking
           parents={roots.filter((item) => item.tracking)}
           items={active}
           {...rowProps}
         />
         <GoalGroup
-          title="Goals"
+          title={t("Goals")}
           parents={roots.filter((item) => !item.tracking)}
           items={active}
           {...rowProps}
@@ -98,13 +100,13 @@ export function Goals({
       )}
       {view === "completed" && (
         <CompanionSheet
-          title="Completed goals"
+          title={t("Completed goals")}
           onClose={() => {
             setView(undefined);
           }}
         >
           {completed.length === 0 && (
-            <Text style={pageStyles.copy}>No completed goals yet.</Text>
+            <Text style={pageStyles.copy}>{t("No completed goals yet.")}</Text>
           )}
           {completed.map((item) => (
             <GoalRow

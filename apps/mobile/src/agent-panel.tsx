@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   AgentPanelContent,
   PersonalMemorySection,
@@ -12,14 +14,25 @@ import { client } from "./conversation";
 import { rpc } from "./api";
 import { exportMemory, inspectMemory } from "./files/memory";
 
-const data = companionAgentData(rpc, randomUUID, {
-  backup: exportMemory,
-  inspect: inspectMemory,
-});
+function useAgentData() {
+  const { locale, t } = useI18n();
+  return useMemo(
+    () =>
+      companionAgentData(
+        rpc,
+        randomUUID,
+        { backup: exportMemory, inspect: inspectMemory },
+        { locale, t }
+      ),
+    [locale, t]
+  );
+}
 export function MobileAgentName() {
+  const data = useAgentData();
   return <AgentName data={data} cacheScope="personal" />;
 }
 export function MobileAgentHeader({ onEdit }: { readonly onEdit: () => void }) {
+  const data = useAgentData();
   return (
     <AgentPresence
       data={data}
@@ -35,6 +48,7 @@ export function MobileAgentPanel(props: {
   readonly onPrompt: (text: string) => void;
   readonly onConversation: (id: string) => void;
 }) {
+  const data = useAgentData();
   return (
     <AgentPanelContent
       {...props}
@@ -49,6 +63,7 @@ export function MobileMemory({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const data = useAgentData();
   return (
     <PersonalMemorySection
       data={data}

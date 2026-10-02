@@ -1,8 +1,9 @@
 import { beforeEach, vi } from "vitest";
 
 vi.mock("@web/i18n/server", async () => {
-  const { createTranslator } = await import("@web/i18n/translate");
-  const { default: messages } = await import("@web/i18n/messages/pt-br.json");
+  const { createTranslator } = await import("@zoen/companion-ui/i18n");
+  const { catalogs } = await import("@zoen/companion-ui/i18n");
+  const messages = catalogs["pt-BR"];
   return {
     getI18n: async () => ({
       locale: "pt-BR",

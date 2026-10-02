@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { Text } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -24,6 +25,7 @@ export function CreatorPreviews({
   readonly onClose: () => void;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const previews = useQuery({
     queryKey: ["creator-previews", cacheScope, draft.id],
@@ -39,16 +41,16 @@ export function CreatorPreviews({
     (item) => item.status === "pending" || item.status === "running"
   );
   return (
-    <CompanionSheet title="Try your specialist" onClose={onClose}>
+    <CompanionSheet title={t("Try your specialist")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Ask a fictional test question. The specialist receives this saved
-        playbook and its examples, with no personal memory, conversation history
-        or tools. Your selected model is used.
+        {t(
+          "Ask a fictional test question. The specialist receives this saved playbook and its examples, with no personal memory, conversation history or tools. Your selected model is used."
+        )}
       </Text>
       <Text style={pageStyles.copy}>
-        Responses and proposals stay private and need your review. Up to 10
-        requests in 24 hours and 100 saved results per workspace, shared with
-        playbook proposals; the latest 20 results for this draft appear here.
+        {t(
+          "Responses and proposals stay private and need your review. Up to 10 requests in 24 hours and 100 saved results per workspace, shared with playbook proposals; the latest 20 results for this draft appear here."
+        )}
       </Text>
       {!draft.archivedAt && (
         <CreatorPlaybookRequest
@@ -67,11 +69,13 @@ export function CreatorPreviews({
         />
       )}
       {previews.isPending && (
-        <Text style={pageStyles.copy}>Loading previews…</Text>
+        <Text style={pageStyles.copy}>{t("Loading previews…")}</Text>
       )}
       {previews.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Previews could not be loaded. Check your connection and refresh.
+          {t(
+            "Previews could not be loaded. Check your connection and refresh."
+          )}
         </Text>
       )}
       <ActionButton
@@ -80,7 +84,7 @@ export function CreatorPreviews({
           void previews.refetch();
         }}
       >
-        Refresh previews
+        {t("Refresh previews")}
       </ActionButton>
       {!previews.isError &&
         previews.data?.map((preview) => (
@@ -95,7 +99,9 @@ export function CreatorPreviews({
         ))}
       {previews.data?.length === 0 && (
         <Text style={pageStyles.copy}>
-          No previews yet. Start with a situation your specialist should handle.
+          {t(
+            "No previews yet. Start with a situation your specialist should handle."
+          )}
         </Text>
       )}
     </CompanionSheet>

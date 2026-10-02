@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import Link from "next/link";
 import { MessageCircleIcon } from "lucide-react";
 import { Button } from "@web/components/ui/button";

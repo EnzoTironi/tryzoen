@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { SavedRoomMessages } from "../rooms/saved";
 import {
   useContext,
@@ -137,6 +138,7 @@ export function ConversationInbox({
   readonly onDiscover: () => void;
   readonly onExport: (id: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -201,8 +203,8 @@ export function ConversationInbox({
     <View style={[styles.search, compact && styles.mobileSearch]}>
       <Search size={18} color={colors.muted} />
       <TextInput
-        accessibilityLabel="Buscar conversas"
-        placeholder="Buscar"
+        accessibilityLabel={t("Buscar conversas")}
+        placeholder={t("Buscar")}
         placeholderTextColor={colors.muted}
         value={query}
         onChangeText={setQuery}
@@ -229,7 +231,7 @@ export function ConversationInbox({
         <IconButton
           quiet
           icon={Ellipsis}
-          label="Opções das conversas"
+          label={t("Opções das conversas")}
           onPress={() => {
             setMenu("options");
           }}
@@ -238,12 +240,16 @@ export function ConversationInbox({
           accessibilityRole="header"
           style={[styles.title, compact && styles.mobileTitle]}
         >
-          {archived ? "Arquivadas" : filter === "Todas" ? "Conversas" : filter}
+          {archived
+            ? t("Arquivadas")
+            : filter === "Todas"
+              ? t("Conversas")
+              : filter}
         </Text>
         <IconButton
           quiet
           icon={ListFilter}
-          label="Filtrar conversas"
+          label={t("Filtrar conversas")}
           selected={filter !== "Todas"}
           onPress={() => {
             setMenu("filters");
@@ -252,7 +258,7 @@ export function ConversationInbox({
         {!compact && (
           <IconButton
             icon={SquarePen}
-            label="Nova conversa"
+            label={t("Nova conversa")}
             onPress={() => {
               setComposing(true);
             }}
@@ -263,7 +269,9 @@ export function ConversationInbox({
       {menu && (
         <CompanionSheet
           title={
-            menu === "filters" ? "Filtrar conversas" : "Opções das conversas"
+            menu === "filters"
+              ? t("Filtrar conversas")
+              : t("Opções das conversas")
           }
           onClose={() => {
             setMenu(undefined);
@@ -290,28 +298,34 @@ export function ConversationInbox({
                 ))
               : [
                   {
-                    label: "Mensagens salvas",
+                    label: t("Mensagens salvas"),
                     icon: Bookmark,
                     press: () => {
                       setSaved(true);
                     },
                   },
                   {
-                    label: "Atualizar conversas",
+                    label: t("Atualizar conversas"),
                     icon: RefreshCw,
                     press: refresh,
                     disabled: conversations.isFetching,
                   },
                   {
-                    label: archived ? "Ver conversas ativas" : "Ver arquivadas",
+                    label: archived
+                      ? t("Ver conversas ativas")
+                      : t("Ver arquivadas"),
                     icon: Archive,
                     press: () => {
                       setArchived(!archived);
                     },
                   },
-                  { label: "Descobrir bots", icon: Compass, press: onDiscover },
                   {
-                    label: "Nova conversa com Zoen",
+                    label: t("Descobrir bots"),
+                    icon: Compass,
+                    press: onDiscover,
+                  },
+                  {
+                    label: t("Nova conversa com Zoen"),
                     icon: Plus,
                     press: onCreate,
                   },
@@ -336,12 +350,12 @@ export function ConversationInbox({
       )}
       {sync.pending && (
         <ActionButton quiet onPress={sync.apply}>
-          Novas conversas · Atualizar
+          {t("Novas conversas · Atualizar")}
         </ActionButton>
       )}
       {sync.reconnecting && (
         <Text accessibilityLiveRegion="polite" style={styles.caption}>
-          Reconectando… As conversas podem estar desatualizadas.
+          {t("Reconectando… As conversas podem estar desatualizadas.")}
         </Text>
       )}
       <FlatList
@@ -387,7 +401,7 @@ export function ConversationInbox({
                   setCreating(true);
                 }}
               >
-                Criar grupo
+                {t("Criar grupo")}
               </ActionButton>
             )}
           </>
@@ -435,7 +449,7 @@ export function ConversationInbox({
             />
             {page?.syncPending && (
               <Text style={styles.caption}>
-                Atualizando o histórico das conversas…
+                {t("Atualizando o histórico das conversas…")}
               </Text>
             )}
           </View>
@@ -446,7 +460,7 @@ export function ConversationInbox({
           {searchField}
           <IconButton
             icon={SquarePen}
-            label="Nova conversa"
+            label={t("Nova conversa")}
             onPress={() => {
               setComposing(true);
             }}
@@ -518,12 +532,16 @@ function RoomRow({
   readonly selected: boolean;
   readonly onOpen: (id: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const { room } = item;
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const highlighted = selected && !compact;
-  const time = item.activityAt > 0 ? conversationTime(item.activityAt) : null;
+  const time =
+    item.activityAt > 0
+      ? conversationTime(item.activityAt, new Date(), locale)
+      : null;
   const unread =
     notifications &&
     (notifications.notificationCount > 0 || notifications.markedUnread);
@@ -546,8 +564,13 @@ function RoomRow({
             accessible
             accessibilityLabel={
               notifications.notificationCount
-                ? `${notifications.notificationCount} notificações não lidas${notifications.highlightCount ? `, ${notifications.highlightCount} destaques` : ""}`
-                : "Marcada como não lida"
+                ? t("{value1} notificações não lidas{value2}", {
+                    value1: notifications.notificationCount,
+                    value2: notifications.highlightCount
+                      ? `, ${notifications.highlightCount} destaques`
+                      : "",
+                  })
+                : t("Marcada como não lida")
             }
             style={[styles.unread, highlighted && styles.selectedDot]}
           />
@@ -582,12 +605,12 @@ function RoomRow({
         >
           {item.preview ??
             (item.summaryState === "unavailable"
-              ? "Prévia indisponível"
+              ? t("Prévia indisponível")
               : room.kind === "group"
-                ? "Grupo"
+                ? t("Grupo")
                 : room.username
                   ? `@${room.username}`
-                  : "Conversa direta")}
+                  : t("Conversa direta"))}
         </Text>
       </View>
     </Pressable>
@@ -605,27 +628,30 @@ function InboxEmpty({
   readonly people: boolean;
   readonly configured: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>
         {search
-          ? "Nenhuma conversa encontrada"
+          ? t("Nenhuma conversa encontrada")
           : groups
-            ? "Seus grupos aparecem aqui"
+            ? t("Seus grupos aparecem aqui")
             : people
-              ? "Suas conversas aparecem aqui"
-              : "Vamos conversar?"}
+              ? t("Suas conversas aparecem aqui")
+              : t("Vamos conversar?")}
       </Text>
       <Text style={styles.caption}>
         {groups
           ? configured
-            ? "Crie um grupo no seu espaço compartilhado."
-            : "O serviço de grupos ainda não está conectado neste ambiente."
+            ? t("Crie um grupo no seu espaço compartilhado.")
+            : t("O serviço de grupos ainda não está conectado neste ambiente.")
           : people
-            ? "Toque em nova conversa e busque alguém deste espaço pelo nome ou username."
-            : "Comece com o Zoen. Suas conversas ficam salvas aqui."}
+            ? t(
+                "Toque em nova conversa e busque alguém deste espaço pelo nome ou username."
+              )
+            : t("Comece com o Zoen. Suas conversas ficam salvas aqui.")}
       </Text>
     </View>
   );
@@ -640,20 +666,21 @@ function InboxFeedback({
   readonly error: boolean;
   readonly onRetry: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
       {loading && (
-        <ActivityIndicator accessibilityLabel="Carregando conversas" />
+        <ActivityIndicator accessibilityLabel={t("Carregando conversas")} />
       )}
       {error && (
         <>
           <Text accessibilityRole="alert" style={styles.caption}>
-            Não foi possível atualizar todas as conversas.
+            {t("Não foi possível atualizar todas as conversas.")}
           </Text>
           <ActionButton quiet onPress={onRetry}>
-            Tentar novamente
+            {t("Tentar novamente")}
           </ActionButton>
         </>
       )}
@@ -668,19 +695,20 @@ function PinnedConversations({
 }: Pick<ComponentProps<typeof ConversationInbox>, "avatarUri" | "onOpen"> & {
   readonly chats: z.infer<typeof inboxPageSchema>["pinned"];
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
       {chats.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>Fixadas</Text>
+          <Text style={styles.sectionLabel}>{t("Fixadas")}</Text>
           <View style={styles.pins}>
             {chats.map((chat) => (
               <Pressable
                 key={chat.sessionId}
                 accessibilityRole="button"
-                accessibilityLabel={`Abrir ${chat.title}`}
+                accessibilityLabel={t("Abrir {value1}", { value1: chat.title })}
                 onPress={() => {
                   onOpen(chat.sessionId);
                 }}

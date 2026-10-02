@@ -2,7 +2,7 @@
 
 import { validationOptions } from "@web/i18n/validation";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 import { type SubmitEvent, useState } from "react";
 import { useRouter } from "next/navigation";

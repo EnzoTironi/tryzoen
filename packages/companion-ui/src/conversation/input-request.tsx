@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   Check,
   CircleAlert,
@@ -23,6 +24,7 @@ export function InputRequestCard({
   readonly enabled: boolean;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState("");
@@ -61,8 +63,8 @@ export function InputRequestCard({
       title={
         waiting
           ? approval
-            ? "Your permission is needed"
-            : "A question for you"
+            ? t("Your permission is needed")
+            : t("A question for you")
           : outcome
       }
       icon={
@@ -91,7 +93,7 @@ export function InputRequestCard({
           </Text>
           {disclosure?.kind === "unsupported" && (
             <Text selectable style={styles.text}>
-              Exact action details are unavailable for this tool.
+              {t("Exact action details are unavailable for this tool.")}
             </Text>
           )}
         </>
@@ -113,7 +115,7 @@ export function InputRequestCard({
               setExpanded(!expanded);
             }}
           >
-            {expanded ? "Hide request" : "View request"}
+            {expanded ? t("Hide request") : t("View request")}
           </ActionButton>
         </>
       )}
@@ -145,8 +147,8 @@ export function InputRequestCard({
             ((request.allowFreeform ?? false) || !request.options?.length) && (
               <View style={styles.request}>
                 <TextInput
-                  accessibilityLabel="Your answer"
-                  placeholder="Your answer"
+                  accessibilityLabel={t("Your answer")}
+                  placeholder={t("Your answer")}
                   value={text}
                   onChangeText={setText}
                   editable={enabled && !submission.pending}
@@ -163,7 +165,7 @@ export function InputRequestCard({
                     })
                   }
                 >
-                  Send answer
+                  {t("Send answer")}
                 </ActionButton>
               </View>
             )}
@@ -171,7 +173,7 @@ export function InputRequestCard({
       )}
       {submission.failed && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Your answer wasn’t accepted. Please try again.
+          {t("Your answer wasn’t accepted. Please try again.")}
         </Text>
       )}
     </ResourceCard>

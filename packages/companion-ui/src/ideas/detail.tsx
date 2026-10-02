@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import type { z } from "zod";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
@@ -24,6 +25,7 @@ export function IdeaDetail({
   readonly onStart: () => void;
   readonly onFeedback: (feedback: z.infer<typeof ideaFeedbackSchema>) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   return (
@@ -32,15 +34,17 @@ export function IdeaDetail({
         <>
           <Text style={pageStyles.copy}>{idea.description}</Text>
           <View style={{ gap: 8 }}>
-            <Text style={pageStyles.rowTitle}>Why this fits you</Text>
+            <Text style={pageStyles.rowTitle}>{t("Why this fits you")}</Text>
             <Text style={pageStyles.copy}>{idea.rationale}</Text>
           </View>
           <View style={{ gap: 8 }}>
-            <Text style={pageStyles.rowTitle}>The plan</Text>
+            <Text style={pageStyles.rowTitle}>{t("The plan")}</Text>
             <Text style={pageStyles.copy}>{idea.prompt}</Text>
           </View>
           {idea.status !== "suggested" && (
-            <Text style={pageStyles.copy}>{ideaStatusLabels[idea.status]}</Text>
+            <Text style={pageStyles.copy}>
+              {t(ideaStatusLabels[idea.status])}
+            </Text>
           )}
         </>
       )}
@@ -51,10 +55,10 @@ export function IdeaDetail({
       )}
       <ActionButton disabled={pending} onPress={onStart}>
         {idea.sessionId
-          ? "Open conversation"
+          ? t("Open conversation")
           : idea.status === "starting"
-            ? "Continue starting"
-            : "Let's go"}
+            ? t("Continue starting")
+            : t("Let's go")}
       </ActionButton>
       <ActionButton
         quiet
@@ -63,11 +67,11 @@ export function IdeaDetail({
           onFeedback("more");
         }}
       >
-        {idea.feedback === "more" ? "Preference saved" : "More like this"}
+        {idea.feedback === "more" ? t("Preference saved") : t("More like this")}
       </ActionButton>
       {idea.feedback === "more" && (
         <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
-          I’ll use this preference when suggesting new ideas.
+          {t("I’ll use this preference when suggesting new ideas.")}
         </Text>
       )}
       <ActionButton
@@ -77,12 +81,13 @@ export function IdeaDetail({
           onFeedback("dismissed");
         }}
       >
-        Not interested
+        {t("Not interested")}
       </ActionButton>
       {idea.sessionId && (
         <Text style={pageStyles.copy}>
-          Hiding this idea won’t stop its work. Open the conversation to stop or
-          continue it.
+          {t(
+            "Hiding this idea won’t stop its work. Open the conversation to stop or continue it."
+          )}
         </Text>
       )}
     </>

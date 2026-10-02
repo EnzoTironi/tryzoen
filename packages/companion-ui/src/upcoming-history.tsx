@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./i18n";
+
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Text, View } from "react-native";
 import { ActionButton } from "./button";
@@ -24,9 +26,10 @@ export function UpcomingHistory({
   readonly data: AgentPanelData;
   readonly cacheScope: string;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const history = useInfiniteQuery({
-    queryKey: ["schedule-history", cacheScope, id],
+    queryKey: ["schedule-history", cacheScope, id, locale],
     queryFn: ({ pageParam }) => data.scheduleHistory(id, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
@@ -34,13 +37,15 @@ export function UpcomingHistory({
   return (
     <View style={{ gap: 12 }}>
       <Text accessibilityRole="header" style={pageStyles.rowTitle}>
-        Run history
+        {t("Run history")}
       </Text>
-      {history.isPending && <Text style={pageStyles.copy}>Loading runs…</Text>}
+      {history.isPending && (
+        <Text style={pageStyles.copy}>{t("Loading runs…")}</Text>
+      )}
       {history.error && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Run history couldn’t be loaded.
+            {t("Run history couldn’t be loaded.")}
           </Text>
           <ActionButton
             quiet
@@ -48,7 +53,7 @@ export function UpcomingHistory({
               void history.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </>
       )}
@@ -61,11 +66,16 @@ export function UpcomingHistory({
             {Boolean(run.summary) && (
               <Text style={pageStyles.copy}>{run.summary}</Text>
             )}
-            <Text style={pageStyles.copy}>Delivery: {run.delivery}</Text>
+            <Text style={pageStyles.copy}>
+              <Translated
+                message="Delivery: {value1}"
+                values={{ value1: run.delivery }}
+              />
+            </Text>
           </View>
         ))}
       {history.data?.pages[0]?.items.length === 0 && (
-        <Text style={pageStyles.copy}>This task hasn’t run yet.</Text>
+        <Text style={pageStyles.copy}>{t("This task hasn’t run yet.")}</Text>
       )}
       {history.hasNextPage && (
         <ActionButton
@@ -75,7 +85,7 @@ export function UpcomingHistory({
             void history.fetchNextPage();
           }}
         >
-          {history.isFetchingNextPage ? "Loading…" : "Earlier runs"}
+          {history.isFetchingNextPage ? t("Loading…") : t("Earlier runs")}
         </ActionButton>
       )}
     </View>

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   useContext,
   useLayoutEffect,
@@ -33,6 +34,7 @@ export function ConversationNavigation({
   }) => ReactNode;
   readonly children: (toggle: () => void) => ReactNode;
 }) {
+  const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const visible = useContext(CompanionVisibility);
   const colors = useColors();
@@ -62,7 +64,7 @@ export function ConversationNavigation({
         <CompanionVisibility value={visible && showInbox}>
           <View
             testID="conversation-sidebar"
-            accessibilityLabel="Lista de conversas"
+            accessibilityLabel={t("Lista de conversas")}
             {...(Platform.OS === "web"
               ? {
                   inert: !showInbox,

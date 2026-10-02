@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import type { ComponentProps } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -29,6 +30,7 @@ export function RoomReactors({
   readonly messageId: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const result = useInfiniteQuery({
@@ -53,7 +55,7 @@ export function RoomReactors({
     ).values(),
   ];
   return (
-    <CompanionSheet title="Reações" onClose={onClose} scrollable={false}>
+    <CompanionSheet title={t("Reações")} onClose={onClose} scrollable={false}>
       <FlatList
         style={styles.list}
         data={result.isError ? [] : entries}
@@ -66,7 +68,10 @@ export function RoomReactors({
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Ver perfil de ${item.person.name}, reação ${item.emoji}`}
+            accessibilityLabel={t("Ver perfil de {value1}, reação {value2}", {
+              value1: item.person.name,
+              value2: item.emoji,
+            })}
             onPress={() => {
               onClose();
               onProfile(item.person);
@@ -80,8 +85,8 @@ export function RoomReactors({
             />
             <View style={styles.copy}>
               <Text style={styles.name}>
-                {item.person.mine ? "Você" : item.person.name}
-                {item.person.bot ? " · IA" : ""}
+                {item.person.mine ? t("Você") : item.person.name}
+                {item.person.bot ? t(" · IA") : ""}
               </Text>
               {item.person.username && (
                 <Text style={styles.caption}>@{item.person.username}</Text>
@@ -92,27 +97,29 @@ export function RoomReactors({
         )}
         ListEmptyComponent={
           result.isPending ? (
-            <ActivityIndicator accessibilityLabel="Carregando reações" />
+            <ActivityIndicator accessibilityLabel={t("Carregando reações")} />
           ) : !result.isError ? (
-            <Text style={styles.caption}>Ainda não há reações.</Text>
+            <Text style={styles.caption}>{t("Ainda não há reações.")}</Text>
           ) : null
         }
         ListFooterComponent={
           <>
             {result.isFetchingNextPage && (
-              <ActivityIndicator accessibilityLabel="Carregando mais reações" />
+              <ActivityIndicator
+                accessibilityLabel={t("Carregando mais reações")}
+              />
             )}
             {result.isError && (
               <>
                 <Text accessibilityRole="alert">
-                  Não foi possível carregar as reações.
+                  {t("Não foi possível carregar as reações.")}
                 </Text>
                 <ActionButton
                   onPress={() => {
                     void result.refetch();
                   }}
                 >
-                  Tentar novamente
+                  {t("Tentar novamente")}
                 </ActionButton>
               </>
             )}

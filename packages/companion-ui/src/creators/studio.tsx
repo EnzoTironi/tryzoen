@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -91,6 +93,7 @@ export function CreatorStudio({
   readonly data: CreatorStudioData;
   readonly cacheScope: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -100,7 +103,7 @@ export function CreatorStudio({
           setOpen(true);
         }}
       >
-        Creator studio
+        {t("Creator studio")}
       </ActionButton>
       {open && (
         <StudioDrafts
@@ -124,6 +127,7 @@ function StudioDrafts({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [archived, setArchived] = useState(false);
   const [selected, setSelected] = useState<string>();
@@ -132,15 +136,16 @@ function StudioDrafts({
     queryFn: data.list,
   });
   return (
-    <CompanionSheet title="Creator studio" onClose={onClose}>
+    <CompanionSheet title={t("Creator studio")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Turn your expertise into an AI playbook. Start with examples you have
-        permission to use, then review your strategies and limits.
+        {t(
+          "Turn your expertise into an AI playbook. Start with examples you have permission to use, then review your strategies and limits."
+        )}
       </Text>
       <Text style={pageStyles.copy}>
-        Drafts and approval records stay private. You can share selected
-        teaching from an approved version with a named person in this workspace
-        for a pilot. Public publishing is not available yet.
+        {t(
+          "Drafts and approval records stay private. You can share selected teaching from an approved version with a named person in this workspace for a pilot. Public publishing is not available yet."
+        )}
       </Text>
       <CreatorPilots data={data} cacheScope={cacheScope} />
       {!archived && (
@@ -163,7 +168,7 @@ function StudioDrafts({
             setArchived(false);
           }}
         >
-          Active drafts
+          {t("Active drafts")}
         </ActionButton>
         <ActionButton
           quiet={!archived}
@@ -171,19 +176,20 @@ function StudioDrafts({
             setArchived(true);
           }}
         >
-          Archived drafts
+          {t("Archived drafts")}
         </ActionButton>
       </View>
       <Text style={pageStyles.copy}>
-        Up to 20 active drafts and 100 total drafts per workspace. Archived
-        drafts are kept for you to read, export or restore.
+        {t(
+          "Up to 20 active drafts and 100 total drafts per workspace. Archived drafts are kept for you to read, export or restore."
+        )}
       </Text>
       {drafts.isPending && (
-        <Text style={pageStyles.copy}>Loading your drafts…</Text>
+        <Text style={pageStyles.copy}>{t("Loading your drafts…")}</Text>
       )}
       {drafts.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Your drafts could not be loaded. Try again.
+          {t("Your drafts could not be loaded. Try again.")}
         </Text>
       )}
       {drafts.isError && (
@@ -193,15 +199,15 @@ function StudioDrafts({
             void drafts.refetch();
           }}
         >
-          Try again
+          {t("Try again")}
         </ActionButton>
       )}
       {drafts.data?.filter((item) => Boolean(item.archivedAt) === archived)
         .length === 0 && (
         <Text style={pageStyles.copy}>
           {archived
-            ? "No archived drafts yet."
-            : "Your first specialist starts here."}
+            ? t("No archived drafts yet.")
+            : t("Your first specialist starts here.")}
         </Text>
       )}
       {!drafts.isError &&
@@ -211,8 +217,15 @@ function StudioDrafts({
             <View key={draft.id} style={{ gap: 8, paddingVertical: 12 }}>
               <Text style={pageStyles.rowTitle}>{draft.title}</Text>
               <Text style={pageStyles.copy}>
-                {draft.examples} authored examples ·{" "}
-                {draft.archivedAt ? "Archived" : "Private draft"}
+                <Translated
+                  message="{value1} authored examples · {value2}"
+                  values={{
+                    value1: draft.examples,
+                    value2: draft.archivedAt
+                      ? t("Archived")
+                      : t("Private draft"),
+                  }}
+                />
               </Text>
               <ActionButton
                 quiet
@@ -220,7 +233,7 @@ function StudioDrafts({
                   setSelected(draft.id);
                 }}
               >
-                {`Open ${draft.title}`}
+                {t("Open {value1}", { value1: draft.title })}
               </ActionButton>
             </View>
           ))}

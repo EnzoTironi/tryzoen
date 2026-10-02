@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo, useState } from "react";
 import { useConversationDraft } from "./session/draft";
 import type { Client } from "eve/client";
@@ -23,6 +24,7 @@ export function SessionConversation({
   readonly reactions: ReactionData;
   readonly cacheScope: string;
 }) {
+  const { t } = useI18n();
   const { draft, saveDraft } = useConversationDraft(
     cacheScope,
     sessionId,
@@ -55,7 +57,7 @@ export function SessionConversation({
         actionError ??
         agent.error?.message ??
         (feedback.query.isError
-          ? "Couldn’t load reactions. Reopen the conversation to try again."
+          ? t("Couldn’t load reactions. Reopen the conversation to try again.")
           : undefined)
       }
       onSend={agent.send}
@@ -65,7 +67,7 @@ export function SessionConversation({
       onCancel={() => {
         setActionError(undefined);
         void agent.cancel().catch(() => {
-          setActionError("The stop request failed. Please try again.");
+          setActionError(t("The stop request failed. Please try again."));
         });
       }}
       onLoadOlder={
@@ -74,7 +76,7 @@ export function SessionConversation({
               setActionError(undefined);
               await agent.loadOlder().catch(() => {
                 setActionError(
-                  "Earlier messages couldn’t be loaded. Please try again."
+                  t("Earlier messages couldn’t be loaded. Please try again.")
                 );
               });
             }

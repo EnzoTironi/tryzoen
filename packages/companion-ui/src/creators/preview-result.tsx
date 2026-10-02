@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -32,6 +34,7 @@ export function CreatorPreviewResult({
   readonly draft?: z.infer<typeof creatorDraftSchema>;
   readonly onChanged?: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [reading, setReading] = useState(false);
   // Capture the opening version so background refresh cannot replace an unsaved review.
@@ -39,37 +42,51 @@ export function CreatorPreviewResult({
     useState<z.infer<typeof creatorPreviewSchema>>();
   const download = useMutation({ mutationFn: data.exportPreview });
   const version = !draft
-    ? "Approved pilot version"
+    ? t("Approved pilot version")
     : preview.revision === draft.revision
-      ? "Current saved version"
-      : "Earlier saved version";
+      ? t("Current saved version")
+      : t("Earlier saved version");
   return (
     <View style={{ gap: 8, paddingVertical: 12 }}>
       {preview.kind === "playbook" && (
-        <Text style={pageStyles.rowTitle}>Playbook proposal</Text>
+        <Text style={pageStyles.rowTitle}>{t("Playbook proposal")}</Text>
       )}
       {preview.evaluation && (
-        <Text
-          style={pageStyles.rowTitle}
-        >{`Evaluation: ${preview.evaluation.case.title}`}</Text>
+        <Text style={pageStyles.rowTitle}>
+          {t("Evaluation: {value1}", { value1: preview.evaluation.case.title })}
+        </Text>
       )}
       <Text style={pageStyles.rowTitle}>{preview.question}</Text>
       <Text accessibilityLiveRegion="polite" style={pageStyles.copy}>
-        {statusLabels[preview.status]}
+        {t(statusLabels[preview.status])}
       </Text>
       <Text style={pageStyles.copy}>
-        {new Date(preview.createdAt).toLocaleString()} · {version}
+        {new Date(preview.createdAt).toLocaleString(locale)} · {version}
       </Text>
       {preview.models.length > 0 && (
         <Text style={pageStyles.copy}>
-          Model: {preview.models.map((model) => model.modelId).join(", ")}
+          <Translated
+            message="Model: {value1}"
+            values={{
+              value1: preview.models.map((model) => model.modelId).join(", "),
+            }}
+          />
         </Text>
       )}
       {preview.startedAt !== null && preview.finishedAt !== null && (
         <Text style={pageStyles.copy}>
-          Execution time:{" "}
-          {((preview.finishedAt - preview.startedAt) / 1000).toFixed(1)} s ·
-          from worker start to saved result
+          <Translated
+            message="Execution time: {value1} s · from worker start to saved result"
+            values={{
+              value1: (
+                (preview.finishedAt - preview.startedAt) /
+                1000
+              ).toLocaleString(locale, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              }),
+            }}
+          />
         </Text>
       )}
       {preview.response !== null && (
@@ -80,7 +97,9 @@ export function CreatorPreviewResult({
               setReading(true);
             }}
           >
-            {preview.kind === "playbook" ? "Read proposal" : "Read response"}
+            {preview.kind === "playbook"
+              ? t("Read proposal")
+              : t("Read response")}
           </ActionButton>
           {preview.kind === "playbook" && draft && onChanged && (
             <CreatorPlaybookReview
@@ -92,8 +111,12 @@ export function CreatorPreviewResult({
           )}
           <Text style={pageStyles.copy}>
             {preview.review
-              ? `Your review: ${creatorReviewVerdicts[preview.review.content.verdict]}`
-              : "You have not reviewed this response yet."}
+              ? t("Your review: {value1}", {
+                  value1: t(
+                    creatorReviewVerdicts[preview.review.content.verdict]
+                  ),
+                })
+              : t("You have not reviewed this response yet.")}
           </Text>
           <ActionButton
             quiet
@@ -101,7 +124,7 @@ export function CreatorPreviewResult({
               setReviewing(preview);
             }}
           >
-            {preview.review ? "Edit my review" : "Review response"}
+            {preview.review ? t("Edit my review") : t("Review response")}
           </ActionButton>
         </>
       )}
@@ -112,24 +135,31 @@ export function CreatorPreviewResult({
           download.mutate(preview.id);
         }}
       >
-        Export result and sources
+        {t("Export result and sources")}
       </ActionButton>
       {download.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The preview could not be exported. Try again.
+          {t("The preview could not be exported. Try again.")}
         </Text>
       )}
       {reading && preview.response && (
         <DocumentEditor
-          title="Preview response"
-          label="Specialist preview response"
+          title={t("Preview response")}
+          label={t("Specialist preview response")}
           initialText={preview.response}
           maxLength={32000}
-          description={`${preview.question}\n\nSaved ${new Date(preview.createdAt).toLocaleString()} · ${version}. This is a private preview, not a verified outcome.`}
+          description={t(
+            "{value1}\n\nSaved {value2} · {value3}. This is a private preview, not a verified outcome.",
+            {
+              value1: preview.question,
+              value2: new Date(preview.createdAt).toLocaleString(locale),
+              value3: version,
+            }
+          )}
           markdown
           readOnly
           onSave={async () => {
-            throw new Error("Preview results are read-only.");
+            throw new Error(t("Preview results are read-only."));
           }}
           onClose={() => {
             setReading(false);

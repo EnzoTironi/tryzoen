@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "./../i18n";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   ActivityIndicator,
@@ -17,6 +18,7 @@ import { CompanionOverlay } from "../overlay";
 import { IconButton } from "../icon-button";
 import { systemFont, useColors } from "../theme";
 import { quickReactions, reactionCategories } from "./catalog";
+import { loadEmojiLabels } from "./labels";
 
 export default function ReactionPicker({
   anchor,
@@ -33,6 +35,25 @@ export default function ReactionPicker({
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  const { t, locale } = useI18n();
+  const [labels, setLabels] = useState<{
+    locale: ReturnType<typeof useI18n>["locale"];
+    names: Awaited<ReturnType<typeof loadEmojiLabels>>;
+  }>();
+  useEffect(() => {
+    if (locale === "en") return undefined;
+    let active = true;
+    void loadEmojiLabels(locale)
+      .then((names) => {
+        if (active) setLabels({ locale, names });
+      })
+      .catch(() => {
+        // Localized generic labels keep the picker usable if a language chunk fails.
+      });
+    return () => {
+      active = false;
+    };
+  }, [locale]);
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { width, height } = useWindowDimensions();
@@ -75,35 +96,44 @@ export default function ReactionPicker({
       (typeof reactionCategories)[number]["items"][number],
       "emoji" | "name"
     >
-  ) => (
-    <Pressable
-      key={entry.emoji}
-      accessibilityRole="button"
-      accessibilityLabel={
-        selected === entry.emoji
-          ? `Remove ${entry.name} reaction`
-          : `React with ${entry.name}`
-      }
-      accessibilityState={{
-        selected: selected === entry.emoji,
-        disabled: pending,
-      }}
-      disabled={pending}
-      aria-disabled={pending}
-      onPress={() => {
-        void select(entry.emoji);
-      }}
-      style={({ pressed }) => [
-        styles.emoji,
-        selected === entry.emoji && styles.selected,
-        pressed && styles.pressed,
-      ]}
-    >
-      <Text style={styles.glyph}>{entry.emoji}</Text>
-    </Pressable>
-  );
+  ) => {
+    const name =
+      locale === "en"
+        ? entry.name
+        : labels?.locale === locale
+          ? (labels.names.get(entry.emoji.replaceAll("\uFE0F", "")) ??
+            entry.emoji)
+          : entry.emoji;
+    return (
+      <Pressable
+        key={entry.emoji}
+        accessibilityRole="button"
+        accessibilityLabel={
+          selected === entry.emoji
+            ? t("Remove {value1} reaction", { value1: name })
+            : t("React with {value1}", { value1: name })
+        }
+        accessibilityState={{
+          selected: selected === entry.emoji,
+          disabled: pending,
+        }}
+        disabled={pending}
+        aria-disabled={pending}
+        onPress={() => {
+          void select(entry.emoji);
+        }}
+        style={({ pressed }) => [
+          styles.emoji,
+          selected === entry.emoji && styles.selected,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.glyph}>{entry.emoji}</Text>
+      </Pressable>
+    );
+  };
   return (
-    <CompanionOverlay title="Ações da mensagem" onClose={onClose}>
+    <CompanionOverlay title={t("Ações da mensagem")} onClose={onClose}>
       <View
         style={[styles.backdrop, compact && expanded && styles.mobileBackdrop]}
       >
@@ -143,15 +173,19 @@ export default function ReactionPicker({
             <View style={styles.header}>
               <IconButton
                 icon={ArrowLeft}
-                label="Voltar às ações"
+                label={t("Voltar às ações")}
                 onPress={() => {
                   setExpanded(false);
                 }}
               />
               <Text accessibilityRole="header" style={styles.title}>
-                {current.name}
+                {t(current.name)}
               </Text>
-              <IconButton icon={X} label="Fechar reações" onPress={onClose} />
+              <IconButton
+                icon={X}
+                label={t("Fechar reações")}
+                onPress={onClose}
+              />
             </View>
           )}
           {expanded ? (
@@ -165,7 +199,7 @@ export default function ReactionPicker({
                   <Pressable
                     key={item.name}
                     accessibilityRole="tab"
-                    accessibilityLabel={item.name}
+                    accessibilityLabel={t(item.name)}
                     aria-selected={category === index}
                     onPress={() => {
                       setCategory(index);
@@ -198,7 +232,7 @@ export default function ReactionPicker({
                   {quickReactions.slice(0, 5).map(renderEmoji)}
                   <IconButton
                     icon={Plus}
-                    label="Mais reações"
+                    label={t("Mais reações")}
                     onPress={() => {
                       setExpanded(true);
                     }}
@@ -216,13 +250,13 @@ export default function ReactionPicker({
           )}
           {pending && (
             <ActivityIndicator
-              accessibilityLabel="Salvando reação"
+              accessibilityLabel={t("Salvando reação")}
               style={styles.pending}
             />
           )}
           {error && (
             <Text accessibilityRole="alert" style={styles.error}>
-              Não foi possível salvar a reação. Tente novamente.
+              {t("Não foi possível salvar a reação. Tente novamente.")}
             </Text>
           )}
         </Animated.View>

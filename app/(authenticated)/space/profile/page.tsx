@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AtSignIcon, CheckIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import { PanelIntro } from "../../_components/panel-intro";

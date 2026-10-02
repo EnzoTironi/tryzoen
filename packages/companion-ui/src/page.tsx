@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -30,6 +31,7 @@ export function CompanionPage({
   readonly hideTitle?: boolean;
   readonly contentMaxWidth?: number;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const window = useWindowDimensions();
@@ -71,7 +73,7 @@ export function CompanionPage({
         )}
         {loading && (
           <ActivityIndicator
-            accessibilityLabel={`Loading ${title}`}
+            accessibilityLabel={t("Loading {value1}", { value1: title })}
             color={colors.accent}
           />
         )}
@@ -82,7 +84,7 @@ export function CompanionPage({
             </Text>
             {onRetry && (
               <ActionButton quiet onPress={onRetry}>
-                Try again
+                {t("Try again")}
               </ActionButton>
             )}
           </View>

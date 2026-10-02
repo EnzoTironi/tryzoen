@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { GoogleSignInButton } from "@web/auth/google-button";
 import { ChannelAuthForm } from "@web/auth/channel/form";
 import { OnboardingFrame } from "./frame";

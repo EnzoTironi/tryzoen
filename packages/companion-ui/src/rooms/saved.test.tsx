@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import { expect, it, vi } from "vitest";
 import type { ReactNode, ComponentProps } from "react";
 import type { z } from "zod";

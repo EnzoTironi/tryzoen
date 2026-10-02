@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   useEffect,
   useMemo,
@@ -59,6 +60,7 @@ export function ConversationRow({
   readonly avatarUri?: string;
   readonly selected?: boolean;
 }) {
+  const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const pageStyles = usePageStyles();
   const colors = useColors();
@@ -72,7 +74,7 @@ export function ConversationRow({
       try {
         await onChange({ sessionId: chat.sessionId, change: next });
       } catch {
-        throw new Error("Couldn’t save the change. Try again.");
+        throw new Error(t("Couldn’t save the change. Try again."));
       }
     },
     onSuccess: () => {
@@ -88,9 +90,11 @@ export function ConversationRow({
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: highlighted }}
-          accessibilityHint="Mantenha pressionado para ver as opções da conversa"
+          accessibilityHint={t(
+            "Mantenha pressionado para ver as opções da conversa"
+          )}
           accessibilityActions={[
-            { name: "longpress", label: "Opções da conversa" },
+            { name: "longpress", label: t("Opções da conversa") },
           ]}
           onAccessibilityAction={({ nativeEvent }) => {
             if (nativeEvent.actionName === "longpress") {
@@ -186,7 +190,7 @@ export function ConversationRow({
               </Pressable>
               <IconButton
                 icon={Ellipsis}
-                label={`Options for ${chat.title}`}
+                label={t("Options for {value1}", { value1: chat.title })}
                 onPress={() => {
                   operation.reset();
                   setMenu(true);
@@ -233,6 +237,7 @@ function ConversationMenu({
   readonly onClose: () => void;
   readonly onRename: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -240,26 +245,26 @@ function ConversationMenu({
     <CompanionSheet title={chat.title} onClose={onClose}>
       {[
         {
-          label: chat.pinned ? "Unpin" : "Pin",
+          label: chat.pinned ? t("Unpin") : t("Pin"),
           icon: chat.pinned ? PinOff : Pin,
           press: () => {
             onAction({ pinned: !chat.pinned });
           },
         },
         {
-          label: "Rename",
+          label: t("Rename"),
           icon: Pencil,
           press: onRename,
         },
         {
-          label: "Export conversation archive",
+          label: t("Export conversation archive"),
           icon: Download,
           press: () => {
             onAction("export");
           },
         },
         {
-          label: chat.archived ? "Restore conversation" : "Archive",
+          label: chat.archived ? t("Restore conversation") : t("Archive"),
           icon: chat.archived ? ArchiveRestore : Archive,
           press: () => {
             onAction({ archived: !chat.archived });
@@ -282,8 +287,9 @@ function ConversationMenu({
         </Pressable>
       ))}
       <Text style={pageStyles.copy}>
-        Exports include messages already saved to your private archive.
-        Attachments are separate.
+        {t(
+          "Exports include messages already saved to your private archive. Attachments are separate."
+        )}
       </Text>
       {error && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -304,6 +310,7 @@ function ConversationName({
   readonly onSave: (title: string) => void;
   readonly onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState(initialTitle);
@@ -315,7 +322,7 @@ function ConversationName({
     <View style={styles.rename}>
       <TextInput
         ref={renameInput}
-        accessibilityLabel="Conversation name"
+        accessibilityLabel={t("Conversation name")}
         value={title}
         onChangeText={setTitle}
         maxLength={240}
@@ -328,13 +335,13 @@ function ConversationName({
       />
       <IconButton
         icon={X}
-        label="Cancel conversation rename"
+        label={t("Cancel conversation rename")}
         disabled={pending}
         onPress={onCancel}
       />
       <IconButton
         icon={Check}
-        label="Save conversation name"
+        label={t("Save conversation name")}
         disabled={pending || !chatTitleSchema.safeParse(title).success}
         onPress={() => {
           onSave(title);
@@ -348,10 +355,11 @@ function ConversationPreview({
   dense,
   selected,
 }: Pick<Parameters<typeof ConversationRow>[0], "chat" | "dense" | "selected">) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const time = conversationTime(chat.updatedAt);
+  const time = conversationTime(chat.updatedAt, new Date(), locale);
   return dense ? (
     <>
       <View style={styles.titleLine}>
@@ -378,7 +386,7 @@ function ConversationPreview({
         numberOfLines={2}
         style={[styles.caption, selected && styles.selectedText]}
       >
-        Conversa com Zoen
+        {t("Conversa com Zoen")}
       </Text>
     </>
   ) : (

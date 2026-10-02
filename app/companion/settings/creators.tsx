@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
+
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
@@ -12,6 +14,7 @@ import { browserSessionClient } from "@web/eve/client";
 export function ConnectedCreatorStudio({
   onPrompt,
 }: { readonly onPrompt?: (prompt: string) => void } = {}) {
+  const { t } = useI18n();
   const { client } = api.useUtils();
   const session = authClient.useSession();
   const params = useSearchParams();
@@ -34,8 +37,8 @@ export function ConnectedCreatorStudio({
     return (
       <output className="type-supporting">
         {session.isPending
-          ? "Loading creator studio…"
-          : "Creator studio unavailable"}
+          ? t("Loading creator studio…")
+          : t("Creator studio unavailable")}
       </output>
     );
   const cacheScope = JSON.stringify([

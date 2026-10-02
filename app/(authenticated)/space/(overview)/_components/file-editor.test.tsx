@@ -52,7 +52,7 @@ vi.mock("@web/trpc/client", () => ({
     },
   },
 }));
-vi.mock("@web/i18n/context", () => ({
+vi.mock("@zoen/companion-ui/i18n", () => ({
   useI18n: () => ({ t: (key: string) => key, locale: "pt-br" }),
 }));
 vi.mock("@web/components/ui/button", () => ({

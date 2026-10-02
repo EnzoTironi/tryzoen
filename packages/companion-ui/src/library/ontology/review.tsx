@@ -1,3 +1,4 @@
+import { useI18n } from "./../../i18n";
 import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { StyleSheet, Text, View } from "react-native";
@@ -8,6 +9,7 @@ import { usePageStyles } from "../../page";
 
 /** A file proposal is rendered from its canonical graph, never a second model. */
 export function OntologyReview({ content }: { readonly content: string }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -18,7 +20,7 @@ export function OntologyReview({ content }: { readonly content: string }) {
   } catch {
     return (
       <Text accessibilityRole="alert" style={pageStyles.copy}>
-        This ontology document cannot be previewed.
+        {t("This ontology document cannot be previewed.")}
       </Text>
     );
   }
@@ -30,9 +32,9 @@ export function OntologyReview({ content }: { readonly content: string }) {
     <View style={styles.content}>
       <Text style={pageStyles.copy}>
         {graph.entities.length}{" "}
-        {graph.entities.length === 1 ? "record" : "records"} ·{" "}
+        {graph.entities.length === 1 ? t("record") : t("records")} ·{" "}
         {graph.links.length}{" "}
-        {graph.links.length === 1 ? "connection" : "connections"}
+        {graph.links.length === 1 ? t("connection") : t("connections")}
       </Text>
       {graph.entities.slice(0, limit).map((entity) => (
         <View key={entity.id} style={styles.card}>
@@ -56,7 +58,9 @@ export function OntologyReview({ content }: { readonly content: string }) {
                   ?.properties.find((property) => property.id === key)?.name ??
                   key}
                 {": "}
-                {claim.value === null ? "Not established" : String(claim.value)}
+                {claim.value === null
+                  ? t("Not established")
+                  : String(claim.value)}
               </Text>
               <OntologyReviewClaim claim={claim} />
             </View>
@@ -86,10 +90,10 @@ export function OntologyReview({ content }: { readonly content: string }) {
             setLimit(limit + 25);
           }}
         >
-          Show more records and connections
+          {t("Show more records and connections")}
         </ActionButton>
       )}
-      <Text style={pageStyles.rowTitle}>Definitions</Text>
+      <Text style={pageStyles.rowTitle}>{t("Definitions")}</Text>
       {graph.types.map((type) => (
         <View key={type.id} style={styles.content}>
           <Text style={pageStyles.copy}>
@@ -98,7 +102,7 @@ export function OntologyReview({ content }: { readonly content: string }) {
           {type.properties.map((property) => (
             <Text key={property.id} style={pageStyles.copy}>
               {property.name} · {property.id} · {property.type}
-              {property.required ? " · Required" : ""}
+              {property.required ? t(" · Required") : ""}
             </Text>
           ))}
         </View>
@@ -125,6 +129,7 @@ function OntologyReviewClaim({
     "sources" | "validTime"
   >;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -132,8 +137,11 @@ function OntologyReviewClaim({
     <View style={styles.content}>
       <Text style={styles.detail}>
         {claim.validTime
-          ? `Valid from ${claim.validTime.from ?? "an unknown start"} · Until ${claim.validTime.until ?? "an unknown end"} (exclusive)`
-          : "World-valid dates not established"}
+          ? t("Valid from {value1} · Until {value2} (exclusive)", {
+              value1: claim.validTime.from ?? t("an unknown start"),
+              value2: claim.validTime.until ?? t("an unknown end"),
+            })
+          : t("World-valid dates not established")}
       </Text>
       {claim.sources.map((source) => (
         <View key={JSON.stringify(source)} style={styles.citation}>
@@ -146,7 +154,7 @@ function OntologyReviewClaim({
         </View>
       ))}
       {!claim.sources.length && (
-        <Text style={styles.detail}>No cited evidence</Text>
+        <Text style={styles.detail}>{t("No cited evidence")}</Text>
       )}
     </View>
   );

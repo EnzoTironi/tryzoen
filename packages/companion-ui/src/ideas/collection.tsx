@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -35,6 +36,7 @@ export function IdeaCollection({
   readonly onPrompt: (prompt: string) => void;
   readonly onConversation: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -76,32 +78,39 @@ export function IdeaCollection({
   const error = start.error?.message ?? feedback.error?.message;
   const ask = () => {
     onPrompt(
-      "Suggest up to five useful personal ideas based on what I have actually shared. Read my saved ideas and feedback first, explain why each fits, and save the proposals in Ideas without executing them. If you need context, ask me one focused question."
+      t(
+        "Suggest up to five useful personal ideas based on what I have actually shared. Read my saved ideas and feedback first, explain why each fits, and save the proposals in Ideas without executing them. If you need context, ask me one focused question."
+      )
     );
   };
   return (
     <>
       <CompanionPage
-        title="Ideas"
+        title={t("Ideas")}
         loading={ideas.isPending}
         error={ideas.error?.message}
         onRetry={() => {
           void ideas.refetch();
         }}
         actions={
-          <IconButton label="Ask for new ideas" icon={Sparkles} onPress={ask} />
+          <IconButton
+            label={t("Ask for new ideas")}
+            icon={Sparkles}
+            onPress={ask}
+          />
         }
       >
         {!ideas.isPending && !ideas.isError && items.length === 0 && (
           <View style={pageStyles.empty}>
             <Text style={pageStyles.heading}>
-              What could I take off your plate?
+              {t("What could I take off your plate?")}
             </Text>
             <Text style={pageStyles.copy}>
-              Share what you’re working toward. Your personal suggestions will
-              appear here, ready when you are.
+              {t(
+                "Share what you’re working toward. Your personal suggestions will appear here, ready when you are."
+              )}
             </Text>
-            <ActionButton onPress={ask}>Ask for ideas</ActionButton>
+            <ActionButton onPress={ask}>{t("Ask for ideas")}</ActionButton>
           </View>
         )}
         {categories.map((category, index) => (
@@ -129,18 +138,18 @@ export function IdeaCollection({
                       <Text style={pageStyles.copy}>{item.description}</Text>
                       {item.status !== "suggested" && (
                         <Text style={styles.status}>
-                          {ideaStatusLabels[item.status]}
+                          {t(ideaStatusLabels[item.status])}
                         </Text>
                       )}
                       {item.feedback === "more" && (
                         <Text style={pageStyles.copy}>
-                          More like this · saved
+                          {t("More like this · saved")}
                         </Text>
                       )}
                     </View>
                   </Pressable>
                   <IconButton
-                    label={`Feedback for ${item.title}`}
+                    label={t("Feedback for {value1}", { value1: item.title })}
                     icon={Ellipsis}
                     onPress={() => {
                       start.reset();
@@ -160,13 +169,13 @@ export function IdeaCollection({
               void ideas.fetchNextPage();
             }}
           >
-            Show more
+            {t("Show more")}
           </ActionButton>
         )}
       </CompanionPage>
       {selected && (
         <CompanionSheet
-          title={selection?.feedbackOnly ? "Idea feedback" : selected.title}
+          title={selection?.feedbackOnly ? t("Idea feedback") : selected.title}
           onClose={() => {
             if (!pending) setSelection(undefined);
           }}

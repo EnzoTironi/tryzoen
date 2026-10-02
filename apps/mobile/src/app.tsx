@@ -1,3 +1,6 @@
+import { MobileI18n, MobileLanguagePicker } from "./i18n";
+
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { LocalMessagesProvider } from "@zoen/companion-ui/local-messages";
 import { gestureStorage } from "./gesture-storage";
 import { mobileMessageStorage } from "./message-storage";
@@ -109,6 +112,15 @@ function renderNavigationOverlay(props: CompanionOverlayProps) {
 }
 
 export function App() {
+  return (
+    <MobileI18n>
+      <MobileApp />
+    </MobileI18n>
+  );
+}
+
+function MobileApp() {
+  const { t, errorText } = useI18n();
   const network = useNetworkState();
   useEffect(() => {
     onlineManager.setOnline(
@@ -204,7 +216,7 @@ export function App() {
         <StatusBar style="dark" />
         {session.isPending ? (
           <View style={styles.center}>
-            <ActivityIndicator accessibilityLabel="Signing in" />
+            <ActivityIndicator accessibilityLabel={t("Signing in")} />
           </View>
         ) : session.data ? (
           <AccountCompanion
@@ -220,10 +232,11 @@ export function App() {
           />
         ) : (
           <View style={styles.center}>
-            <Text style={styles.brand}>Zoen</Text>
+            <Text style={styles.brand}>{t("Zoen")}</Text>
             <Text style={styles.copy}>
-              Your conversations, ideas, and goals. Together.
+              {t("Your conversations, ideas, and goals. Together.")}
             </Text>
+            <MobileLanguagePicker />
             <ActionButton
               disabled={signingIn}
               onPress={() => {
@@ -234,13 +247,17 @@ export function App() {
                   .then((result) => {
                     if (result.error)
                       setError(
-                        result.error.message ??
+                        errorText(
+                          result.error.message,
                           "Sign-in failed. Please try again."
+                        )
                       );
                   })
                   .catch(() => {
                     setError(
-                      "Unable to connect. Check your connection and try again."
+                      t(
+                        "Unable to connect. Check your connection and try again."
+                      )
                     );
                   })
                   .finally(() => {
@@ -248,11 +265,13 @@ export function App() {
                   });
               }}
             >
-              {signingIn ? "Signing in…" : "Continue with Google"}
+              {signingIn ? t("Signing in…") : t("Continue with Google")}
             </ActionButton>
             {(error !== undefined || session.error !== null) && (
               <Text accessibilityRole="alert" style={styles.error}>
-                {error ?? "Couldn’t connect to your account. Please try again."}
+                {error
+                  ? errorText(error)
+                  : t("Couldn’t connect to your account. Please try again.")}
               </Text>
             )}
           </View>
@@ -271,6 +290,7 @@ function AccountCompanion({
   readonly pendingLink?: PendingMobileLink;
   readonly onLinkHandled: (link: PendingMobileLink) => void;
 }) {
+  const { errorText } = useI18n();
   const storage = useMemo(() => mobileMessageStorage(sessionId), [sessionId]);
   const startAudioRecording = useAudioRecording();
   const openOverlays = useRef(0);
@@ -321,7 +341,7 @@ function AccountCompanion({
                       const result = await auth.signOut();
                       if (result.error)
                         throw new Error(
-                          result.error.message ?? "Could not sign out."
+                          errorText(result.error.message, "Could not sign out.")
                         );
                       client.clear();
                     }}
@@ -361,6 +381,7 @@ function MobileCompanion({
   readonly overlayVersion: number;
 }) {
   const account = auth.useSession();
+  const { errorText } = useI18n();
   const [navigation, setNavigation] = useState(initialMobileNavigation);
   const { section, roomId, conversationOpen, conversation } = navigation;
   const [linkError, setLinkError] = useState<string>();
@@ -494,7 +515,7 @@ function MobileCompanion({
         >
           {linkError && (
             <Text accessibilityRole="alert" style={styles.error}>
-              {linkError}
+              {errorText(linkError)}
             </Text>
           )}
           {section === "chat" && roomId ? (

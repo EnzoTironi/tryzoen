@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
@@ -28,6 +30,7 @@ export function LearnedNotes({
   readonly data: LearnedNotesData;
   readonly cacheScope: string;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const memory = useQuery({
     queryKey: ["companion-learned-memory", cacheScope],
@@ -71,15 +74,21 @@ export function LearnedNotes({
       ) ?? []);
   return (
     <CompanionPage
-      title="Learned memories"
+      title={t("Learned memories")}
       loading={memory.isPending}
       error={
         memory.error
-          ? "Your saved memories couldn’t be loaded. Access must be restored before viewing or editing them."
+          ? t(
+              "Your saved memories couldn’t be loaded. Access must be restored before viewing or editing them."
+            )
           : mutation.error
             ? isLearnedMemoryConflict(mutation.error)
-              ? "Memory changed. Your request is retained; review the current revision before retrying."
-              : "Your change couldn’t be confirmed. Review the saved memory before retrying."
+              ? t(
+                  "Memory changed. Your request is retained; review the current revision before retrying."
+                )
+              : t(
+                  "Your change couldn’t be confirmed. Review the saved memory before retrying."
+                )
             : undefined
       }
       onRetry={() => {
@@ -87,8 +96,9 @@ export function LearnedNotes({
       }}
     >
       <Text style={pageStyles.copy}>
-        Private to you in this workspace. Review what Zoen remembers, correct a
-        note, or pause learning.
+        {t(
+          "Private to you in this workspace. Review what Zoen remembers, correct a note, or pause learning."
+        )}
       </Text>
       <View style={styles.actions}>
         <ActionButton
@@ -98,7 +108,7 @@ export function LearnedNotes({
             setHistory({});
           }}
         >
-          Search memory history
+          {t("Search memory history")}
         </ActionButton>
         <ActionButton
           disabled={actionsDisabled || !memory.data.automaticEnabled}
@@ -109,7 +119,7 @@ export function LearnedNotes({
               );
           }}
         >
-          Remember something
+          {t("Remember something")}
         </ActionButton>
         <ActionButton
           quiet
@@ -129,18 +139,21 @@ export function LearnedNotes({
           }}
         >
           {preference
-            ? "Retry preference change"
+            ? t("Retry preference change")
             : memory.data?.enabled === false
-              ? "Resume memory"
-              : "Pause memory"}
+              ? t("Resume memory")
+              : t("Pause memory")}
         </ActionButton>
       </View>
       {preference && mutation.error && (
         <View style={pageStyles.section}>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            The preference change was not confirmed. Your current personal
-            preference is {memory.data?.enabled ? "active" : "paused"}.
-            Workspace enablement is separate.
+            <Translated
+              message="The preference change was not confirmed. Your current personal preference is {value1}. Workspace enablement is separate."
+              values={{
+                value1: memory.data?.enabled ? t("active") : t("paused"),
+              }}
+            />
           </Text>
           <ActionButton
             quiet
@@ -150,30 +163,35 @@ export function LearnedNotes({
               mutation.reset();
             }}
           >
-            Use the current reviewed preference
+            {t("Use the current reviewed preference")}
           </ActionButton>
         </View>
       )}
       {memory.data?.enabled === false && (
         <Text style={pageStyles.copy}>
-          Learning and recall are paused. Review, correction and removal remain
-          available.
+          {t(
+            "Learning and recall are paused. Review, correction and removal remain available."
+          )}
         </Text>
       )}
       {memory.data?.workspaceEnabled === false && (
         <Text style={pageStyles.copy}>
-          Automatic memory is disabled in this workspace. Your personal
-          preference is unchanged; review, correction and removal remain
-          available.
+          {t(
+            "Automatic memory is disabled in this workspace. Your personal preference is unchanged; review, correction and removal remain available."
+          )}
         </Text>
       )}
       {claims.map(({ claim, body }) => (
         <MemoryCard
           key={claim.file.id}
-          document={{ title: "Learned memory", text: body.text, updated: "" }}
+          document={{
+            title: t("Learned memory"),
+            text: body.text,
+            updated: "",
+          }}
           action={
             <IconButton
-              label="Edit note"
+              label={t("Edit note")}
               icon={Pencil}
               disabled={actionsDisabled}
               onPress={() => {
@@ -197,7 +215,9 @@ export function LearnedNotes({
               onPress={() => {
                 setRelating(claim.file.id);
               }}
-            >{`Relationships (${body.relations.length})`}</ActionButton>
+            >
+              {t("Relationships ({value1})", { value1: body.relations.length })}
+            </ActionButton>
             <ActionButton
               quiet
               disabled={actionsDisabled}
@@ -205,10 +225,10 @@ export function LearnedNotes({
                 setHistory({ claimId: claim.file.id });
               }}
             >
-              Recorded versions
+              {t("Recorded versions")}
             </ActionButton>
             <IconButton
-              label="Remove note"
+              label={t("Remove note")}
               icon={Trash2}
               disabled={actionsDisabled}
               onPress={() => {
@@ -226,7 +246,7 @@ export function LearnedNotes({
       ))}
       {!memory.isError && memory.data && !claims.length && (
         <Text style={pageStyles.copy}>
-          Things you ask Zoen to remember will appear here.
+          {t("Things you ask Zoen to remember will appear here.")}
         </Text>
       )}
       {!memory.isPending && (
@@ -250,14 +270,14 @@ export function LearnedNotes({
                 });
             }}
           >
-            Remove all learned notes
+            {t("Remove all learned notes")}
           </ActionButton>
         </View>
       )}
       <Text style={[pageStyles.copy, pageStyles.section]}>
-        Removal stops automatic recall. Earlier recorded claim versions and
-        immutable conversation journals remain available through their separate
-        review and archive actions.
+        {t(
+          "Removal stops automatic recall. Earlier recorded claim versions and immutable conversation journals remain available through their separate review and archive actions."
+        )}
       </Text>
       {editing && (
         <LearnedClaimEditor
@@ -294,29 +314,35 @@ export function LearnedNotes({
       )}
       {removing && (
         <CompanionSheet
-          title="Remove learned memory"
+          title={t("Remove learned memory")}
           onClose={() => {
             if (!mutation.isPending) setRemoving(undefined);
           }}
         >
           <Text accessibilityRole="header" style={pageStyles.heading}>
             {removing.action === "tombstone"
-              ? "Remove this note?"
-              : "Remove all current learned notes?"}
+              ? t("Remove this note?")
+              : t("Remove all current learned notes?")}
           </Text>
           <Text style={pageStyles.copy}>
-            Zoen will stop recalling these claims. Recorded history and
-            immutable journals are retained. No archive or erasure authority is
-            reset.
+            {t(
+              "Zoen will stop recalling these claims. Recorded history and immutable journals are retained. No archive or erasure authority is reset."
+            )}
           </Text>
           {mutation.error && (
             <>
               <Text accessibilityRole="alert" style={pageStyles.copy}>
-                The removal was not confirmed. Your request is retained. Review
-                the current memory before retrying.
+                {t(
+                  "The removal was not confirmed. Your request is retained. Review the current memory before retrying."
+                )}
               </Text>
               <Text selectable style={pageStyles.copy}>
-                Current head: {memory.data?.snapshot.revision ?? "empty memory"}
+                <Translated
+                  message="Current head: {value1}"
+                  values={{
+                    value1: memory.data?.snapshot.revision ?? t("empty memory"),
+                  }}
+                />
               </Text>
               {claims
                 .filter(
@@ -343,7 +369,7 @@ export function LearnedNotes({
                   }
                 }}
               >
-                Use this reviewed revision
+                {t("Use this reviewed revision")}
               </ActionButton>
             </>
           )}
@@ -355,7 +381,7 @@ export function LearnedNotes({
                 setRemoving(undefined);
               }}
             >
-              Keep notes
+              {t("Keep notes")}
             </ActionButton>
             <ActionButton
               disabled={actionsDisabled}
@@ -366,7 +392,7 @@ export function LearnedNotes({
                 });
               }}
             >
-              {mutation.isPending ? "Removing…" : "Remove"}
+              {mutation.isPending ? t("Removing…") : t("Remove")}
             </ActionButton>
           </View>
         </CompanionSheet>

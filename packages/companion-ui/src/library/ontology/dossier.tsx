@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../../i18n";
+
 import { useMemo } from "react";
 import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
@@ -27,6 +29,7 @@ export function OntologyDossier({
   readonly onClose: () => void;
   readonly onAction: (actionId: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -38,22 +41,33 @@ export function OntologyDossier({
     <CompanionSheet title={entity.name} onClose={onClose}>
       <View style={styles.content}>
         <Text style={pageStyles.copy}>
-          {type?.name ?? entity.type} · Recorded version{" "}
-          {record.revision?.slice(0, 8) ?? "—"}
+          <Translated
+            message="{value1} · Recorded version {value2}"
+            values={{
+              value1: type?.name ?? entity.type,
+              value2: record.revision?.slice(0, 8) ?? "—",
+            }}
+          />
         </Text>
         {record.asOf && (
           <Text style={pageStyles.copy}>
-            Recorded by {new Date(record.asOf).toLocaleString()}.
+            <Translated
+              message="Recorded by {value1}."
+              values={{ value1: new Date(record.asOf).toLocaleString(locale) }}
+            />
           </Text>
         )}
         {record.validOn && (
           <Text style={pageStyles.copy}>
-            Facts valid on {record.validOn}. Unknown validity remains visible.
+            <Translated
+              message="Facts valid on {value1}. Unknown validity remains visible."
+              values={{ value1: record.validOn }}
+            />
           </Text>
         )}
         {entity.sources.length > 0 && (
           <View style={styles.card}>
-            <Text style={pageStyles.rowTitle}>About this record</Text>
+            <Text style={pageStyles.rowTitle}>{t("About this record")}</Text>
             <OntologyEvidence
               claim={{ sources: entity.sources, validTime: null }}
               record={record}
@@ -68,7 +82,9 @@ export function OntologyDossier({
                 key}
             </Text>
             <Text selectable style={pageStyles.rowTitle}>
-              {claim.value === null ? "Not established" : String(claim.value)}
+              {claim.value === null
+                ? t("Not established")
+                : String(claim.value)}
             </Text>
             <OntologyEvidence claim={claim} record={record} data={data} />
           </View>
@@ -91,7 +107,7 @@ export function OntologyDossier({
             ))}
         {links.length > 0 && (
           <Text accessibilityRole="header" style={pageStyles.heading}>
-            Connections
+            {t("Connections")}
           </Text>
         )}
         {links.map((link) => {
@@ -111,12 +127,12 @@ export function OntologyDossier({
                 )?.name ?? link.type}{" "}
                 ·{" "}
                 {link.from === entity.id
-                  ? "From this record"
-                  : "To this record"}
+                  ? t("From this record")
+                  : t("To this record")}
               </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${other.name}`}
+                accessibilityLabel={t("Open {value1}", { value1: other.name })}
                 onPress={() => {
                   onSelect(other.id);
                 }}
@@ -135,7 +151,9 @@ export function OntologyDossier({
           !links.length &&
           !entity.sources.length && (
             <Text style={pageStyles.copy}>
-              No fields or evidence have been established for this record yet.
+              {t(
+                "No fields or evidence have been established for this record yet."
+              )}
             </Text>
           )}
       </View>

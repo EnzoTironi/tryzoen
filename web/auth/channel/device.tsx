@@ -2,7 +2,7 @@
 
 import type { z } from "zod";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";

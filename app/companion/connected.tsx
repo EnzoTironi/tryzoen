@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
+
 import { startBrowserAudioRecording } from "@web/files/audio-recording";
 import { renderBrowserMedia } from "@web/files/media";
 import { api } from "@web/trpc/client";
@@ -50,6 +52,7 @@ export function ConnectedCompanion({
   readonly title?: string;
   readonly draftScope: string;
 }) {
+  const { t } = useI18n();
   const { client } = api.useUtils();
   const router = useRouter();
   const params = useSearchParams();
@@ -105,11 +108,13 @@ export function ConnectedCompanion({
   return (
     <div className={styles.viewport}>
       {params.has("message") && !messageLocation && (
-        <p role="alert">Este link de mensagem é inválido.</p>
+        <p role="alert">{t("Este link de mensagem é inválido.")}</p>
       )}
       {draftError && (
         <p role="alert">
-          Couldn’t open the draft. Allow storage for this site and try again.
+          {t(
+            "Couldn’t open the draft. Allow storage for this site and try again."
+          )}
         </p>
       )}
       <CompanionEditingProvider>
@@ -136,7 +141,7 @@ export function ConnectedCompanion({
                   navigate("/");
                 }}
                 hideConversationHeader={Boolean(roomId)}
-                title={title ?? "Zoen"}
+                title={title ?? t("Zoen")}
                 avatarUri="/marketing/zoen-avatar.webp"
                 agentName={<ConnectedAgentName />}
                 renderAgentHeader={(onEdit) => (

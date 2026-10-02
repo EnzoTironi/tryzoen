@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useRef, useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -19,6 +21,7 @@ export function CreatorPreviewRequest({
   readonly disabled: boolean;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [selectedCase, setSelectedCase] = useState<string>();
   const [choosing, setChoosing] = useState(false);
@@ -62,14 +65,15 @@ export function CreatorPreviewRequest({
             setChoosing(true);
           }}
         >
-          Choose evaluation case
+          {t("Choose evaluation case")}
         </ActionButton>
       )}
       {selectedCase && (
         <>
           <Text style={pageStyles.copy}>
-            The saved criteria stay hidden from the specialist and cannot change
-            for this run.
+            {t(
+              "The saved criteria stay hidden from the specialist and cannot change for this run."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -80,12 +84,12 @@ export function CreatorPreviewRequest({
               requestId.current = undefined;
             }}
           >
-            Write a different question
+            {t("Write a different question")}
           </ActionButton>
         </>
       )}
       <TextInput
-        accessibilityLabel="Preview question"
+        accessibilityLabel={t("Preview question")}
         multiline
         maxLength={4000}
         value={question}
@@ -94,7 +98,7 @@ export function CreatorPreviewRequest({
           setQuestion(value);
           requestId.current = undefined;
         }}
-        placeholder="What should this specialist help with?"
+        placeholder={t("What should this specialist help with?")}
         style={[pageStyles.field, { minHeight: 120 }]}
       />
       <ActionButton
@@ -104,25 +108,30 @@ export function CreatorPreviewRequest({
         }}
       >
         {mutation.isPending
-          ? "Starting preview…"
+          ? t("Starting preview…")
           : selectedCase
-            ? "Run evaluation case"
-            : "Run private preview"}
+            ? t("Run evaluation case")
+            : t("Run private preview")}
       </ActionButton>
       {mutation.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {mutation.error.message} Any accepted request will appear below.
+          <Translated
+            message="{value1} Any accepted request will appear below."
+            values={{ value1: errorText(mutation.error.message) }}
+          />
         </Text>
       )}
       {choosing && (
         <CompanionSheet
-          title="Choose evaluation case"
+          title={t("Choose evaluation case")}
           onClose={() => {
             setChoosing(false);
           }}
         >
           <Text style={pageStyles.copy}>
-            Choose a saved question with criteria defined before the response.
+            {t(
+              "Choose a saved question with criteria defined before the response."
+            )}
           </Text>
           {draft.evaluation?.cases.map((item) => (
             <ActionButton
@@ -134,7 +143,9 @@ export function CreatorPreviewRequest({
                 requestId.current = undefined;
                 setChoosing(false);
               }}
-            >{`Evaluate: ${item.title}`}</ActionButton>
+            >
+              {t("Evaluate: {value1}", { value1: item.title })}
+            </ActionButton>
           ))}
         </CompanionSheet>
       )}

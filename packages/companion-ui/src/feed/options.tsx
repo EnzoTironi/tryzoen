@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import type { z } from "zod";
 import { Text } from "react-native";
@@ -20,12 +22,13 @@ export function FeedOptions({
   readonly onDelete: () => void;
   readonly onClose: () => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   const [confirm, setConfirm] = useState(false);
   return (
     <CompanionSheet
-      title={confirm ? "Delete this post?" : "About this post"}
+      title={confirm ? t("Delete this post?") : t("About this post")}
       onClose={() => {
         if (!pending) onClose();
       }}
@@ -33,15 +36,21 @@ export function FeedOptions({
       <Text style={pageStyles.rowTitle}>{post.title}</Text>
       {confirm ? (
         <Text style={pageStyles.copy}>
-          This permanently removes the post from your Feed. Conversations about
-          it are kept.
+          {t(
+            "This permanently removes the post from your Feed. Conversations about it are kept."
+          )}
         </Text>
       ) : (
         <>
           <Text style={pageStyles.copy}>
-            Published {new Date(post.createdAt).toLocaleString()}
+            <Translated
+              message="Published {value1}"
+              values={{
+                value1: new Date(post.createdAt).toLocaleString(locale),
+              }}
+            />
           </Text>
-          <Text style={pageStyles.rowTitle}>Why this was created</Text>
+          <Text style={pageStyles.rowTitle}>{t("Why this was created")}</Text>
           <Text style={pageStyles.copy}>{post.rationale}</Text>
         </>
       )}
@@ -58,7 +67,7 @@ export function FeedOptions({
           else setConfirm(true);
         }}
       >
-        {pending ? "Deleting…" : "Delete post"}
+        {pending ? t("Deleting…") : t("Delete post")}
       </ActionButton>
       {confirm && (
         <ActionButton
@@ -68,7 +77,7 @@ export function FeedOptions({
             setConfirm(false);
           }}
         >
-          Keep post
+          {t("Keep post")}
         </ActionButton>
       )}
     </CompanionSheet>

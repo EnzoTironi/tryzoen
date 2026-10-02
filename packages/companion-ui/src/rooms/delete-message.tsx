@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState, type ComponentProps } from "react";
 import {
   useMutation,
@@ -24,6 +25,7 @@ export function DeleteRoomMessage({
   readonly messageId: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const deletion = useMessageDeletion({
     data,
@@ -34,7 +36,7 @@ export function DeleteRoomMessage({
   });
   return (
     <CompanionSheet
-      title="Excluir mensagem?"
+      title={t("Excluir mensagem?")}
       onClose={() => {
         if (!deletion.isPending) onClose();
       }}
@@ -47,13 +49,13 @@ export function DeleteRoomMessage({
           lineHeight: 22,
         }}
       >
-        O conteúdo será removido da conversa. Respostas na thread continuam
-        disponíveis. Isso não apaga cópias ou arquivos que outras pessoas já
-        salvaram.
+        {t(
+          "O conteúdo será removido da conversa. Respostas na thread continuam disponíveis. Isso não apaga cópias ou arquivos que outras pessoas já salvaram."
+        )}
       </Text>
       {deletion.isError && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          Não foi possível excluir. Tente novamente.
+          {t("Não foi possível excluir. Tente novamente.")}
         </Text>
       )}
       <ActionButton
@@ -62,10 +64,10 @@ export function DeleteRoomMessage({
           deletion.mutate();
         }}
       >
-        {deletion.isPending ? "Excluindo…" : "Excluir mensagem"}
+        {deletion.isPending ? t("Excluindo…") : t("Excluir mensagem")}
       </ActionButton>
       <ActionButton quiet disabled={deletion.isPending} onPress={onClose}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </CompanionSheet>
   );

@@ -1,3 +1,4 @@
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { MobileSettings } from "./settings";
 import { SearchSection } from "./search";
 import { randomUUID } from "expo-crypto";
@@ -121,6 +122,7 @@ function LibrarySection({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const { t } = useI18n();
   const cache = useQueryClient();
   const session = auth.useSession();
   const scope = session.data?.session.id ?? "signed-out";
@@ -170,8 +172,12 @@ function LibrarySection({
       onCreate={(kind) => {
         onPrompt(
           kind === "model"
-            ? "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
-            : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder."
+            ? t(
+                "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
+              )
+            : t(
+                "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder."
+              )
         );
       }}
       loading={files.isPending}
@@ -189,6 +195,7 @@ function FileSection({
   readonly path: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const session = auth.useSession();
   const file = useQuery({
     queryKey: ["files", path],
@@ -207,8 +214,8 @@ function FileSection({
     return (
       <DocumentEditor
         title={path.split("/").at(-1) ?? path}
-        label="File content"
-        description="Only this workspace can access this document."
+        label={t("File content")}
+        description={t("Only this workspace can access this document.")}
         initialText={snapshot.content ?? ""}
         maxLength={262144}
         markdown={path.endsWith(".md")}
@@ -246,7 +253,7 @@ function FileSection({
       }}
       actions={
         <ActionButton quiet onPress={onClose}>
-          Back
+          {t("Back")}
         </ActionButton>
       }
     >

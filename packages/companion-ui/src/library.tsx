@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import type { ComponentProps } from "react";
 import { useMemo, useState } from "react";
 import {
@@ -92,6 +93,7 @@ export function Library({
   readonly onOpen: (id: string) => void;
   readonly onCreate: (kind: "document" | "model") => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const compact = useWindowDimensions().width < 720;
@@ -115,8 +117,8 @@ export function Library({
           <View style={styles.search}>
             <Search size={18} color={colors.muted} />
             <TextInput
-              accessibilityLabel="Search library"
-              placeholder="Search"
+              accessibilityLabel={t("Search library")}
+              placeholder={t("Search")}
               value={query}
               onChangeText={setQuery}
               style={styles.searchInput}
@@ -126,7 +128,7 @@ export function Library({
             <View key={item.label}>
               {(item.label === "All creations" || item.label === "Images") && (
                 <Text style={styles.categoryHeading}>
-                  {item.label === "All creations" ? "Artifacts" : "Media"}
+                  {item.label === "All creations" ? t("Artifacts") : t("Media")}
                 </Text>
               )}
               <Pressable
@@ -142,7 +144,7 @@ export function Library({
                 ]}
               >
                 <item.icon size={19} color={colors.muted} strokeWidth={1.7} />
-                <Text style={styles.categoryLabel}>{item.label}</Text>
+                <Text style={styles.categoryLabel}>{t(item.label)}</Text>
               </Pressable>
             </View>
           ))}
@@ -150,13 +152,13 @@ export function Library({
       )}
       <View style={styles.content}>
         <CompanionPage
-          title={category.label}
+          title={t(category.label)}
           actions={
             <View style={styles.actions}>
               {compact && (
                 <IconButton
                   icon={ChevronDown}
-                  label="Library categories and search"
+                  label={t("Library categories and search")}
                   selected={showCategories}
                   onPress={() => {
                     setShowCategories(!showCategories);
@@ -166,7 +168,7 @@ export function Library({
               {!systemFiles && fileControls && (
                 <IconButton
                   icon={list ? LayoutGrid : List}
-                  label={list ? "Grid view" : "List view"}
+                  label={list ? t("Grid view") : t("List view")}
                   onPress={() => {
                     setList(!list);
                   }}
@@ -174,7 +176,9 @@ export function Library({
               )}
               <IconButton
                 icon={descending ? ArrowUpAZ : ArrowDownAZ}
-                label={descending ? "Sort files A to Z" : "Sort files Z to A"}
+                label={
+                  descending ? t("Sort files A to Z") : t("Sort files Z to A")
+                }
                 onPress={() => {
                   setDescending(!descending);
                 }}
@@ -184,8 +188,8 @@ export function Library({
                   accessibilityRole="button"
                   accessibilityLabel={
                     category.label === "Analysis models"
-                      ? "Create an analysis model"
-                      : "Create a file"
+                      ? t("Create an analysis model")
+                      : t("Create a file")
                   }
                   onPress={() => {
                     onCreate(
@@ -247,6 +251,7 @@ function LibraryFiles({
   readonly category: (typeof categories)[number];
   readonly settled: boolean;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -257,11 +262,13 @@ function LibraryFiles({
         item.title.toLowerCase().includes(query.trim().toLowerCase())
     )
     // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
-    .sort((a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title));
+    .sort(
+      (a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title, locale)
+    );
   return (
     <>
       <Text accessibilityRole="header" style={pageStyles.heading}>
-        {query ? "Search results" : "Your files"}
+        {query ? t("Search results") : t("Your files")}
       </Text>
       <View style={list ? styles.rows : styles.grid}>
         {matching.map((item) => (
@@ -298,8 +305,10 @@ function LibraryFiles({
       {settled && matching.length === 0 && (
         <Text style={pageStyles.copy}>
           {query
-            ? "No files match your search."
-            : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
+            ? t("No files match your search.")
+            : t("No {value1} yet. Create something with Zoen to add it here.", {
+                value1: t(category.label).toLocaleLowerCase(locale),
+              })}
         </Text>
       )}
     </>

@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useRef, useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -21,6 +23,7 @@ export function CreatorPilot({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const pilot = useQuery({
     queryKey: ["creator-pilot", cacheScope, id],
@@ -29,23 +32,23 @@ export function CreatorPilot({
     retry: false,
   });
   return (
-    <CompanionSheet title="Private AI pilot" onClose={onClose}>
+    <CompanionSheet title={t("Private AI pilot")} onClose={onClose}>
       {pilot.isPending && (
-        <Text style={pageStyles.copy}>Loading shared teaching…</Text>
+        <Text style={pageStyles.copy}>{t("Loading shared teaching…")}</Text>
       )}
       {pilot.isError && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            This pilot is unavailable. Access may have ended, or your connection
-            may be interrupted. Your unsaved question and previously loaded
-            content are kept on this device.
+            {t(
+              "This pilot is unavailable. Access may have ended, or your connection may be interrupted. Your unsaved question and previously loaded content are kept on this device."
+            )}
           </Text>
           <ActionButton
             onPress={() => {
               void pilot.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </>
       )}
@@ -72,6 +75,7 @@ function PilotQuestions({
   readonly data: CreatorStudioData;
   readonly cacheScope: string;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [question, setQuestion] = useState("");
   const requestId = useRef<string | undefined>(undefined);
@@ -111,25 +115,34 @@ function PilotQuestions({
   return (
     <>
       <Text style={pageStyles.copy}>
-        AI based on selected teaching from {pilot.creatorName}. This is not the
-        creator speaking, and approval is not proof of expertise.
+        <Translated
+          message="AI based on selected teaching from {value1}. This is not the creator speaking, and approval is not proof of expertise."
+          values={{ value1: pilot.creatorName }}
+        />
       </Text>
       <CreatorReleaseEvidence content={pilot.content} />
       <Text style={pageStyles.copy}>
-        {pilot.answerMode === "grounded"
-          ? "Grounded version: only retrieved excerpts from these approved sources and your question reach your selected model."
-          : "Snapshot version: this approved teaching and your question reach your selected model."}
-        Personal memory, conversation history and tools are excluded. The
-        creator cannot read your questions, answers or private reviews. Share
-        only information you have permission to send to your model.
+        <Translated
+          message="{value1}Personal memory, conversation history and tools are excluded. The creator cannot read your questions, answers or private reviews. Share only information you have permission to send to your model."
+          values={{
+            value1:
+              pilot.answerMode === "grounded"
+                ? t(
+                    "Grounded version: only retrieved excerpts from these approved sources and your question reach your selected model."
+                  )
+                : t(
+                    "Snapshot version: this approved teaching and your question reach your selected model."
+                  ),
+          }}
+        />
       </Text>
       <Text style={pageStyles.copy}>
-        One request at a time, up to 10 in 24 hours and 100 saved results per
-        person in this workspace, shared with your own previews and proposals.
-        Latest 20 results shown.
+        {t(
+          "One request at a time, up to 10 in 24 hours and 100 saved results per person in this workspace, shared with your own previews and proposals. Latest 20 results shown."
+        )}
       </Text>
       <TextInput
-        accessibilityLabel="Pilot question"
+        accessibilityLabel={t("Pilot question")}
         multiline
         maxLength={4000}
         value={question}
@@ -153,17 +166,21 @@ function PilotQuestions({
           run.mutate();
         }}
       >
-        {run.isPending ? "Starting…" : "Ask privately"}
+        {run.isPending ? t("Starting…") : t("Ask privately")}
       </ActionButton>
       {run.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {run.error.message} Any accepted request will appear below.
+          <Translated
+            message="{value1} Any accepted request will appear below."
+            values={{ value1: errorText(run.error.message) }}
+          />
         </Text>
       )}
       {previews.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Saved results are unavailable. Refresh to check your access and
-          connection.
+          {t(
+            "Saved results are unavailable. Refresh to check your access and connection."
+          )}
         </Text>
       )}
       <ActionButton
@@ -172,7 +189,7 @@ function PilotQuestions({
           void previews.refetch();
         }}
       >
-        Refresh results
+        {t("Refresh results")}
       </ActionButton>
       {previews.data?.map((preview) => (
         <CreatorPreviewResult

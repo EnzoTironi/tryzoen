@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import type { ComposerEditorHandle } from "../composer/editor";
 import {
   useEffect,
@@ -47,6 +48,7 @@ export function useComposerSheet({
   disabled: boolean;
   onPick?: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const source = useComposerReferences();
@@ -106,7 +108,7 @@ export function useComposerSheet({
     ],
     queryFn: () => {
       if (!source || !token)
-        throw new Error("No reference source is available.");
+        throw new Error(t("No reference source is available."));
       return source.search({ trigger: token.trigger, query, roomId });
     },
     enabled: visible && query === token.query,
@@ -182,26 +184,28 @@ export function useComposerSheet({
           title={
             visible
               ? token.trigger === "$"
-                ? "Skills"
+                ? t("Skills")
                 : token.trigger === "/"
-                  ? "Rotinas"
-                  : "Pessoas e arquivos"
-              : "Adicionar"
+                  ? t("Rotinas")
+                  : t("Pessoas e arquivos")
+              : t("Adicionar")
           }
           onClose={close}
         >
           {visible ? (
             <>
               {searching && (
-                <ActivityIndicator accessibilityLabel="Buscando referências" />
+                <ActivityIndicator
+                  accessibilityLabel={t("Buscando referências")}
+                />
               )}
               {results.isError ? (
                 <Text accessibilityRole="alert" style={styles.empty}>
-                  Não foi possível buscar. Feche e tente novamente.
+                  {t("Não foi possível buscar. Feche e tente novamente.")}
                 </Text>
               ) : !searching && items.length === 0 ? (
                 <Text style={styles.empty}>
-                  Nenhum resultado nesta conversa.
+                  {t("Nenhum resultado nesta conversa.")}
                 </Text>
               ) : null}
               {items.map((item, index) => (
@@ -231,7 +235,7 @@ export function useComposerSheet({
                   <View style={styles.copy}>
                     <Text numberOfLines={1} style={styles.label}>
                       {item.title}
-                      {item.kind === "bot" ? " · IA" : ""}
+                      {item.kind === "bot" ? t(" · IA") : ""}
                     </Text>
                     <Text numberOfLines={1} style={styles.detail}>
                       {item.detail}
@@ -245,7 +249,7 @@ export function useComposerSheet({
               {onPick && (
                 <SheetAction
                   icon={Paperclip}
-                  title="Arquivos e mídia"
+                  title={t("Arquivos e mídia")}
                   detail="Fotos, vídeos, áudio e documentos · até 3 MiB"
                   onPress={() => {
                     close();
@@ -257,20 +261,20 @@ export function useComposerSheet({
                 [
                   {
                     trigger: "@",
-                    title: "Pessoas e arquivos",
-                    detail: "Referenciar algo na conversa",
+                    title: t("Pessoas e arquivos"),
+                    detail: t("Referenciar algo na conversa"),
                     icon: AtSign,
                   },
                   {
                     trigger: "$",
-                    title: "Skills",
-                    detail: "Escolher uma habilidade",
+                    title: t("Skills"),
+                    detail: t("Escolher uma habilidade"),
                     icon: Sparkles,
                   },
                   {
                     trigger: "/",
-                    title: "Rotinas",
-                    detail: "Referenciar uma rotina",
+                    title: t("Rotinas"),
+                    detail: t("Referenciar uma rotina"),
                     icon: Zap,
                   },
                 ].map((item) => (
@@ -351,6 +355,7 @@ function ComposerSheet({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { height } = useWindowDimensions();
@@ -368,7 +373,7 @@ function ComposerSheet({
         </Text>
         <IconButton
           icon={X}
-          label="Fechar menu de adicionar"
+          label={t("Fechar menu de adicionar")}
           onPress={onClose}
         />
       </View>

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ export function CreatorDetails({
   readonly onSaved: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [title, setTitle] = useState(draft.content.title);
   const [description, setDescription] = useState(draft.content.description);
@@ -43,19 +45,19 @@ export function CreatorDetails({
     else onClose();
   };
   return (
-    <CompanionSheet title="Specialist details" onClose={close}>
-      <Text style={pageStyles.rowTitle}>Name</Text>
+    <CompanionSheet title={t("Specialist details")} onClose={close}>
+      <Text style={pageStyles.rowTitle}>{t("Name")}</Text>
       <TextInput
-        accessibilityLabel="Specialist name"
+        accessibilityLabel={t("Specialist name")}
         value={title}
         maxLength={80}
         editable={!mutation.isPending}
         onChangeText={setTitle}
         style={pageStyles.field}
       />
-      <Text style={pageStyles.rowTitle}>What it helps with</Text>
+      <Text style={pageStyles.rowTitle}>{t("What it helps with")}</Text>
       <TextInput
-        accessibilityLabel="Specialist description"
+        accessibilityLabel={t("Specialist description")}
         value={description}
         maxLength={400}
         editable={!mutation.isPending}
@@ -68,25 +70,27 @@ export function CreatorDetails({
           mutation.mutate();
         }}
       >
-        {mutation.isPending ? "Saving…" : "Save details"}
+        {mutation.isPending ? t("Saving…") : t("Save details")}
       </ActionButton>
       {mutation.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {mutation.error.message}
+          {errorText(mutation.error.message)}
         </Text>
       )}
       {discarding && (
         <View style={{ gap: 8 }}>
-          <Text style={pageStyles.rowTitle}>Discard your unsaved changes?</Text>
+          <Text style={pageStyles.rowTitle}>
+            {t("Discard your unsaved changes?")}
+          </Text>
           <ActionButton
             quiet
             onPress={() => {
               setDiscarding(false);
             }}
           >
-            Keep editing
+            {t("Keep editing")}
           </ActionButton>
-          <ActionButton onPress={onClose}>Discard changes</ActionButton>
+          <ActionButton onPress={onClose}>{t("Discard changes")}</ActionButton>
         </View>
       )}
     </CompanionSheet>

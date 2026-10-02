@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -42,6 +44,7 @@ export function CreatorPreviewReview({
   readonly data: Pick<CreatorStudioData, "reviewPreview">;
   readonly onClose: () => void;
 }) {
+  const { t, locale, errorText } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   const initial = preview.review?.content ?? {
@@ -71,11 +74,12 @@ export function CreatorPreviewReview({
     else onClose();
   };
   return (
-    <CompanionSheet title="Your review" onClose={close}>
+    <CompanionSheet title={t("Your review")} onClose={close}>
       <Text style={pageStyles.rowTitle}>{preview.question}</Text>
       <Text style={pageStyles.copy}>
-        Record what worked and what needs to change. Your review stays private
-        with this saved response and playbook version.
+        {t(
+          "Record what worked and what needs to change. Your review stays private with this saved response and playbook version."
+        )}
       </Text>
       <ActionButton
         quiet
@@ -84,7 +88,7 @@ export function CreatorPreviewReview({
           setEditing("response");
         }}
       >
-        Read saved response
+        {t("Read saved response")}
       </ActionButton>
       <ActionButton
         quiet
@@ -94,14 +98,14 @@ export function CreatorPreviewReview({
         }}
       >
         {preview.evaluation
-          ? "Read predeclared criteria"
+          ? t("Read predeclared criteria")
           : value.criteria
-            ? "Edit review criteria"
-            : "Write review criteria"}
+            ? t("Edit review criteria")
+            : t("Write review criteria")}
       </ActionButton>
       <View
         accessibilityRole="radiogroup"
-        accessibilityLabel="Review verdict"
+        accessibilityLabel={t("Review verdict")}
         style={{ gap: 8 }}
       >
         {creatorPreviewReviewContentSchema.shape.verdict.options.map(
@@ -109,7 +113,7 @@ export function CreatorPreviewReview({
             <Pressable
               key={verdict}
               accessibilityRole="radio"
-              accessibilityLabel={creatorReviewVerdicts[verdict]}
+              accessibilityLabel={t(creatorReviewVerdicts[verdict])}
               aria-checked={confirmed && value.verdict === verdict}
               aria-disabled={save.isPending}
               disabled={save.isPending}
@@ -131,7 +135,7 @@ export function CreatorPreviewReview({
                 {confirmed && value.verdict === verdict ? "●" : "○"}
               </Text>
               <Text style={pageStyles.copy}>
-                {creatorReviewVerdicts[verdict]}
+                {t(creatorReviewVerdicts[verdict])}
               </Text>
             </Pressable>
           )
@@ -144,15 +148,20 @@ export function CreatorPreviewReview({
           setEditing("notes");
         }}
       >
-        {value.notes ? "Edit review notes" : "Write review notes"}
+        {value.notes ? t("Edit review notes") : t("Write review notes")}
       </ActionButton>
       <Text style={pageStyles.copy}>
-        Explain which criteria the response met and what should improve.
+        {t("Explain which criteria the response met and what should improve.")}
       </Text>
       {preview.review && (
         <Text style={pageStyles.copy}>
-          Last saved {new Date(preview.review.updatedAt).toLocaleString()} ·{" "}
-          {creatorReviewVerdicts[preview.review.content.verdict]}
+          <Translated
+            message="Last saved {value1} · {value2}"
+            values={{
+              value1: new Date(preview.review.updatedAt).toLocaleString(locale),
+              value2: t(creatorReviewVerdicts[preview.review.content.verdict]),
+            }}
+          />
         </Text>
       )}
       <ActionButton
@@ -165,36 +174,49 @@ export function CreatorPreviewReview({
           save.mutate();
         }}
       >
-        {save.isPending ? "Saving review…" : "Save my review"}
+        {save.isPending ? t("Saving review…") : t("Save my review")}
       </ActionButton>
       {save.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {save.error.message} Your draft is still here.
+          <Translated
+            message="{value1} Your draft is still here."
+            values={{ value1: errorText(save.error.message) }}
+          />
         </Text>
       )}
       {discarding && (
         <View style={{ gap: 8 }}>
-          <Text style={pageStyles.rowTitle}>Discard your unsaved review?</Text>
+          <Text style={pageStyles.rowTitle}>
+            {t("Discard your unsaved review?")}
+          </Text>
           <ActionButton
             quiet
             onPress={() => {
               setDiscarding(false);
             }}
           >
-            Keep editing
+            {t("Keep editing")}
           </ActionButton>
-          <ActionButton onPress={onClose}>Discard changes</ActionButton>
+          <ActionButton onPress={onClose}>{t("Discard changes")}</ActionButton>
         </View>
       )}
       {editing && (
         <DocumentEditor
           {...reviewDocuments[editing]}
+          title={t(reviewDocuments[editing].title)}
+          label={t(reviewDocuments[editing].label)}
           description={
             editing === "criteria" && criteriaLocked
-              ? "These criteria were saved before the model answered. This run keeps that original version."
+              ? t(
+                  "These criteria were saved before the model answered. This run keeps that original version."
+                )
               : editing === "response"
-                ? "The original answer is read-only. Your review cannot alter it."
-                : "This editor updates your review draft. Use Save my review to save your criteria, verdict and notes together."
+                ? t(
+                    "The original answer is read-only. Your review cannot alter it."
+                  )
+                : t(
+                    "This editor updates your review draft. Use Save my review to save your criteria, verdict and notes together."
+                  )
           }
           initialText={
             editing === "response" ? (preview.response ?? "") : value[editing]

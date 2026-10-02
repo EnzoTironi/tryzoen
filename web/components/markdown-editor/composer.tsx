@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   useEffect,
   useLayoutEffect,
@@ -31,6 +32,7 @@ import { Button } from "@web/components/ui/button";
 import styles from "./composer.module.css";
 
 export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
+  const { t } = useI18n();
   const latest = useRef(props);
   useLayoutEffect(() => {
     latest.current = props;
@@ -140,43 +142,43 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
   });
   const commands = [
     {
-      label: "Negrito",
+      label: t("Negrito"),
       Icon: Bold,
       active: state?.bold,
       run: () => editor?.chain().focus().toggleBold().run(),
     },
     {
-      label: "Itálico",
+      label: t("Itálico"),
       Icon: Italic,
       active: state?.italic,
       run: () => editor?.chain().focus().toggleItalic().run(),
     },
     {
-      label: "Riscado",
+      label: t("Riscado"),
       Icon: Strikethrough,
       active: state?.strike,
       run: () => editor?.chain().focus().toggleStrike().run(),
     },
     {
-      label: "Lista",
+      label: t("Lista"),
       Icon: List,
       active: state?.bullet,
       run: () => editor?.chain().focus().toggleBulletList().run(),
     },
     {
-      label: "Lista numerada",
+      label: t("Lista numerada"),
       Icon: ListOrdered,
       active: state?.ordered,
       run: () => editor?.chain().focus().toggleOrderedList().run(),
     },
     {
-      label: "Citação",
+      label: t("Citação"),
       Icon: Quote,
       active: state?.quote,
       run: () => editor?.chain().focus().toggleBlockquote().run(),
     },
     {
-      label: "Inserir link",
+      label: t("Inserir link"),
       Icon: Link,
       active: link !== undefined,
       run: () => {
@@ -184,7 +186,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
       },
     },
     {
-      label: "Código",
+      label: t("Código"),
       Icon: Code,
       active: state?.code,
       run: () => editor?.chain().focus().toggleCode().run(),
@@ -197,7 +199,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
           type="button"
           variant="ghost"
           size="icon"
-          aria-label="Formatação da mensagem"
+          aria-label={t("Formatação da mensagem")}
           aria-expanded={formatting}
           onMouseDown={(event) => {
             event.preventDefault();
@@ -211,7 +213,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
         {formatting && (
           <div
             role="toolbar"
-            aria-label="Formatar mensagem"
+            aria-label={t("Formatar mensagem")}
             className={styles.toolbar}
           >
             {commands.map(({ label, Icon, active, run }) => (
@@ -239,7 +241,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
       {link !== undefined && (
         <div className={styles.linkForm}>
           <input
-            aria-label="Endereço do link"
+            aria-label={t("Endereço do link")}
             placeholder="https://"
             value={link}
             onChange={(event) => {
@@ -256,7 +258,7 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
               setLink(undefined);
             }}
           >
-            Aplicar
+            {t("Aplicar")}
           </Button>
           <Button
             type="button"
@@ -266,14 +268,16 @@ export default function PromptEditor({ ref, ...props }: ComposerEditorProps) {
               editor?.commands.focus();
             }}
           >
-            Cancelar
+            {t("Cancelar")}
           </Button>
         </div>
       )}
       <EditorContent editor={editor} className={styles.input} />
       {props.value.length > props.maxLength && (
         <span role="alert" className={styles.error}>
-          A mensagem excede {props.maxLength} caracteres.
+          {t("A mensagem excede {count} caracteres.", {
+            count: props.maxLength,
+          })}
         </span>
       )}
     </div>

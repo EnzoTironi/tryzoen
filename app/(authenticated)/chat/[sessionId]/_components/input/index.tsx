@@ -1,7 +1,7 @@
 "use client";
 
 import { SquareIcon } from "lucide-react";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   PromptInput,
   PromptInputBody,

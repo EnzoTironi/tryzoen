@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Locale } from "./locale";
+import type { Locale } from "@zoen/companion-ui/i18n";
 
 const validationLocales = {
   "pt-BR": z.locales.ptBR(),

@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from "@zoen/companion-ui/i18n";
+
 import { ConnectedCreatorStudio } from "./settings/creators";
 import { ConnectedSearch } from "./search";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -97,6 +99,7 @@ function ConnectedLibrary({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const { t } = useI18n();
   const cache = useQueryClient();
   const utils = api.useUtils();
   const params = useSearchParams();
@@ -177,8 +180,12 @@ function ConnectedLibrary({
           onCreate={(kind) => {
             onPrompt(
               kind === "model"
-                ? "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
-                : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
+                ? t(
+                    "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
+                  )
+                : t(
+                    "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
+                  )
             );
           }}
           loading={files.isPending}

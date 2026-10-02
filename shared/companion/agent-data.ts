@@ -1,3 +1,4 @@
+import type { useI18n } from "@zoen/companion-ui/i18n";
 import { activityPageSchema } from "@zoen/companion-ui/activity";
 import type { z } from "zod";
 import {
@@ -20,6 +21,20 @@ import { companionIdentitySchema } from "./schema";
 import { agentFiles } from "../workspaces/agent-files";
 import { companionDocumentHistory } from "./files";
 
+const profileLabels: Readonly<Record<string, string>> = {
+  addressLine1: "Address line 1",
+  addressLine2: "Address line 2",
+  city: "City",
+  countryCode: "Country",
+  dateOfBirth: "Date of birth",
+  email: "Email",
+  firstName: "First name",
+  lastName: "Last name",
+  phone: "Phone",
+  postalCode: "Postal code",
+  region: "Region",
+};
+
 export function companionAgentData(
   rpc: {
     query: (
@@ -30,7 +45,8 @@ export function companionAgentData(
     mutation: (path: string, input?: unknown) => Promise<unknown>;
   },
   newOperationId: () => string,
-  memoryArchives: AgentPanelData["learned"]["archives"]
+  memoryArchives: AgentPanelData["learned"]["archives"],
+  { locale, t }: Pick<ReturnType<typeof useI18n>, "locale" | "t">
 ): AgentPanelData {
   return {
     async activity(input, signal) {
@@ -116,13 +132,15 @@ export function companionAgentData(
       );
       return {
         profile: Object.entries(memory.profile).flatMap(([label, value]) =>
-          value ? [{ label: label.replaceAll(/([A-Z])/g, " $1"), value }] : []
+          value ? [{ label: t(profileLabels[label] ?? label), value }] : []
         ),
         documents: memory.notes.documents.map((note, index) => ({
           id: note.version,
-          title: `Personal notes${index ? ` ${index + 1}` : ""}`,
+          title: index
+            ? t("Personal notes {number}", { number: index + 1 })
+            : t("Personal notes"),
           text: personalNoteText(note.content),
-          updated: new Date(note.updatedAt).toLocaleString(),
+          updated: new Date(note.updatedAt).toLocaleString(locale),
         })),
         unresolved: memory.notes.status === "unresolved",
       };
@@ -140,19 +158,21 @@ export function companionAgentData(
       return {
         hasMore: page.hasMore,
         items: page.reminders.map((item) => {
-          const cadence = scheduleCadence(item.timing);
+          const cadence = scheduleCadence(item.timing, { locale, t });
           return {
             id: item.id,
             revision: item.revision,
             title: item.prompt,
-            group: cadence.group,
+            group: t(cadence.group),
             cadence: cadence.cadence,
             status: item.status,
             canManage: item.mayManage,
             conversationId: item.originalSessionId ?? undefined,
-            nextRun: item.nextRunAt?.toLocaleString(),
-            lastRun: item.latestRunStatus?.replaceAll("_", " "),
-            delivery: item.latestReportStatus?.replaceAll("_", " "),
+            nextRun: item.nextRunAt?.toLocaleString(locale),
+            lastRun: item.latestRunStatus ? t(item.latestRunStatus) : undefined,
+            delivery: item.latestReportStatus
+              ? t(item.latestReportStatus)
+              : undefined,
           };
         }),
       };
@@ -170,9 +190,9 @@ export function companionAgentData(
       return {
         items: page.items.map((run) => ({
           id: run.id,
-          date: run.scheduledFor.toLocaleString(),
-          status: run.status.replaceAll("_", " "),
-          delivery: run.reportStatus.replaceAll("_", " "),
+          date: run.scheduledFor.toLocaleString(locale),
+          status: t(run.status),
+          delivery: t(run.reportStatus),
           summary:
             run.outcome?.kind === "nothing_to_report"
               ? run.outcome.reason
@@ -191,34 +211,38 @@ export function companionAgentData(
   };
 }
 
-function scheduleCadence(timing: z.output<typeof scheduleTimingSchema>) {
+function scheduleCadence(
+  timing: z.output<typeof scheduleTimingSchema>,
+  { locale, t }: Pick<ReturnType<typeof useI18n>, "locale" | "t">
+) {
   if (timing.kind === "once")
     return {
       group: "Once",
-      cadence: `Once · ${new Date(timing.at).toLocaleString()}`,
+      cadence: t("Once · {date}", {
+        date: new Date(timing.at).toLocaleString(locale),
+      }),
     };
   if (timing.kind === "interval")
     return {
       group: "Repeating",
-      cadence: `Every ${timing.everyMinutes} minutes`,
+      cadence: t("Every {count} minutes", { count: timing.everyMinutes }),
     };
-  const days = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ];
+  const weekday = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2026, 0, 4 + (timing.weekday ?? 0))));
   const frequency =
     timing.frequency === "weekly"
-      ? (days[timing.weekday ?? 0] ?? "Weekly")
+      ? weekday
       : timing.frequency === "weekdays"
         ? "Weekdays"
         : "Daily";
   return {
     group: timing.frequency === "weekly" ? "Weekly" : "Daily",
-    cadence: `${frequency} at ${timing.localTime} · ${timing.timezone}`,
+    cadence: t("{frequency} at {time} · {timezone}", {
+      frequency: t(frequency),
+      time: timing.localTime,
+      timezone: timing.timezone,
+    }),
   };
 }

@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { TextInput } from "react-native";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../tests/helpers/companion-i18n";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { StyleSheet } from "react-native";
 import { Composer } from "./composer";

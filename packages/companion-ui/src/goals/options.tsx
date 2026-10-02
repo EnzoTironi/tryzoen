@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, Switch, Text, View } from "react-native";
@@ -26,14 +27,15 @@ export function GoalOptions({
   readonly onCompleted: () => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   return (
-    <CompanionSheet title="Goal options" onClose={onClose}>
+    <CompanionSheet title={t("Goal options")} onClose={onClose}>
       {(
         [
-          ["showSubtitles", "Show subtitles"],
-          ["sortAutomatically", "Sort automatically"],
+          ["showSubtitles", t("Show subtitles")],
+          ["sortAutomatically", t("Sort automatically")],
         ] as const
       ).map(([key, label]) => (
         <View key={key} style={pageStyles.row}>
@@ -50,8 +52,9 @@ export function GoalOptions({
         </View>
       ))}
       <Text style={pageStyles.copy}>
-        Automatic sorting puts recent activity first. Turn it off to sort by
-        name.
+        {t(
+          "Automatic sorting puts recent activity first. Turn it off to sort by name."
+        )}
       </Text>
       {error && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
@@ -63,7 +66,9 @@ export function GoalOptions({
         onPress={onCompleted}
         style={pageStyles.row}
       >
-        <Text style={[pageStyles.rowTitle, { flex: 1 }]}>Completed goals</Text>
+        <Text style={[pageStyles.rowTitle, { flex: 1 }]}>
+          {t("Completed goals")}
+        </Text>
         <ChevronRight size={20} color={colors.muted} />
       </Pressable>
     </CompanionSheet>

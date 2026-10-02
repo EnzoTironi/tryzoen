@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSMicrophoneUsageDescription": "Permita que o Zoen grave mensagens de voz quando você tocar no microfone."
+  }
+}

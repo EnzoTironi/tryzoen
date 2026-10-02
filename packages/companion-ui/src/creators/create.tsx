@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ export function CreatorDraftCreate({
   readonly onCreated: (id: string) => void;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [title, setTitle] = useState("");
   const [draftId, setDraftId] = useState(data.newId);
@@ -45,8 +47,8 @@ export function CreatorDraftCreate({
   return (
     <>
       <TextInput
-        accessibilityLabel="Specialist name"
-        placeholder="Name your specialist"
+        accessibilityLabel={t("Specialist name")}
+        placeholder={t("Name your specialist")}
         value={title}
         onChangeText={setTitle}
         maxLength={80}
@@ -59,11 +61,11 @@ export function CreatorDraftCreate({
           create.mutate();
         }}
       >
-        {create.isPending ? "Creating…" : "Create a draft"}
+        {create.isPending ? t("Creating…") : t("Create a draft")}
       </ActionButton>
       {create.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {create.error.message}
+          {errorText(create.error.message)}
         </Text>
       )}
     </>

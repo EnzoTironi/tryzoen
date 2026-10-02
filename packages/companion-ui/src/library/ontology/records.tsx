@@ -1,3 +1,4 @@
+import { useI18n } from "./../../i18n";
 import { useMemo } from "react";
 import type { z } from "zod";
 import { ChevronRight, Network } from "lucide-react-native";
@@ -15,6 +16,7 @@ export function OntologyRecords({
   readonly query: string;
   readonly onOpen: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -34,7 +36,7 @@ export function OntologyRecords({
         <Pressable
           key={item.id}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${item.name}`}
+          accessibilityLabel={t("Open {value1}", { value1: item.name })}
           onPress={() => {
             onOpen(item.id);
           }}
@@ -55,15 +57,18 @@ export function OntologyRecords({
       ))}
       {matching.length > 100 && (
         <Text style={pageStyles.copy}>
-          Showing 100 records. Search to find a more specific person, project or
-          fact.
+          {t(
+            "Showing 100 records. Search to find a more specific person, project or fact."
+          )}
         </Text>
       )}
       {!matching.length && (
         <Text style={pageStyles.copy}>
           {term
-            ? "No matching knowledge."
-            : "Your published knowledge will appear here with its relationships and sources."}
+            ? t("No matching knowledge.")
+            : t(
+                "Your published knowledge will appear here with its relationships and sources."
+              )}
         </Text>
       )}
     </View>

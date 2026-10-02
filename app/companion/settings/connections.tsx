@@ -1,7 +1,7 @@
 "use client";
 import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 import { ConnectionList } from "@app/(authenticated)/connections/_components/connection-list";
 import { ConnectorLibrary } from "@app/(authenticated)/space/(overview)/_components/connector-library";

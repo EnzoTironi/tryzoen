@@ -1,3 +1,6 @@
+import { MobileLanguagePicker } from "../i18n";
+
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { MobileVault } from "./vault";
 import { useState, type ComponentProps } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -36,6 +39,7 @@ function SettingsNavigation({
   onPrompt,
   creators,
 }: ComponentProps<typeof MobileSettings>) {
+  const { t } = useI18n();
   const [page, setPage] = useState<SettingsPage>();
   const signOut = useMutation({ mutationFn: onSignOut });
   return (
@@ -50,7 +54,7 @@ function SettingsNavigation({
         signOut.mutate();
       }}
       signingOut={signOut.isPending}
-      error={signOut.isError ? "Could not sign out. Try again." : undefined}
+      error={signOut.isError ? t("Could not sign out. Try again.") : undefined}
     >
       <View key={page} style={styles.content}>
         <SettingsContent
@@ -73,6 +77,7 @@ function SettingsContent({
 }: Pick<ComponentProps<typeof MobileSettings>, "creators" | "onPrompt"> & {
   readonly page?: SettingsPage;
 }) {
+  const { t } = useI18n();
   switch (page) {
     case "general":
       return <GeneralSettings creators={creators} onPrompt={onPrompt} />;
@@ -84,7 +89,7 @@ function SettingsContent({
       return (
         <>
           <Text accessibilityRole="header" style={styles.heading}>
-            Signed-in sessions
+            {t("Signed-in sessions")}
           </Text>
           <SignedInSessions />
         </>
@@ -93,7 +98,7 @@ function SettingsContent({
       return (
         <>
           <Text accessibilityRole="header" style={styles.heading}>
-            Personal memory
+            {t("Personal memory")}
           </Text>
           <MobileMemory onPrompt={onPrompt} />
         </>
@@ -102,33 +107,37 @@ function SettingsContent({
       return (
         <>
           <Text style={styles.description}>
-            Ask Zoen how a feature works or describe a problem. Include only the
-            details you want to share in the conversation.
+            {t(
+              "Ask Zoen how a feature works or describe a problem. Include only the details you want to share in the conversation."
+            )}
           </Text>
           <ActionButton
             onPress={() => {
               onPrompt(
-                "I need help using Zoen. Ask me what I am trying to do and what happened."
+                t(
+                  "I need help using Zoen. Ask me what I am trying to do and what happened."
+                )
               );
             }}
           >
-            Ask Zoen for help
+            {t("Ask Zoen for help")}
           </ActionButton>
         </>
       );
     case "legal":
       return (
         <Text style={styles.description}>
-          Zoen uses AI and can make mistakes. Review important information and
-          requested actions. Connected services have their own terms and privacy
-          policies.
+          {t(
+            "Zoen uses AI and can make mistakes. Review important information and requested actions. Connected services have their own terms and privacy policies."
+          )}
         </Text>
       );
     case "connectors":
       return (
         <Text style={styles.description}>
-          Connecting and managing provider accounts is not available in this app
-          yet. Existing messaging links are managed under Messaging channels.
+          {t(
+            "Connecting and managing provider accounts is not available in this app yet. Existing messaging links are managed under Messaging channels."
+          )}
         </Text>
       );
     case "wallet":
@@ -144,23 +153,27 @@ function GeneralSettings({
   creators,
   onPrompt,
 }: Pick<ComponentProps<typeof MobileSettings>, "creators" | "onPrompt">) {
+  const { t } = useI18n();
   const account = auth.useSession();
   return (
     <>
       <Text accessibilityRole="header" style={styles.heading}>
-        {account.data?.user.name ?? "Your account"}
+        {account.data?.user.name ?? t("Your account")}
       </Text>
       <Text style={styles.description}>{account.data?.user.email}</Text>
+      <MobileLanguagePicker />
       <MessageGestureSettings />
       <ActionButton
         quiet
         onPress={() => {
           onPrompt(
-            "Help me create my bot. Interview me about its purpose, expertise, sources and boundaries before creating anything."
+            t(
+              "Help me create my bot. Interview me about its purpose, expertise, sources and boundaries before creating anything."
+            )
           );
         }}
       >
-        Create my bot
+        {t("Create my bot")}
       </ActionButton>
       <CreatorStudio
         data={creators}
@@ -170,11 +183,13 @@ function GeneralSettings({
         quiet
         onPress={() => {
           onPrompt(
-            "Help me review my connected tools, available models, and account preferences. Ask what I want to change before applying anything."
+            t(
+              "Help me review my connected tools, available models, and account preferences. Ask what I want to change before applying anything."
+            )
           );
         }}
       >
-        Discuss preferences with Zoen
+        {t("Discuss preferences with Zoen")}
       </ActionButton>
     </>
   );

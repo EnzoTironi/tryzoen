@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { RoomMessageContext } from "./context";
 import { BookmarkX, ChevronRight } from "lucide-react-native";
 import { IconButton } from "../icon-button";
@@ -33,6 +35,7 @@ export function SavedRoomMessages({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const client = useQueryClient();
   const refresh = () =>
@@ -74,7 +77,7 @@ export function SavedRoomMessages({
       />
     );
   return (
-    <CompanionSheet title="Mensagens salvas" onClose={onClose}>
+    <CompanionSheet title={t("Mensagens salvas")} onClose={onClose}>
       <Text
         style={{
           fontFamily: systemFont,
@@ -83,26 +86,30 @@ export function SavedRoomMessages({
           marginBottom: 16,
         }}
       >
-        Só você · até 100 mensagens. As salvas deste espaço aparecem aqui.
+        {t(
+          "Só você · até 100 mensagens. As salvas deste espaço aparecem aqui."
+        )}
       </Text>
       {(result.isError || reset) && (
         <>
           <Text accessibilityRole="alert">
             {reset
-              ? "A lista mudou. Atualize para ver a versão atual."
-              : "Não foi possível carregar suas mensagens."}
+              ? t("A lista mudou. Atualize para ver a versão atual.")
+              : t("Não foi possível carregar suas mensagens.")}
           </Text>
           <ActionButton
             onPress={() => {
               void refresh();
             }}
           >
-            Atualizar
+            {t("Atualizar")}
           </ActionButton>
         </>
       )}
       {result.isPending && (
-        <ActivityIndicator accessibilityLabel="Carregando mensagens salvas" />
+        <ActivityIndicator
+          accessibilityLabel={t("Carregando mensagens salvas")}
+        />
       )}
       <FlatList
         data={items}
@@ -114,12 +121,14 @@ export function SavedRoomMessages({
         }}
         ListEmptyComponent={
           !result.isPending && !result.isError && !reset ? (
-            <Text>Nenhuma mensagem salva neste espaço.</Text>
+            <Text>{t("Nenhuma mensagem salva neste espaço.")}</Text>
           ) : null
         }
         ListFooterComponent={
           result.isFetchingNextPage ? (
-            <ActivityIndicator accessibilityLabel="Carregando mais mensagens" />
+            <ActivityIndicator
+              accessibilityLabel={t("Carregando mais mensagens")}
+            />
           ) : null
         }
         renderItem={({ item }) => (
@@ -152,6 +161,7 @@ function SavedRow({
   readonly onSelect: (value: z.infer<typeof roomMediaReadSchema>) => void;
   readonly onRemove: (value: z.infer<typeof roomMediaReadSchema>) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   return (
     <View
@@ -187,7 +197,7 @@ function SavedRow({
               color: colors.ink,
             }}
           >
-            {item.room?.label ?? "Mensagem indisponível"}
+            {item.room?.label ?? t("Mensagem indisponível")}
           </Text>
           {item.room && item.message && (
             <ChevronRight size={16} color={colors.muted} />
@@ -203,16 +213,21 @@ function SavedRow({
           }}
         >
           {item.message?.text ??
-            "O acesso ou a mensagem original não está mais disponível."}
+            t("O acesso ou a mensagem original não está mais disponível.")}
         </Text>
         <Text
           style={{ fontFamily: systemFont, color: colors.muted, fontSize: 12 }}
         >
-          Salva em {new Date(item.savedAt).toLocaleDateString()}
+          <Translated
+            message="Salva em {value1}"
+            values={{
+              value1: new Date(item.savedAt).toLocaleDateString(locale),
+            }}
+          />
         </Text>
       </Pressable>
       <IconButton
-        label="Remover das salvas"
+        label={t("Remover das salvas")}
         icon={BookmarkX}
         onPress={() => {
           onRemove(item.reference);

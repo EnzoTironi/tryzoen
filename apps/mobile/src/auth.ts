@@ -1,3 +1,4 @@
+import { deviceLocale, readLocalePreference } from "./locale";
 import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
 import * as SecureStore from "expo-secure-store";
@@ -17,7 +18,11 @@ export const auth = createAuthClient({
   ],
 });
 export async function accountHeaders(): Promise<Record<string, string>> {
-  if (Platform.OS === "web") return {};
+  const locale =
+    (await readLocalePreference().catch(() => undefined)) ?? deviceLocale();
+  if (Platform.OS === "web") return { "Accept-Language": locale };
   const cookie = await auth.getCookie();
-  return cookie ? { Cookie: cookie } : {};
+  return cookie
+    ? { Cookie: cookie, "Accept-Language": locale }
+    : { "Accept-Language": locale };
 }

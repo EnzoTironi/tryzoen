@@ -1,7 +1,7 @@
 "use client";
 
-import type { createTranslator } from "@web/i18n/translate";
-import { useI18n } from "@web/i18n/context";
+import type { createTranslator } from "@zoen/companion-ui/i18n";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { PanelLink } from "../../_components/panel-link";
 import { Alert, AlertDescription, AlertTitle } from "@web/components/ui/alert";
 import { Button } from "@web/components/ui/button";

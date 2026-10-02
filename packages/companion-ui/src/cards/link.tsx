@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import {
   Image,
@@ -20,6 +21,7 @@ export function MessageLinks({ text }: { text: string }) {
   return messageLinks(text).map((url) => <LinkCard key={url} url={url} />);
 }
 export function LinkCard({ url, title }: { url: string; title?: string }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const source = useLinkPreviews();
@@ -30,7 +32,7 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
   const preview = useQuery({
     queryKey: ["link-preview", source?.cacheScope, url],
     queryFn: () => {
-      if (!source) throw new Error("Preview unavailable");
+      if (!source) throw new Error(t("Preview unavailable"));
       return source.load(url);
     },
     enabled: !!source && safe && load,
@@ -50,7 +52,9 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
     <View style={styles.container}>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel={`Abrir ${title ?? preview.data?.title ?? domain}`}
+        accessibilityLabel={t("Abrir {value1}", {
+          value1: title ?? preview.data?.title ?? domain,
+        })}
         onPress={open}
         style={styles.card}
       >
@@ -62,7 +66,7 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
             onError={() => {
               setImageFailed(true);
             }}
-            accessibilityLabel="Prévia do link"
+            accessibilityLabel={t("Prévia do link")}
           />
         )}
         <ResourceCard
@@ -85,8 +89,8 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
             icon={ImagePlus}
             label={
               preview.isError
-                ? "Tentar carregar prévia novamente"
-                : "Carregar prévia do link"
+                ? t("Tentar carregar prévia novamente")
+                : t("Carregar prévia do link")
             }
             disabled={preview.isFetching}
             onPress={() => {
@@ -96,16 +100,16 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
           />
           <Text style={styles.caption}>
             {preview.isFetching
-              ? "Carregando prévia…"
+              ? t("Carregando prévia…")
               : preview.isError
-                ? "Prévia indisponível"
-                : "Carregar prévia"}
+                ? t("Prévia indisponível")
+                : t("Carregar prévia")}
           </Text>
         </View>
       )}
       {failed && (
         <Text accessibilityRole="alert" style={styles.error}>
-          Não foi possível abrir o link.
+          {t("Não foi possível abrir o link.")}
         </Text>
       )}
     </View>

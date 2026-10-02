@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getI18n } from "@web/i18n/server";
 import {
   companionCanonicalPath,
   companionPublicOrigin,
@@ -13,12 +14,15 @@ import { MarketingLanding } from "./_components/marketing-landing";
 const canonical = companionCanonicalPath("/");
 
 export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  const title = t(zoenSocialTitle);
+  const description = t(zoenSocialDescription);
   return {
     metadataBase: new URL(companionPublicOrigin),
-    title: zoenSocialTitle,
-    description: zoenSocialDescription,
+    title,
+    description,
     alternates: { canonical },
-    ...zoenSocialMetadata({ path: "/" }),
+    ...zoenSocialMetadata({ title, description, path: "/" }),
   };
 }
 

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMarkRoomUnread } from "./unread";
 import { ThreadSubscription } from "./thread-subscription";
 import { roomMessageUrl } from "./links";
@@ -73,6 +74,7 @@ export function RoomConversation({
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const width = useWindowDimensions().width;
   const compact = width < 720;
   const { colors, styles } = useRoomStyles(compact);
@@ -171,13 +173,14 @@ export function RoomConversation({
     return (
       <View style={styles.unavailable}>
         <Text accessibilityRole="header" style={styles.title}>
-          Conversa indisponível
+          {t("Conversa indisponível")}
         </Text>
         <Text accessibilityRole="alert" style={styles.caption}>
-          Você não tem mais acesso a esta conversa. Um administrador pode
-          adicionar você novamente.
+          {t(
+            "Você não tem mais acesso a esta conversa. Um administrador pode adicionar você novamente."
+          )}
         </Text>
-        <ActionButton onPress={onBack}>Voltar às conversas</ActionButton>
+        <ActionButton onPress={onBack}>{t("Voltar às conversas")}</ActionButton>
       </View>
     );
   return (
@@ -214,7 +217,7 @@ export function RoomConversation({
         />
         {unread.isError && (
           <Text accessibilityRole="alert" style={styles.caption}>
-            Não foi possível marcar como não lida. Tente novamente.
+            {t("Não foi possível marcar como não lida. Tente novamente.")}
           </Text>
         )}
         <RoomMessages
@@ -316,22 +319,26 @@ export function RoomConversation({
             <View style={styles.headerSide} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Voltar à conversa ${room?.label ?? "Thread"}`}
-              accessibilityHint={`Thread de ${root.sender}`}
+              accessibilityLabel={t("Voltar à conversa {value1}", {
+                value1: room?.label ?? t("Thread"),
+              })}
+              accessibilityHint={t("Thread de {value1}", {
+                value1: root.sender,
+              })}
               onPress={() => {
                 setRoot(undefined);
               }}
               style={styles.identity}
             >
               <ConversationAvatar
-                name={room?.label ?? "Thread"}
+                name={room?.label ?? t("Thread")}
                 uri={room?.avatarUri ?? undefined}
                 group={room?.kind === "group"}
                 size={compact ? 56 : 40}
               />
               <View style={styles.nameCapsule}>
                 <Text numberOfLines={1} style={styles.title}>
-                  {room?.label ?? "Thread"}
+                  {room?.label ?? t("Thread")}
                 </Text>
                 <ChevronRight size={12} color={colors.ink} />
               </View>
@@ -340,7 +347,7 @@ export function RoomConversation({
               <View style={styles.headerControl}>
                 <IconButton
                   icon={X}
-                  label="Fechar thread"
+                  label={t("Fechar thread")}
                   onPress={() => {
                     setRoot(undefined);
                   }}
@@ -375,7 +382,7 @@ export function RoomConversation({
       )}
       {ready && options && (
         <CompanionSheet
-          title="Conversa"
+          title={t("Conversa")}
           onClose={() => {
             setOptions(false);
           }}
@@ -384,14 +391,14 @@ export function RoomConversation({
             {[
               {
                 icon: Search,
-                label: "Buscar na conversa",
+                label: t("Buscar na conversa"),
                 run: () => {
                   setSearching(true);
                 },
               },
               {
                 icon: Pin,
-                label: "Mensagens fixadas",
+                label: t("Mensagens fixadas"),
                 run: () => {
                   setPins(true);
                 },
@@ -400,8 +407,8 @@ export function RoomConversation({
                 icon: Info,
                 label:
                   room?.kind === "direct"
-                    ? "Perfil da pessoa"
-                    : "Detalhes do grupo",
+                    ? t("Perfil da pessoa")
+                    : t("Detalhes do grupo"),
                 run: showProfile,
               },
             ].map(({ icon: Icon, label, run }) => (
@@ -523,21 +530,23 @@ export function RoomConversation({
             style={styles.caption}
           >
             {participation.status === "error"
-              ? "Não foi possível conectar à conversa."
+              ? t("Não foi possível conectar à conversa.")
               : participation.status === "cancelled"
-                ? "Conexão pausada."
-                : "Conectando à conversa…"}
+                ? t("Conexão pausada.")
+                : t("Conectando à conversa…")}
           </Text>
           {participation.status === "pending" ? (
             <ActionButton onPress={participation.cancel}>
-              Cancelar conexão
+              {t("Cancelar conexão")}
             </ActionButton>
           ) : (
             <ActionButton onPress={participation.retry}>
-              Tentar novamente
+              {t("Tentar novamente")}
             </ActionButton>
           )}
-          <ActionButton onPress={onBack}>Voltar às conversas</ActionButton>
+          <ActionButton onPress={onBack}>
+            {t("Voltar às conversas")}
+          </ActionButton>
         </View>
       )}
     </View>
@@ -563,6 +572,7 @@ function RoomHeader({
   readonly onSearch: () => void;
   readonly onOptions: () => void;
 }) {
+  const { t } = useI18n();
   const { colors, styles } = useRoomStyles(compact);
   return (
     <View
@@ -575,7 +585,7 @@ function RoomHeader({
         <View style={styles.headerControl}>
           <IconButton
             icon={compact ? ArrowLeft : Search}
-            label={compact ? "Voltar às conversas" : "Buscar na conversa"}
+            label={compact ? t("Voltar às conversas") : t("Buscar na conversa")}
             onPress={compact ? onBack : onSearch}
           />
         </View>
@@ -583,11 +593,11 @@ function RoomHeader({
       <View pointerEvents="box-none" style={styles.identity}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Ver perfil da conversa"
+          accessibilityLabel={t("Ver perfil da conversa")}
           onPress={onProfile}
         >
           <ConversationAvatar
-            name={room?.label ?? "Conversa"}
+            name={room?.label ?? t("Conversa")}
             uri={room?.avatarUri ?? undefined}
             group={room?.kind === "group"}
             size={compact ? 56 : 40}
@@ -595,10 +605,12 @@ function RoomHeader({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Detalhes de ${room?.label ?? "conversa"}`}
+          accessibilityLabel={t("Detalhes de {value1}", {
+            value1: room?.label ?? t("conversa"),
+          })}
           accessibilityHint={
             room?.kind === "direct" && room.username
-              ? `@${room.username} · conversa direta`
+              ? t("@{value1} · conversa direta", { value1: room.username })
               : undefined
           }
           onPress={onProfile}
@@ -610,7 +622,7 @@ function RoomHeader({
             numberOfLines={1}
             style={styles.title}
           >
-            {room?.label ?? "Conversa"}
+            {room?.label ?? t("Conversa")}
           </Text>
           <ChevronRight size={12} color={colors.ink} />
         </Pressable>
@@ -622,7 +634,7 @@ function RoomHeader({
         <View style={styles.headerControl}>
           <IconButton
             icon={Ellipsis}
-            label="Opções da conversa"
+            label={t("Opções da conversa")}
             onPress={onOptions}
           />
         </View>

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useRef, useState, type ComponentProps } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Pencil, PlusSquare, SquareCheck, Trash2 } from "lucide-react-native";
@@ -19,6 +20,7 @@ export function GoalActions({
   ComponentProps<typeof GoalDetail>,
   "goal" | "data" | "onChanged" | "onPrompt" | "onClose"
 >) {
+  const { t, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -68,15 +70,16 @@ export function GoalActions({
     );
   if (view === "delete")
     return (
-      <CompanionSheet title="Delete this goal?" onClose={close}>
+      <CompanionSheet title={t("Delete this goal?")} onClose={close}>
         <Text style={pageStyles.rowTitle}>{target.title}</Text>
         <Text style={pageStyles.copy}>
-          This removes the saved goal, its subgoals and their activity history.
-          Existing conversations and schedules are unchanged.
+          {t(
+            "This removes the saved goal, its subgoals and their activity history. Existing conversations and schedules are unchanged."
+          )}
         </Text>
         {change.error && (
           <Text accessibilityRole="alert" style={styles.error}>
-            {change.error.message}
+            {errorText(change.error.message)}
           </Text>
         )}
         <ActionButton
@@ -85,10 +88,10 @@ export function GoalActions({
             change.mutate("delete");
           }}
         >
-          Delete goal and history
+          {t("Delete goal and history")}
         </ActionButton>
         <ActionButton quiet disabled={change.isPending} onPress={close}>
-          Keep goal
+          {t("Keep goal")}
         </ActionButton>
       </CompanionSheet>
     );
@@ -104,7 +107,10 @@ export function GoalActions({
         else if (action === "subgoal") {
           onClose();
           onPrompt(
-            `Help me add a subgoal to “${target.title}” (workstream ID ${target.reference}). Read the parent first, ask what milestone I want, and save the agreed subgoal with parentId set to this parent. Do not create a schedule without discussing it.`
+            t(
+              "Help me add a subgoal to “{value1}” (workstream ID {value2}). Read the parent first, ask what milestone I want, and save the agreed subgoal with parentId set to this parent. Do not create a schedule without discussing it.",
+              { value1: target.title, value2: target.reference }
+            )
           );
         } else setView(action);
       }}
@@ -129,23 +135,24 @@ function GoalActionMenu({
     action: "complete" | "subgoal" | "rename" | "delete"
   ) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const actions = [
     {
       id: "complete",
-      label: completed ? "Reopen" : "Complete",
+      label: completed ? t("Reopen") : t("Complete"),
       icon: SquareCheck,
     },
     ...(canAddSubgoal
-      ? [{ id: "subgoal", label: "Add subgoal", icon: PlusSquare } as const]
+      ? [{ id: "subgoal", label: t("Add subgoal"), icon: PlusSquare } as const]
       : []),
-    { id: "rename", label: "Rename", icon: Pencil },
-    { id: "delete", label: "Delete", icon: Trash2 },
+    { id: "rename", label: t("Rename"), icon: Pencil },
+    { id: "delete", label: t("Delete"), icon: Trash2 },
   ] as const;
   return (
     <SheetSurface
-      title="Goal actions"
+      title={t("Goal actions")}
       onClose={onClose}
       panelStyle={styles.sheet}
       maxWidth={420}
@@ -181,7 +188,7 @@ function GoalActionMenu({
         </Pressable>
       ))}
       <ActionButton quiet disabled={pending} onPress={onClose}>
-        Cancel
+        {t("Cancel")}
       </ActionButton>
     </SheetSurface>
   );

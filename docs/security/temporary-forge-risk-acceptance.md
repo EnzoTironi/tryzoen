@@ -103,3 +103,14 @@ The advisory remains unfixed; its version/path constraints and
 **2026-10-04T02:59:00Z** expiry remain unchanged. This review does not grant
 deployment authority. Recompute and review the final combined configuration
 after other branches are integrated.
+
+After localization merged as `725f04b2`, independent review rechecked the final
+combined configuration and regenerated root lockfile. Against that main, the lock
+delta removes only the root's unused direct yaml 2.9.1 importer. Mobile, desktop,
+signing, workflow, Docker, Next and infrastructure dependency settings remain
+unchanged. The six infrastructure changes retain the reviewed migration-cutover
+scope. The fresh registry report still contains the same high advisory, affected
+version, no patched version and exact 100 paths. The final reviewed fingerprint
+is `e416be64fb05f4929d7ffb49a87b78d6de57e881d448c2924b726db50d9605bc`.
+The vulnerability remains unfixed, the acceptance expires at the same
+**2026-10-04T02:59:00Z**, and deployment requires separate user authorization.

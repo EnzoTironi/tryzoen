@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ShieldCheckIcon } from "lucide-react";
 import { authClient } from "@web/auth/client";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 export function VaultContinue() {
   const { t } = useI18n();

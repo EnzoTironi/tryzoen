@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "eve/client";
@@ -41,6 +42,7 @@ export function AgentPresence({
   readonly avatarUri: string;
   readonly onEdit: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const identity = useIdentity(data, cacheScope);
@@ -56,7 +58,7 @@ export function AgentPresence({
         <Image source={{ uri: avatarUri }} style={styles.avatar} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Edit agent identity"
+          accessibilityLabel={t("Edit agent identity")}
           onPress={onEdit}
           style={styles.editAvatar}
         >
@@ -64,16 +66,16 @@ export function AgentPresence({
         </Pressable>
       </View>
       <Text numberOfLines={1} style={styles.name}>
-        {identity.data?.name ?? "Zoen"}
+        {identity.data?.name ?? t("Zoen")}
       </Text>
       <View accessibilityRole="text" style={styles.connection}>
         <Zap size={17} color={health.isSuccess ? "#15803d" : colors.muted} />
         <Text style={styles.connectionText}>
           {health.isPending
-            ? "Connecting…"
+            ? t("Connecting…")
             : health.isError
-              ? "Unavailable"
-              : "Connected"}
+              ? t("Unavailable")
+              : t("Connected")}
         </Text>
       </View>
       {health.isError && (
@@ -83,7 +85,7 @@ export function AgentPresence({
             void health.refetch();
           }}
         >
-          Reconnect
+          {t("Reconnect")}
         </ActionButton>
       )}
     </View>
@@ -99,6 +101,7 @@ export function AgentIdentity({
   readonly cacheScope: string;
   readonly renderPersonalNotes: (onBack: () => void) => ReactNode;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -122,12 +125,12 @@ export function AgentIdentity({
   };
   return (
     <CompanionPage
-      title="Identity"
+      title={t("Identity")}
       hideTitle
       loading={identity.isPending}
       error={
         identity.error
-          ? "Agent identity couldn’t be loaded. Try again."
+          ? t("Agent identity couldn’t be loaded. Try again.")
           : undefined
       }
       onRetry={() => {
@@ -141,7 +144,7 @@ export function AgentIdentity({
             {profile.text.replace(/^#.*\n|^Name:.*\n/gm, "").trim()}
           </Text>
           <Text style={pageStyles.copy}>
-            {profile.saved ? "Workspace identity" : "Not customized yet"}
+            {profile.saved ? t("Workspace identity") : t("Not customized yet")}
           </Text>
           <ActionButton
             quiet
@@ -149,7 +152,7 @@ export function AgentIdentity({
               open(profile);
             }}
           >
-            {identity.data?.canEdit ? "Edit identity" : "View identity"}
+            {identity.data?.canEdit ? t("Edit identity") : t("View identity")}
           </ActionButton>
         </View>
       )}
@@ -160,7 +163,9 @@ export function AgentIdentity({
             <Pressable
               key={document.path}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${document.title}`}
+              accessibilityLabel={t("Open {value1}", {
+                value1: t(document.title),
+              })}
               onPress={() => {
                 open(document);
               }}
@@ -170,12 +175,16 @@ export function AgentIdentity({
               ]}
             >
               <Text style={styles.documentTitle}>
-                {document.title.toUpperCase()}
+                {t(document.title).toLocaleUpperCase(locale)}
               </Text>
-              <Text style={styles.documentSubtitle}>HANDLE WITH CARE</Text>
+              <Text style={styles.documentSubtitle}>
+                {t("HANDLE WITH CARE")}
+              </Text>
               <View style={styles.documentFoot}>
                 <Text style={styles.documentStatus}>
-                  {document.saved ? "Workspace document" : "Not customized"}
+                  {document.saved
+                    ? t("Workspace document")
+                    : t("Not customized")}
                 </Text>
                 <Heart size={22} fill="#ffffff80" color="#ffffff80" />
               </View>
@@ -184,7 +193,7 @@ export function AgentIdentity({
       </View>
       <View style={pageStyles.section}>
         <Text style={pageStyles.copy}>
-          These documents shape your agent in this workspace.
+          {t("These documents shape your agent in this workspace.")}
         </Text>
         <View style={styles.personal}>
           <ActionButton
@@ -193,13 +202,13 @@ export function AgentIdentity({
               setPersonal(true);
             }}
           >
-            Your personal notes
+            {t("Your personal notes")}
           </ActionButton>
         </View>
       </View>
       {personal && (
         <SheetSurface
-          title="Personal memory"
+          title={t("Personal memory")}
           onClose={() => {
             setPersonal(false);
           }}
@@ -219,10 +228,12 @@ export function AgentIdentity({
           title={
             editing.document.path.split("/").at(-1) ?? editing.document.title
           }
-          label={`${editing.document.title} document`}
+          label={t("{value1} document", { value1: t(editing.document.title) })}
           initialText={editing.document.text}
           maxLength={262144}
-          description="This document guides your agent in this workspace. Changes apply to its next response."
+          description={t(
+            "This document guides your agent in this workspace. Changes apply to its next response."
+          )}
           readOnly={!identity.data?.canEdit}
           allowUnchanged={!editing.document.saved}
           onClose={() => {

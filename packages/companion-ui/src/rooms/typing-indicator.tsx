@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { Text } from "react-native";
 import type { z } from "zod";
 import { systemFont, useColors } from "../theme";
@@ -10,15 +11,16 @@ export function RoomTypingIndicator({
   readonly userIds: string[];
   readonly members: z.infer<typeof roomMemberSchema>[];
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const people = members.filter(
     (person) => !person.mine && userIds.includes(person.id)
   );
   if (!people.length) return null;
-  const names = people
-    .slice(0, 2)
-    .map((person) => person.name)
-    .join(" e ");
+  const names = new Intl.ListFormat(locale, {
+    style: "long",
+    type: "conjunction",
+  }).format(people.slice(0, 2).map((person) => person.name));
   return (
     <Text
       accessibilityLiveRegion="polite"
@@ -31,10 +33,10 @@ export function RoomTypingIndicator({
       }}
     >
       {names}
-      {people.length > 2 ? " e outras pessoas" : ""}
+      {people.length > 2 ? t(" e outras pessoas") : ""}
       {people.length === 1
-        ? " está digitando nesta conversa…"
-        : " estão digitando nesta conversa…"}
+        ? t(" está digitando nesta conversa…")
+        : t(" estão digitando nesta conversa…")}
     </Text>
   );
 }

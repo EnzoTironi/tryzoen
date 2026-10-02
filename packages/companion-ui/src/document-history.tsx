@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo, useState } from "react";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -26,6 +27,7 @@ export function DocumentHistory({
   readonly readOnly: boolean;
   readonly onRestore: (text: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -42,10 +44,10 @@ export function DocumentHistory({
   return (
     <View style={styles.surface}>
       <Text accessibilityRole="header" style={pageStyles.rowTitle}>
-        Version history
+        {t("Version history")}
       </Text>
       {history.isPending && (
-        <Text style={pageStyles.copy}>Loading versions…</Text>
+        <Text style={pageStyles.copy}>{t("Loading versions…")}</Text>
       )}
       {history.isError && (
         <ActionButton
@@ -54,11 +56,13 @@ export function DocumentHistory({
             void history.refetch();
           }}
         >
-          Retry history
+          {t("Retry history")}
         </ActionButton>
       )}
       {history.data?.length === 0 && (
-        <Text style={pageStyles.copy}>History begins when you save.</Text>
+        <Text style={pageStyles.copy}>
+          {t("History begins when you save.")}
+        </Text>
       )}
       <ScrollView style={styles.versions}>
         {history.data?.map((entry) => (
@@ -75,7 +79,7 @@ export function DocumentHistory({
             ]}
           >
             <Text style={pageStyles.copy}>
-              {entry.date} · {entry.source}
+              {new Date(entry.date).toLocaleString(locale)} · {entry.source}
             </Text>
             <Text style={styles.caption}>{entry.revision.slice(0, 7)}</Text>
           </Pressable>
@@ -84,7 +88,7 @@ export function DocumentHistory({
       {selected && (
         <View style={styles.preview}>
           {previous.isPending ? (
-            <Text style={pageStyles.copy}>Loading version…</Text>
+            <Text style={pageStyles.copy}>{t("Loading version…")}</Text>
           ) : previous.isError ? (
             <ActionButton
               quiet
@@ -92,13 +96,13 @@ export function DocumentHistory({
                 void previous.refetch();
               }}
             >
-              Retry version
+              {t("Retry version")}
             </ActionButton>
           ) : (
             <>
               <ScrollView style={styles.source}>
                 <Text selectable style={pageStyles.copy}>
-                  {previous.data ?? "This version removed the file."}
+                  {previous.data ?? t("This version removed the file.")}
                 </Text>
               </ScrollView>
               {!readOnly && typeof previous.data === "string" && (
@@ -109,12 +113,13 @@ export function DocumentHistory({
                       onRestore(previous.data);
                   }}
                 >
-                  Replace draft with this version
+                  {t("Replace draft with this version")}
                 </ActionButton>
               )}
               <Text style={styles.caption}>
-                Restoring changes your draft. Save to publish the restored
-                version.
+                {t(
+                  "Restoring changes your draft. Save to publish the restored version."
+                )}
               </Text>
             </>
           )}

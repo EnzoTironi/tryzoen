@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { KnowledgeQueryCard } from "./conversation/knowledge-query";
 import { MessageInteraction } from "./conversation/interaction";
 import { MessageDelivery } from "./conversation/delivery";
@@ -81,6 +82,7 @@ export function Conversation({
   readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange?: (ids: string[]) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const { compact, topInset } = useContext(ConversationChrome);
   const styles = useMemo(
@@ -148,14 +150,16 @@ export function Conversation({
         onContentSizeChange={resizeHistory}
         ListHeaderComponent={
           loadingOlder ? (
-            <ActivityIndicator accessibilityLabel="Loading earlier messages" />
+            <ActivityIndicator
+              accessibilityLabel={t("Loading earlier messages")}
+            />
           ) : olderError ? (
             <View>
               <Text accessibilityRole="alert">
-                Earlier messages couldn’t be loaded.
+                {t("Earlier messages couldn’t be loaded.")}
               </Text>
               <ActionButton quiet onPress={retryHistory}>
-                Try again
+                {t("Try again")}
               </ActionButton>
             </View>
           ) : null
@@ -243,7 +247,7 @@ export function Conversation({
                 {message.metadata?.status === "failed" &&
                   !message.metadata.optimistic && (
                     <Text style={styles.error}>
-                      A resposta não pôde ser concluída.
+                      {t("A resposta não pôde ser concluída.")}
                     </Text>
                   )}
               </View>
@@ -256,15 +260,15 @@ export function Conversation({
               <View
                 accessibilityRole="progressbar"
                 accessibilityLabel={
-                  status === "resuming" ? "Reconnecting" : "Working"
+                  status === "resuming" ? t("Reconnecting") : t("Working")
                 }
                 style={styles.progress}
               >
                 <ActivityIndicator size="small" color={colors.muted} />
                 <Text style={styles.caption}>
                   {status === "resuming"
-                    ? "Reconnecting to your conversation…"
-                    : "Working on it…"}
+                    ? t("Reconnecting to your conversation…")
+                    : t("Working on it…")}
                 </Text>
               </View>
             )}
@@ -326,6 +330,7 @@ export function Conversation({
 }
 
 function UserMessage({ text }: { readonly text: string }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const quoted = readReplyMessage(text);
@@ -335,10 +340,10 @@ function UserMessage({ text }: { readonly text: string }) {
       <View style={styles.quote}>
         <Text style={[styles.caption, styles.outgoingText]}>
           {quoted.id.startsWith("feed:")
-            ? "Discussing a Feed post"
+            ? t("Discussing a Feed post")
             : quoted.role === "assistant"
-              ? "Replying to Zoen"
-              : "Replying to you"}
+              ? t("Replying to Zoen")
+              : t("Replying to you")}
         </Text>
         <Text
           selectable
@@ -364,6 +369,7 @@ export function MessagePart({
   readonly canRespond: boolean;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   if (part.type === "text") {
@@ -400,12 +406,12 @@ export function MessagePart({
         tint="#8673c8"
         detail={
           part.state === "output-error"
-            ? "Falhou"
+            ? t("Falhou")
             : part.state === "output-available"
-              ? "Concluído"
+              ? t("Concluído")
               : part.state === "output-denied"
-                ? "Não autorizado"
-                : "Em andamento"
+                ? t("Não autorizado")
+                : t("Em andamento")
         }
       />
     );
@@ -426,7 +432,7 @@ export function MessagePart({
           </Text>
         )}
         {part.state === "required" && url && (
-          <LinkCard url={url} title="Connect account" />
+          <LinkCard url={url} title={t("Connect account")} />
         )}
       </ResourceCard>
     );
@@ -442,9 +448,9 @@ export function MessagePart({
         }}
       />
     ) : part.url ? (
-      <LinkCard url={part.url} title={part.filename ?? "Attachment"} />
+      <LinkCard url={part.url} title={part.filename ?? t("Attachment")} />
     ) : (
-      <Text style={styles.caption}>{part.filename ?? "Attachment"}</Text>
+      <Text style={styles.caption}>{part.filename ?? t("Attachment")}</Text>
     );
   return null;
 }

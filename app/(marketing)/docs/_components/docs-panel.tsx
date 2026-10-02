@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import Link from "next/link";
 import { Button } from "@web/components/ui/button";
 import { OnboardingTrigger } from "../../_components/onboarding";

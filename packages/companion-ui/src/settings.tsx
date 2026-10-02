@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
@@ -47,8 +48,6 @@ export type SettingsPage =
   | "help"
   | "legal";
 
-const untranslated = (text: string) => text;
-
 export function SettingsPanel({
   page,
   onSelect,
@@ -58,7 +57,6 @@ export function SettingsPanel({
   signingOut,
   error,
   children,
-  translate = untranslated,
 }: {
   readonly page?: SettingsPage;
   readonly onSelect: (page: SettingsPage) => void;
@@ -68,13 +66,11 @@ export function SettingsPanel({
   readonly signingOut: boolean;
   readonly error?: string;
   readonly children?: ReactNode;
-  readonly translate?: (text: string) => string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const title = translate(
-    pages.find((item) => item.id === page)?.label ?? "Settings"
-  );
+  const title = t(pages.find((item) => item.id === page)?.label ?? "Settings");
   return (
     <SheetSurface
       title={title}
@@ -85,7 +81,7 @@ export function SettingsPanel({
       <View style={styles.header}>
         {page && (
           <IconButton
-            label={translate("Back to settings")}
+            label={t("Back to settings")}
             icon={ArrowLeft}
             onPress={onBack}
           />
@@ -93,11 +89,7 @@ export function SettingsPanel({
         <Text accessibilityRole="header" style={styles.title}>
           {title}
         </Text>
-        <IconButton
-          label={translate("Close settings")}
-          icon={X}
-          onPress={onClose}
-        />
+        <IconButton label={t("Close settings")} icon={X} onPress={onClose} />
       </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -127,7 +119,7 @@ export function SettingsPanel({
                     />
                   )}
                 </View>
-                <Text style={styles.label}>{translate(label)}</Text>
+                <Text style={styles.label}>{t(label)}</Text>
                 <ChevronRight
                   size={17}
                   strokeWidth={1.5}
@@ -145,7 +137,7 @@ export function SettingsPanel({
             >
               <LogOut size={20} strokeWidth={1.7} color={colors.ink} />
               <Text style={styles.label}>
-                {translate(signingOut ? "Signing out…" : "Sign out")}
+                {t(signingOut ? "Signing out…" : "Sign out")}
               </Text>
             </Pressable>
           </>

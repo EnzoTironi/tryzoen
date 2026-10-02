@@ -1,3 +1,5 @@
+import { catalogs, createTranslator } from "@zoen/companion-ui/i18n";
+import { deviceLocale, readLocalePreference } from "../locale";
 import { randomUUID } from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { isAvailableAsync, shareAsync } from "expo-sharing";
@@ -12,6 +14,9 @@ export async function sharePrivateArchive(input: {
 }) {
   if (!(await isAvailableAsync()))
     throw new Error("Sharing is not available on this device.");
+  const locale =
+    (await readLocalePreference().catch(() => undefined)) ?? deviceLocale();
+  const t = createTranslator(catalogs[locale], locale);
   const directory = new Directory(Paths.cache, `archive-${randomUUID()}`);
   directory.create();
   try {
@@ -22,7 +27,7 @@ export async function sharePrivateArchive(input: {
     );
     await shareAsync(file.uri, {
       mimeType: input.mimeType,
-      dialogTitle: input.title,
+      dialogTitle: t(input.title),
     });
   } catch {
     throw new Error(

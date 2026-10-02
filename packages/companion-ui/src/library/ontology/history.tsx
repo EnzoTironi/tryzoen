@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../../i18n";
+
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +24,7 @@ export function OntologyHistory({
   readonly onApply: (value: z.output<typeof OntologyReadSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [revision, setRevision] = useState(view.revision);
   const [time, setTime] = useState(
@@ -52,15 +55,16 @@ export function OntologyHistory({
     validOn: date.trim() || undefined,
   });
   return (
-    <CompanionSheet title="Knowledge history" onClose={onClose}>
+    <CompanionSheet title={t("Knowledge history")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Choose what was recorded, then optionally filter the facts by when they
-        held in the world. These are separate dates.
+        {t(
+          "Choose what was recorded, then optionally filter the facts by when they held in the world. These are separate dates."
+        )}
       </Text>
-      <Text style={pageStyles.rowTitle}>Recorded on or before</Text>
+      <Text style={pageStyles.rowTitle}>{t("Recorded on or before")}</Text>
       <TextInput
-        accessibilityLabel="Knowledge recorded time"
-        placeholder="YYYY-MM-DD HH:mm"
+        accessibilityLabel={t("Knowledge recorded time")}
+        placeholder={t("YYYY-MM-DD HH:mm")}
         value={time}
         onChangeText={(value) => {
           setTime(value);
@@ -73,19 +77,22 @@ export function OntologyHistory({
         style={pageStyles.field}
       />
       <Text style={pageStyles.copy}>
-        Time zone: {new Intl.DateTimeFormat().resolvedOptions().timeZone}. Leave
-        blank to use a version below. If your clock repeats an hour, choose a
-        recorded version.
+        <Translated
+          message="Time zone: {value1}. Leave blank to use a version below. If your clock repeats an hour, choose a recorded version."
+          values={{
+            value1: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }}
+        />
       </Text>
       {hasTime && asOf === null && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Enter a valid local day and time, such as 2026-09-30 10:30.
+          {t("Enter a valid local day and time, such as 2026-09-30 10:30.")}
         </Text>
       )}
-      <Text style={pageStyles.rowTitle}>Facts valid on</Text>
+      <Text style={pageStyles.rowTitle}>{t("Facts valid on")}</Text>
       <TextInput
-        accessibilityLabel="Knowledge validity date"
-        placeholder="YYYY-MM-DD"
+        accessibilityLabel={t("Knowledge validity date")}
+        placeholder={t("YYYY-MM-DD")}
         value={date}
         onChangeText={setDate}
         maxLength={10}
@@ -97,13 +104,13 @@ export function OntologyHistory({
       {Boolean(date.trim()) &&
         !OntologyReadSchema.shape.validOn.safeParse(date.trim()).success && (
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Enter a valid date such as 2026-09-29.
+            {t("Enter a valid date such as 2026-09-29.")}
           </Text>
         )}
       <Text style={pageStyles.copy}>
-        Leave the date blank to show all facts. Unknown validity remains
-        visible. The end date of an interval is exclusive. Historical views
-        cannot change records.
+        {t(
+          "Leave the date blank to show all facts. Unknown validity remains visible. The end date of an interval is exclusive. Historical views cannot change records."
+        )}
       </Text>
       <ActionButton
         disabled={!input.success || apply.isPending}
@@ -111,11 +118,11 @@ export function OntologyHistory({
           if (input.success) apply.mutate(input.data);
         }}
       >
-        {apply.isPending ? "Opening view…" : "Apply view"}
+        {apply.isPending ? t("Opening view…") : t("Apply view")}
       </ActionButton>
       {apply.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          This view could not be opened. Check your access and try again.
+          {t("This view could not be opened. Check your access and try again.")}
         </Text>
       )}
       <OntologyVersions

@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
@@ -25,6 +27,7 @@ export function VaultItemDetails({
   readonly onBack: () => void;
   readonly renderPermission?: (id: string) => ReactNode;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -46,8 +49,12 @@ export function VaultItemDetails({
       </Text>
       <Text style={pageStyles.copy}>{item.account}</Text>
       <Text style={pageStyles.copy}>
-        Saved {new Date(item.createdAt).toLocaleDateString()}. Secrets are not
-        displayed here.
+        <Translated
+          message="Saved {value1}. Secrets are not displayed here."
+          values={{
+            value1: new Date(item.createdAt).toLocaleDateString(locale),
+          }}
+        />
       </Text>
       {mayManage && item.hasSecret && !confirming && (
         <ActionButton
@@ -55,7 +62,7 @@ export function VaultItemDetails({
             setEditing(true);
           }}
         >
-          Edit saved item
+          {t("Edit saved item")}
         </ActionButton>
       )}
       {item.hasSecret && renderPermission?.(item.id)}
@@ -63,8 +70,9 @@ export function VaultItemDetails({
         (confirming ? (
           <>
             <Text>
-              Remove this saved item and revoke its existing grants? This cannot
-              be undone.
+              {t(
+                "Remove this saved item and revoke its existing grants? This cannot be undone."
+              )}
             </Text>
             <ActionButton
               disabled={pending}
@@ -72,7 +80,7 @@ export function VaultItemDetails({
                 onRemove();
               }}
             >
-              {pending ? "Removing…" : "Confirm removal"}
+              {pending ? t("Removing…") : t("Confirm removal")}
             </ActionButton>
             <ActionButton
               quiet
@@ -81,7 +89,7 @@ export function VaultItemDetails({
                 setConfirming(false);
               }}
             >
-              Keep item
+              {t("Keep item")}
             </ActionButton>
           </>
         ) : (
@@ -91,7 +99,7 @@ export function VaultItemDetails({
               setConfirming(true);
             }}
           >
-            Remove saved item
+            {t("Remove saved item")}
           </ActionButton>
         ))}
       <ActionButton
@@ -101,7 +109,7 @@ export function VaultItemDetails({
           onBack();
         }}
       >
-        Back to saved items
+        {t("Back to saved items")}
       </ActionButton>
     </View>
   );

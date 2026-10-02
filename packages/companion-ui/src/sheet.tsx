@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
@@ -76,6 +77,7 @@ export function CompanionSheet({
   readonly scrollable?: boolean;
   readonly maxWidth?: number;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -85,7 +87,7 @@ export function CompanionSheet({
           {title}
         </Text>
         <IconButton
-          label={`Close ${title.toLowerCase()}`}
+          label={t("Close {value1}", { value1: title.toLowerCase() })}
           icon={X}
           onPress={onClose}
         />

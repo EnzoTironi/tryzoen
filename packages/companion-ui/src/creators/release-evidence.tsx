@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
@@ -11,6 +13,7 @@ export function CreatorReleaseEvidence({
   evidence,
 }: Pick<z.infer<typeof creatorReleaseSchema>, "content"> &
   Partial<Pick<z.infer<typeof creatorReleaseSchema>, "evidence">>) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [reading, setReading] = useState<{ title: string; text: string }>();
   return (
@@ -20,10 +23,10 @@ export function CreatorReleaseEvidence({
       <ActionButton
         quiet
         onPress={() => {
-          setReading({ title: "Playbook.md", text: content.playbook });
+          setReading({ title: t("Playbook.md"), text: content.playbook });
         }}
       >
-        Read selected playbook
+        {t("Read selected playbook")}
       </ActionButton>
       {content.examples.map((example) => (
         <ActionButton
@@ -32,25 +35,35 @@ export function CreatorReleaseEvidence({
           onPress={() => {
             setReading({
               title: `${example.title}.md`,
-              text: `${example.content}\n\n---\n\nSource: ${example.source}\n\nRights: ${example.rights}`,
+              text: `${example.content}\n\n---\n\n${t("Source")}: ${example.source}\n\n${t("Usage rights")}: ${t(example.rights)}`,
             });
           }}
         >
-          {`Read source: ${example.title}`}
+          {t("Read source: {value1}", { value1: example.title })}
         </ActionButton>
       ))}
       {evidence && (
         <Text accessibilityRole="header" style={pageStyles.heading}>
-          Reviewed cases
+          {t("Reviewed cases")}
         </Text>
       )}
       {evidence?.map((item) => (
         <View key={item.id} style={{ gap: 8 }}>
           <Text style={pageStyles.rowTitle}>{item.evaluation.case.title}</Text>
           <Text style={pageStyles.copy}>
-            Useful for this case ·{" "}
-            {item.models.map((model) => model.modelId).join(", ")} ·{" "}
-            {((item.finishedAt - item.startedAt) / 1000).toFixed(1)} s
+            <Translated
+              message="Useful for this case · {value1} · {value2} s"
+              values={{
+                value1: item.models.map((model) => model.modelId).join(", "),
+                value2: (
+                  (item.finishedAt - item.startedAt) /
+                  1000
+                ).toLocaleString(locale, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                }),
+              }}
+            />
           </Text>
           <ActionButton
             quiet
@@ -58,27 +71,31 @@ export function CreatorReleaseEvidence({
               setReading({
                 title: `${item.evaluation.case.title}.md`,
                 text: [
-                  "# Question",
+                  t("# Question"),
                   item.question,
-                  "# Criteria set before the run",
+                  t("# Criteria set before the run"),
                   item.evaluation.case.criteria,
-                  "# Specialist response",
+                  t("# Specialist response"),
                   item.response,
-                  "# Creator review",
+                  t("# Creator review"),
                   item.review.content.notes,
                 ].join("\n\n"),
               });
             }}
           >
-            {`Read evaluation: ${item.evaluation.case.title}`}
+            {t("Read evaluation: {value1}", {
+              value1: item.evaluation.case.title,
+            })}
           </ActionButton>
         </View>
       ))}
       {reading && (
         <DocumentEditor
           title={reading.title}
-          label="Version evidence"
-          description="The selected source or evaluation preserved for this version."
+          label={t("Version evidence")}
+          description={t(
+            "The selected source or evaluation preserved for this version."
+          )}
           initialText={reading.text}
           markdown
           readOnly
@@ -87,7 +104,7 @@ export function CreatorReleaseEvidence({
             setReading(undefined);
           }}
           onSave={async () => {
-            throw new Error("Version evidence is read-only.");
+            throw new Error(t("Version evidence is read-only."));
           }}
         />
       )}

@@ -3,7 +3,7 @@
 import { BriefcaseBusinessIcon, ChevronDownIcon, HomeIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import styles from "./workspace-switcher.module.css";
 import { workspaceHref } from "@web/workspaces/navigation";
 

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Grip } from "lucide-react-native";
@@ -25,6 +26,7 @@ export function GoalGroup({
   readonly pendingId?: string;
   readonly showSubtitle: boolean;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
@@ -73,7 +75,9 @@ export function GoalGroup({
         >
           <Grip size={17} color={colors.muted} />
           <Text style={styles.moreText}>
-            {expanded ? "Show less" : `Show ${remaining} more`}
+            {expanded
+              ? t("Show less")
+              : t("Show {value1} more", { value1: remaining })}
           </Text>
         </Pressable>
       )}
