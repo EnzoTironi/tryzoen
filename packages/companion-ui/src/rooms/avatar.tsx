@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState, type ComponentProps } from "react";
 import {
   useMutation,
@@ -25,6 +26,7 @@ export function EditRoomAvatar({
   room,
   onClose,
 }: ComponentProps<typeof RenameRoom>) {
+  const { t } = useI18n();
   const colors = useColors();
   const pageStyles = usePageStyles();
   const attachments = useAttachments();
@@ -76,7 +78,7 @@ export function EditRoomAvatar({
     if (!busy) onClose();
   };
   return (
-    <CompanionSheet title="Foto do grupo" onClose={close} maxWidth={480}>
+    <CompanionSheet title={t("Foto do grupo")} onClose={close} maxWidth={480}>
       <View style={{ alignItems: "center", paddingVertical: 16 }}>
         <ConversationAvatar
           name={room.label}
@@ -86,8 +88,9 @@ export function EditRoomAvatar({
         />
       </View>
       <Text style={pageStyles.copy}>
-        Visível para todos os participantes. O enquadramento central será usado
-        como foto do grupo.
+        {t(
+          "Visível para todos os participantes. O enquadramento central será usado como foto do grupo."
+        )}
       </Text>
       <ActionButton
         quiet
@@ -122,7 +125,7 @@ export function EditRoomAvatar({
             });
         }}
       >
-        {picking ? "Abrindo…" : "Escolher foto"}
+        {picking ? t("Abrindo…") : t("Escolher foto")}
       </ActionButton>
       {(!!currentUri || !!selection?.file) && (
         <ActionButton
@@ -133,29 +136,32 @@ export function EditRoomAvatar({
             setSelection({ file: null, operationId: data.operationId() });
           }}
         >
-          Remover foto
+          {t("Remover foto")}
         </ActionButton>
       )}
       <Text style={pageStyles.copy}>
-        JPEG, PNG, WebP ou AVIF, até 3 MB e 24 megapixels. A foto será reduzida
-        e seus metadados removidos.
+        {t(
+          "JPEG, PNG, WebP ou AVIF, até 3 MB e 24 megapixels. A foto será reduzida e seus metadados removidos."
+        )}
       </Text>
       {pickError && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          Selecione uma única imagem nos formatos e limites indicados.
+          {t("Selecione uma única imagem nos formatos e limites indicados.")}
         </Text>
       )}
       {save.isError && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          Não foi possível confirmar a foto. Sua escolha foi preservada. Confira
-          o formato e a conexão e tente novamente.
+          {t(
+            "Não foi possível confirmar a foto. Sua escolha foi preservada. Confira o formato e a conexão e tente novamente."
+          )}
         </Text>
       )}
       {conflict && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Outra pessoa alterou a foto. Confira a versão atual antes de
-            substituir.
+            {t(
+              "Outra pessoa alterou a foto. Confira a versão atual antes de substituir."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -166,7 +172,7 @@ export function EditRoomAvatar({
               save.reset();
             }}
           >
-            Ver foto atual
+            {t("Ver foto atual")}
           </ActionButton>
         </>
       )}
@@ -176,10 +182,10 @@ export function EditRoomAvatar({
           if (selection) save.mutate(selection);
         }}
       >
-        {save.isPending ? "Salvando…" : "Salvar foto"}
+        {save.isPending ? t("Salvando…") : t("Salvar foto")}
       </ActionButton>
       <ActionButton quiet disabled={busy} onPress={close}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </CompanionSheet>
   );

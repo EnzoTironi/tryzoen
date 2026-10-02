@@ -1,3 +1,4 @@
+import { useI18n } from "./../../i18n";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Clock } from "lucide-react-native";
@@ -24,6 +25,7 @@ export function OntologyVersions({
     value: z.output<typeof OntologyReadSchema>["revision"]
   ) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -37,11 +39,11 @@ export function OntologyVersions({
   return (
     <View>
       <Text accessibilityRole="header" style={pageStyles.rowTitle}>
-        Recorded versions
+        {t("Recorded versions")}
       </Text>
       <Pressable
         accessibilityRole="radio"
-        accessibilityLabel="Current knowledge"
+        accessibilityLabel={t("Current knowledge")}
         accessibilityState={{ checked: current }}
         disabled={disabled}
         onPress={() => {
@@ -51,20 +53,22 @@ export function OntologyVersions({
       >
         <Clock size={20} color={colors.muted} />
         <Text style={[pageStyles.rowTitle, styles.title]}>
-          Current knowledge
+          {t("Current knowledge")}
         </Text>
         {current && <Check size={20} color={colors.ink} />}
       </Pressable>
       {history.isPending && (
-        <Text style={pageStyles.copy}>Loading recorded versions…</Text>
+        <Text style={pageStyles.copy}>{t("Loading recorded versions…")}</Text>
       )}
       {history.isError && (
         <View style={styles.detail}>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Recorded versions could not be loaded. Your access may have changed.
+            {t(
+              "Recorded versions could not be loaded. Your access may have changed."
+            )}
           </Text>
           <ActionButton quiet onPress={() => void history.refetch()}>
-            Try history again
+            {t("Try history again")}
           </ActionButton>
         </View>
       )}
@@ -72,7 +76,9 @@ export function OntologyVersions({
         <Pressable
           key={entry.revision}
           accessibilityRole="radio"
-          accessibilityLabel={`Recorded version ${entry.revision.slice(0, 8)}`}
+          accessibilityLabel={t("Recorded version {value1}", {
+            value1: entry.revision.slice(0, 8),
+          })}
           accessibilityState={{ checked: entry.revision === revision }}
           disabled={disabled}
           onPress={() => {
@@ -84,8 +90,8 @@ export function OntologyVersions({
             <Text style={pageStyles.rowTitle}>{entry.date}</Text>
             <Text style={pageStyles.copy}>
               {entry.source === "knowledge-publication"
-                ? "Reviewed change"
-                : "Record update"}
+                ? t("Reviewed change")
+                : t("Record update")}
               {" · "}
               {entry.revision.slice(0, 8)}
             </Text>
@@ -97,12 +103,12 @@ export function OntologyVersions({
       ))}
       {entries?.length === 0 && (
         <Text style={pageStyles.copy}>
-          History begins with the first published records.
+          {t("History begins with the first published records.")}
         </Text>
       )}
       {entries?.length === 50 && (
         <Text style={pageStyles.copy}>
-          Showing the 50 most recent recorded versions.
+          {t("Showing the 50 most recent recorded versions.")}
         </Text>
       )}
     </View>

@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { MessageReaders } from "./readers";
 import type { roomReadReceiptSchema } from "./schema";
 import { MessageInteraction } from "../conversation/interaction";
@@ -103,6 +104,7 @@ export function RoomMessages({
   readonly fetching: boolean;
   readonly onMore: () => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   // A reviewed message belongs to the conversation, not a recycled list row.
@@ -214,26 +216,30 @@ export function RoomMessages({
         }}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator accessibilityLabel="Carregando mensagens anteriores" />
+            <ActivityIndicator
+              accessibilityLabel={t("Carregando mensagens anteriores")}
+            />
           ) : null
         }
         ListEmptyComponent={
           !loading && !error ? (
-            <Text style={styles.empty}>A conversa começa aqui.</Text>
+            <Text style={styles.empty}>{t("A conversa começa aqui.")}</Text>
           ) : null
         }
         ListHeaderComponent={
           <>
             {loading && (
-              <ActivityIndicator accessibilityLabel="Carregando mensagens" />
+              <ActivityIndicator
+                accessibilityLabel={t("Carregando mensagens")}
+              />
             )}
             {error && (
               <View style={styles.error}>
                 <Text accessibilityRole="alert" style={styles.caption}>
-                  Não foi possível atualizar a conversa.
+                  {t("Não foi possível atualizar a conversa.")}
                 </Text>
                 <ActionButton quiet onPress={onRetry}>
-                  Tentar novamente
+                  {t("Tentar novamente")}
                 </ActionButton>
               </View>
             )}
@@ -262,8 +268,8 @@ export function RoomMessages({
               {startsTime && (
                 <Text testID="room-message-timestamp" style={styles.day}>
                   {startsDay &&
-                    `${new Date(item.timestamp).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}, `}
-                  {new Date(item.timestamp).toLocaleTimeString([], {
+                    `${new Date(item.timestamp).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "short" })}, `}
+                  {new Date(item.timestamp).toLocaleTimeString(locale, {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -369,6 +375,7 @@ function LatestMessagesButton({
   readonly newer: number;
   readonly onPress: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   if (!visible) return null;
@@ -378,7 +385,9 @@ function LatestMessagesButton({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${label}. Ir para o fim da conversa`}
+      accessibilityLabel={t("{value1}. Ir para o fim da conversa", {
+        value1: label,
+      })}
       onPress={onPress}
       style={[styles.latest, { bottom: bottomInset + 12 }]}
     >
@@ -435,6 +444,7 @@ function RoomMessage({
   readonly last: boolean;
   readonly reaction?: z.infer<typeof roomReactionSummarySchema>;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const outgoing = item.outgoing;
@@ -453,7 +463,7 @@ function RoomMessage({
       role="group"
       accessibilityLabel={
         item.timestamp
-          ? `${person.name}, ${new Date(item.timestamp).toLocaleString()}`
+          ? `${person.name}, ${new Date(item.timestamp).toLocaleString(locale)}`
           : person.name
       }
       style={[styles.row, item.mine && styles.outgoing]}
@@ -468,19 +478,21 @@ function RoomMessage({
           {first && !item.mine && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Ver perfil de ${person.name}`}
+              accessibilityLabel={t("Ver perfil de {value1}", {
+                value1: person.name,
+              })}
               disabled={!!item.outgoing}
               onPress={profile}
             >
               <Text style={styles.sender}>{person.name}</Text>
             </Pressable>
           )}
-          {item.bot && <Text style={styles.badge}>IA</Text>}
+          {item.bot && <Text style={styles.badge}>{t("IA")}</Text>}
           {item.forwarded && !item.redacted && (
-            <Text style={styles.time}>Encaminhada</Text>
+            <Text style={styles.time}>{t("Encaminhada")}</Text>
           )}
           {item.editId && !item.redacted && (
-            <Text style={styles.time}>Editada</Text>
+            <Text style={styles.time}>{t("Editada")}</Text>
           )}
         </View>
       )}
@@ -489,7 +501,9 @@ function RoomMessage({
           (last ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Perfil de ${person.name}`}
+              accessibilityLabel={t("Perfil de {value1}", {
+                value1: person.name,
+              })}
               onPress={profile}
             >
               <ConversationAvatar

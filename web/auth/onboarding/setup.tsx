@@ -17,7 +17,7 @@ import type { readLinkedChannelIdentities } from "../../../server/accounts/contr
 import type { channelProviderSchema } from "@shared/identity/channel-auth";
 import { ChannelAuthForm } from "@web/auth/channel/form";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { workspaceHref } from "@web/workspaces/navigation";
 import { safeCallbackUrl } from "@web/auth/channel/client";
 import { OnboardingFrame } from "./frame";

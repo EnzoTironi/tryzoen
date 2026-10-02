@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import {
   useInfiniteQuery,
@@ -44,6 +45,7 @@ export function FeedCollection({
   readonly cacheScope: string;
   readonly onPrompt: (prompt: string) => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const client = useQueryClient();
   const [likeError, setLikeError] = useState<string>();
@@ -110,17 +112,19 @@ export function FeedCollection({
   const current = items.find((post) => post.id === selected);
   const customize = () => {
     onPrompt(
-      "Help me shape my personal Feed. Read my preferences, then ask what topics, sources and frequency I want. Save a useful first post after we agree on the topic. Confirm any recurring schedule separately before enabling it."
+      t(
+        "Help me shape my personal Feed. Read my preferences, then ask what topics, sources and frequency I want. Save a useful first post after we agree on the topic. Confirm any recurring schedule separately before enabling it."
+      )
     );
   };
   return (
     <>
       <CompanionPage
-        title="Feed"
+        title={t("Feed")}
         contentMaxWidth={768}
         actions={
           <IconButton
-            label="Customize feed"
+            label={t("Customize feed")}
             icon={SlidersHorizontal}
             onPress={() => {
               setEditing(true);
@@ -160,12 +164,17 @@ export function FeedCollection({
         ))}
         {!feed.isPending && !feed.isError && items.length === 0 && (
           <View style={pageStyles.empty}>
-            <Text style={pageStyles.heading}>A feed shaped around you</Text>
-            <Text style={pageStyles.copy}>
-              Thoughtful updates on the things you care about, with sources and
-              room to explore.
+            <Text style={pageStyles.heading}>
+              {t("A feed shaped around you")}
             </Text>
-            <ActionButton onPress={customize}>Set up my feed</ActionButton>
+            <Text style={pageStyles.copy}>
+              {t(
+                "Thoughtful updates on the things you care about, with sources and room to explore."
+              )}
+            </Text>
+            <ActionButton onPress={customize}>
+              {t("Set up my feed")}
+            </ActionButton>
           </View>
         )}
         {feed.hasNextPage && (
@@ -176,7 +185,7 @@ export function FeedCollection({
               void feed.fetchNextPage();
             }}
           >
-            Load more
+            {t("Load more")}
           </ActionButton>
         )}
       </CompanionPage>

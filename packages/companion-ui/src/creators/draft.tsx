@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,7 @@ export function CreatorDraft({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const client = useQueryClient();
   const queryKey = ["creator-draft", cacheScope, id];
@@ -38,23 +40,25 @@ export function CreatorDraft({
   const [releases, setReleases] = useState(false);
   return (
     <CompanionSheet
-      title={draft.data?.content.title ?? "Specialist draft"}
+      title={draft.data?.content.title ?? t("Specialist draft")}
       onClose={onClose}
     >
       {draft.isPending && (
-        <Text style={pageStyles.copy}>Loading your specialist…</Text>
+        <Text style={pageStyles.copy}>{t("Loading your specialist…")}</Text>
       )}
       {draft.isError && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            This draft is unavailable. Check your workspace and try again.
+            {t(
+              "This draft is unavailable. Check your workspace and try again."
+            )}
           </Text>
           <ActionButton
             onPress={() => {
               void draft.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </>
       )}
@@ -62,8 +66,10 @@ export function CreatorDraft({
         <>
           <Text style={pageStyles.copy}>
             {draft.data.archivedAt
-              ? "Archived draft · Restore it to make changes."
-              : "Private draft · Only you can open this draft. Sharing an approved version requires a separate pilot invitation."}
+              ? t("Archived draft · Restore it to make changes.")
+              : t(
+                  "Private draft · Only you can open this draft. Sharing an approved version requires a separate pilot invitation."
+                )}
           </Text>
           {Boolean(draft.data.content.description) && (
             <Text style={pageStyles.copy}>
@@ -83,7 +89,9 @@ export function CreatorDraft({
               setPreview(true);
             }}
           >
-            {draft.data.archivedAt ? "Saved previews" : "Try this specialist"}
+            {draft.data.archivedAt
+              ? t("Saved previews")
+              : t("Try this specialist")}
           </ActionButton>
           <ActionButton
             quiet
@@ -91,7 +99,7 @@ export function CreatorDraft({
               setEvaluation(true);
             }}
           >
-            Evaluation cases
+            {t("Evaluation cases")}
           </ActionButton>
           <ActionButton
             quiet
@@ -99,7 +107,7 @@ export function CreatorDraft({
               setReleases(true);
             }}
           >
-            Approved versions
+            {t("Approved versions")}
           </ActionButton>
           {!draft.data.archivedAt && (
             <ActionButton
@@ -108,25 +116,26 @@ export function CreatorDraft({
                 setDetails(draft.data);
               }}
             >
-              Edit specialist details
+              {t("Edit specialist details")}
             </ActionButton>
           )}
           <Text
             accessibilityRole="header"
             style={[pageStyles.heading, { marginBottom: 0 }]}
           >
-            Playbook
+            {t("Playbook")}
           </Text>
           <Text style={pageStyles.copy}>
-            Define useful strategies, the context they need and when a person
-            should take over.
+            {t(
+              "Define useful strategies, the context they need and when a person should take over."
+            )}
           </Text>
           <ActionButton
             onPress={() => {
               setPlaybook(draft.data);
             }}
           >
-            {draft.data.archivedAt ? "Read playbook" : "Edit playbook"}
+            {draft.data.archivedAt ? t("Read playbook") : t("Edit playbook")}
           </ActionButton>
           <CreatorExamples
             draft={draft.data}
@@ -139,9 +148,11 @@ export function CreatorDraft({
       )}
       {playbook && (
         <DocumentEditor
-          title="Playbook.md"
-          label="Specialist playbook"
-          description="Your private draft. Saving does not publish this playbook or change an active agent."
+          title={t("Playbook.md")}
+          label={t("Specialist playbook")}
+          description={t(
+            "Your private draft. Saving does not publish this playbook or change an active agent."
+          )}
           initialText={playbook.content.playbook}
           maxLength={64000}
           markdown

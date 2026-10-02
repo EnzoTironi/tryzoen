@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import {
   Pressable,
@@ -33,6 +34,7 @@ export function VaultFields({
   readonly revealed: boolean;
   readonly onChange: (field: keyof VaultFormDraft, value: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const fields: readonly (readonly [keyof VaultFormDraft, string, boolean?])[] =
@@ -57,14 +59,14 @@ export function VaultFields({
       {kind === "login" && (
         <View
           accessibilityRole="radiogroup"
-          accessibilityLabel="Sign-in identifier type"
+          accessibilityLabel={t("Sign-in identifier type")}
           style={styles.picker}
         >
           {(["email", "phone", "username"] as const).map((value) => (
             <Pressable
               key={value}
               accessibilityRole="radio"
-              accessibilityLabel={value}
+              accessibilityLabel={t(value)}
               aria-checked={values.identifierType === value}
               aria-disabled={pending}
               disabled={pending}
@@ -77,16 +79,16 @@ export function VaultFields({
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.optionText}>{value}</Text>
+              <Text style={styles.optionText}>{t(value)}</Text>
             </Pressable>
           ))}
         </View>
       )}
       {fields.map(([field, label, secret]) => (
         <View key={field} style={{ gap: 6 }}>
-          <Text style={styles.label}>{label}</Text>
+          <Text style={styles.label}>{t(label)}</Text>
           <TextInput
-            accessibilityLabel={label}
+            accessibilityLabel={t(label)}
             nativeID={`vault-${field}`}
             value={values[field]}
             editable={!pending}

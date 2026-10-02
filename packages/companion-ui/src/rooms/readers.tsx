@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import type { z } from "zod";
@@ -16,6 +17,7 @@ export function MessageReaders({
   readonly members: z.infer<typeof roomMemberSchema>[];
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
@@ -56,7 +58,7 @@ export function MessageReaders({
       </Pressable>
       {open && (
         <CompanionSheet
-          title="Visto por"
+          title={t("Visto por")}
           maxWidth={560}
           onClose={() => {
             setOpen(false);
@@ -64,7 +66,7 @@ export function MessageReaders({
           scrollable={false}
         >
           <Text style={styles.note}>
-            Pessoas que compartilharam a leitura até esta mensagem.
+            {t("Pessoas que compartilharam a leitura até esta mensagem.")}
           </Text>
           <FlatList
             data={readers}
@@ -73,7 +75,9 @@ export function MessageReaders({
             renderItem={({ item: { person, timestamp } }) => (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Ver perfil de ${person.name}`}
+                accessibilityLabel={t("Ver perfil de {value1}", {
+                  value1: person.name,
+                })}
                 onPress={() => {
                   setOpen(false);
                   onProfile(person);
@@ -87,7 +91,7 @@ export function MessageReaders({
                 />
                 <Text style={styles.name}>{person.name}</Text>
                 <Text style={styles.caption}>
-                  {new Date(timestamp).toLocaleString([], {
+                  {new Date(timestamp).toLocaleString(locale, {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",

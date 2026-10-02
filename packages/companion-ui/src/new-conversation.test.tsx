@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Client } from "eve/client";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../tests/helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NewConversation } from "./new-conversation";
 import type { ConversationDraft } from "./session/input";

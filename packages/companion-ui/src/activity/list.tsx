@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -50,6 +51,7 @@ export function AgentActivity({
   readonly approvals: boolean;
   readonly onSelect: (sessionId: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -113,15 +115,15 @@ export function AgentActivity({
       ListHeaderComponent={
         <View style={styles.header}>
           <Text accessibilityRole="header" style={pageStyles.heading}>
-            {approvals ? "Histórico de aprovações" : "Atividade recente"}
+            {approvals ? t("Histórico de aprovações") : t("Atividade recente")}
           </Text>
           <Text style={pageStyles.copy}>
-            Suas conversas · Abra um registro para ver os detalhes.
+            {t("Suas conversas · Abra um registro para ver os detalhes.")}
           </Text>
           {history.isError && (
             <View style={styles.feedback}>
               <Text accessibilityRole="alert" style={pageStyles.copy}>
-                Não foi possível carregar a atividade.
+                {t("Não foi possível carregar a atividade.")}
               </Text>
               <ActionButton
                 quiet
@@ -129,7 +131,7 @@ export function AgentActivity({
                   void refresh();
                 }}
               >
-                Tentar novamente
+                {t("Tentar novamente")}
               </ActionButton>
             </View>
           )}
@@ -138,20 +140,21 @@ export function AgentActivity({
       ListEmptyComponent={
         history.isPending ? (
           <ActivityIndicator
-            accessibilityLabel="Carregando atividade"
+            accessibilityLabel={t("Carregando atividade")}
             color={colors.accent}
           />
         ) : !history.isError ? (
           <Text style={pageStyles.copy}>
-            Nenhuma atividade recente registrada. O histórico disponível aparece
-            aqui conforme você conversa.
+            {t(
+              "Nenhuma atividade recente registrada. O histórico disponível aparece aqui conforme você conversa."
+            )}
           </Text>
         ) : null
       }
       ListFooterComponent={
         history.isFetchingNextPage ? (
           <ActivityIndicator
-            accessibilityLabel="Carregando mais atividade"
+            accessibilityLabel={t("Carregando mais atividade")}
             color={colors.accent}
           />
         ) : null
@@ -168,11 +171,13 @@ function ActivityRow({
   readonly item: z.infer<typeof activityItemSchema>;
   readonly onSelect: (sessionId: string) => void;
 }) {
+  const { t, locale } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
-  const { label, Icon } = presentations[item.kind];
-  const date = new Date(item.at).toLocaleString(undefined, {
+  const { label: message, Icon } = presentations[item.kind];
+  const label = t(message);
+  const date = new Date(item.at).toLocaleString(locale, {
     day: "numeric",
     month: "short",
     hour: "2-digit",

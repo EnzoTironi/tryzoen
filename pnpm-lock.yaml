@@ -136,7 +136,7 @@ importers:
         version: 2.8.0
       '@vercel/connect':
         specifier: ^2.0.0
-        version: 2.0.0(a55fe430fd51d9817f194c08096442c6)
+        version: 2.0.0(2d8d0a33523691efabdaf11ae3d3af5e)
       '@vercel/oidc':
         specifier: 3.8.5
         version: 3.8.5
@@ -336,6 +336,9 @@ importers:
       '@t3-oss/env-core':
         specifier: 0.13.11
         version: 0.13.11(typescript@7.0.2)(zod@4.5.4)
+      '@zoen/companion-ui':
+        specifier: workspace:*
+        version: link:../../packages/companion-ui
       zod:
         specifier: 4.5.4
         version: 4.5.4
@@ -488,6 +491,9 @@ importers:
       credit-card-type:
         specifier: ^10.3.0
         version: 10.3.0
+      emojibase-data:
+        specifier: 17.0.0
+        version: 17.0.0(emojibase@17.0.0)
       eve:
         specifier: ^0.63.0
         version: 0.63.0(patch_hash=e0e5c7e45c333c242b9c800e8f97a12e1bc1442271451c8979c78d8213f6988d)(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.5.4))(just-bash@3.4.2(supports-color@8.1.1))
@@ -5629,6 +5635,15 @@ packages:
 
   emoji-regex@9.2.2:
     resolution: {integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==}
+
+  emojibase-data@17.0.0:
+    resolution: {integrity: sha512-Yvgb5AWoHViHV/gq1qr5ZAarcBip+B27/ZLRsUJkbgAEaLlZ/fof9g882LTpmEpyhBNEC0m2SEmItljHsTygjA==}
+    peerDependencies:
+      emojibase: '*'
+
+  emojibase@17.0.0:
+    resolution: {integrity: sha512-bXdpf4HPY3p41zK5swVKZdC/VynsMZ4LoLxdYDE+GucqkFwzcM1GVc4ODfYAlwoKaf2U2oNNUoOO78N96ovpBA==}
+    engines: {node: '>=18.12.0'}
 
   encodeurl@1.0.2:
     resolution: {integrity: sha512-TPJXq8JqFaVYm2CWmPvnP2Iyo4ZSM7/QKcSmuMLDObfpH5fi7RUGmd/rTDf+rut/saiDiQEeVTNgAmJEdAOx0w==}
@@ -13917,7 +13932,7 @@ snapshots:
     dependencies:
       execa: 5.1.1
 
-  '@vercel/connect@2.0.0(a55fe430fd51d9817f194c08096442c6)':
+  '@vercel/connect@2.0.0(2d8d0a33523691efabdaf11ae3d3af5e)':
     dependencies:
       '@vercel/oidc': 3.8.5
     optionalDependencies:
@@ -15394,6 +15409,12 @@ snapshots:
   emoji-regex@8.0.0: {}
 
   emoji-regex@9.2.2: {}
+
+  emojibase-data@17.0.0(emojibase@17.0.0):
+    dependencies:
+      emojibase: 17.0.0
+
+  emojibase@17.0.0: {}
 
   encodeurl@1.0.2: {}
 

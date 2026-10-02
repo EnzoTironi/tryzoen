@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
@@ -20,6 +21,7 @@ export function FileTree({
   readonly descending: boolean;
   readonly onOpen: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -27,8 +29,8 @@ export function FileTree({
   return (
     <View>
       <View style={styles.header}>
-        <Text style={[styles.column, styles.name]}>Name</Text>
-        <Text style={styles.column}>Type</Text>
+        <Text style={[styles.column, styles.name]}>{t("Name")}</Text>
+        <Text style={styles.column}>{t("Type")}</Text>
       </View>
       {rows.map((row) => {
         const open = Boolean(query.trim()) || expanded.has(row.id);
@@ -39,7 +41,10 @@ export function FileTree({
             accessibilityRole="button"
             accessibilityLabel={
               row.folder
-                ? `${open ? "Collapse" : "Expand"} folder ${row.title}`
+                ? t("{value1} folder {value2}", {
+                    value1: open ? t("Collapse") : t("Expand"),
+                    value2: row.title,
+                  })
                 : row.id
             }
             aria-expanded={row.folder ? open : undefined}
@@ -77,7 +82,7 @@ export function FileTree({
             </View>
             <Text style={styles.column}>
               {row.folder
-                ? "Folder"
+                ? t("Folder")
                 : row.title.split(".").at(-1)?.toUpperCase()}
             </Text>
           </Pressable>
@@ -86,8 +91,8 @@ export function FileTree({
       {rows.length === 0 && (
         <Text style={styles.empty}>
           {query.trim()
-            ? "No files match your search."
-            : "No system files yet."}
+            ? t("No files match your search.")
+            : t("No system files yet.")}
         </Text>
       )}
     </View>

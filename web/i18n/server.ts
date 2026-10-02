@@ -1,12 +1,8 @@
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
-import { localeCookie, resolveLocale } from "./locale";
-import { createTranslator, type Messages } from "./translate";
-import ptBR from "./messages/pt-br.json";
-import en from "./messages/en.json";
-import es from "./messages/es.json";
-
-const catalogs = { "pt-BR": ptBR, en, es } satisfies Record<string, Messages>;
+import { localeCookie, resolveLocale } from "@zoen/companion-ui/i18n";
+import { createTranslator } from "@zoen/companion-ui/i18n";
+import { catalogs } from "@zoen/companion-ui/i18n";
 
 export const getI18n = cache(async () => {
   const preference = (await cookies()).get(localeCookie)?.value;
@@ -15,5 +11,5 @@ export const getI18n = cache(async () => {
     (await headers()).get("accept-language")
   );
   const messages = catalogs[locale];
-  return { locale, messages, t: createTranslator(messages) };
+  return { locale, messages, t: createTranslator(messages, locale) };
 });

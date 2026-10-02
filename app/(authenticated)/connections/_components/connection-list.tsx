@@ -3,7 +3,7 @@
 import { useState, type ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { ChannelAuthForm } from "@web/auth/channel/form";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { GoogleWorkspaceAction } from "../google-workspace-action";
 import { LinkedChannels } from "./linked-channels";
 import { PersonalWhatsApp } from "./personal-whatsapp";

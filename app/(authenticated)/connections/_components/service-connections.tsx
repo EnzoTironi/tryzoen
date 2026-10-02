@@ -3,7 +3,7 @@
 import { PanelLink } from "../../_components/panel-link";
 import { PlugIcon, ChevronRightIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import styles from "../../_components/connections.module.css";
 
 export function ServiceConnections() {

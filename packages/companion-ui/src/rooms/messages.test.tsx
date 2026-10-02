@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import { expect, it, vi } from "vitest";
 import { RoomMessages } from "./messages";
 
@@ -174,7 +174,7 @@ it("places timestamps between time blocks rather than at every author change", (
   ]);
   expect(html.match(/data-testid="room-message-timestamp"/gu)).toHaveLength(2);
   for (const timestamp of [time, time + 60000, time + 120000, time + 7 * 60000])
-    expect(html).toContain(new Date(timestamp).toLocaleString());
+    expect(html).toContain(new Date(timestamp).toLocaleString("en"));
   expect(html.match(/role="group"/gu)).toHaveLength(4);
 });
 it("marks a new day even when messages are only two minutes apart", () => {
@@ -186,7 +186,7 @@ it("marks a new day even when messages are only two minutes apart", () => {
   expect(html.match(/data-testid="room-message-timestamp"/gu)).toHaveLength(2);
   for (const timestamp of [midnight, midnight + 120000])
     expect(html).toContain(
-      new Date(timestamp).toLocaleDateString([], {
+      new Date(timestamp).toLocaleDateString("en", {
         weekday: "long",
         day: "numeric",
         month: "short",

@@ -1,6 +1,7 @@
 import { dialog, systemPreferences, type BrowserWindow } from "electron";
 import { isMicrophoneRequest } from "./audio-permission.js";
 import { isApplicationNavigation } from "./navigation.js";
+import { desktopText as t } from "./i18n.js";
 
 /** Each capture requires app-origin validation and explicit native consent. */
 export function registerAudioAccess(window: BrowserWindow, origin: string) {
@@ -20,9 +21,9 @@ export function registerAudioAccess(window: BrowserWindow, origin: string) {
       void dialog
         .showMessageBox(window, {
           type: "question",
-          message: "Allow Zoen to record this voice message?",
-          detail: "Recording stays local until you attach it and tap Send.",
-          buttons: ["Cancel", "Allow microphone"],
+          message: t("Allow Zoen to record this voice message?"),
+          detail: t("Recording stays local until you attach it and tap Send."),
+          buttons: [t("Cancel"), t("Allow microphone")],
           defaultId: 0,
           cancelId: 0,
         })

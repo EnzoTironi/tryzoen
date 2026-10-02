@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import type { ComponentProps } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Text, ActivityIndicator } from "react-native";
@@ -17,6 +18,7 @@ export function SaveRoomMessage({
   readonly messageId: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const { state, change } = useSavedMessageChange({
     data,
     cacheScope,
@@ -26,27 +28,31 @@ export function SaveRoomMessage({
   });
   return (
     <CompanionSheet
-      title="Mensagem salva"
+      title={t("Mensagem salva")}
       onClose={() => {
         if (!change.isPending) onClose();
       }}
     >
       <Text>
-        Somente você vê suas mensagens salvas. O conteúdo continua sujeito ao
-        acesso e às alterações da conversa original.
+        {t(
+          "Somente você vê suas mensagens salvas. O conteúdo continua sujeito ao acesso e às alterações da conversa original."
+        )}
       </Text>
       {state.isPending && (
-        <ActivityIndicator accessibilityLabel="Carregando mensagens salvas" />
+        <ActivityIndicator
+          accessibilityLabel={t("Carregando mensagens salvas")}
+        />
       )}
       {(state.isError || change.isError) && (
         <Text accessibilityRole="alert">
-          Não foi possível atualizar. Tente novamente.
+          {t("Não foi possível atualizar. Tente novamente.")}
         </Text>
       )}
       {change.data?.status === "conflict" && (
         <Text accessibilityRole="alert">
-          Suas mensagens salvas mudaram. Confira o estado atualizado e tente
-          novamente.
+          {t(
+            "Suas mensagens salvas mudaram. Confira o estado atualizado e tente novamente."
+          )}
         </Text>
       )}
       <ActionButton
@@ -58,13 +64,13 @@ export function SaveRoomMessage({
         }}
       >
         {state.isError
-          ? "Tentar novamente"
+          ? t("Tentar novamente")
           : state.data?.saved
-            ? "Remover das salvas"
-            : "Salvar mensagem"}
+            ? t("Remover das salvas")
+            : t("Salvar mensagem")}
       </ActionButton>
       <ActionButton quiet disabled={change.isPending} onPress={onClose}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </CompanionSheet>
   );
@@ -77,6 +83,7 @@ function useSavedMessageChange({
   messageId,
   onClose,
 }: ComponentProps<typeof SaveRoomMessage>) {
+  const { t } = useI18n();
   const client = useQueryClient();
   const state = useQuery({
     queryKey: ["matrix-saved-state", cacheScope, roomId, messageId],
@@ -86,7 +93,8 @@ function useSavedMessageChange({
   });
   const change = useMutation({
     mutationFn: async () => {
-      if (!state.data || state.isError) throw new Error("Estado indisponível");
+      if (!state.data || state.isError)
+        throw new Error(t("Estado indisponível"));
       return data.saveMessage({
         id: roomId,
         messageId,

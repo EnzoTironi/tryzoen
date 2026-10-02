@@ -2,7 +2,7 @@
 
 import { BotIcon, ShieldCheckIcon } from "lucide-react";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { api } from "@web/trpc/client";
 
 export function VaultDelegation({ itemId }: { readonly itemId: string }) {

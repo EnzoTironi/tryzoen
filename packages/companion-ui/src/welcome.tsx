@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import {
   Image,
   Pressable,
@@ -61,6 +62,7 @@ export function Welcome({
   readonly initialDraft?: ConversationDraft;
   readonly avatarUri?: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const staged = readReplyMessage(initialDraft?.text ?? "");
@@ -94,16 +96,16 @@ export function Welcome({
             <Image source={{ uri: avatarUri }} style={styles.avatar} />
           ) : (
             <View style={styles.monogram}>
-              <Text style={styles.monogramText}>z.</Text>
+              <Text style={styles.monogramText}>{t("z.")}</Text>
             </View>
           )}
           <Text accessibilityRole="header" style={styles.heading}>
             {name
-              ? `A little space for you, ${name}.`
-              : "A little space for you."}
+              ? t("A little space for you, {value1}.", { value1: name })
+              : t("A little space for you.")}
           </Text>
           <Text style={styles.subtitle}>
-            Big plans, small errands, and everything in between.
+            {t("Big plans, small errands, and everything in between.")}
           </Text>
         </View>
         <Composer
@@ -124,16 +126,16 @@ export function Welcome({
           disabled={disabled}
         />
         <View style={styles.suggestions}>
-          <Text style={styles.eyebrow}>SOMEWHERE TO START</Text>
+          <Text style={styles.eyebrow}>{t("SOMEWHERE TO START")}</Text>
           {suggestions.map(({ title, detail, prompt, icon: Icon }) => (
             <Pressable
               key={title}
               disabled={disabled}
               accessibilityRole="button"
-              accessibilityLabel={title}
+              accessibilityLabel={t(title)}
               onPress={() => {
                 setSuggestion((current) => ({
-                  draft: { ...current.draft, text: prompt },
+                  draft: { ...current.draft, text: t(prompt) },
                   revision: current.revision + 1,
                 }));
               }}
@@ -146,8 +148,8 @@ export function Welcome({
                 <Icon size={20} strokeWidth={1.5} color={colors.accent} />
               </View>
               <View style={styles.suggestionCopy}>
-                <Text style={styles.suggestionTitle}>{title}</Text>
-                <Text style={styles.suggestionDetail}>{detail}</Text>
+                <Text style={styles.suggestionTitle}>{t(title)}</Text>
+                <Text style={styles.suggestionDetail}>{t(detail)}</Text>
               </View>
               <ArrowUpRight size={17} color={colors.muted} strokeWidth={1.5} />
             </Pressable>

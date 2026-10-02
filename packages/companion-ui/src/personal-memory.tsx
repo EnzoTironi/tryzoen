@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useState } from "react";
 import { Pencil } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
@@ -34,27 +35,29 @@ export function PersonalMemory({
   readonly onCorrectProfile: () => void;
   readonly onLearned: () => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<MemoryDocumentView>();
   return (
     <CompanionPage
-      title="Identity & memory"
+      title={t("Identity & memory")}
       loading={loading}
       error={error}
       onRetry={onRetry}
       actions={
         <ActionButton quiet disabled={loading} onPress={onRetry}>
-          Refresh
+          {t("Refresh")}
         </ActionButton>
       }
     >
       <Text style={pageStyles.copy}>
-        Your saved profile and personal notes. These belong to your account,
-        across your workspaces.
+        {t(
+          "Your saved profile and personal notes. These belong to your account, across your workspaces."
+        )}
       </Text>
       <View style={pageStyles.section}>
         <Text accessibilityRole="header" style={pageStyles.heading}>
-          Your profile
+          {t("Your profile")}
         </Text>
         {profile.map((field) => (
           <View key={field.label} style={styles.profileRow}>
@@ -65,17 +68,19 @@ export function PersonalMemory({
           </View>
         ))}
         {!loading && !error && profile.length === 0 && (
-          <Text style={pageStyles.copy}>No profile details saved yet.</Text>
+          <Text style={pageStyles.copy}>
+            {t("No profile details saved yet.")}
+          </Text>
         )}
         <View style={styles.actions}>
           <ActionButton quiet onPress={onCorrectProfile}>
-            Update my profile
+            {t("Update my profile")}
           </ActionButton>
         </View>
       </View>
       <View style={pageStyles.section}>
         <Text accessibilityRole="header" style={pageStyles.heading}>
-          Personal notes
+          {t("Personal notes")}
         </Text>
         {documents.map((document) => (
           <MemoryCard
@@ -83,7 +88,7 @@ export function PersonalMemory({
             document={document}
             action={
               <IconButton
-                label="Edit notes"
+                label={t("Edit notes")}
                 icon={Pencil}
                 onPress={() => {
                   setEditing(document);
@@ -95,25 +100,29 @@ export function PersonalMemory({
         {!loading && !error && documents.length === 0 && (
           <Text style={pageStyles.copy}>
             {unresolved
-              ? "Personal notes have not been located yet. Continue a private conversation with Zoen, then refresh."
-              : "No personal notes saved yet."}
+              ? t(
+                  "Personal notes have not been located yet. Continue a private conversation with Zoen, then refresh."
+                )
+              : t("No personal notes saved yet.")}
           </Text>
         )}
       </View>
       <ActionButton quiet onPress={onLearned}>
-        Review learned memories
+        {t("Review learned memories")}
       </ActionButton>
       <Text style={[pageStyles.copy, pageStyles.section]}>
-        This view includes your profile and personal notes. Learned workspace
-        memories, conversations, files, connected accounts and schedules are
-        separate. Editing notes does not erase earlier conversations.
+        {t(
+          "This view includes your profile and personal notes. Learned workspace memories, conversations, files, connected accounts and schedules are separate. Editing notes does not erase earlier conversations."
+        )}
       </Text>
       {editing && (
         <DocumentEditor
           markdown
-          title="Edit personal notes"
-          label="Personal notes"
-          description="Put each fact or preference on its own line. Saving replaces this document’s notes."
+          title={t("Edit personal notes")}
+          label={t("Personal notes")}
+          description={t(
+            "Put each fact or preference on its own line. Saving replaces this document’s notes."
+          )}
           initialText={editing.text}
           maxLength={4000}
           saveLabel="Save notes"

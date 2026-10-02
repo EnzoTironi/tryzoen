@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useEffect, useRef, useState } from "react";
 import { ZodError } from "zod";
 import { AppState, Text, View } from "react-native";
@@ -31,6 +32,7 @@ export function VaultItemForm({
   readonly initialOrigin?: string;
   readonly initialIdentifierType?: "email" | "phone" | "username";
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [values, setValues] = useState<VaultFormDraft>({
     nickname: initialLabel,
@@ -99,7 +101,7 @@ export function VaultItemForm({
     let conflict = false;
     try {
       conflict = (await onSave(input)) === false;
-      if (conflict) throw new Error("The saved item changed");
+      if (conflict) throw new Error(t("The saved item changed"));
       if (alive.current) done.current();
     } catch {
       if (alive.current) {
@@ -128,10 +130,12 @@ export function VaultItemForm({
       <View style={{ gap: 16 }}>
         <Text accessibilityRole="alert">
           {localError ??
-            "Could not confirm the save. Sensitive fields were cleared. Check saved items before trying again."}
+            t(
+              "Could not confirm the save. Sensitive fields were cleared. Check saved items before trying again."
+            )}
         </Text>
         <ActionButton onPress={onDone}>
-          {initialValue ? "Review saved item" : "Check saved items"}
+          {initialValue ? t("Review saved item") : t("Check saved items")}
         </ActionButton>
       </View>
     );
@@ -139,10 +143,16 @@ export function VaultItemForm({
     <View style={{ gap: 16 }}>
       <Text style={pageStyles.copy}>
         {initialValue
-          ? "Changes revoke existing access for Zoen. Grant permission again after saving if needed."
+          ? t(
+              "Changes revoke existing access for Zoen. Grant permission again after saving if needed."
+            )
           : kind === "login"
-            ? "Saved credentials stay in your vault. Saving does not grant Zoen permission to use them."
-            : "Save card details in your vault. This does not connect a payment provider or authorize purchases."}
+            ? t(
+                "Saved credentials stay in your vault. Saving does not grant Zoen permission to use them."
+              )
+            : t(
+                "Save card details in your vault. This does not connect a payment provider or authorize purchases."
+              )}
       </Text>
       <VaultFields
         kind={kind}
@@ -160,15 +170,16 @@ export function VaultItemForm({
           setRevealed((value) => !value);
         }}
       >
-        {revealed ? "Hide sensitive fields" : "Show sensitive fields"}
+        {revealed ? t("Hide sensitive fields") : t("Show sensitive fields")}
       </ActionButton>
       <Text style={pageStyles.copy}>
-        Sensitive fields hide again after 30 seconds.
+        {t("Sensitive fields hide again after 30 seconds.")}
       </Text>
       {localError && <Text accessibilityRole="alert">{localError}</Text>}
       {attempted && !result.success && (
         <Text accessibilityRole="alert">
-          {result.error.issues[0]?.message ?? "Complete the required details."}
+          {result.error.issues[0]?.message ??
+            t("Complete the required details.")}
         </Text>
       )}
       <ActionButton
@@ -178,15 +189,15 @@ export function VaultItemForm({
         }}
       >
         {pending
-          ? "Saving…"
+          ? t("Saving…")
           : initialValue
-            ? "Save changes"
+            ? t("Save changes")
             : kind === "login"
-              ? "Save login"
-              : "Save card"}
+              ? t("Save login")
+              : t("Save card")}
       </ActionButton>
       <ActionButton quiet disabled={pending} onPress={onDone}>
-        Cancel
+        {t("Cancel")}
       </ActionButton>
     </View>
   );

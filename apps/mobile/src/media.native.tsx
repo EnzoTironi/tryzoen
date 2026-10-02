@@ -1,3 +1,4 @@
+import { useI18n, Translated } from "@zoen/companion-ui/i18n";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
@@ -9,6 +10,7 @@ import type { FileUIPart } from "ai";
 import { inlineAttachmentSchema } from "@zoen/companion-ui/messages";
 
 function NativeMedia({ file }: { file: FileUIPart }) {
+  const { t } = useI18n();
   const [uri, setUri] = useState<string>();
   const [failed, setFailed] = useState(false);
   useEffect(
@@ -21,13 +23,15 @@ function NativeMedia({ file }: { file: FileUIPart }) {
   );
   if (failed)
     return (
-      <Text accessibilityRole="alert">Não foi possível abrir o arquivo.</Text>
+      <Text accessibilityRole="alert">
+        {t("Não foi possível abrir o arquivo.")}
+      </Text>
     );
   if (!uri)
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Abrir controles de reprodução"
+        accessibilityLabel={t("Abrir controles de reprodução")}
         style={styles.button}
         onPress={() => {
           try {
@@ -56,6 +60,7 @@ function NativeVideo({ uri }: { uri: string }) {
   return <VideoView player={player} nativeControls style={styles.video} />;
 }
 function NativeAudio({ uri }: { uri: string }) {
+  const { t } = useI18n();
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
   const Icon = status.playing ? Pause : Play;
@@ -64,7 +69,7 @@ function NativeAudio({ uri }: { uri: string }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          status.playing ? "Pausar áudio" : "Reproduzir áudio"
+          status.playing ? t("Pausar áudio") : t("Reproduzir áudio")
         }
         style={styles.button}
         onPress={() => {
@@ -78,11 +83,17 @@ function NativeAudio({ uri }: { uri: string }) {
         <Icon size={24} color="#0866c9" />
       </Pressable>
       <Text accessibilityLiveRegion="none" style={styles.time}>
-        {Math.floor(status.currentTime)} / {Math.floor(status.duration)} s
+        <Translated
+          message="{value1} / {value2} s"
+          values={{
+            value1: Math.floor(status.currentTime),
+            value2: Math.floor(status.duration),
+          }}
+        />
       </Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Voltar ao início"
+        accessibilityLabel={t("Voltar ao início")}
         style={styles.button}
         onPress={() => {
           void player.seekTo(0);
@@ -92,7 +103,7 @@ function NativeAudio({ uri }: { uri: string }) {
       </Pressable>
       {status.error && (
         <Text accessibilityRole="alert">
-          Não foi possível reproduzir este áudio.
+          {t("Não foi possível reproduzir este áudio.")}
         </Text>
       )}
     </View>

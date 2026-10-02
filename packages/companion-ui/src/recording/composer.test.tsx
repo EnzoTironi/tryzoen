@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { AudioMessageRecorder } from "./composer";
@@ -128,7 +128,9 @@ test("an attachment-limit failure preserves local review and displays the error"
   });
   render();
   expect(() => mocks.attach?.()).not.toThrow();
-  expect(mocks.updates.get(2)).toContain("Attachment limit reached");
+  expect(mocks.updates.get(2)).toContain(
+    "This action could not be completed. Try again."
+  );
   expect(mocks.controller.signal.aborted).toBe(false);
   expect(mocks.onActive).not.toHaveBeenCalled();
 });

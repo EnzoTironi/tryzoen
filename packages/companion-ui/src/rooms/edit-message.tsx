@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useContext, useRef, useState, type ComponentProps } from "react";
 import {
   useMutation,
@@ -34,17 +35,18 @@ export function EditRoomMessage({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const renderEditor = useContext(MarkdownEditorProvider);
   const { editor, baseline, error, setError, save, close, reload } =
     useMessageEdit({ data, roomId, cacheScope, item, onClose });
   return (
-    <CompanionSheet title="Editar mensagem" onClose={close}>
+    <CompanionSheet title={t("Editar mensagem")} onClose={close}>
       <View key={baseline.editId ?? baseline.id} style={{ height: 280 }}>
         {renderEditor?.({
           initialMarkdown: baseline.text,
-          label: "Mensagem",
-          description: "Edite sua mensagem",
+          label: t("Mensagem"),
+          description: t("Edite sua mensagem"),
           editable: !save.isPending,
           ref: editor,
           onChange: () => {
@@ -60,14 +62,18 @@ export function EditRoomMessage({
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
           {error ??
             (!renderEditor
-              ? "Editor indisponível"
-              : "Não foi possível salvar. Seu texto foi preservado; tente novamente.")}
+              ? t("Editor indisponível")
+              : t(
+                  "Não foi possível salvar. Seu texto foi preservado; tente novamente."
+                ))}
         </Text>
       )}
       {save.data?.status === "conflict" && (
         <>
           <Text accessibilityRole="alert">
-            Esta mensagem mudou em outro lugar. Seu rascunho foi preservado.
+            {t(
+              "Esta mensagem mudou em outro lugar. Seu rascunho foi preservado."
+            )}
           </Text>
           <ActionButton
             quiet
@@ -75,7 +81,7 @@ export function EditRoomMessage({
               reload();
             }}
           >
-            Carregar versão atual
+            {t("Carregar versão atual")}
           </ActionButton>
         </>
       )}
@@ -87,10 +93,10 @@ export function EditRoomMessage({
           save.mutate();
         }}
       >
-        {save.isPending ? "Salvando…" : "Salvar alterações"}
+        {save.isPending ? t("Salvando…") : t("Salvar alterações")}
       </ActionButton>
       <ActionButton quiet disabled={save.isPending} onPress={close}>
-        Cancelar
+        {t("Cancelar")}
       </ActionButton>
     </CompanionSheet>
   );
@@ -103,6 +109,7 @@ function useMessageEdit({
   item,
   onClose,
 }: ComponentProps<typeof EditRoomMessage>) {
+  const { t } = useI18n();
   const editor = useRef<MarkdownEditorHandle>(null);
   const operation = useRef<{ text: string; id: string } | null>(null);
   const [baseline, setBaseline] = useState(item);
@@ -110,7 +117,7 @@ function useMessageEdit({
   const client = useQueryClient();
   const save = useMutation({
     mutationFn: async () => {
-      if (!editor.current) throw new Error("Editor indisponível");
+      if (!editor.current) throw new Error(t("Editor indisponível"));
       const text = (await editor.current.read()).trim();
       if (operation.current?.text !== text)
         operation.current = { text, id: data.operationId() };

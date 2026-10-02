@@ -1,3 +1,4 @@
+import { useI18n, Translated } from "./../i18n";
 import {
   useMemo,
   useEffect,
@@ -36,6 +37,7 @@ export function AudioMessageRecorder({
   readonly onAttach: (file: FileUIPart) => void;
   readonly onActive: (active: boolean) => void;
 }) {
+  const { t, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const adapter = useAttachments();
@@ -104,8 +106,8 @@ export function AudioMessageRecorder({
       reset();
       setError(
         cause instanceof Error
-          ? cause.message
-          : "Recording failed. Please try again."
+          ? errorText(cause.message)
+          : t("Recording failed. Please try again.")
       );
     }
   }
@@ -125,8 +127,8 @@ export function AudioMessageRecorder({
               <ActivityIndicator
                 accessibilityLabel={
                   phase === "permission"
-                    ? "Waiting for microphone permission"
-                    : "Preparing recording"
+                    ? t("Waiting for microphone permission")
+                    : t("Preparing recording")
                 }
               />
             ) : null}
@@ -134,11 +136,17 @@ export function AudioMessageRecorder({
               <>
                 <View style={styles.dot} />
                 <Text style={styles.label}>
-                  Recording {seconds}s / {audioRecordingLimitSeconds}s
+                  <Translated
+                    message="Recording {value1}s / {value2}s"
+                    values={{
+                      value1: seconds,
+                      value2: audioRecordingLimitSeconds,
+                    }}
+                  />
                 </Text>
                 <IconButton
                   icon={Square}
-                  label="Stop recording and review"
+                  label={t("Stop recording and review")}
                   onPress={() => {
                     setPhase("processing");
                     stop.current?.();
@@ -148,12 +156,12 @@ export function AudioMessageRecorder({
             )}
             {phase === "permission" && (
               <Text style={styles.label}>
-                Allow microphone access to record.
+                {t("Allow microphone access to record.")}
               </Text>
             )}
             <IconButton
               icon={Trash2}
-              label="Discard recording"
+              label={t("Discard recording")}
               onPress={reset}
             />
           </View>
@@ -169,16 +177,16 @@ export function AudioMessageRecorder({
                   } catch (cause) {
                     setError(
                       cause instanceof Error
-                        ? cause.message
-                        : "The recording could not be attached."
+                        ? errorText(cause.message)
+                        : t("The recording could not be attached.")
                     );
                   }
                 }}
               >
-                Attach voice message
+                {t("Attach voice message")}
               </ActionButton>
               <Text style={styles.hint}>
-                Listen first. Nothing is sent until you tap Send.
+                {t("Listen first. Nothing is sent until you tap Send.")}
               </Text>
             </>
           )}

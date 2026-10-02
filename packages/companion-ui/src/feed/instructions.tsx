@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useQuery } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { CompanionPage } from "../page";
@@ -13,6 +14,7 @@ export function FeedInstructions({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const instructions = useQuery({
     queryKey: ["feed-instructions", cacheScope],
     queryFn: data.instructions,
@@ -21,9 +23,9 @@ export function FeedInstructions({
   });
   if (!instructions.data)
     return (
-      <CompanionSheet title="Feed instructions" onClose={onClose}>
+      <CompanionSheet title={t("Feed instructions")} onClose={onClose}>
         <CompanionPage
-          title="Feed instructions"
+          title={t("Feed instructions")}
           loading={instructions.isPending}
           error={instructions.error?.message}
           onRetry={() => {
@@ -37,9 +39,11 @@ export function FeedInstructions({
   const document = instructions.data;
   return (
     <DocumentEditor
-      title="Feed instructions"
-      label="Feed instructions"
-      description="Choose topics, sources, tone and things to avoid. These personal instructions guide new posts; saving does not enable a recurring schedule."
+      title={t("Feed instructions")}
+      label={t("Feed instructions")}
+      description={t(
+        "Choose topics, sources, tone and things to avoid. These personal instructions guide new posts; saving does not enable a recurring schedule."
+      )}
       initialText={document.content}
       maxLength={20000}
       markdown

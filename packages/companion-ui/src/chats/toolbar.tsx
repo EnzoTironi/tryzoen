@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Archive, ArrowLeft, Plus, Ellipsis, X } from "lucide-react-native";
@@ -28,6 +29,7 @@ export function ConversationToolbar({
     readonly onClose: () => void;
   };
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -38,8 +40,8 @@ export function ConversationToolbar({
   };
   const search = (
     <TextInput
-      accessibilityLabel="Search conversations"
-      placeholder="Search conversations"
+      accessibilityLabel={t("Search conversations")}
+      placeholder={t("Search conversations")}
       value={query}
       onChangeText={onQuery}
       maxLength={200}
@@ -54,7 +56,9 @@ export function ConversationToolbar({
           <IconButton
             icon={archived ? ArrowLeft : Ellipsis}
             label={
-              archived ? "Back to conversations" : "Conversation panel options"
+              archived
+                ? t("Back to conversations")
+                : t("Conversation panel options")
             }
             onPress={
               archived
@@ -72,7 +76,7 @@ export function ConversationToolbar({
           numberOfLines={panel ? 1 : undefined}
           style={[styles.title, panel && styles.panelTitle]}
         >
-          {archived ? "Archived conversations" : title}
+          {archived ? t("Archived conversations") : title}
         </Text>
         <View style={styles.actions}>
           {!panel && (
@@ -80,8 +84,8 @@ export function ConversationToolbar({
               icon={archived ? ArrowLeft : Archive}
               label={
                 archived
-                  ? "Back to conversations"
-                  : "Show archived conversations"
+                  ? t("Back to conversations")
+                  : t("Show archived conversations")
               }
               onPress={showArchive}
             />
@@ -89,14 +93,14 @@ export function ConversationToolbar({
           {!archived && onCreate && (
             <IconButton
               icon={Plus}
-              label="New conversation"
+              label={t("New conversation")}
               onPress={onCreate}
             />
           )}
           {panel && (
             <IconButton
               icon={X}
-              label="Close conversations"
+              label={t("Close conversations")}
               onPress={panel.onClose}
             />
           )}
@@ -107,13 +111,13 @@ export function ConversationToolbar({
 
       {options && (
         <CompanionSheet
-          title="Conversation panel options"
+          title={t("Conversation panel options")}
           onClose={() => {
             setOptions(false);
           }}
         >
           <ActionButton quiet onPress={showArchive}>
-            Show archived conversations
+            {t("Show archived conversations")}
           </ActionButton>
         </CompanionSheet>
       )}

@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../tests/helpers/companion-i18n";
 import type { Library, CompanionPage } from "@zoen/companion-ui";
 import type { FileEditor } from "@app/(authenticated)/space/(overview)/_components/file-editor";
 import { beforeEach, expect, it, vi } from "vitest";

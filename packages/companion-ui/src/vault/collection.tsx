@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import { AppState, Text, View } from "react-native";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ export function VaultCollection({
   readonly cacheScope: string;
   readonly renderPermission?: (id: string) => ReactNode;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<string>();
@@ -57,7 +59,7 @@ export function VaultCollection({
     return (
       <View style={{ gap: 16 }}>
         <Text accessibilityRole="alert">
-          Could not verify saved items. Refresh before trying again.
+          {t("Could not verify saved items. Refresh before trying again.")}
         </Text>
         <ActionButton
           onPress={() => {
@@ -67,12 +69,14 @@ export function VaultCollection({
             void refetch();
           }}
         >
-          Try again
+          {t("Try again")}
         </ActionButton>
       </View>
     );
   if (list.isPending || (list.isFetching && !list.isFetchingNextPage))
-    return <Text accessibilityLiveRegion="polite">Loading saved items…</Text>;
+    return (
+      <Text accessibilityLiveRegion="polite">{t("Loading saved items…")}</Text>
+    );
   const mayManage = list.data.pages[0]?.mayManage === true;
   if (adding && mayManage)
     return (
@@ -110,12 +114,16 @@ export function VaultCollection({
   return (
     <View style={{ gap: 16 }}>
       <Text accessibilityRole="header" style={pageStyles.heading}>
-        {kind === "login" ? "Saved logins" : "Saved cards"}
+        {kind === "login" ? t("Saved logins") : t("Saved cards")}
       </Text>
       <Text style={pageStyles.copy}>
         {kind === "login"
-          ? "Manage saved credentials. Access for Zoen is a separate permission."
-          : "Encrypted card details, not a connected wallet or a payment authorization."}
+          ? t(
+              "Manage saved credentials. Access for Zoen is a separate permission."
+            )
+          : t(
+              "Encrypted card details, not a connected wallet or a payment authorization."
+            )}
       </Text>
       {mayManage ? (
         <ActionButton
@@ -123,14 +131,16 @@ export function VaultCollection({
             setAdding(true);
           }}
         >
-          {kind === "login" ? "Add login" : "Add card"}
+          {kind === "login" ? t("Add login") : t("Add card")}
         </ActionButton>
       ) : (
         <Text>
-          Only workspace owners and administrators can change saved items.
+          {t(
+            "Only workspace owners and administrators can change saved items."
+          )}
         </Text>
       )}
-      {!items.length && <Text>No saved items yet.</Text>}
+      {!items.length && <Text>{t("No saved items yet.")}</Text>}
       {items.map((value) => (
         <View
           key={value.id}
@@ -160,7 +170,7 @@ export function VaultCollection({
             void list.fetchNextPage();
           }}
         >
-          {list.isFetchingNextPage ? "Loading…" : "Show more saved items"}
+          {list.isFetchingNextPage ? t("Loading…") : t("Show more saved items")}
         </ActionButton>
       )}
     </View>

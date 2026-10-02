@@ -4,7 +4,7 @@ import { useRef, type ReactNode } from "react";
 import Image from "next/image";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon } from "lucide-react";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { cn } from "@web/components/class-names";
 import styles from "./onboarding.module.css";
 

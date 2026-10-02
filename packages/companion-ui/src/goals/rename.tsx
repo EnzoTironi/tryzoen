@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react-native";
@@ -24,6 +26,7 @@ export function GoalRename({
   readonly onSave: (title: string) => Promise<void>;
   readonly onClose: () => void;
 }) {
+  const { t, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState(initialTitle);
@@ -41,7 +44,7 @@ export function GoalRename({
   };
   return (
     <CompanionOverlay
-      title="Rename goal"
+      title={t("Rename goal")}
       onClose={close}
       focusOnOpen={() => {
         input.current?.focus();
@@ -53,28 +56,28 @@ export function GoalRename({
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Cancel goal rename"
+          accessibilityLabel={t("Cancel goal rename")}
           onPress={close}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.dialog}>
           <View style={styles.header}>
             <Text accessibilityRole="header" style={styles.heading}>
-              Rename goal
+              {t("Rename goal")}
             </Text>
             <IconButton
-              label="Close goal rename"
+              label={t("Close goal rename")}
               icon={X}
               disabled={save.isPending}
               onPress={close}
             />
           </View>
           <Text nativeID="goal-name-label" style={styles.label}>
-            Goal name
+            {t("Goal name")}
           </Text>
           <TextInput
             ref={input}
-            accessibilityLabel="Goal name"
+            accessibilityLabel={t("Goal name")}
             aria-labelledby="goal-name-label"
             value={title}
             onChangeText={setTitle}
@@ -89,15 +92,18 @@ export function GoalRename({
           />
           {save.error && (
             <Text accessibilityRole="alert" style={styles.error}>
-              Could not save this name. Your draft is kept. {save.error.message}
+              <Translated
+                message="Could not save this name. Your draft is kept. {value1}"
+                values={{ value1: errorText(save.error.message) }}
+              />
             </Text>
           )}
           <View style={styles.actions}>
             <ActionButton quiet disabled={save.isPending} onPress={close}>
-              Cancel
+              {t("Cancel")}
             </ActionButton>
             <ActionButton disabled={!valid || save.isPending} onPress={submit}>
-              {save.isPending ? "Saving…" : "Save"}
+              {save.isPending ? t("Saving…") : t("Save")}
             </ActionButton>
           </View>
         </View>

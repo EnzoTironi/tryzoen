@@ -5,7 +5,7 @@ import { isValid } from "@shared/validation";
 import { useState } from "react";
 import { CheckIcon, ChevronRightIcon, CpuIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { ModelAuthorization } from "./model-authorization";
 import { modelCatalog, WorkspaceModelSchema } from "@shared/models/catalog";
 import styles from "./connections.module.css";

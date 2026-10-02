@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text } from "react-native";
 import type { z } from "zod";
@@ -18,6 +19,7 @@ export function CreatorPlaybookReview({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<z.infer<typeof creatorDraftSchema>>();
   const current = preview.revision === draft.revision && !draft.archivedAt;
@@ -25,8 +27,12 @@ export function CreatorPlaybookReview({
     <>
       <Text style={pageStyles.copy}>
         {current
-          ? "This proposal has not changed your playbook. Review its sources and limits, edit it, then explicitly choose to use it."
-          : "The draft changed since this proposal. Generate a new proposal from the current examples before replacing its playbook."}
+          ? t(
+              "This proposal has not changed your playbook. Review its sources and limits, edit it, then explicitly choose to use it."
+            )
+          : t(
+              "The draft changed since this proposal. Generate a new proposal from the current examples before replacing its playbook."
+            )}
       </Text>
       <ActionButton
         quiet
@@ -35,24 +41,26 @@ export function CreatorPlaybookReview({
           setEditing(draft);
         }}
       >
-        Review proposed playbook
+        {t("Review proposed playbook")}
       </ActionButton>
       {editing && preview.response && (
         <DocumentEditor
-          title="Proposed playbook.md"
-          label="Proposed specialist playbook"
-          description="Check the source attributions, strategies and limits. Saving replaces your private playbook with this edited proposal and requires fresh evaluation runs before another version can be approved. Nothing is published."
+          title={t("Proposed playbook.md")}
+          label={t("Proposed specialist playbook")}
+          description={t(
+            "Check the source attributions, strategies and limits. Saving replaces your private playbook with this edited proposal and requires fresh evaluation runs before another version can be approved. Nothing is published."
+          )}
           initialText={preview.response}
           maxLength={64000}
           markdown
           allowUnchanged
-          saveLabel="Use as playbook"
+          saveLabel={t("Use as playbook")}
           onClose={() => {
             setEditing(undefined);
           }}
           onSave={async (playbook) => {
             if (!playbook.trim())
-              throw new Error("Write a playbook before saving.");
+              throw new Error(t("Write a playbook before saving."));
             const updated = await data.save({
               id: editing.id,
               expectedRevision: editing.revision,

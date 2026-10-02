@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { Pressable } from "react-native";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import ReactionPicker from "./picker";
 

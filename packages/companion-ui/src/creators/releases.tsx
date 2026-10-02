@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ export function CreatorReleases({
   readonly archived: boolean;
   readonly onClose: () => void;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [reviewing, setReviewing] = useState(false);
   const [selected, setSelected] = useState<string>();
@@ -29,10 +31,11 @@ export function CreatorReleases({
     queryFn: () => data.releases(draftId),
   });
   return (
-    <CompanionSheet title="Approved versions" onClose={onClose}>
+    <CompanionSheet title={t("Approved versions")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Keep a reviewed version with its playbook, selected examples, completed
-        evaluations and approval notes. These versions remain private.
+        {t(
+          "Keep a reviewed version with its playbook, selected examples, completed evaluations and approval notes. These versions remain private."
+        )}
       </Text>
       {!archived && (
         <ActionButton
@@ -40,28 +43,28 @@ export function CreatorReleases({
             setReviewing(true);
           }}
         >
-          Review current version
+          {t("Review current version")}
         </ActionButton>
       )}
       {versions.isPending && (
-        <Text style={pageStyles.copy}>Loading approved versions…</Text>
+        <Text style={pageStyles.copy}>{t("Loading approved versions…")}</Text>
       )}
       {versions.isError && (
         <>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Approved versions could not be loaded.
+            {t("Approved versions could not be loaded.")}
           </Text>
           <ActionButton
             onPress={() => {
               void versions.refetch();
             }}
           >
-            Try again
+            {t("Try again")}
           </ActionButton>
         </>
       )}
       {versions.data?.length === 0 && (
-        <Text style={pageStyles.copy}>No approved versions yet.</Text>
+        <Text style={pageStyles.copy}>{t("No approved versions yet.")}</Text>
       )}
       {!versions.isError &&
         versions.data?.map((version) => (
@@ -72,7 +75,9 @@ export function CreatorReleases({
               setSelected(version.id);
             }}
           >
-            {`Approved ${new Date(version.createdAt).toLocaleString()}`}
+            {t("Approved {value1}", {
+              value1: new Date(version.createdAt).toLocaleString(locale),
+            })}
           </ActionButton>
         ))}
       {reviewing && (

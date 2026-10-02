@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -39,6 +41,7 @@ export function MemoryHistory({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [query, setQuery] = useState("");
   const [date, setDate] = useState("");
@@ -52,7 +55,7 @@ export function MemoryHistory({
     enabled: Boolean(claimId),
     queryFn: () => {
       if (!claimId)
-        throw new Error("Select a memory to inspect its recorded versions.");
+        throw new Error(t("Select a memory to inspect its recorded versions."));
       return data.history({ claimId });
     },
   });
@@ -65,17 +68,18 @@ export function MemoryHistory({
     search.variables.validOn === (validOn || undefined);
   if (claimId)
     return (
-      <CompanionSheet title="Recorded memory versions" onClose={onClose}>
+      <CompanionSheet title={t("Recorded memory versions")} onClose={onClose}>
         <Text style={pageStyles.copy}>
-          These are recorded versions, including corrections and removal. They
-          do not replace current automatic recall.
+          {t(
+            "These are recorded versions, including corrections and removal. They do not replace current automatic recall."
+          )}
         </Text>
         {versions.isPending && (
-          <Text style={pageStyles.copy}>Loading recorded versions…</Text>
+          <Text style={pageStyles.copy}>{t("Loading recorded versions…")}</Text>
         )}
         {versions.isError && (
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            Recorded versions are unavailable under your current access.
+            {t("Recorded versions are unavailable under your current access.")}
           </Text>
         )}
         {!versions.isError &&
@@ -85,12 +89,12 @@ export function MemoryHistory({
               document={{
                 title:
                   claim.file.state.kind === "tombstone"
-                    ? "Removed memory"
-                    : "Recorded memory",
+                    ? t("Removed memory")
+                    : t("Recorded memory"),
                 text:
                   claim.file.state.kind === "active"
                     ? claim.file.state.body.text
-                    : "Removed from automatic recall.",
+                    : t("Removed from automatic recall."),
                 updated: "",
               }}
             >
@@ -101,7 +105,7 @@ export function MemoryHistory({
           versions.data &&
           !versions.data.versions.length && (
             <Text style={pageStyles.copy}>
-              No recorded versions are available.
+              {t("No recorded versions are available.")}
             </Text>
           )}
         {!versions.isError &&
@@ -113,43 +117,43 @@ export function MemoryHistory({
                 setVersionLimit(versionLimit + 20);
               }}
             >
-              Show 20 more versions
+              {t("Show 20 more versions")}
             </ActionButton>
           )}
       </CompanionSheet>
     );
   return (
-    <CompanionSheet title="Memory history" onClose={onClose}>
+    <CompanionSheet title={t("Memory history")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Find what claims said at a recorded moment. Recorded time and
-        world-valid dates are separate. A previously removed fact can appear in
-        an earlier audit snapshot.
+        {t(
+          "Find what claims said at a recorded moment. Recorded time and world-valid dates are separate. A previously removed fact can appear in an earlier audit snapshot."
+        )}
       </Text>
       <TextInput
-        accessibilityLabel="Search memory history"
+        accessibilityLabel={t("Search memory history")}
         value={query}
         onChangeText={setQuery}
-        placeholder="A topic, name or phrase"
+        placeholder={t("A topic, name or phrase")}
         maxLength={8000}
         style={pageStyles.field}
       />
       <View style={styles.row}>
         <View style={styles.field}>
-          <Text style={pageStyles.rowTitle}>Recorded date</Text>
+          <Text style={pageStyles.rowTitle}>{t("Recorded date")}</Text>
           <TextInput
-            accessibilityLabel="Memory recorded date"
+            accessibilityLabel={t("Memory recorded date")}
             value={date}
             onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
+            placeholder={t("YYYY-MM-DD")}
             maxLength={10}
             autoCapitalize="none"
             style={pageStyles.field}
           />
         </View>
         <View style={styles.field}>
-          <Text style={pageStyles.rowTitle}>Recorded time</Text>
+          <Text style={pageStyles.rowTitle}>{t("Recorded time")}</Text>
           <TextInput
-            accessibilityLabel="Memory recorded time"
+            accessibilityLabel={t("Memory recorded time")}
             value={time}
             onChangeText={setTime}
             placeholder="14:30"
@@ -159,19 +163,24 @@ export function MemoryHistory({
           />
         </View>
       </View>
-      <Text style={pageStyles.copy}>Your local recorded time · {timezone}</Text>
+      <Text style={pageStyles.copy}>
+        <Translated
+          message="Your local recorded time · {value1}"
+          values={{ value1: timezone }}
+        />
+      </Text>
       <TextInput
-        accessibilityLabel="Optional world-valid date"
+        accessibilityLabel={t("Optional world-valid date")}
         value={validOn}
         onChangeText={setValidOn}
-        placeholder="World-valid date, optional · YYYY-MM-DD"
+        placeholder={t("World-valid date, optional · YYYY-MM-DD")}
         maxLength={10}
         autoCapitalize="none"
         style={pageStyles.field}
       />
       {Boolean(date && time) && !asOf && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Enter a valid recorded date and time.
+          {t("Enter a valid recorded date and time.")}
         </Text>
       )}
       <ActionButton
@@ -185,7 +194,8 @@ export function MemoryHistory({
           });
           if (!parsed.success) {
             setValidation(
-              parsed.error.issues[0]?.message ?? "Review your query and dates."
+              parsed.error.issues[0]?.message ??
+                t("Review your query and dates.")
             );
             return;
           }
@@ -193,7 +203,7 @@ export function MemoryHistory({
           search.mutate(parsed.data);
         }}
       >
-        {search.isPending ? "Searching…" : "Search this recorded moment"}
+        {search.isPending ? t("Searching…") : t("Search this recorded moment")}
       </ActionButton>
       {validation && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
@@ -202,57 +212,73 @@ export function MemoryHistory({
       )}
       {search.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          History is unavailable under current access. Personal pause does not
-          prevent authorized historical review.
+          {t(
+            "History is unavailable under current access. Personal pause does not prevent authorized historical review."
+          )}
         </Text>
       )}
       {visible && (
         <View style={styles.results}>
           <Text accessibilityRole="header" style={pageStyles.heading}>
-            Memory recorded by{" "}
-            {asOf ? new Date(asOf).toLocaleString() : "the selected moment"}
+            <Translated
+              message="Memory recorded by {value1}"
+              values={{
+                value1: asOf
+                  ? new Date(asOf).toLocaleString(locale)
+                  : t("the selected moment"),
+              }}
+            />
           </Text>
           <Text selectable style={pageStyles.copy}>
-            Snapshot revision: {search.data.revision ?? "empty memory"}
+            <Translated
+              message="Snapshot revision: {value1}"
+              values={{ value1: search.data.revision ?? t("empty memory") }}
+            />
           </Text>
           {!search.data.matches.length && (
             <Text style={pageStyles.copy}>
-              No matching claims were recorded at this moment.
+              {t("No matching claims were recorded at this moment.")}
             </Text>
           )}
           {search.data.matches.map(({ claim, validity }) => (
             <MemoryCard
               key={`${claim.file.id}:${claim.revision}`}
               document={{
-                title: "Historical memory",
+                title: t("Historical memory"),
                 text:
                   claim.file.state.kind === "active"
                     ? claim.file.state.body.text
-                    : "Removed from automatic recall.",
+                    : t("Removed from automatic recall."),
                 updated: "",
               }}
             >
               <Text style={pageStyles.copy}>
-                World-valid filter:{" "}
-                {validity === "unknown"
-                  ? "unknown dates"
-                  : validity === "in-range"
-                    ? "in range"
-                    : "not applied"}
+                <Translated
+                  message="World-valid filter: {value1}"
+                  values={{
+                    value1:
+                      validity === "unknown"
+                        ? t("unknown dates")
+                        : validity === "in-range"
+                          ? t("in range")
+                          : t("not applied"),
+                  }}
+                />
               </Text>
               <LearnedClaimProvenance claim={claim} />
             </MemoryCard>
           ))}
           {search.data.hasMore && (
             <Text style={pageStyles.copy}>
-              More matching claims exist. Refine the query; each result is
-              bounded to eight matches.
+              {t(
+                "More matching claims exist. Refine the query; each result is bounded to eight matches."
+              )}
             </Text>
           )}
           <Text style={pageStyles.copy}>
-            This is an audit view, including retained prior facts where
-            applicable. It does not restore removed memories or change current
-            recall.
+            {t(
+              "This is an audit view, including retained prior facts where applicable. It does not restore removed memories or change current recall."
+            )}
           </Text>
         </View>
       )}

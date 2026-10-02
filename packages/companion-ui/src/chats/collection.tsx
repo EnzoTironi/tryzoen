@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import {
   useMemo,
   useDeferredValue,
@@ -24,7 +25,7 @@ export function ConversationSearch({
   cacheScope,
   onOpen,
   onCreate,
-  title = "Conversations",
+  title,
   intro,
   selectedId,
   panel,
@@ -40,6 +41,7 @@ export function ConversationSearch({
   readonly panel?: ComponentProps<typeof ConversationToolbar>["panel"];
   readonly onExport: (sessionId: string) => Promise<void>;
 }) {
+  const { t, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const pageStyles = usePageStyles();
@@ -65,7 +67,7 @@ export function ConversationSearch({
       style={[styles.page, width >= 720 && styles.wide, panel && styles.panel]}
     >
       <ConversationToolbar
-        title={title}
+        title={title ?? t("Conversations")}
         intro={intro}
         query={query}
         onQuery={setQuery}
@@ -97,10 +99,14 @@ export function ConversationSearch({
           !chats.isPending && !chats.error ? (
             <Text style={pageStyles.copy}>
               {search
-                ? "No conversations match your search."
+                ? t("No conversations match your search.")
                 : archived
-                  ? "No archived conversations. Conversations you archive will appear here."
-                  : "Start a conversation. You can return to it here anytime."}
+                  ? t(
+                      "No archived conversations. Conversations you archive will appear here."
+                    )
+                  : t(
+                      "Start a conversation. You can return to it here anytime."
+                    )}
             </Text>
           ) : null
         }
@@ -108,14 +114,14 @@ export function ConversationSearch({
           <View style={styles.feedback}>
             {chats.isFetching && (
               <ActivityIndicator
-                accessibilityLabel="Loading conversations"
+                accessibilityLabel={t("Loading conversations")}
                 color={colors.accent}
               />
             )}
             {chats.error && (
               <>
                 <Text accessibilityRole="alert" style={styles.error}>
-                  {chats.error.message}
+                  {errorText(chats.error.message)}
                 </Text>
                 <ActionButton
                   quiet
@@ -123,7 +129,7 @@ export function ConversationSearch({
                     void chats.refetch();
                   }}
                 >
-                  Try again
+                  {t("Try again")}
                 </ActionButton>
               </>
             )}
@@ -135,7 +141,7 @@ export function ConversationSearch({
                   void chats.fetchNextPage();
                 }}
               >
-                Load more
+                {t("Load more")}
               </ActionButton>
             )}
           </View>

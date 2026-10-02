@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import type { ChatData } from "./schema";
 import type { InboxData, inboxNotificationsSchema } from "./inbox-schema";
 import type { z } from "zod";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import {
   QueryClient,
   QueryClientProvider,

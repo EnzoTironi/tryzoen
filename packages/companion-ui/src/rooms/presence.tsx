@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { z } from "zod";
@@ -9,6 +10,7 @@ export function PresenceIndicator({
 }: {
   readonly state?: z.infer<typeof roomPresenceSchema>["state"];
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   if (!state || state === "offline") return null;
@@ -21,7 +23,7 @@ export function PresenceIndicator({
         ]}
       />
       <Text style={styles.caption}>
-        {state === "online" ? "Online" : "Ausente"}
+        {state === "online" ? t("Online") : t("Ausente")}
       </Text>
     </View>
   );

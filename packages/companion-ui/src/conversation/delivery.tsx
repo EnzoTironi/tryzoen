@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
 import { systemFont, useColors } from "../theme";
@@ -15,6 +16,7 @@ export function MessageDelivery({
   readonly onRemove?: () => void;
   readonly failureText?: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const online = useConversationOnline();
   let label = online
@@ -46,12 +48,12 @@ export function MessageDelivery({
       </Text>
       {status === "failed" && onRemove && (
         <ActionButton quiet onPress={onRemove}>
-          Remover deste dispositivo
+          {t("Remover deste dispositivo")}
         </ActionButton>
       )}
       {status === "failed" && onRetry && (
         <ActionButton quiet onPress={onRetry}>
-          Reenviar
+          {t("Reenviar")}
         </ActionButton>
       )}
     </View>

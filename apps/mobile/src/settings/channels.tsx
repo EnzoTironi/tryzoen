@@ -1,3 +1,4 @@
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { useEffect, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +11,7 @@ import { auth } from "../auth";
 import { rpc } from "../api";
 
 function useLinkedChannels() {
+  const { t } = useI18n();
   const account = auth.useSession();
   const userId = account.data?.user.id;
   const sessionId = account.data?.session.id;
@@ -39,7 +41,7 @@ function useLinkedChannels() {
     mutationFn: async () => {
       const current = await auth.getSession();
       if (current.error)
-        throw new Error("Local sign-out could not finish. Try again.");
+        throw new Error(t("Local sign-out could not finish. Try again."));
       if (
         current.data &&
         (current.data.user.id !== userId ||
@@ -48,7 +50,7 @@ function useLinkedChannels() {
         return;
       const result = await auth.signOut();
       if (result.error)
-        throw new Error("Local sign-out could not finish. Try again.");
+        throw new Error(t("Local sign-out could not finish. Try again."));
       await account.refetch();
     },
   });
@@ -62,12 +64,12 @@ function useLinkedChannels() {
         current.data?.user.id !== userId ||
         current.data.session.id !== sessionId
       )
-        throw new Error("Your session changed. Sign in again.");
+        throw new Error(t("Your session changed. Sign in again."));
       const fresh = linkedChannelIdentitySchema
         .array()
         .parse(await rpc.query("accountChannels.list"));
       if (!fresh.some((identity) => identity.id === identityId))
-        throw new Error("This channel is no longer linked.");
+        throw new Error(t("This channel is no longer linked."));
       return channelUnlinkResultSchema.parse(
         await rpc.mutation("accountChannels.revoke", { identityId })
       );
@@ -102,12 +104,14 @@ function useLinkedChannels() {
   };
 }
 export function LinkedChannels() {
+  const { t } = useI18n();
   const state = useLinkedChannels();
   return (
     <View style={styles.content}>
       <Text style={styles.description}>
-        Review the messengers linked to your account. Unlinking a messenger
-        signs you out of all your Zoen apps and browsers.
+        {t(
+          "Review the messengers linked to your account. Unlinking a messenger signs you out of all your Zoen apps and browsers."
+        )}
       </Text>
       <ChannelContent state={state} />
     </View>
@@ -118,6 +122,7 @@ function ChannelContent({
 }: {
   readonly state: ReturnType<typeof useLinkedChannels>;
 }) {
+  const { t } = useI18n();
   const {
     account,
     userId,
@@ -134,59 +139,64 @@ function ChannelContent({
     return (
       <View style={styles.content}>
         <Text accessibilityLiveRegion="polite">
-          Messenger unlinked. Your sessions were revoked.
+          {t("Messenger unlinked. Your sessions were revoked.")}
         </Text>
         {finishSignOut.isError ? (
           <>
             <Text accessibilityRole="alert">
-              Finish signing out of this app to continue.
+              {t("Finish signing out of this app to continue.")}
             </Text>
             <ActionButton
               onPress={() => {
                 finishSignOut.mutate();
               }}
             >
-              Finish signing out
+              {t("Finish signing out")}
             </ActionButton>
           </>
         ) : (
-          <Text>Signing out…</Text>
+          <Text>{t("Signing out…")}</Text>
         )}
       </View>
     );
-  if (account.isPending) return <Text>Loading your account…</Text>;
+  if (account.isPending) return <Text>{t("Loading your account…")}</Text>;
   if (!userId || !sessionId)
     return (
       <Text accessibilityRole="alert">
-        Sign in to review messaging channels.
+        {t("Sign in to review messaging channels.")}
       </Text>
     );
   if (account.error || channels.isError || unlink.isError)
     return (
       <View style={styles.content}>
         <Text accessibilityRole="alert">
-          Could not verify your linked channels. Refresh and try again.
+          {t("Could not verify your linked channels. Refresh and try again.")}
         </Text>
-        <ActionButton onPress={refresh}>Try again</ActionButton>
+        <ActionButton onPress={refresh}>{t("Try again")}</ActionButton>
       </View>
     );
   if (channels.isPending || channels.isFetching)
     return (
-      <Text accessibilityLiveRegion="polite">Loading messaging channels…</Text>
+      <Text accessibilityLiveRegion="polite">
+        {t("Loading messaging channels…")}
+      </Text>
     );
   return (
     <>
       {unlink.data?.status === "last_access" && (
         <Text accessibilityRole="alert">
-          This is your last linked messenger. It was kept to protect access to
-          your account.
+          {t(
+            "This is your last linked messenger. It was kept to protect access to your account."
+          )}
         </Text>
       )}
-      {channels.data.length === 0 && <Text>No messaging channels linked.</Text>}
+      {channels.data.length === 0 && (
+        <Text>{t("No messaging channels linked.")}</Text>
+      )}
       {channels.data.map((identity) => (
         <View key={identity.id} style={styles.row}>
           <Text style={styles.title}>
-            {identity.channel === "telegram" ? "Telegram" : "WhatsApp"}
+            {identity.channel === "telegram" ? t("Telegram") : t("WhatsApp")}
           </Text>
           <Text style={styles.description}>{identity.senderId}</Text>
           <ActionButton
@@ -196,13 +206,14 @@ function ChannelContent({
               setSelected(identity.id);
             }}
           >
-            Review unlinking
+            {t("Review unlinking")}
           </ActionButton>
           {selected === identity.id && (
             <View style={styles.confirmation}>
               <Text>
-                Unlink this messenger and sign out of every Zoen session? Your
-                conversations are kept.
+                {t(
+                  "Unlink this messenger and sign out of every Zoen session? Your conversations are kept."
+                )}
               </Text>
               <ActionButton
                 disabled={unlink.isPending}
@@ -210,7 +221,7 @@ function ChannelContent({
                   unlink.mutate(identity.id);
                 }}
               >
-                {unlink.isPending ? "Unlinking…" : "Unlink and sign out"}
+                {unlink.isPending ? t("Unlinking…") : t("Unlink and sign out")}
               </ActionButton>
               <ActionButton
                 quiet
@@ -219,14 +230,14 @@ function ChannelContent({
                   setSelected(undefined);
                 }}
               >
-                Keep linked
+                {t("Keep linked")}
               </ActionButton>
             </View>
           )}
         </View>
       ))}
       <ActionButton quiet disabled={unlink.isPending} onPress={refresh}>
-        Refresh channels
+        {t("Refresh channels")}
       </ActionButton>
     </>
   );

@@ -7,7 +7,7 @@ import {
   type SettingsPage,
 } from "@zoen/companion-ui";
 import { authClient } from "@web/auth/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { LanguagePicker } from "@web/i18n/language-picker";
 import { ModelConnections } from "@app/(authenticated)/_components/model-connections";
 import { WorkspaceSwitcher } from "@app/(authenticated)/_components/workspace-switcher";
@@ -26,12 +26,12 @@ export function ConnectedSettings({
   readonly onClose: () => void;
   readonly onPrompt: (text: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, errorText } = useI18n();
   const [page, setPage] = useState<SettingsPage>();
   const signOut = useMutation({
     mutationFn: async () => {
       const result = await authClient.signOut();
-      if (result.error) throw new Error(result.error.message);
+      if (result.error) throw new Error(errorText(result.error.message));
       window.location.assign("/sign-in?callbackUrl=%2Fcompanion");
     },
   });
@@ -48,7 +48,6 @@ export function ConnectedSettings({
       }}
       signingOut={signOut.isPending}
       error={signOut.error ? t("Could not sign out. Try again.") : undefined}
-      translate={t}
     >
       <div className="space-y-6 pb-4">
         <SettingsContent

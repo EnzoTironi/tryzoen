@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { RoomPrivacySettings } from "./privacy";
 import { RoomNotificationSettings } from "./notifications";
@@ -41,6 +42,7 @@ export function ParticipantProfile({
   readonly onClose: () => void;
   readonly onConversation: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const open = useDirectConversation(data, cacheScope, (id) => {
@@ -49,12 +51,12 @@ export function ParticipantProfile({
   });
   return (
     <SheetSurface
-      title={`Perfil de ${person.name}`}
+      title={t("Perfil de {value1}", { value1: person.name })}
       onClose={onClose}
       maxWidth={480}
     >
       <View style={styles.toolbar}>
-        <IconButton label="Fechar perfil" icon={X} onPress={onClose} />
+        <IconButton label={t("Fechar perfil")} icon={X} onPress={onClose} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
@@ -76,10 +78,10 @@ export function ParticipantProfile({
           )}
           <Text style={styles.subtitle}>
             {person.bot
-              ? "Agente de IA"
+              ? t("Agente de IA")
               : person.mine
-                ? "Seu perfil"
-                : "Membro do espaço"}
+                ? t("Seu perfil")
+                : t("Membro do espaço")}
           </Text>
         </View>
         {!person.bot &&
@@ -95,20 +97,22 @@ export function ParticipantProfile({
                   if (person.username) open.mutate(person.username);
                 }}
               >
-                {open.isPending ? "Abrindo conversa…" : "Mensagem"}
+                {open.isPending ? t("Abrindo conversa…") : t("Mensagem")}
               </ActionButton>
               {open.isError && (
                 <Text accessibilityRole="alert" style={styles.description}>
-                  Não foi possível abrir a conversa. Tente novamente.
+                  {t("Não foi possível abrir a conversa. Tente novamente.")}
                 </Text>
               )}
             </View>
           )}
         <View style={styles.section}>
-          <Text style={styles.label}>CONVERSA EM COMUM</Text>
+          <Text style={styles.label}>{t("CONVERSA EM COMUM")}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Voltar à conversa ${groupName}`}
+            accessibilityLabel={t("Voltar à conversa {value1}", {
+              value1: groupName,
+            })}
             onPress={onConversation}
             style={({ pressed }) => [styles.group, pressed && styles.pressed]}
           >
@@ -121,7 +125,7 @@ export function ParticipantProfile({
             <View style={styles.copy}>
               <Text style={styles.title}>{groupName}</Text>
               <Text style={styles.subtitle}>
-                {direct ? "Conversa direta" : "Pessoas e Zoen"}
+                {direct ? t("Conversa direta") : t("Pessoas e Zoen")}
               </Text>
             </View>
             <MessageCircle size={22} color={colors.accent} />
@@ -145,8 +149,12 @@ export function ParticipantProfile({
           <Users size={21} color={colors.muted} />
           <Text style={styles.description}>
             {person.bot
-              ? "Mencione Zoen no grupo para pedir ajuda. O agente usa o contexto compartilhado desta conversa."
-              : "Vocês participam deste espaço. As conversas e memórias pessoais de cada participante continuam privadas."}
+              ? t(
+                  "Mencione Zoen no grupo para pedir ajuda. O agente usa o contexto compartilhado desta conversa."
+                )
+              : t(
+                  "Vocês participam deste espaço. As conversas e memórias pessoais de cada participante continuam privadas."
+                )}
           </Text>
         </View>
       </ScrollView>

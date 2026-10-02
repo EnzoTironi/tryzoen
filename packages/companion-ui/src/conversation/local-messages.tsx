@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Text, View } from "react-native";
@@ -34,6 +35,7 @@ function LocalMessagesSession({
   readonly children: ReactNode;
   readonly onRetry: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const client = useQueryClient();
   const [persistence, setPersistence] = useState<MessagePersistence>();
@@ -51,14 +53,16 @@ function LocalMessagesSession({
       .catch(() => {
         if (active)
           setError(
-            "Não foi possível recuperar os rascunhos deste dispositivo. Reabra o app para tentar novamente."
+            t(
+              "Não foi possível recuperar os rascunhos deste dispositivo. Reabra o app para tentar novamente."
+            )
           );
       });
     return () => {
       active = false;
       messages.close();
     };
-  }, [client, storage]);
+  }, [client, storage, t]);
   return (
     <LocalMessagesContext.Provider value={persistence}>
       {error && (
@@ -70,13 +74,15 @@ function LocalMessagesSession({
         </Text>
       )}
       {!persistence && error && (
-        <ActionButton onPress={onRetry}>Tentar novamente</ActionButton>
+        <ActionButton onPress={onRetry}>{t("Tentar novamente")}</ActionButton>
       )}
       {persistence
         ? children
         : !error && (
             <View style={{ flex: 1, justifyContent: "center" }}>
-              <ActivityIndicator accessibilityLabel="Recuperando rascunhos" />
+              <ActivityIndicator
+                accessibilityLabel={t("Recuperando rascunhos")}
+              />
             </View>
           )}
     </LocalMessagesContext.Provider>

@@ -1,3 +1,4 @@
+import { useI18n } from "./../../i18n";
 import { useState } from "react";
 import type { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
@@ -60,6 +61,7 @@ function ScopedOntologyCollection({
   data,
   query,
 }: Parameters<typeof OntologyCollection>[0]) {
+  const { t, locale } = useI18n();
   const pageStyles = usePageStyles();
   const [selected, setSelected] = useState<string>();
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -71,8 +73,9 @@ function ScopedOntologyCollection({
   return (
     <View style={styles.collection}>
       <Text style={pageStyles.copy}>
-        Useful facts, the people and projects they connect, and the evidence
-        behind them.
+        {t(
+          "Useful facts, the people and projects they connect, and the evidence behind them."
+        )}
       </Text>
       <ActionButton
         quiet
@@ -80,7 +83,7 @@ function ScopedOntologyCollection({
           setHistoryOpen(true);
         }}
       >
-        {`${view.asOf ? `Recorded by ${new Date(view.asOf).toLocaleString()}` : view.revision ? `Recorded version ${view.revision.slice(0, 8)}` : "Current knowledge"}${view.validOn ? ` · Valid on ${view.validOn}` : " · All dates"}`}
+        {`${view.asOf ? `Recorded by ${new Date(view.asOf).toLocaleString(locale)}` : view.revision ? `Recorded version ${view.revision.slice(0, 8)}` : t("Current knowledge")}${view.validOn ? ` · Valid on ${view.validOn}` : t(" · All dates")}`}
       </ActionButton>
       {historyOpen && (
         <OntologyHistory
@@ -97,11 +100,11 @@ function ScopedOntologyCollection({
         />
       )}
       {knowledge.isPending && (
-        <Text style={pageStyles.copy}>Loading knowledge…</Text>
+        <Text style={pageStyles.copy}>{t("Loading knowledge…")}</Text>
       )}
       {knowledge.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Knowledge could not be loaded. Your access may have changed.
+          {t("Knowledge could not be loaded. Your access may have changed.")}
         </Text>
       )}
       {knowledge.isError && (
@@ -111,13 +114,13 @@ function ScopedOntologyCollection({
             void knowledge.refetch();
           }}
         >
-          Try again
+          {t("Try again")}
         </ActionButton>
       )}
       {graph &&
         (knowledge.data?.asOf && knowledge.data.revision === null ? (
           <Text style={pageStyles.copy}>
-            Nothing had been published by this recorded time.
+            {t("Nothing had been published by this recorded time.")}
           </Text>
         ) : (
           <OntologyRecords graph={graph} query={query} onOpen={setSelected} />

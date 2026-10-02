@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConversationNavigation } from "./navigation";
 import { CompanionVisibility } from "../visibility";

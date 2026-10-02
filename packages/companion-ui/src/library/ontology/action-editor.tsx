@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../../i18n";
+
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ActionButton } from "../../button";
@@ -26,6 +28,7 @@ export function OntologyActionEditor({
   readonly data: OntologyData;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   const page = usePageStyles();
   const [state, setState] = useState<OntologyActionState>({
     kind: "editing",
@@ -56,7 +59,9 @@ export function OntologyActionEditor({
     if (current.kind === "sending" || liveLoading.current) return;
     if (current.kind === "uncertain") {
       setError(
-        "The result is still unknown. Retry this exact change to resolve it before starting another."
+        t(
+          "The result is still unknown. Retry this exact change to resolve it before starting another."
+        )
       );
       return;
     }
@@ -78,7 +83,9 @@ export function OntologyActionEditor({
     if (next.kind === "closed") onClose();
     else
       setError(
-        "This attempt is still being resolved. Its frozen operation and draft remain open."
+        t(
+          "This attempt is still being resolved. Its frozen operation and draft remain open."
+        )
       );
   };
   const send = async (operationId: string) => {
@@ -106,7 +113,9 @@ export function OntologyActionEditor({
         case "conflict":
           update({ ...attempt, kind: "conflict" });
           setError(
-            "Knowledge changed or this attempt conflicts. Your draft and reviewed head are unchanged."
+            t(
+              "Knowledge changed or this attempt conflicts. Your draft and reviewed head are unchanged."
+            )
           );
           break;
         case "denied":
@@ -116,13 +125,17 @@ export function OntologyActionEditor({
           update({ kind: "editing", draft: attempt.draft });
           clearConfirmation();
           setError(
-            "Check the value, dates and cited passages. Nothing was saved by this attempt."
+            t(
+              "Check the value, dates and cited passages. Nothing was saved by this attempt."
+            )
           );
           break;
         case "uncertain":
           update({ ...attempt, kind: "uncertain" });
           setError(
-            "The response was interrupted. This change may already have been saved. Retry uses the identical operation and reviewed head."
+            t(
+              "The response was interrupted. This change may already have been saved. Retry uses the identical operation and reviewed head."
+            )
           );
           break;
       }
@@ -149,7 +162,7 @@ export function OntologyActionEditor({
       if (ontologyActionFailure(cause) === "denied") update({ kind: "denied" });
       else
         setError(
-          "Current knowledge could not be loaded. Your draft is still here."
+          t("Current knowledge could not be loaded. Your draft is still here.")
         );
     } finally {
       liveLoading.current = false;
@@ -159,13 +172,13 @@ export function OntologyActionEditor({
   if (confirmDiscard)
     return (
       <CompanionSheet
-        title="Discard this draft?"
+        title={t("Discard this draft?")}
         onClose={() => {
           discardPrompt(false);
         }}
       >
         <Text accessibilityRole="header" style={page.rowTitle}>
-          Discard this unsaved draft?
+          {t("Discard this unsaved draft?")}
         </Text>
         <ActionButton
           quiet
@@ -173,19 +186,20 @@ export function OntologyActionEditor({
             discardPrompt(false);
           }}
         >
-          Keep editing
+          {t("Keep editing")}
         </ActionButton>
-        <ActionButton onPress={discard}>Discard draft</ActionButton>
+        <ActionButton onPress={discard}>{t("Discard draft")}</ActionButton>
       </CompanionSheet>
     );
   if (state.kind === "denied")
     return (
-      <CompanionSheet title="Knowledge action" onClose={close}>
+      <CompanionSheet title={t("Knowledge action")} onClose={close}>
         <Text accessibilityRole="alert" style={page.copy}>
-          You can no longer change this knowledge. Reopen it with your current
-          access.
+          {t(
+            "You can no longer change this knowledge. Reopen it with your current access."
+          )}
         </Text>
-        <ActionButton onPress={onClose}>Close</ActionButton>
+        <ActionButton onPress={onClose}>{t("Close")}</ActionButton>
       </CompanionSheet>
     );
   const { draft } = state;
@@ -222,14 +236,24 @@ export function OntologyActionEditor({
     <CompanionSheet title={draft.title} onClose={close}>
       <View style={styles.form}>
         <Text style={page.copy}>
-          {draft.property.name} · Reviewed version{" "}
-          {draft.expectedRevision.slice(0, 8)}
+          <Translated
+            message="{value1} · Reviewed version {value2}"
+            values={{
+              value1: draft.property.name,
+              value2: draft.expectedRevision.slice(0, 8),
+            }}
+          />
         </Text>
         <Text style={page.copy}>
-          Captured value:{" "}
-          {original?.value === null || original === undefined
-            ? "Not established"
-            : String(original.value)}
+          <Translated
+            message="Captured value: {value1}"
+            values={{
+              value1:
+                original?.value === null || original === undefined
+                  ? t("Not established")
+                  : String(original.value),
+            }}
+          />
         </Text>
         {error && (
           <Text accessibilityRole="alert" style={page.copy}>
@@ -239,21 +263,21 @@ export function OntologyActionEditor({
         {state.kind === "editing" ? (
           <>
             <Text accessibilityRole="header" style={page.rowTitle}>
-              New value
+              {t("New value")}
             </Text>
             <View
               accessibilityRole="radiogroup"
-              accessibilityLabel="Value establishment"
+              accessibilityLabel={t("Value establishment")}
             >
               <Choice
-                label="Not established"
+                label={t("Not established")}
                 selected={draft.unknown}
                 onPress={() => {
                   edit({ ...draft, unknown: true });
                 }}
               />
               <Choice
-                label="Set a value"
+                label={t("Set a value")}
                 selected={!draft.unknown}
                 onPress={() => {
                   edit({ ...draft, unknown: false });
@@ -264,18 +288,20 @@ export function OntologyActionEditor({
               (draft.property.type === "boolean" ? (
                 <View
                   accessibilityRole="radiogroup"
-                  accessibilityLabel={`New ${draft.property.name}`}
+                  accessibilityLabel={t("New {value1}", {
+                    value1: draft.property.name,
+                  })}
                   style={styles.row}
                 >
                   <Choice
-                    label="True"
+                    label={t("True")}
                     selected={draft.value === "true"}
                     onPress={() => {
                       edit({ ...draft, value: "true" });
                     }}
                   />
                   <Choice
-                    label="False"
+                    label={t("False")}
                     selected={draft.value === "false"}
                     onPress={() => {
                       edit({ ...draft, value: "false" });
@@ -284,7 +310,9 @@ export function OntologyActionEditor({
                 </View>
               ) : (
                 <TextInput
-                  accessibilityLabel={`New ${draft.property.name}`}
+                  accessibilityLabel={t("New {value1}", {
+                    value1: draft.property.name,
+                  })}
                   value={draft.value}
                   onChangeText={(value) => {
                     edit({ ...draft, value });
@@ -295,35 +323,35 @@ export function OntologyActionEditor({
                   }
                   placeholder={
                     draft.property.type === "date"
-                      ? "YYYY-MM-DD"
+                      ? t("YYYY-MM-DD")
                       : draft.property.name
                   }
                   style={page.field}
                 />
               ))}
             <Text accessibilityRole="header" style={page.rowTitle}>
-              Evidence and world-valid dates
+              {t("Evidence and world-valid dates")}
             </Text>
             <View
               accessibilityRole="radiogroup"
-              accessibilityLabel="Evidence and date choice"
+              accessibilityLabel={t("Evidence and date choice")}
             >
               <Choice
-                label="Keep captured evidence and dates"
+                label={t("Keep captured evidence and dates")}
                 selected={draft.metadata === "keep"}
                 onPress={() => {
                   edit({ ...draft, metadata: "keep" });
                 }}
               />
               <Choice
-                label="Replace evidence and dates"
+                label={t("Replace evidence and dates")}
                 selected={draft.metadata === "replace"}
                 onPress={() => {
                   edit({ ...draft, metadata: "replace" });
                 }}
               />
               <Choice
-                label="Clear evidence and dates"
+                label={t("Clear evidence and dates")}
                 selected={draft.metadata === "clear"}
                 onPress={() => {
                   edit({ ...draft, metadata: "clear" });
@@ -332,9 +360,12 @@ export function OntologyActionEditor({
             </View>
             {draft.metadata === "keep" && (
               <View style={styles.form}>
-                <Text
-                  style={page.copy}
-                >{`Captured at version ${draft.record.revision?.slice(0, 8) ?? "none"}. Review this evidence against your new value.`}</Text>
+                <Text style={page.copy}>
+                  {t(
+                    "Captured at version {value1}. Review this evidence against your new value.",
+                    { value1: draft.record.revision?.slice(0, 8) ?? "none" }
+                  )}
+                </Text>
                 <OntologyEvidence
                   claim={original ?? { sources: [], validTime: null }}
                   record={draft.record}
@@ -344,15 +375,18 @@ export function OntologyActionEditor({
             )}
             {draft.metadata === "clear" && (
               <Text style={page.copy}>
-                This removes evidence and dates from the current claim. Its
-                previously published version remains in history.
+                {t(
+                  "This removes evidence and dates from the current claim. Its previously published version remains in history."
+                )}
               </Text>
             )}
             {draft.metadata === "replace" && (
               <>
                 {draft.sources.map((citation, index) => (
                   <View key={citation.sourceKey} style={styles.form}>
-                    <Text style={page.rowTitle}>{`Source ${index + 1}`}</Text>
+                    <Text style={page.rowTitle}>
+                      {t("Source {value1}", { value1: index + 1 })}
+                    </Text>
                     {(
                       [
                         "path",
@@ -362,7 +396,10 @@ export function OntologyActionEditor({
                     ).map((field) => (
                       <TextInput
                         key={field}
-                        accessibilityLabel={`Source ${index + 1} ${field}`}
+                        accessibilityLabel={t("Source {value1} {value2}", {
+                          value1: index + 1,
+                          value2: field,
+                        })}
                         value={citation[field]}
                         onChangeText={(value) => {
                           edit({
@@ -376,10 +413,10 @@ export function OntologyActionEditor({
                         }}
                         placeholder={
                           field === "path"
-                            ? "knowledge/source.md"
+                            ? t("knowledge/source.md")
                             : field === "revision"
-                              ? "Recorded source version"
-                              : "Exact supporting passage"
+                              ? t("Recorded source version")
+                              : t("Exact supporting passage")
                         }
                         maxLength={
                           field === "excerpt"
@@ -403,7 +440,9 @@ export function OntologyActionEditor({
                           ),
                         });
                       }}
-                    >{`Remove source ${index + 1}`}</ActionButton>
+                    >
+                      {t("Remove source {value1}", { value1: index + 1 })}
+                    </ActionButton>
                   </View>
                 ))}
                 <ActionButton
@@ -424,33 +463,34 @@ export function OntologyActionEditor({
                     });
                   }}
                 >
-                  Add cited source
+                  {t("Add cited source")}
                 </ActionButton>
                 <TextInput
-                  accessibilityLabel="Valid from date"
+                  accessibilityLabel={t("Valid from date")}
                   value={draft.from}
                   onChangeText={(from) => {
                     edit({ ...draft, from });
                   }}
-                  placeholder="Valid from · YYYY-MM-DD, optional"
+                  placeholder={t("Valid from · YYYY-MM-DD, optional")}
                   maxLength={10}
                   autoCapitalize="none"
                   style={page.field}
                 />
                 <TextInput
-                  accessibilityLabel="Exclusive valid until date"
+                  accessibilityLabel={t("Exclusive valid until date")}
                   value={draft.until}
                   onChangeText={(until) => {
                     edit({ ...draft, until });
                   }}
-                  placeholder="Until · YYYY-MM-DD, exclusive, optional"
+                  placeholder={t("Until · YYYY-MM-DD, exclusive, optional")}
                   maxLength={10}
                   autoCapitalize="none"
                   style={page.field}
                 />
                 <Text style={page.copy}>
-                  Dates require cited evidence. An empty date stays unknown; the
-                  end date is exclusive.
+                  {t(
+                    "Dates require cited evidence. An empty date stays unknown; the end date is exclusive."
+                  )}
                 </Text>
               </>
             )}
@@ -469,22 +509,24 @@ export function OntologyActionEditor({
                   setError(undefined);
                 } catch {
                   setError(
-                    "Check the value, exact source paths and revisions, cited passages and dates before reviewing."
+                    t(
+                      "Check the value, exact source paths and revisions, cited passages and dates before reviewing."
+                    )
                   );
                 }
               }}
             >
-              Review change
+              {t("Review change")}
             </ActionButton>
           </>
         ) : (
           <>
             <Text accessibilityRole="header" style={page.rowTitle}>
-              Your reviewed change
+              {t("Your reviewed change")}
             </Text>
             <Text selectable style={page.copy}>
               {state.input.value === null
-                ? "Not established"
+                ? t("Not established")
                 : String(state.input.value)}
             </Text>
             {state.input.sources.map((source) => (
@@ -500,12 +542,16 @@ export function OntologyActionEditor({
             ))}
             <Text style={page.copy}>
               {state.input.validTime
-                ? `Valid from ${state.input.validTime.from ?? "unknown"} · Until ${state.input.validTime.until ?? "unknown"} (exclusive)`
-                : "World-valid dates not established"}
+                ? t("Valid from {value1} · Until {value2} (exclusive)", {
+                    value1: state.input.validTime.from ?? "unknown",
+                    value2: state.input.validTime.until ?? "unknown",
+                  })
+                : t("World-valid dates not established")}
             </Text>
             <Text style={page.copy}>
-              Publishing replaces this complete property claim. Sources are
-              checked against current authorized files.
+              {t(
+                "Publishing replaces this complete property claim. Sources are checked against current authorized files."
+              )}
             </Text>
             {state.kind === "review" && (
               <>
@@ -514,8 +560,10 @@ export function OntologyActionEditor({
                     accessibilityRole="checkbox"
                     accessibilityLabel={
                       draft.metadata === "clear"
-                        ? "Remove the current evidence and dates"
-                        : "I reviewed that this evidence supports the new value and dates"
+                        ? t("Remove the current evidence and dates")
+                        : t(
+                            "I reviewed that this evidence supports the new value and dates"
+                          )
                     }
                     accessibilityState={{ checked: confirmed }}
                     onPress={() => {
@@ -540,7 +588,7 @@ export function OntologyActionEditor({
                   >
                     <Text
                       style={page.copy}
-                    >{`${confirmed ? "☑" : "☐"} ${draft.metadata === "clear" ? "Remove the current evidence and dates" : "I reviewed that this evidence supports the new value and dates"}`}</Text>
+                    >{`${confirmed ? "☑" : "☐"} ${draft.metadata === "clear" ? t("Remove the current evidence and dates") : t("I reviewed that this evidence supports the new value and dates")}`}</Text>
                   </Pressable>
                 )}
                 <ActionButton
@@ -549,7 +597,7 @@ export function OntologyActionEditor({
                     void send(state.input.operationId);
                   }}
                 >
-                  Publish change
+                  {t("Publish change")}
                 </ActionButton>
                 <ActionButton
                   quiet
@@ -565,13 +613,13 @@ export function OntologyActionEditor({
                     clearConfirmation();
                   }}
                 >
-                  Back to edit
+                  {t("Back to edit")}
                 </ActionButton>
               </>
             )}
             {state.kind === "sending" && (
               <Text accessibilityLiveRegion="polite" style={page.copy}>
-                Publishing…
+                {t("Publishing…")}
               </Text>
             )}
             {state.kind === "uncertain" && (
@@ -580,7 +628,7 @@ export function OntologyActionEditor({
                   void send(state.input.operationId);
                 }}
               >
-                Retry this exact change
+                {t("Retry this exact change")}
               </ActionButton>
             )}
             {state.kind === "conflict" && (
@@ -591,18 +639,24 @@ export function OntologyActionEditor({
                 }}
               >
                 {loadingCurrent
-                  ? "Loading current knowledge…"
-                  : "Review current knowledge"}
+                  ? t("Loading current knowledge…")
+                  : t("Review current knowledge")}
               </ActionButton>
             )}
             {state.kind === "comparison" && (
               <>
                 <Text accessibilityRole="header" style={page.rowTitle}>
-                  Current published claim
+                  {t("Current published claim")}
                 </Text>
-                <Text
-                  style={page.copy}
-                >{`Version ${state.current.revision?.slice(0, 8) ?? "none"} · ${currentClaim?.value === null || currentClaim === undefined ? "Not established" : String(currentClaim.value)}`}</Text>
+                <Text style={page.copy}>
+                  {t("Version {value1} · {value2}", {
+                    value1: state.current.revision?.slice(0, 8) ?? "none",
+                    value2:
+                      currentClaim?.value === null || currentClaim === undefined
+                        ? t("Not established")
+                        : String(currentClaim.value),
+                  })}
+                </Text>
                 {currentClaim && (
                   <OntologyEvidence
                     claim={currentClaim}
@@ -611,8 +665,9 @@ export function OntologyActionEditor({
                   />
                 )}
                 <Text style={page.copy}>
-                  Your draft has not been rebased. Review this difference before
-                  using the current head; a new operation will be created.
+                  {t(
+                    "Your draft has not been rebased. Review this difference before using the current head; a new operation will be created."
+                  )}
                 </Text>
                 <ActionButton
                   onPress={() => {
@@ -629,7 +684,9 @@ export function OntologyActionEditor({
                     );
                     if (!rebased) {
                       setError(
-                        "This action or its property changed. Discard this draft and reopen the current record."
+                        t(
+                          "This action or its property changed. Discard this draft and reopen the current record."
+                        )
                       );
                       return;
                     }
@@ -638,7 +695,7 @@ export function OntologyActionEditor({
                     setError(undefined);
                   }}
                 >
-                  Use reviewed current head
+                  {t("Use reviewed current head")}
                 </ActionButton>
               </>
             )}
@@ -649,7 +706,7 @@ export function OntologyActionEditor({
           disabled={state.kind === "sending" || loadingCurrent}
           onPress={close}
         >
-          Close
+          {t("Close")}
         </ActionButton>
       </View>
     </CompanionSheet>

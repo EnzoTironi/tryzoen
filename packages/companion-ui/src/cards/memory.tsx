@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import type { ReactNode } from "react";
 import { NotebookPen } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
@@ -15,17 +16,22 @@ export function MemoryCard({
   readonly action?: ReactNode;
   readonly children?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <ResourceCard
       title={document.title}
-      detail={document.updated ? `Updated ${document.updated}` : undefined}
+      detail={
+        document.updated
+          ? t("Updated {date}", { date: document.updated })
+          : undefined
+      }
       icon={NotebookPen}
       action={action}
       style={styles.card}
     >
       <View style={styles.body}>
         <AssistantMarkdown
-          text={document.text || "No notes in this document."}
+          text={document.text || t("No notes in this document.")}
           allowImages={false}
         />
       </View>

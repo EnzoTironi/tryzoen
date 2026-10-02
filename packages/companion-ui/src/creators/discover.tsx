@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -22,6 +24,7 @@ export function DiscoverBots({
   readonly onPrompt: (prompt: string) => void;
   readonly avatarUri?: string;
 }) {
+  const { t } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [search, setSearch] = useState("");
@@ -44,11 +47,11 @@ export function DiscoverBots({
     ) ?? [];
   return (
     <CompanionPage
-      title="Descobrir"
+      title={t("Descobrir")}
       loading={pilots.isPending || drafts.isPending}
       error={
         pilots.error || drafts.error
-          ? "Não foi possível carregar seus bots."
+          ? t("Não foi possível carregar seus bots.")
           : undefined
       }
       onRetry={() => {
@@ -57,37 +60,39 @@ export function DiscoverBots({
       }}
     >
       <Text style={styles.intro}>
-        Uma boa conversa pode começar com a pessoa certa. Ou com o bot certo.
+        {t(
+          "Uma boa conversa pode começar com a pessoa certa. Ou com o bot certo."
+        )}
       </Text>
       <View style={styles.search}>
         <Search size={20} color={colors.muted} />
         <TextInput
-          accessibilityLabel="Buscar bots"
-          placeholder="Buscar bots"
+          accessibilityLabel={t("Buscar bots")}
+          placeholder={t("Buscar bots")}
           value={search}
           onChangeText={setSearch}
           maxLength={100}
           style={styles.input}
         />
       </View>
-      <Text style={styles.section}>Para conversar</Text>
+      <Text style={styles.section}>{t("Para conversar")}</Text>
       <View style={styles.cards}>
-        {match("Zoen") && (
+        {match(t("Zoen")) && (
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               onPrompt(
-                "Vamos conversar. Me ajude a decidir no que focar hoje."
+                t("Vamos conversar. Me ajude a decidir no que focar hoje.")
               );
             }}
             style={styles.card}
           >
             <ConversationAvatar name="Zoen" uri={avatarUri} size={56} />
-            <Text style={styles.title}>Zoen</Text>
+            <Text style={styles.title}>{t("Zoen")}</Text>
             <Text style={styles.copy}>
-              Seu agente pessoal, com suas ideias, metas e memória.
+              {t("Seu agente pessoal, com suas ideias, metas e memória.")}
             </Text>
-            <Text style={styles.link}>Conversar ↗</Text>
+            <Text style={styles.link}>{t("Conversar ↗")}</Text>
           </Pressable>
         )}
         {available.map((pilot) => (
@@ -96,37 +101,52 @@ export function DiscoverBots({
             accessibilityRole="button"
             onPress={() => {
               onPrompt(
-                `Quero conversar usando o especialista ${pilot.title}, de ${pilot.creatorName}. Use os ensinamentos compartilhados comigo como referência nesta conversa privada. Não compartilhe a conversa com o criador.`
+                t(
+                  "Quero conversar usando o especialista {value1}, de {value2}. Use os ensinamentos compartilhados comigo como referência nesta conversa privada. Não compartilhe a conversa com o criador.",
+                  { value1: pilot.title, value2: pilot.creatorName }
+                )
               );
             }}
             style={styles.card}
           >
             <ConversationAvatar name={pilot.title} size={56} />
-            <Text style={styles.title}>{pilot.title} · IA</Text>
+            <Text style={styles.title}>
+              <Translated
+                message="{value1} · IA"
+                values={{ value1: pilot.title }}
+              />
+            </Text>
             {pilot.username && (
               <Text style={styles.byline}>@{pilot.username}</Text>
             )}
             <Text style={styles.copy}>{pilot.description}</Text>
             <Text style={styles.byline}>
-              Por {pilot.creatorName} · acesso por convite
+              <Translated
+                message="Por {value1} · acesso por convite"
+                values={{ value1: pilot.creatorName }}
+              />
             </Text>
-            <Text style={styles.link}>Conversar ↗</Text>
+            <Text style={styles.link}>{t("Conversar ↗")}</Text>
           </Pressable>
         ))}
       </View>
       {!available.length && (
         <Text style={styles.note}>
-          Bots compartilhados com você aparecerão aqui após aceitar o convite.
+          {t(
+            "Bots compartilhados com você aparecerão aqui após aceitar o convite."
+          )}
         </Text>
       )}
       <View style={styles.create}>
         <Sparkles size={28} color={colors.accent} />
         <View style={styles.createCopy}>
           <Text style={styles.title}>
-            Seu conhecimento pode virar uma conversa.
+            {t("Seu conhecimento pode virar uma conversa.")}
           </Text>
           <Text style={styles.copy}>
-            Conte sua ideia. O Zoen te entrevista e prepara seu bot com você.
+            {t(
+              "Conte sua ideia. O Zoen te entrevista e prepara seu bot com você."
+            )}
           </Text>
         </View>
         <ActionButton
@@ -134,13 +154,13 @@ export function DiscoverBots({
             onPrompt(creatorInterviewPrompt);
           }}
         >
-          Criar meu bot
+          {t("Criar meu bot")}
         </ActionButton>
       </View>
       {(drafts.data?.filter((draft) => !draft.archivedAt && match(draft.title))
         .length ?? 0) > 0 && (
         <>
-          <Text style={styles.section}>Seus bots em construção</Text>
+          <Text style={styles.section}>{t("Seus bots em construção")}</Text>
           {drafts.data
             ?.filter((draft) => !draft.archivedAt && match(draft.title))
             .map((draft) => (
@@ -149,7 +169,10 @@ export function DiscoverBots({
                 accessibilityRole="button"
                 onPress={() => {
                   onPrompt(
-                    `Vamos continuar criando meu bot ${draft.title}. Retome meu rascunho privado e me entreviste sobre o próximo ponto que falta e preserve o que já construímos.`
+                    t(
+                      "Vamos continuar criando meu bot {value1}. Retome meu rascunho privado e me entreviste sobre o próximo ponto que falta e preserve o que já construímos.",
+                      { value1: draft.title }
+                    )
                   );
                 }}
                 style={styles.draft}
@@ -158,7 +181,7 @@ export function DiscoverBots({
                 <View style={styles.createCopy}>
                   <Text style={styles.title}>{draft.title}</Text>
                   <Text numberOfLines={1} style={styles.copy}>
-                    {draft.description || "Continuar a entrevista"}
+                    {draft.description || t("Continuar a entrevista")}
                   </Text>
                 </View>
                 <ArrowUpRight size={20} color={colors.muted} />

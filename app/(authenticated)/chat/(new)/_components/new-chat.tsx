@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 
 import { useEveAgent } from "eve/react";
 import { useRouter, useSearchParams } from "next/navigation";

@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import type { ReactNode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { CredentialPermissions } from "./permissions";

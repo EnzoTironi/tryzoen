@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { QueryProvider } from "@app/_providers/query-provider";
 import { TooltipProvider } from "@web/components/ui/tooltip";
+import { QueryProvider } from "@app/_providers/query-provider";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import { applicationOrigin } from "@shared/environment/origin";
 import { getAuthSession } from "@db/services/auth/session";
 import { getI18n } from "@web/i18n/server";
-import { I18nProvider } from "@web/i18n/provider";
-import { zoenSocialMetadata } from "./(marketing)/social";
+import { I18nProvider } from "@zoen/companion-ui/i18n";
+import {
+  zoenSocialMetadata,
+  zoenSocialTitle,
+  zoenSocialDescription,
+} from "./(marketing)/social";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -19,7 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: {
       icon: [{ url: "/marketing/zoen-favicon.png", type: "image/png" }],
     },
-    ...zoenSocialMetadata(),
+    ...zoenSocialMetadata({
+      title: t(zoenSocialTitle),
+      description: t(zoenSocialDescription),
+    }),
   };
 }
 

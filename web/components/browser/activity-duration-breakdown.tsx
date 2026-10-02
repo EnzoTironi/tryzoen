@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   browserActivityKinds,
   type BrowserActivityDurations,
@@ -27,7 +27,7 @@ export function ActivityDurationBreakdown({
 }: {
   durations: BrowserActivityDurations;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const segments = browserActivityKinds.flatMap((kind) => {
     const durationMs = durations[kind] ?? 0;
     return durationMs > 0 ? [{ durationMs, kind }] : [];
@@ -43,7 +43,7 @@ export function ActivityDurationBreakdown({
       >
         {segments.map(({ durationMs, kind }) => {
           const presentation = activityPresentation[kind];
-          const label = `${t(presentation.label)}: ${formatDuration(durationMs)}`;
+          const label = `${t(presentation.label)}: ${formatDuration(durationMs, locale)}`;
           return (
             <span
               aria-label={label}
@@ -64,7 +64,7 @@ export function ActivityDurationBreakdown({
                 aria-hidden="true"
                 className={`size-1.5 rounded-full ${presentation.className}`}
               />
-              {t(presentation.label)} {formatDuration(durationMs)}
+              {t(presentation.label)} {formatDuration(durationMs, locale)}
             </span>
           );
         })}
@@ -73,9 +73,10 @@ export function ActivityDurationBreakdown({
   );
 }
 
-function formatDuration(milliseconds: number) {
+function formatDuration(milliseconds: number, locale: string) {
   if (milliseconds < 1_000) return `${String(Math.round(milliseconds))}ms`;
   const seconds = milliseconds / 1_000;
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  if (seconds < 60)
+    return `${seconds.toLocaleString(locale, { minimumFractionDigits: seconds < 10 ? 1 : 0, maximumFractionDigits: seconds < 10 ? 1 : 0 })}s`;
   return `${String(Math.floor(seconds / 60))}m ${String(Math.floor(seconds % 60))}s`;
 }

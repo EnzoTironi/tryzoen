@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Replayer } from "@rrweb/replay";
 import { Button } from "@web/components/ui/button";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import type { AppRouter } from "@web/trpc/router";
 import type { inferRouterOutputs } from "@trpc/server";
 import "@rrweb/replay/dist/style.css";

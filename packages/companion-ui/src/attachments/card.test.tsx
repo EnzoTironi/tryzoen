@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../../tests/helpers/companion-i18n";
 import type { Image } from "react-native";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AttachmentCard } from "./card";

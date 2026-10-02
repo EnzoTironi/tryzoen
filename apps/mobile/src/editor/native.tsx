@@ -1,3 +1,4 @@
+import { useI18n, Translated } from "@zoen/companion-ui/i18n";
 import { useImperativeHandle, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -44,6 +45,7 @@ const bridges = TenTapStartKit.filter(
 );
 
 export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
+  const { t, errorText } = useI18n();
   const editor = useRef<MarkdownEditorHandle>(null);
   const [document, setDocument] = useState({
     text: props.initialMarkdown,
@@ -60,11 +62,11 @@ export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
     () => ({
       read: async () => {
         if (!editor.current)
-          throw new Error("The editor is still loading. Try again.");
+          throw new Error(t("The editor is still loading. Try again."));
         return await editor.current.read();
       },
     }),
-    []
+    [t]
   );
   const act = async (action: "source" | "copy" | "share") => {
     if (busy || !editor.current) return;
@@ -89,7 +91,7 @@ export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
     } catch (error) {
       props.onError(
         error instanceof Error
-          ? error.message
+          ? errorText(error.message)
           : "The document action failed. Try again."
       );
     } finally {
@@ -101,7 +103,7 @@ export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
       <View style={styles.documentActions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Document actions"
+          accessibilityLabel={t("Document actions")}
           accessibilityState={{ expanded: menu }}
           onPress={() => {
             setMenu(!menu);
@@ -115,9 +117,12 @@ export function MobileEditor({ ref, ...props }: MarkdownEditorProps) {
         <View style={styles.toolbar}>
           {(
             [
-              ["source", source ? "Visual editor" : "View Markdown source"],
-              ["copy", "Copy Markdown"],
-              ["share", "Save or share Markdown"],
+              [
+                "source",
+                source ? t("Visual editor") : t("View Markdown source"),
+              ],
+              ["copy", t("Copy Markdown")],
+              ["share", t("Save or share Markdown")],
             ] as const
           ).map(([action, label]) => (
             <ActionButton
@@ -168,6 +173,7 @@ function VisualEditor({
   onDirty,
   ref,
 }: MarkdownEditorProps) {
+  const { t } = useI18n();
   const [initial] = useState(() => {
     const content = documentMarkdown.parse(initialMarkdown);
     return { content, canonical: documentMarkdown.serialize(content) };
@@ -200,22 +206,22 @@ function VisualEditor({
     () => ({
       read: async () => {
         if (!editor.getEditorState().isReady)
-          throw new Error("The editor is still loading. Try again.");
+          throw new Error(t("The editor is still loading. Try again."));
         const markdown = documentMarkdown.serialize(await editor.getJSON());
         return markdown === initial.canonical ? initialMarkdown : markdown;
       },
     }),
-    [editor, initial.canonical, initialMarkdown]
+    [editor, initial.canonical, initialMarkdown, t]
   );
   const commands = [
     {
-      label: "Bold",
+      label: t("Bold"),
       active: state.isBoldActive,
       icon: <Bold size={19} />,
       run: editor.toggleBold,
     },
     {
-      label: "Italic",
+      label: t("Italic"),
       active: state.isItalicActive,
       icon: <Italic size={19} />,
       run: editor.toggleItalic,
@@ -223,31 +229,35 @@ function VisualEditor({
     ...([1, 2, 3] as const).map((level) => ({
       label: `Heading ${level}`,
       active: state.headingLevel === level,
-      icon: <Text>H{level}</Text>,
+      icon: (
+        <Text>
+          <Translated message="H{value1}" values={{ value1: level }} />
+        </Text>
+      ),
       run: () => {
         editor.toggleHeading(level);
       },
     })),
     {
-      label: "Bullet list",
+      label: t("Bullet list"),
       active: state.isBulletListActive,
       icon: <List size={20} />,
       run: editor.toggleBulletList,
     },
     {
-      label: "Numbered list",
+      label: t("Numbered list"),
       active: state.isOrderedListActive,
       icon: <ListOrdered size={20} />,
       run: editor.toggleOrderedList,
     },
     {
-      label: "Undo",
+      label: t("Undo"),
       active: false,
       icon: <Undo2 size={19} />,
       run: editor.undo,
     },
     {
-      label: "Redo",
+      label: t("Redo"),
       active: false,
       icon: <Redo2 size={19} />,
       run: editor.redo,
@@ -282,11 +292,13 @@ function VisualEditor({
         accessibilityLabel={label}
         style={styles.root}
         onError={() => {
-          onError("The editor could not load. Close it and try again.");
+          onError(t("The editor could not load. Close it and try again."));
         }}
         onContentProcessDidTerminate={() => {
           onError(
-            "The editor stopped responding. Your saved document is unchanged."
+            t(
+              "The editor stopped responding. Your saved document is unchanged."
+            )
           );
         }}
         originWhitelist={["about:blank"]}

@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode, Ref } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToSourceMarkup as renderToStaticMarkup } from "../../../tests/helpers/companion-i18n";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DocumentEditor } from "./document-editor";
 import {

@@ -2,7 +2,7 @@
 
 import { BrainIcon, FolderOpenIcon, MailIcon, NetworkIcon } from "lucide-react";
 import { api } from "@web/trpc/client";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import {
   capabilitiesPath,
   workspacePlugins,

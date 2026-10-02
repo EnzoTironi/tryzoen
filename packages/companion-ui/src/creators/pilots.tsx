@@ -1,3 +1,5 @@
+import { useI18n, Translated } from "./../i18n";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -15,6 +17,7 @@ export function CreatorPilots({
   readonly data: CreatorStudioData;
   readonly cacheScope: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -24,7 +27,7 @@ export function CreatorPilots({
           setOpen(true);
         }}
       >
-        Private pilots
+        {t("Private pilots")}
       </ActionButton>
       {open && (
         <PilotInvitations
@@ -48,6 +51,7 @@ function PilotInvitations({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const { t, errorText } = useI18n();
   const pageStyles = usePageStyles();
   const [selected, setSelected] = useState<string>();
   const [ending, setEnding] = useState<string>();
@@ -66,17 +70,18 @@ function PilotInvitations({
     },
   });
   return (
-    <CompanionSheet title="Private pilots" onClose={onClose}>
+    <CompanionSheet title={t("Private pilots")} onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Try an explicitly shared version of a creator’s AI. Accepting shares no
-        conversations or personal memory. Your questions, answers and reviews
-        stay private to you. Access ends if either person withdraws or leaves
-        this workspace.
+        {t(
+          "Try an explicitly shared version of a creator’s AI. Accepting shares no conversations or personal memory. Your questions, answers and reviews stay private to you. Access ends if either person withdraws or leaves this workspace."
+        )}
       </Text>
-      {pilots.isPending && <Text style={pageStyles.copy}>Loading pilots…</Text>}
+      {pilots.isPending && (
+        <Text style={pageStyles.copy}>{t("Loading pilots…")}</Text>
+      )}
       {pilots.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Pilots could not be loaded.
+          {t("Pilots could not be loaded.")}
         </Text>
       )}
       <ActionButton
@@ -85,30 +90,35 @@ function PilotInvitations({
           void pilots.refetch();
         }}
       >
-        Refresh pilots
+        {t("Refresh pilots")}
       </ActionButton>
       {action.error && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          {action.error.message}
+          {errorText(action.error.message)}
         </Text>
       )}
       {!pilots.isError &&
         pilots.data?.map((pilot) => (
           <View key={pilot.id} style={{ gap: 8, paddingVertical: 12 }}>
-            <Text style={pageStyles.rowTitle}>{pilot.title} · AI</Text>
+            <Text style={pageStyles.rowTitle}>
+              <Translated
+                message="{value1} · AI"
+                values={{ value1: pilot.title }}
+              />
+            </Text>
             <Text style={pageStyles.copy}>
               {pilot.isCreator
-                ? `For ${pilot.recipientName}`
-                : `From ${pilot.creatorName}`}{" "}
-              · {pilot.status}
+                ? t("For {value1}", { value1: pilot.recipientName })
+                : t("From {value1}", { value1: pilot.creatorName })}{" "}
+              · {t(pilot.status)}
             </Text>
             <Text style={pageStyles.copy}>{pilot.description}</Text>
             {pilot.status === "pending" && !pilot.isCreator && (
               <>
                 <Text style={pageStyles.copy}>
-                  If you accept, the selected teaching and each question you
-                  submit will be processed by your chosen model. Previous
-                  conversations are not included.
+                  {t(
+                    "If you accept, the selected teaching and each question you submit will be processed by your chosen model. Previous conversations are not included."
+                  )}
                 </Text>
                 <ActionButton
                   disabled={action.isPending}
@@ -116,7 +126,7 @@ function PilotInvitations({
                     action.mutate({ id: pilot.id, action: "accept" });
                   }}
                 >
-                  Accept private pilot
+                  {t("Accept private pilot")}
                 </ActionButton>
                 <ActionButton
                   quiet
@@ -125,7 +135,7 @@ function PilotInvitations({
                     action.mutate({ id: pilot.id, action: "decline" });
                   }}
                 >
-                  Decline invitation
+                  {t("Decline invitation")}
                 </ActionButton>
               </>
             )}
@@ -135,7 +145,7 @@ function PilotInvitations({
                   setSelected(pilot.id);
                 }}
               >
-                Open pilot
+                {t("Open pilot")}
               </ActionButton>
             )}
             {(pilot.status === "active" || pilot.status === "withdrawn") && (
@@ -145,7 +155,7 @@ function PilotInvitations({
                   setFeedback(pilot.id);
                 }}
               >
-                Feedback shared with creator
+                {t("Feedback shared with creator")}
               </ActionButton>
             )}
             {(pilot.status === "pending" || pilot.status === "active") && (
@@ -156,31 +166,29 @@ function PilotInvitations({
                   setEnding(pilot.id);
                 }}
               >
-                End access
+                {t("End access")}
               </ActionButton>
             )}
           </View>
         ))}
       {pilots.data?.length === 0 && (
         <Text style={pageStyles.copy}>
-          No pilots yet. Invite someone from an approved version, or accept an
-          invitation here.
+          {t(
+            "No pilots yet. Invite someone from an approved version, or accept an invitation here."
+          )}
         </Text>
       )}
       {ending && (
         <CompanionSheet
-          title="End pilot access?"
+          title={t("End pilot access?")}
           onClose={() => {
             if (!action.isPending) setEnding(undefined);
           }}
         >
           <Text style={pageStyles.copy}>
-            The participant will no longer be able to open the teaching, read
-            saved pilot results or start new runs. A result still being
-            generated will not be saved after withdrawal. Copies already read or
-            exported cannot be recalled. Feedback you explicitly submitted to
-            the creator remains readable while both people stay in this
-            workspace.
+            {t(
+              "The participant will no longer be able to open the teaching, read saved pilot results or start new runs. A result still being generated will not be saved after withdrawal. Copies already read or exported cannot be recalled. Feedback you explicitly submitted to the creator remains readable while both people stay in this workspace."
+            )}
           </Text>
           <ActionButton
             disabled={action.isPending}
@@ -188,11 +196,11 @@ function PilotInvitations({
               action.mutate({ id: ending, action: "withdraw" });
             }}
           >
-            End this pilot
+            {t("End this pilot")}
           </ActionButton>
           {action.error && (
             <Text accessibilityRole="alert" style={pageStyles.copy}>
-              {action.error.message}
+              {errorText(action.error.message)}
             </Text>
           )}
         </CompanionSheet>

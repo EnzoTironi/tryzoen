@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
-import { useI18n } from "@web/i18n/context";
+import { useI18n } from "@zoen/companion-ui/i18n";
 import { Button } from "@web/components/ui/button";
 
 export function MessageFeedback({ messageId }: { readonly messageId: string }) {

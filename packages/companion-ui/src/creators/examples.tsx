@@ -1,3 +1,4 @@
+import { useI18n } from "./../i18n";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { z } from "zod";
@@ -21,6 +22,7 @@ export function CreatorExamples({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const { t } = useI18n();
   const pageStyles = usePageStyles();
   const [example, setExample] = useState<{
     snapshot: z.infer<typeof creatorDraftSchema>;
@@ -32,12 +34,12 @@ export function CreatorExamples({
         accessibilityRole="header"
         style={[pageStyles.heading, { marginBottom: 0 }]}
       >
-        Authored examples
+        {t("Authored examples")}
       </Text>
       <Text style={pageStyles.copy}>
-        Use representative cases you can share. Include your observations,
-        chosen strategy, alternatives and a useful response. Keep private
-        conversations and client details out of these examples.
+        {t(
+          "Use representative cases you can share. Include your observations, chosen strategy, alternatives and a useful response. Keep private conversations and client details out of these examples."
+        )}
       </Text>
       {draft.content.examples.map((item) => (
         <View key={item.id} style={{ gap: 8, paddingVertical: 8 }}>
@@ -49,7 +51,7 @@ export function CreatorExamples({
               setExample({ snapshot: draft, value: item });
             }}
           >
-            {`${draft.archivedAt ? "Read" : "Edit"} ${item.title}`}
+            {`${draft.archivedAt ? t("Read") : t("Edit")} ${item.title}`}
           </ActionButton>
         </View>
       ))}
@@ -70,20 +72,20 @@ export function CreatorExamples({
             });
           }}
         >
-          Add an example
+          {t("Add an example")}
         </ActionButton>
       )}
       {example?.snapshot.archivedAt ? (
         <DocumentEditor
           title={example.value.title}
-          label="Archived example"
-          description={`${example.value.source} · ${example.value.rights}`}
+          label={t("Archived example")}
+          description={`${example.value.source} · ${t(example.value.rights)}`}
           initialText={example.value.content}
           maxLength={24000}
           markdown
           readOnly
           onSave={async () => {
-            throw new Error("Restore this draft before editing it.");
+            throw new Error(t("Restore this draft before editing it."));
           }}
           onClose={() => {
             setExample(undefined);

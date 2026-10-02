@@ -16,7 +16,7 @@ export function companionDocumentHistory(
         .parse(await rpc.query("workspaces.history", { path }));
       return versions.map((version) => ({
         revision: version.revision,
-        date: new Date(version.createdAt).toLocaleString(),
+        date: new Date(version.createdAt).toISOString(),
         source: version.source,
       }));
     },
