@@ -28,7 +28,9 @@ test("ontology history and recorded source reads use the existing document owner
   );
   const data = companionOntologyData(
     { query, mutation: vi.fn<() => Promise<unknown>>() },
-    "session:workspace"
+    "session:workspace",
+    () => "00000000-0000-4000-8000-000000000001",
+    () => undefined
   );
   expect(await data.history()).toMatchObject([
     { revision, source: "knowledge-publication" },

@@ -124,7 +124,14 @@ function LibrarySection({
   const cache = useQueryClient();
   const session = auth.useSession();
   const scope = session.data?.session.id ?? "signed-out";
-  const ontology = useMemo(() => companionOntologyData(rpc, scope), [scope]);
+  const ontology = useMemo(
+    () =>
+      companionOntologyData(rpc, scope, randomUUID, () => {
+        void cache.invalidateQueries({ queryKey: ["files"] });
+        void cache.invalidateQueries({ queryKey: ["ontology", scope] });
+      }),
+    [scope, cache]
+  );
   const proposals = useMemo(
     () =>
       companionKnowledgeData(rpc, scope, randomUUID, () => {

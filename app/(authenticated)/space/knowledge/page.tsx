@@ -3,7 +3,10 @@
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getUntypedClient } from "@trpc/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { NetworkIcon, PlusIcon } from "lucide-react";
 
 import { api } from "@web/trpc/client";
@@ -12,25 +15,57 @@ import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import { Textarea } from "@web/components/ui/textarea";
 import { OntologySchema } from "@zoen/companion-ui/ontology";
-import { OntologySources } from "./sources";
 import {
-  OntologyEntityForm,
-  OntologyRelations,
-  OntologyValueField,
-} from "./entity-form";
+  OntologyActionEditor,
+  beginOntologyAction,
+  ontologyActionFailure,
+  type OntologyActionDraft,
+} from "@zoen/companion-ui";
+import { companionOntologyData } from "@shared/companion/knowledge";
+import { authClient } from "@web/auth/client";
+import { CompanionEditingProvider } from "../../../companion/editing";
+import { OntologySources } from "./sources";
+import { OntologyEntityForm, OntologyRelations } from "./entity-form";
 import { PanelIntro } from "../../_components/panel-intro";
 import panel from "../../_components/panel.module.css";
 import styles from "../space.module.css";
 
 export default function WorkspaceKnowledgePage() {
+  const space = useSearchParams().get("space") ?? "personal";
+  const account = authClient.useSession();
+  const scope = `${account.data?.session.id ?? "signed-out"}:${space}`;
+  return (
+    <CompanionEditingProvider>
+      <WorkspaceKnowledgeContent key={scope} scope={scope} />
+    </CompanionEditingProvider>
+  );
+}
+
+function WorkspaceKnowledgeContent({ scope }: { readonly scope: string }) {
   const { t } = useI18n();
+  const utils = api.useUtils();
+  const cache = useQueryClient();
   const state = api.workspaces.ontology.read.useQuery();
   const publish = api.workspaces.ontology.publish.useMutation();
-  const act = api.workspaces.ontology.act.useMutation();
+  const [draft, setDraft] = useState<OntologyActionDraft | null>(null);
+  const ontology = useMemo(
+    () =>
+      companionOntologyData(
+        getUntypedClient(utils.client),
+        scope,
+        () => crypto.randomUUID(),
+        () => {
+          void utils.workspaces.ontology.read.invalidate();
+          void utils.workspaces.files.invalidate();
+          void cache.invalidateQueries({ queryKey: ["ontology", scope] });
+        }
+      ),
+    [utils, scope, cache]
+  );
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [parseError, setParseError] = useState(false);
-  const graph = state.data?.graph;
+  const graph = state.error ? undefined : state.data?.graph;
   const save = (next: z.output<typeof OntologySchema>) =>
     publish
       .mutateAsync({
@@ -56,7 +91,7 @@ export default function WorkspaceKnowledgePage() {
           setQuery(event.target.value);
         }}
       />
-      {(parseError || Boolean(state.error ?? publish.error ?? act.error)) && (
+      {(parseError || Boolean(state.error ?? publish.error)) && (
         <p role="alert" className={styles.error}>
           {t(
             "Confira os dados e a versão antes de salvar. Seu rascunho foi preservado."
@@ -132,66 +167,38 @@ export default function WorkspaceKnowledgePage() {
                   graph.actions
                     .filter((action) => action.entityType === entity.type)
                     .map((action) => (
-                      <form
+                      <Button
+                        type="button"
+                        variant="secondary"
                         key={action.id}
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const value = z
-                            .string()
-                            .parse(
-                              new FormData(event.currentTarget).get("value")
-                            );
-                          const property = graph.types
-                            .find((type) => type.id === entity.type)
-                            ?.properties.find(
-                              (item) => item.id === action.property
-                            );
-                          void act
-                            .mutateAsync({
-                              entityId: entity.id,
-                              actionId: action.id,
-                              sources: [],
-                              validTime: null,
-                              value:
-                                property?.type === "number"
-                                  ? Number(value)
-                                  : property?.type === "boolean"
-                                    ? value === "true"
-                                    : value,
-                              operationId: crypto.randomUUID(),
-                              expectedRevision: state.data.revision,
-                            })
-                            .then(async () => state.refetch())
-                            .catch(() => undefined);
+                        onClick={() => {
+                          setDraft(
+                            beginOntologyAction(
+                              state.data,
+                              entity.id,
+                              action.id
+                            )
+                          );
                         }}
                       >
-                        <OntologyValueField
-                          property={
-                            graph.types
-                              .find((type) => type.id === entity.type)
-                              ?.properties.find(
-                                (property) => property.id === action.property
-                              ) ?? {
-                              id: action.property,
-                              name: action.name,
-                              type: "string",
-                              required: true,
-                            }
-                          }
-                        />
-                        <Button
-                          type="submit"
-                          variant="secondary"
-                          disabled={act.isPending}
-                        >
-                          {t(action.name)}
-                        </Button>
-                      </form>
+                        {t(action.name)}
+                      </Button>
                     ))}
               </div>
             </details>
           ))}
       </div>
+      {draft &&
+        state.data?.mayManage &&
+        ontologyActionFailure(state.error) !== "denied" && (
+          <OntologyActionEditor
+            initialDraft={draft}
+            data={ontology}
+            onClose={() => {
+              setDraft(null);
+            }}
+          />
+        )}
       {graph?.entities.length === 0 && (
         <p className={styles.empty}>
           {t("Pessoas, projetos e decisões. Veja como tudo se relaciona.")}

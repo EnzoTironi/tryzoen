@@ -4,7 +4,7 @@ import type { OntologyData } from "./collection";
 import type { OntologyReadSchema } from "./schema";
 
 export function ontologyReadOptions(
-  data: OntologyData,
+  data: Pick<OntologyData, "cacheKey" | "read">,
   view: z.output<typeof OntologyReadSchema>
 ) {
   return queryOptions({

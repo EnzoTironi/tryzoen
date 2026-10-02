@@ -67,6 +67,12 @@ export {
 
 export type { KnowledgeProposalData } from "./library/knowledge";
 export type { OntologyData } from "./library/ontology/collection";
+export { OntologyActionEditor } from "./library/ontology/action-editor";
+export {
+  beginOntologyAction,
+  ontologyActionFailure,
+} from "./library/ontology/action-draft";
+export type { OntologyActionDraft } from "./library/ontology/action-draft";
 
 export { useAccessibilityPreferences, useDarkAppearance } from "./theme";
 

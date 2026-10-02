@@ -104,8 +104,19 @@ function ConnectedLibrary({
   const account = authClient.useSession();
   const knowledgeScope = `${account.data?.session.id ?? "signed-out"}:${scope}`;
   const ontology = useMemo(
-    () => companionOntologyData(getUntypedClient(utils.client), knowledgeScope),
-    [utils.client, knowledgeScope]
+    () =>
+      companionOntologyData(
+        getUntypedClient(utils.client),
+        knowledgeScope,
+        () => crypto.randomUUID(),
+        () => {
+          void utils.workspaces.files.invalidate();
+          void cache.invalidateQueries({
+            queryKey: ["ontology", knowledgeScope],
+          });
+        }
+      ),
+    [utils, knowledgeScope, cache]
   );
   const proposals = useMemo(
     () =>
