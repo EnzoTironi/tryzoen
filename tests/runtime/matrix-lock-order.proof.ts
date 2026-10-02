@@ -28,6 +28,7 @@ import { forwardMatrixMessage } from "../../server/matrix/forward";
 import { sendMatrixMessage } from "../../server/matrix/send";
 import { setThreadSubscription } from "../../server/matrix/thread-subscriptions";
 import { setSavedMatrixMessage } from "../../server/matrix/saved";
+import { matrixIdentityForUser } from "../../server/matrix/identities";
 
 function assertAllocatedDatabase() {
   for (const connection of [env.DATABASE_URL, env.DATABASE_URL_UNPOOLED]) {
@@ -666,6 +667,29 @@ function mockMessageProvider(
       if (path === "versions") {
         assert.equal(options?.version, "");
         return { unstable_features: { "org.matrix.msc4306": true } };
+      }
+      if (path === "register") {
+        assert.equal(method, "POST");
+        assert.equal(userId, undefined);
+        assert.equal(options, undefined);
+        assert.ok(body && typeof body === "object" && !Array.isArray(body));
+        assert.ok(typeof body.username === "string");
+        const matrixId = `@${body.username}:synthetic.invalid`;
+        const identities = await query(sql`SELECT user_id FROM matrix_identities
+          WHERE matrix_id = ${matrixId}`);
+        assert.equal(identities.length, 1);
+        const identity = identities[0];
+        assert.ok(identity && typeof identity.user_id === "string");
+        const expected = matrixIdentityForUser(
+          identity.user_id,
+          "synthetic.invalid"
+        );
+        assert.deepEqual(body, {
+          type: "m.login.application_service",
+          username: expected.localpart,
+          inhibit_login: true,
+        });
+        return { user_id: expected.matrixId };
       }
       const parts = path.split("/");
       assert.equal(parts[0], "rooms");
