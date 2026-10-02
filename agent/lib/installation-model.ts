@@ -12,21 +12,19 @@ function codexSelection(model: z.output<typeof codexModelSchema>) {
     providerOptions: { openai: { reasoningSummary: null } },
   };
   return {
-    model: withModelDeadline(
-      wrapLanguageModel({
-        model: chatgpt(model),
-        middleware: {
-          transformParams: async ({ params }) => ({
-            ...params,
-            tools: params.tools?.map((tool) =>
-              tool.type === "function"
-                ? { ...tool, strict: tool.strict ?? false }
-                : tool
-            ),
-          }),
-        },
-      })
-    ),
+    model: wrapLanguageModel({
+      model: withModelDeadline(chatgpt(model)),
+      middleware: {
+        transformParams: async ({ params }) => ({
+          ...params,
+          tools: params.tools?.map((tool) =>
+            tool.type === "function"
+              ? { ...tool, strict: tool.strict ?? false }
+              : tool
+          ),
+        }),
+      },
+    }),
     modelContextWindowTokens:
       model === "gpt-5.3-codex-spark" ? 128_000 : 272_000,
     modelOptions,
