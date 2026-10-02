@@ -123,9 +123,9 @@ test("the real Git bundle and exact JSONL bytes round-trip through distinct v2 a
       encodePrivateMemoryArchive(original)
     );
     expect(decoded).toEqual(copyPrivateMemoryArchive(original));
-    expect(() =>
-      requirePrivateMemoryArchiveAuthentication(decoded)
-    ).not.toThrow();
+    expect(() => {
+      requirePrivateMemoryArchiveAuthentication(decoded);
+    }).not.toThrow();
   }
   expect(
     decodePrivateMemoryArchive(encodePrivateMemoryArchive(claims)).version
@@ -169,10 +169,11 @@ test("declared byte, entry and duplicate-coordinate budgets fail before payload 
     sources: z
       .array(z.record(z.string(), z.unknown()))
       .parse(manifest.sources)
-      .map((source) => ({
-        ...source,
-        bytes: privateMemoryArchiveLimits.sourceFileBytes + 1,
-      })),
+      .map((source) =>
+        Object.assign({}, source, {
+          bytes: privateMemoryArchiveLimits.sourceFileBytes + 1,
+        })
+      ),
   }));
   expect(() => decodePrivateMemoryArchive(tooLargeEvent)).toThrow(
     PrivateMemoryArchiveError
@@ -197,9 +198,9 @@ test("archive authentication binds scope, generation, checkpoint and exact paylo
     { ...corpus, namespaceId: randomUUID() },
     { ...corpus, capturedThrough: 8 },
   ])
-    expect(() => requirePrivateMemoryArchiveAuthentication(changed)).toThrow(
-      PrivateMemoryArchiveError
-    );
+    expect(() => {
+      requirePrivateMemoryArchiveAuthentication(changed);
+    }).toThrow(PrivateMemoryArchiveError);
   expect(
     PrivateMemoryCorpusBackupSchema.safeParse({ ...corpus, capturedThrough: 8 })
       .success
@@ -214,5 +215,7 @@ test("caller mutation cannot change the copied archive handed to asynchronous re
   const copied = copyPrivateMemoryArchive(claims);
   source.content.fill(0);
   expect(copied.sources[0]?.content).toEqual(original);
-  expect(() => requirePrivateMemoryArchiveAuthentication(copied)).not.toThrow();
+  expect(() => {
+    requirePrivateMemoryArchiveAuthentication(copied);
+  }).not.toThrow();
 });

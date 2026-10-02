@@ -52,7 +52,7 @@ import {
   PrivateMemoryBackupSchema,
   PrivateMemoryCorpusBackupSchema,
   PrivateMemoryArchiveError,
-  PrivateMemoryArchiveSchema,
+  type PrivateMemoryArchiveSchema,
   copyPrivateMemoryArchive,
   sealPrivateMemoryArchive,
   requirePrivateMemoryArchiveAuthentication,

@@ -43,8 +43,9 @@ export async function POST(request: Request) {
           );
         if (!parameters.has("expectedRevision"))
           throw new PrivateMemoryArchiveError("invalid_input");
+        const expectedRevision = parameters.get("expectedRevision");
         const input = PrivateMemoryArchiveApplySchema.parse({
-          expectedRevision: parameters.get("expectedRevision") || null,
+          expectedRevision: expectedRevision === "" ? null : expectedRevision,
           archiveDigest: parameters.get("archiveDigest"),
         });
         if (privateMemoryArchiveDigest(bytes) !== input.archiveDigest)

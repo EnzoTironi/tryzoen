@@ -163,11 +163,11 @@ test("v2 retains every cited correction/clear source while v3 also keeps uncited
   });
   const claims = await PrivateMemoryRepository.backup(actor);
   const corpus = await PrivateMemoryRepository.backupCorpus(actor);
-  expect(claims.sources.map((event) => event.eventId).sort()).toEqual(
-    [weekly.eventId, monthly.eventId].sort()
+  expect(claims.sources.map((event) => event.eventId).toSorted()).toEqual(
+    [weekly.eventId, monthly.eventId].toSorted()
   );
-  expect(corpus.sources.map((event) => event.eventId).sort()).toEqual(
-    [weekly.eventId, monthly.eventId, unverified.eventId].sort()
+  expect(corpus.sources.map((event) => event.eventId).toSorted()).toEqual(
+    [weekly.eventId, monthly.eventId, unverified.eventId].toSorted()
   );
   const namespace = await fixture.namespace(actor);
   expect(corpus.capturedThrough).toBe(namespace.journalHighWater);
@@ -353,7 +353,7 @@ test("an orphan immutable file cannot be silently exported or turned into a deli
   ).rejects.toMatchObject({ reason: "unavailable" });
   await expect(
     rebuildSessionSourceReceipts(actor, sessionId)
-  ).rejects.toThrow();
+  ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
   expect(
     await query(
       sql`SELECT event_id FROM memory_session_sources WHERE namespace_id=${namespace.id} AND event_id=${orphan.eventId}`
@@ -460,8 +460,9 @@ test("a retained-erasure receipt arriving after selection blocks the actual work
     await holder.query("ROLLBACK");
     const result = await worker;
     expect(result.status).toBe("rejected");
-    if (result.status === "rejected")
-      expect(result.reason).toBeInstanceOf(AggregateError);
+    const reason: unknown =
+      result.status === "rejected" ? result.reason : undefined;
+    expect(reason).toBeInstanceOf(AggregateError);
     expect(
       await query(
         sql`SELECT event_id FROM memory_session_sources WHERE namespace_id=${namespace.id} AND stored_at IS NOT NULL`

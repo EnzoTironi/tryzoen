@@ -159,9 +159,10 @@ export function copyPrivateMemoryArchive(raw: unknown) {
   return {
     ...parsed,
     bundle: parsed.bundle === null ? null : Uint8Array.from(parsed.bundle),
-    sources: parsed.sources.map((source) => ({
-      ...source,
-      content: Uint8Array.from(source.content),
-    })),
+    sources: parsed.sources.map((source) =>
+      Object.assign({}, source, {
+        content: Uint8Array.from(source.content),
+      })
+    ),
   };
 }

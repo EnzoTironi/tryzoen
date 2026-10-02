@@ -29,6 +29,7 @@ const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const fileLimit = sessionArchiveLimits.fileBytes;
 const exportLimit = sessionArchiveLimits.bytes;
+const noAbortListener = () => undefined;
 
 export class SessionArchiveUnavailable extends Error {
   constructor() {
@@ -193,7 +194,7 @@ export async function exportSessionSources(
   const cancellation = new AbortController();
   const combined = AbortSignal.any([signal, cancellation.signal]);
   let activePull: Promise<void> | undefined;
-  let removeAbort: () => void = () => undefined;
+  let removeAbort: () => void = noAbortListener;
   let index = 0;
   const body = new ReadableStream<Uint8Array>(
     {
@@ -203,7 +204,9 @@ export async function exportSessionSources(
           if (!activePull) controller.error(signal.reason);
         };
         signal.addEventListener("abort", abort, { once: true });
-        removeAbort = () => signal.removeEventListener("abort", abort);
+        removeAbort = () => {
+          signal.removeEventListener("abort", abort);
+        };
         if (signal.aborted) abort();
       },
       pull(controller) {
