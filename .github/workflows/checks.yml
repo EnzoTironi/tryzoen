@@ -38,7 +38,8 @@ jobs:
 
       - name: Audit application and infrastructure dependencies
         run: |
-          pnpm audit --audit-level=low
+          node --test scripts/audit/regressions.mjs
+          node scripts/audit/run.mjs
           pnpm --dir infrastructure audit --audit-level=low
 
       - name: Run checks
