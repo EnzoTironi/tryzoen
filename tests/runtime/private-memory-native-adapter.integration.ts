@@ -62,6 +62,21 @@ const changeResult = z.object({
     messages: z.array(z.object({ id: z.string(), content: z.string() })),
   }),
 });
+const recallContent = z.strictObject({
+  revision: LearnedClaimSearchSchema.shape.revision,
+  matches: LearnedClaimSearchSchema.shape.matches,
+});
+
+function parseRecall(
+  result: Awaited<ReturnType<(typeof learned.provider.recall)["turn.started"]>>
+) {
+  const message = result.messages[0];
+  if (!message || message.id !== "learned-current")
+    throw new Error("Expected the current learned-memory replacement");
+  const content = message.content.split("\n").at(-1);
+  if (!content) throw new Error("Expected canonical recall content");
+  return recallContent.parse(JSON.parse(content));
+}
 
 function contextFor(
   actor: Parameters<typeof workspaceExecutionFor>[0],
@@ -335,7 +350,7 @@ test("native text/media and compaction recall use only the bounded current reque
     });
     expect(standalone.messages[0]?.id).toBe("learned-current");
     expect(JSON.stringify(standalone)).not.toContain("out-of-bound preference");
-    expect(JSON.stringify(standalone)).toContain('"matches":[]');
+    expect(parseRecall(standalone).matches).toEqual([]);
     const media = contextFor(
       actor,
       [
@@ -352,8 +367,8 @@ test("native text/media and compaction recall use only the bounded current reque
       context.memory.scope.key
     );
     expect(
-      JSON.stringify(await learned.provider.recall["turn.started"](media))
-    ).toContain('"matches":[]');
+      parseRecall(await learned.provider.recall["turn.started"](media)).matches
+    ).toEqual([]);
   } finally {
     await retireNamespace(actor);
   }
