@@ -72,9 +72,10 @@ export class PrivateMemoryError extends Error {
       | "invalid_input"
       | "unavailable"
       | "disabled"
-      | "stale_recall"
+      | "stale_recall",
+    options?: ErrorOptions
   ) {
-    super("PrivateMemoryError");
+    super("PrivateMemoryError", options);
     this.name = "PrivateMemoryError";
   }
 }
@@ -214,7 +215,7 @@ async function authorized<Result>(
       error instanceof SqlError ||
       error instanceof SessionArchiveUnavailable
     )
-      throw new PrivateMemoryError("unavailable");
+      throw new PrivateMemoryError("unavailable", { cause: error });
     if (error instanceof z.ZodError)
       throw new PrivateMemoryError("invalid_input");
     throw error;

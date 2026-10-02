@@ -32,9 +32,10 @@ const exportLimit = sessionArchiveLimits.bytes;
 const noAbortListener = () => undefined;
 
 export class SessionArchiveUnavailable extends Error {
-  constructor() {
+  constructor(options?: ErrorOptions) {
     super(
-      "No saved conversation archive is available yet. Try again after the conversation has been saved."
+      "No saved conversation archive is available yet. Try again after the conversation has been saved.",
+      options
     );
   }
 }
@@ -80,7 +81,11 @@ async function sourceFile(
   await using file = await open(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
-  );
+  ).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      throw new SessionArchiveUnavailable({ cause: error });
+    throw error;
+  });
   const info = await file.stat();
   if (!info.isFile() || (info.mode & 0o077) !== 0 || info.size > fileLimit)
     throw new Error("The saved conversation archive could not be verified.");
@@ -278,7 +283,7 @@ async function sessionDirectory(
     const path = join(...parts.slice(0, index));
     const info = await lstat(path).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT")
-        throw new SessionArchiveUnavailable();
+        throw new SessionArchiveUnavailable({ cause: error });
       throw error;
     });
     if (

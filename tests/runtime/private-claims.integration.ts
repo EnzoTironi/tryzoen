@@ -663,6 +663,21 @@ test("restore rolls back the entire bundle/index on SQL receipt failure and reva
   const archive = await PrivateMemoryRepository.backup(actor);
   await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,bundle=NULL,recorded_at=NULL
     WHERE namespace_id IN (SELECT namespace_id FROM workspace_memory_namespace WHERE workspace_id=${actor.workspaceId} AND user_id=${actor.userId})`);
+  const expectRetainedDamagedState = async () => {
+    await expect(PrivateMemoryRepository.read(actor)).rejects.toMatchObject({
+      reason: "unavailable",
+    });
+    expect(
+      await queries.query(sql`SELECT head_sha AS head,bundle,recorded_at AS "recordedAt"
+      FROM private_memory_repository WHERE namespace_id=${archive.namespaceId}`)
+    ).toEqual([{ head: null, bundle: null, recordedAt: null }]);
+    expect(
+      await queries.query(sql`SELECT operation_id AS "operationId",revision FROM private_memory_operation
+      WHERE namespace_id=${archive.namespaceId}`)
+    ).toEqual([{ operationId: input.operationId, revision: archive.revision }]);
+  };
+  // Historical injected SQL-failure evidence; actual rollback acceptance uses
+  // the separate no-mock collision journey. Damaged authority stays unavailable.
   const original = queries.query;
   const dialect = new PgDialect();
   const spy = vi
@@ -692,9 +707,7 @@ test("restore rolls back the entire bundle/index on SQL receipt failure and reva
   } finally {
     spy.mockRestore();
   }
-  expect(
-    (await PrivateMemoryRepository.read(actor)).snapshot.revision
-  ).toBeNull();
+  await expectRetainedDamagedState();
   await repository.publish(actor, {
     operationId: randomUUID(),
     expectedRevision: shared.revision,
@@ -703,9 +716,7 @@ test("restore rolls back the entire bundle/index on SQL receipt failure and reva
   await expect(
     PrivateMemoryRepository.restore(actor, { expectedRevision: null, archive })
   ).rejects.toMatchObject({ reason: "invalid_input" });
-  expect(
-    (await PrivateMemoryRepository.read(actor)).snapshot.revision
-  ).toBeNull();
+  await expectRetainedDamagedState();
 });
 
 test("restore rejects unsigned content, an erased namespace rebind and blind recovery without a retained revision fence", async () => {
