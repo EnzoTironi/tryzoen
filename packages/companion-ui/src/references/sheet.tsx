@@ -28,7 +28,7 @@ import {
 import { useComposerReferences } from "./provider";
 import { referenceAt, insertReference } from "./schema";
 import { IconButton } from "../icon-button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 
 export function useComposerSheet({
   text,
@@ -47,6 +47,8 @@ export function useComposerSheet({
   disabled: boolean;
   onPick?: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const source = useComposerReferences();
   const roomId = roomOverride ?? source?.roomId;
   const [caret, setCaret] = useState(text.length);
@@ -323,6 +325,8 @@ function SheetAction({
   detail: string;
   onPress: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Pressable
       accessibilityRole="button"
@@ -347,6 +351,8 @@ function ComposerSheet({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { height } = useWindowDimensions();
   return (
     <View
@@ -376,43 +382,55 @@ function ComposerSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  sheet: {
-    position: "absolute",
-    bottom: "100%",
-    marginBottom: 10,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
-    boxShadow: "0 8px 36px rgba(0,0,0,0.12)",
-    overflow: "hidden",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingLeft: 20,
-    paddingRight: 6,
-  },
-  heading: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  content: { paddingHorizontal: 8, paddingBottom: 8 },
-  row: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 14,
-  },
-  copy: { flex: 1, minWidth: 0, gap: 2 },
-  label: { fontSize: 16, color: colors.ink },
-  detail: { fontSize: 13, color: colors.muted },
-  active: { backgroundColor: "#eaf2ff" },
-  pressed: { backgroundColor: colors.wash },
-  empty: { padding: 16, fontSize: 14, color: colors.muted },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    sheet: {
+      position: "absolute",
+      bottom: "100%",
+      marginBottom: 10,
+      left: 0,
+      right: 0,
+      zIndex: 20,
+      borderRadius: 24,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
+      boxShadow: "0 8px 36px rgba(0,0,0,0.12)",
+      overflow: "hidden",
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingLeft: 20,
+      paddingRight: 6,
+    },
+    heading: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    content: { paddingHorizontal: 8, paddingBottom: 8 },
+    row: {
+      minHeight: 54,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 14,
+    },
+    copy: { flex: 1, minWidth: 0, gap: 2 },
+    label: { fontFamily: systemFont, fontSize: 16, color: colors.ink },
+    detail: { fontFamily: systemFont, fontSize: 13, color: colors.muted },
+    active: { backgroundColor: "#eaf2ff" },
+    pressed: { backgroundColor: colors.wash },
+    empty: {
+      fontFamily: systemFont,
+      padding: 16,
+      fontSize: 14,
+      color: colors.muted,
+    },
+  });
+}

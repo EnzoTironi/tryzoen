@@ -1,4 +1,5 @@
 import {
+  useMemo,
   useEffect,
   useCallback,
   useImperativeHandle,
@@ -12,7 +13,7 @@ import type { FileUIPart } from "ai";
 import { useAttachments } from "../attachments/provider";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import {
   audioRecordingLimitSeconds,
   requireActiveAudioRecording,
@@ -35,6 +36,8 @@ export function AudioMessageRecorder({
   readonly onAttach: (file: FileUIPart) => void;
   readonly onActive: (active: boolean) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const adapter = useAttachments();
   const [phase, setPhase] = useState<
     "idle" | "permission" | "recording" | "processing" | "review"
@@ -189,16 +192,23 @@ export function AudioMessageRecorder({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  panel: { gap: 8 },
-  controls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger },
-  label: { fontSize: 14, color: colors.ink },
-  hint: { fontSize: 12, color: colors.muted },
-  error: { fontSize: 13, color: colors.danger },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    panel: { gap: 8 },
+    controls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    dot: {
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: colors.danger,
+    },
+    label: { fontFamily: systemFont, fontSize: 14, color: colors.ink },
+    hint: { fontFamily: systemFont, fontSize: 12, color: colors.muted },
+    error: { fontFamily: systemFont, fontSize: 13, color: colors.danger },
+  });
+}

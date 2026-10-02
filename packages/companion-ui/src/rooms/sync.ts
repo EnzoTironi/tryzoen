@@ -1,5 +1,5 @@
 import { mergeReadReceipts } from "./read-receipts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import {
   onlineManager,
@@ -7,6 +7,7 @@ import {
   type QueryClient,
   type QueryFilters,
 } from "@tanstack/react-query";
+import type { useRoomParticipation } from "./participation";
 import { useTypingPublisher } from "./typing-publisher";
 import { reconcileRoomHistory } from "./history";
 import type {
@@ -21,10 +22,15 @@ export function useRoomSync(
   data: Pick<RoomData, "setTyping" | "readSync">,
   cacheScope: string,
   roomId: string,
-  enabled: boolean
+  enabled: boolean,
+  participation: Pick<
+    ReturnType<typeof useRoomParticipation>,
+    "requireJoined" | "revision"
+  >
 ) {
   const client = useQueryClient();
-  const scope = JSON.stringify([cacheScope, roomId, enabled]);
+  const { requireJoined, revision } = participation;
+  const scope = JSON.stringify([cacheScope, roomId, enabled, revision]);
   const [failure, setFailure] = useState<string>();
   const [denied, setDenied] = useState<string>();
   const [snapshot, setSnapshot] = useState<{
@@ -37,6 +43,20 @@ export function useRoomSync(
     items: z.infer<typeof roomReadReceiptSchema>[];
   }>();
   const change = useTypingPublisher(data, cacheScope, roomId, enabled);
+  const confirmed = useCallback(() => {
+    try {
+      requireJoined();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [requireJoined]);
+  const guardedChange = useCallback(
+    (typing: boolean) => {
+      change(typing && confirmed());
+    },
+    [change, confirmed]
+  );
   useEffect(() => {
     let active = AppState.currentState === "active";
     let disposed = false;
@@ -53,7 +73,8 @@ export function useRoomSync(
       active &&
       onlineManager.isOnline() &&
       !disposed &&
-      !accessDenied;
+      !accessDenied &&
+      confirmed();
     const history = ["matrix-messages", "matrix-thread"].map((kind) => ({
       queryKey: [kind, cacheScope, roomId],
     }));
@@ -170,11 +191,11 @@ export function useRoomSync(
     const subscription = AppState.addEventListener("change", (state) => {
       active = state === "active";
       stop();
-      if (allowed()) void poll();
+      // A fresh participation revision starts the next observation after resume.
     });
-    const online = onlineManager.subscribe((connected) => {
+    const online = onlineManager.subscribe(() => {
       stop();
-      if (connected && allowed()) void poll();
+      // The participation owner rechecks access before enabling another poll.
     });
     void poll();
     return () => {
@@ -183,14 +204,14 @@ export function useRoomSync(
       subscription.remove();
       online();
     };
-  }, [data, cacheScope, roomId, enabled, scope, change, client]);
+  }, [data, cacheScope, roomId, enabled, scope, change, client, confirmed]);
   return {
     userIds: snapshot?.scope === scope ? snapshot.userIds : [],
     presence: snapshot?.scope === scope ? snapshot.presence : [],
     receipts: receiptSnapshot?.scope === scope ? receiptSnapshot.items : [],
     reconnecting: failure === scope,
     accessDenied: denied === scope,
-    change,
+    change: guardedChange,
   };
 }
 

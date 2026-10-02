@@ -1,5 +1,7 @@
 # Social/Matrix implementation handoff
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 The current cross-product backlog and execution order live in
 [the parity roadmap](parity-roadmap.md). This document retains the decisions and
 historical verification checkpoints behind that plan; later evidence supersedes
@@ -2039,3 +2041,294 @@ Greenfield removal of obsolete code/schemas/APIs/configuration is authorized;
 no backward-compatibility, dual writes/reads or data backfills unless requested.
 Correctness invariants and deterministic setup remain required, and applied
 migration rewrites require resetting affected development/test databases.
+
+### Reviewed knowledge changes — K1 / wave 41
+
+Merged PR 152 at `b700ad48d51d8426ac0097dee1556e269dd00e16` after all six
+required checks passed, then started `codex/unified-knowledge` from that head.
+
+The native knowledge proposal tool, transactional multi-file publisher and
+shared Library reviewer are implemented. Review shows current/proposed file
+contents, dependencies and exact source revisions. An administrator approves or
+rejects a whole proposal; the generic editor and agent document save tool cannot
+bypass that review for proposals or canonical model/definition/routing writes.
+Operation replay, historical proposal access, final authorization and CAS remain
+at the existing repository owner. Receipt paths are now an array, with no dual
+receipt format. Workspace schemas moved to the shared UI package as the single
+web/Expo/server contract.
+
+The isolated integration verifies multi-file approval, member restrictions,
+private/team separation, historical citation content, draft removal, replay,
+concurrent approve/reject, changed-source conflict, no partial publication,
+revoked memberships, generic-editor rejection and the actual native proposal
+call. Existing repository/model/skill tests and native tools also passed during
+this slice. Migration 0097 requires empty disposable workspace repository
+records; only the named isolated/local review tables were cleared and migrated.
+See `local-runtime-setup.md` before upgrading another development database.
+
+The desktop and mobile browser flow uses synthetic budget files. It does not
+execute Malloy or use external provider data. Full K1, Akita replacement, retained
+filesystem, semantic projections and dreams remain open in `knowledge-plan.md`;
+creator work remains deferred. Do not report this as complete Muse/TextQL parity
+or proven million-user capacity.
+
+Final validation: `pnpm check --concurrency=1` passes all nine tasks, 280 test
+files and 1,742 tests; `pnpm build` passes. The final isolated knowledge suite
+passes four cases. Chrome verifies the mobile review sheet, desktop modal,
+file selection, citations, successful publication and the updated visual editor.
+The definition and model histories both show revision `466bc6b` from the same
+publication. Image evidence and a clearly labeled screenshot-sequence video
+are attached to the current pull request using `gh --attach`.
+
+[PR 155](https://github.com/EnzoTironi/tryzoen/pull/155) contains the publication
+boundary and subsequent scoped discovery. Its
+[visual evidence](https://github.com/EnzoTironi/tryzoen/pull/155#issuecomment-5897771787)
+uses synthetic files only. The published routing index supplies stable concept
+IDs, bounded topic discovery and canonical file loading at one head. Moves
+update routing in the same publication; dangling references are rejected. The
+native tool and workspace instructions use these records before domain answers.
+This does not replace the private Akita owner or execute a semantic model.
+
+The first CI runtime pass exposed customer-tool publication callers passing
+`slug`/rollback metadata into the stricter file-write input. Those callers now
+send only the owned write fields. Both new native tools have qualification
+inventory entries pointing at their real isolated tests; validation was not
+loosened and behavior tests remain enabled.
+
+Final discovery/fix validation: all nine `pnpm check` tasks and `pnpm build`
+pass. The 23 isolated cases across knowledge, customer tools/connectors and
+qualification pass; this includes all failing CI journeys. The discovery
+structural delta still records eight findings / three churn gates, without
+acknowledgements; the new knowledge policy and discovery function retain size/
+complexity observations. This is not a clean structural-quality claim.
+
+### Ontology provenance and historical projections — K1 / wave 42
+
+The authored ontology property shape now owns its value, exact citations and
+nullable valid-time interval. Links carry their own citations/intervals. Existing
+primitive-property callers, native action inputs, forms, fixtures and the live
+approval evaluation were replaced directly; no compatibility reader remains.
+A manual action clears the prior value's evidence. Publication verifies cited
+excerpts at authorized historical revisions, with 60 citations / 24 source pairs.
+Explicit dates require evidence and use an exclusive upper bound.
+
+Native and authenticated API reads accept a known `revision` and `validOn` date.
+They recheck current access, preserve unknown validity and omit actions from a
+historical projection. Source status is checked against today's authorized files
+at `sourceCheckedAtRevision`; a present passage does not prove full-file or
+provider freshness. The existing knowledge page can attach evidence to a record,
+property or relation and open the exact historical source. Shared native Library
+dossiers, timestamp-based as_of and complete private claim/session history remain
+open. This is not the Akita replacement or a semantic query executor.
+
+The discovery CI rerun passed 441 of 442 runtime cases. The last failure was an
+exact external-agent tool inventory missing `workspace_knowledge_discover`. Its
+assertion now includes that actual read-only capability and checks delegated
+discovery, while preserving denial of private profiles, historical reads, exports
+and writes. The affected external-agent and native suites pass locally.
+
+Final local `pnpm check --concurrency=1`: all nine tasks, 281 files / 1,748 tests
+pass; `pnpm build` passes. Ontology/repository integration has five passing cases;
+external-agent/native integration has twelve passing cases (ontology's final
+source-state refactor also passes its two cases). The focused unit pass has twelve
+cases. No model/provider evaluation, production deployment or real-account data
+was used. The claim-shape change requires recreating disposable old ontology
+documents; no migration or old-data converter was added.
+
+Structural delta for this wave: nine observations and one existing native
+dispatcher churn gate, with no acknowledgements. The new form's complexity was
+reduced by keeping source targeting and immutable graph edits in their concrete
+UI owner. Remaining JSX size observations and the preexisting large knowledge
+page are not a clean structural-quality claim.
+
+Chrome verification of the final production build also passed: an administrator
+attached an exact source passage and its explicit validity dates to a property,
+then opened the historical citation. The relationship kept its distinct source.
+The same evidence remains readable at 390×844 in the mobile sheet; desktop sizing
+was restored. Screenshots are attached to PR 155 with `gh --attach`. All records
+belong to the named synthetic local review workspace. This does not qualify the
+pending shared native Library dossier or physical mobile devices.
+
+### K1 / wave 43 — shared Library knowledge dossiers
+
+The shared React Native Library includes Knowledge records with field evidence,
+explicit valid intervals, directional relationships and historical source opening.
+The existing sheet primitive provides the mobile sheet/desktop modal. Web/Electron
+and Expo use the same read adapter. The canonical schema moved directly to
+`packages/companion-ui/src/library/ontology/schema.ts`; its old shared file was
+removed and every caller/evaluation changed together. Server validation errors
+remain with their concrete owner. Historical source reads compose the existing
+document-history adapter. Collection/source caches include the account session
+and workspace; failed revalidation removes the displayed record collection.
+Search renders at most 100 matches, and file filtering no longer runs when a
+knowledge or proposal collection is active.
+
+Final `pnpm check --concurrency=1` passes all nine tasks (281 files / 1,748 tests;
+1m1.761s), with no lint warnings. `pnpm build` passes in 24.135s. Eight isolated
+ontology and delegated-agent integration cases pass in 7.50s. Chrome verifies
+source opening, bidirectional record navigation and the 390×844 sheet; images
+are attached to PR 155 using `gh --attach`. No physical-device qualification or
+production deployment was performed.
+
+The structural quality pass reports 19 observations / eight gates: repetitive
+RPC adapter shapes, repeated edits to the Library adapters and the file-list JSX
+size. New JSX components/interfaces produce structural dead-code observations
+but are imported, rendered, type checked and covered by the browser journey.
+Library complexity no longer regresses, and historical reads reuse the owning
+adapter. The report is not clean; no finding was hidden or acknowledged away.
+This read journey does not implement a second memory authority or complete K3/K4.
+
+A final evidence-editor correction permits changing an already linked citation's
+validity without duplicating that citation, including when the ten-source limit
+is reached. Two focused property/link cases confirm citation preservation and
+immutable input; Chrome confirms unknown-to-explicit validity through the actual
+form with the same path/revision/excerpt. `pnpm check` now passes 282 files /
+1,750 tests and all nine tasks (1m8.093s). The final structural delta has two
+observations / one repeated-edit gate; no new complexity or duplication finding.
+A local build-cache write encountered a full disk after the build completed.
+Only the verified, regenerable Turbopack cache in this worktree was removed;
+private records, sessions and user files were preserved.
+
+### K1 / wave 44 — reviewed conversational ontology publication
+
+The existing native knowledge proposal accepts the complete canonical ontology
+with related knowledge files. Graph semantics and scoped historical quotes are
+checked before staging, and all graph citations participate in source conflicts
+without relying on the separate evidence list. The private-app/admin boundary,
+ontology capability, immutable drafts, bounded references and atomic CAS/replay
+contract remain explicit. Generic editor/agent publication is still denied.
+
+The shared review shows readable records, claims, validity and connections in
+cards. Publishing refreshes the scoped Library ontology cache; failed review
+authorization clears its stale preview. Eleven isolated integration cases pass,
+including the actual native schema/executor, member denial, forged/foreign
+sources, invalid links and edited-source conflicts. Full check: nine tasks,
+282 files / 1,750 tests, 1m29.433s; build: 54.22s. Chrome verifies desktop review,
+390×844 mobile sheet, normal publication and opening the changed dossier without
+a reload. Evidence is attached to PR 155 with `gh --attach`.
+
+The structural delta reports five repeated-edit gates plus minor complexity/size
+observations and JSX/renamed-symbol indexing limitations. No finding was hidden
+or acknowledged away. K2 semantic execution, K3 private memory replacement and
+K4 dream review remain open; this wave does not claim complete Muse parity.
+
+## Wave 45 — recorded knowledge and world-valid date
+
+The shared Knowledge collection now opens the existing document history in a
+mobile sheet or desktop modal. A reader may select a recorded Git version and,
+independently, a world-valid date. No second history decoder or storage owner was
+introduced. Historical views remain read-only; unknown validity stays visible,
+invalid calendar dates cannot be applied and interval ends remain exclusive.
+
+TanStack query keys include principal/workspace scope, recorded version and
+validity date. The next view resolves before the sheet closes, so switching does
+not relabel the old records or replace the collection with a loading screen.
+Cached views are reused within the existing 15-second freshness window. Access
+revalidation errors remove stale graph/history content. History remains bounded
+to 50 versions and record search to 100 visible results.
+
+Validation: full `pnpm check` passed nine tasks, 284 files / 1,752 tests in
+50.757s; `pnpm build` passed in 40.643s. Two focused cache/transport tests cover
+principal/date/revision separation and reuse of the document owner. Chrome
+confirms invalid-date denial, an older label at the same record ID, desktop and
+390×844 mobile controls, exclusive-end filtering and explicitly unknown dates.
+Evidence is attached to PR 155. Disk exhaustion interrupted earlier attempts;
+only regenerable caches under this worktree were removed before the successful
+run. No user files or production records were removed.
+
+This is revision-based history for authored ontology, not historical replacement
+of the learned-memory engine. Timestamp selection is completed in wave 46;
+private claims/sessions, complete memory replacement and safe dream candidates
+remain open.
+
+## Wave 46 — native knowledge as of a recorded instant
+
+The canonical ontology read accepts a timezone-qualified `asOf` timestamp or an
+exact revision, independently of `validOn`. The native agent uses that same
+schema. Times before the first publication return an empty graph; historical
+views cannot manage records. Current evidence status identifies its separate
+checked revision. Cache keys separate principal, revision, timestamp and validity
+date. No compatibility reader or second source of truth was introduced.
+
+One database statement captures both Git bundle and selected receipt, preserving
+consistency during concurrent publication. Receipts use the final publication
+clock, monotonically after their parent, and successful retries retain the same
+time. Existing workspace grants and private/shared execution restrictions remain
+enforced. All callers changed with the repository selection contract.
+
+Thirteen isolated knowledge/ontology cases pass; the final two temporal cases
+also verify a simulated backwards-clock parent in their own disposable fixture.
+Required check passes nine tasks, 284 files / 1,752 tests; the final repeat reuses
+the successful task cache. This wave does not replace learned private memory,
+activate dreams, deploy production or reset production records.
+
+Final build passes in 45.42s. Chrome verifies the rebuilt strict client, older
+record names and evidence at the chosen world-valid date in a fresh synthetic
+runtime workspace. Three repeated-edit structural gates remain disclosed; no
+new complexity or duplication finding is reported. Visual evidence is attached
+to PR 155 through `gh --attach`.
+
+## Wave 47 — shared recorded-time selection
+
+The shared Library history sheet/modal accepts a local day and minute and sends
+the same native `asOf` contract. Choosing a version clears the time and typing a
+time clears the version; the independent valid date is preserved. Invalid,
+nonexistent and repeated local times are rejected instead of selecting current
+facts. The chosen instant and actual revision appear in the dossier. Empty
+pre-publication history is explicit. Closing a pending view prevents late
+navigation, and version loading retains its bounded, authorization-aware owner.
+
+All nine required checks pass, 285 files / 1,756 tests in 2m33.48s; build passes
+in 35.225s. Four local-time cases include offset/roundtrip and one-hour and
+30-minute daylight-saving changes. Chrome verifies invalid-input denial,
+empty history, a recorded dossier, reopening, return to current state, desktop
+modal and 390×844 mobile sheet. Evidence is attached to PR 155 with `gh --attach`.
+One repeated-edit structural gate and minor size findings remain disclosed; a
+new JSX component is indexed as dead despite its live render call. No production
+deployment, new dependency, private-memory replacement or capacity claim is made.
+
+## Wave 48 — historical definitions and native file reads
+
+Native knowledge discovery and canonical file reads share the recorded-view
+owner with ontology: exact revision or timezone-qualified `asOf`, never both.
+Historical routing follows paths at that revision, including files moved later.
+Paging pins the returned revision. Missing historical files explicitly report
+`exists: false`, and pre-publication history remains empty. Current file reads
+retain their ordinary missing-path errors. Agent instructions distinguish
+historical reference from active procedures or a reason to invent new routing.
+
+Fourteen isolated runtime cases pass, including actual native tools, moved files,
+pagination after a current edit, foreign revision denial, membership revocation
+and denial of every recorded view to external grants. App and infrastructure
+audits report no known vulnerabilities after correcting newly disclosed
+`brace-expansion` recursion/CPU issues with 2.1.7 and 5.0.12. No exclusions,
+production changes, new engine or second knowledge authority were introduced.
+K2 execution, K3 private-memory replacement and K4 safe dreams remain open.
+
+Final check: nine tasks, 285 files / 1,756 tests pass in 2m6.65s; build passes in
+1m24.881s. Four focused runtime cases pass after the type fixes and private
+file-reader extraction. Discovery size/complexity and two repeated-edit
+structural findings remain disclosed without suppression.
+
+## Wave 49 — recorded filesystem listing and search
+
+Native file listing and literal knowledge search now use the same revision or
+timezone-qualified `asOf` selector. Old trees include paths moved or removed
+later; search uses that exact bundle and retains the existing 3-lines/file,
+60-excerpt and 800-character bounds. Empty history, foreign revisions and
+revoked membership cannot return today's files. Profile/instruction files remain
+outside knowledge search. The repository has one private recorded-snapshot
+selector for document selection and search within their access transactions.
+
+Group/external agents retain current listing and paged reads. Instructions
+require comparing each page's returned revision and restarting if it changes;
+explicit recorded selectors remain denied even for the current head. Fourteen
+existing runtime cases pass. A new native listing/search case passes after
+repairing its fixture to use the existing separate profile publisher; it covers
+literal brackets, clipped excerpts, moves, empty history, isolation and
+revocation. No new authority, engine, migration or production reset was added.
+
+All nine required checks pass, 285 files / 1,756 tests in 1m2.063s; build passes
+in 24.032s. The final native file-view case passes in 7.33s. One repeated-edit
+dispatcher finding and a minor eight-line size increase remain disclosed;
+no new complexity or duplication finding is reported.

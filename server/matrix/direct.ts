@@ -15,6 +15,7 @@ import {
   type WorkspaceActorSchema,
 } from "../workspaces/access";
 import { ensureMatrixIdentity } from "./identities";
+import { lockMatrixAdmission } from "./authority";
 import { matrixConfiguration, matrixRequest, MatrixError } from "./client";
 
 const roomResult = z.object({ room_id: z.string() });
@@ -122,6 +123,7 @@ export async function openDirectRoom(
   input: z.infer<typeof directOpenSchema>
 ) {
   return transaction(async () => {
+    await lockMatrixAdmission([actor.workspaceId], []);
     await requireWorkspaceAccess(actor);
     if (!actor.authSessionId) throw new WorkspaceAccessDenied();
     const peers = await query(sql`

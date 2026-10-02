@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { Ellipsis, Heart, MessageCircle } from "lucide-react-native";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { AssistantMarkdown } from "../markdown";
 import { IconButton } from "../icon-button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { systemFont, useColors } from "../theme";
 import type { feedPostSchema } from "./schema";
 
 export function FeedCard({
@@ -21,6 +21,9 @@ export function FeedCard({
   readonly onDiscuss: () => void;
   readonly onOptions: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [linkError, setLinkError] = useState(false);
   return (
     <View style={styles.card}>
@@ -93,36 +96,54 @@ export function FeedCard({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  card: {
-    gap: 8,
-    marginBottom: 32,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 18,
-    lineHeight: 26,
-    fontWeight: "500",
-    flex: 1,
-  },
-  date: { color: colors.muted, fontSize: 12, lineHeight: 26 },
-  discuss: { color: colors.ink, fontSize: 13, lineHeight: 20 },
-  sources: { gap: 10 },
-  source: { color: colors.accent, fontSize: 14, lineHeight: 22 },
-  actions: { flexDirection: "row", gap: 12, alignItems: "center" },
-  action: {
-    minHeight: 44,
-    minWidth: 44,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    card: {
+      gap: 8,
+      marginBottom: 32,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    title: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 18,
+      lineHeight: 26,
+      fontWeight: "500",
+      flex: 1,
+    },
+    date: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 26,
+    },
+    discuss: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    sources: { gap: 10 },
+    source: {
+      fontFamily: systemFont,
+      color: colors.accent,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    actions: { flexDirection: "row", gap: 12, alignItems: "center" },
+    action: {
+      minHeight: 44,
+      minWidth: 44,
+      flexDirection: "row",
+      gap: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 8,
+    },
+  });
+}

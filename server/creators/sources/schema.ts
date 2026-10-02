@@ -3,7 +3,7 @@ import { creatorExampleSchema } from "@zoen/companion-ui/creators";
 import {
   GitRevisionSchema,
   WorkspacePathSchema,
-} from "../../../shared/workspaces/files";
+} from "@zoen/companion-ui/workspace-files";
 
 const workspaceSnapshotMetadataSchema = z.strictObject({
   title: creatorExampleSchema.shape.title,

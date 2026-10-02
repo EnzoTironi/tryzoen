@@ -12,8 +12,9 @@ import {
   publishOntology,
   readOntology,
 } from "../../server/workspaces/ontology";
-import { emptyOntology } from "../../shared/workspaces/ontology";
+import { emptyOntology } from "@zoen/companion-ui/ontology";
 import { workspaceFixture } from "./workspace-fixture";
+import { invokeWorkspaceTool } from "../../server/tools/workspace";
 test("ontology actions retain sources and history, replay once, and reject foreign provenance or stale writes", async () => {
   await using workspace = await workspaceFixture();
   const { actor, guest, personal, repository } = workspace;
@@ -37,12 +38,23 @@ test("ontology actions retain sources and history, replay once, and reject forei
         type: "project",
         name: "First project",
         properties: {
-          status: "planned",
+          status: {
+            value: "planned",
+            sources: [
+              {
+                path: "knowledge/project.md",
+                revision: source.revision,
+                excerpt: "Synthetic source evidence.",
+              },
+            ],
+            validTime: null,
+          },
         },
         sources: [
           {
             path: "knowledge/project.md",
             revision: source.revision,
+            excerpt: "Synthetic source evidence.",
           },
         ],
       },
@@ -51,7 +63,7 @@ test("ontology actions retain sources and history, replay once, and reject forei
         type: "task",
         name: "First task",
         properties: {
-          status: "open",
+          status: { value: "open", sources: [], validTime: null },
         },
         sources: [],
       },
@@ -61,6 +73,8 @@ test("ontology actions retain sources and history, replay once, and reject forei
         type: "part_of",
         from: "task_one",
         to: "project_one",
+        sources: [],
+        validTime: null,
       },
     ],
   };
@@ -96,8 +110,13 @@ test("ontology actions retain sources and history, replay once, and reject forei
     entityId: "project_one",
     actionId: "project_status",
     value: "active",
+    sources: [],
+    validTime: null,
   };
   const changed = await applyOntologyAction(actor, action);
+  expect(
+    (await readOntology(actor)).graph.entities[0]?.properties.status?.sources
+  ).toEqual([]);
   expect(await applyOntologyAction(actor, action)).toEqual(changed);
   const exported = await repository.export(actor);
   if (!exported) throw new Error("Missing Git export");
@@ -148,9 +167,9 @@ test("ontology actions retain sources and history, replay once, and reject forei
       },
     })}`
   );
-  expect((await readOntology(guest)).graph.entities[0]?.properties.status).toBe(
-    "active"
-  );
+  expect(
+    (await readOntology(guest)).graph.entities[0]?.properties.status?.value
+  ).toBe("active");
   expect(
     (await repository.read(actor, "ontology/workspace.json", saved.revision))
       .content
@@ -192,6 +211,7 @@ test("ontology actions retain sources and history, replay once, and reject forei
           {
             path: "knowledge/private.md",
             revision: privateSource.revision,
+            excerpt: "PRIVATE",
           },
         ],
       },
@@ -229,6 +249,8 @@ test("ontology actions retain sources and history, replay once, and reject forei
                 type: "part_of",
                 from: "project_one",
                 to: "task_one",
+                sources: [],
+                validTime: null,
               },
             ],
           },
@@ -269,4 +291,148 @@ test("ontology actions retain sources and history, replay once, and reject forei
       )
     ).ok
   ).toBe(true);
+});
+
+test("property and relationship evidence validates exact scoped sources, supports two time coordinates and detects source edits", async () => {
+  await using workspace = await workspaceFixture();
+  const { actor, guest, guestPersonal, repository } = workspace;
+  const source = await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: null,
+    path: "knowledge/project.md",
+    content:
+      "# Project\nActive from 2026-09-01 until 2026-10-01.\nTask belongs to Project.",
+  });
+  const citation = {
+    path: "knowledge/project.md",
+    revision: source.revision,
+    excerpt: "Active from 2026-09-01 until 2026-10-01.",
+  };
+  const interval = { from: "2026-09-01", until: "2026-10-01" };
+  const graph = {
+    ...emptyOntology,
+    entities: [
+      {
+        id: "project_one",
+        type: "project",
+        name: "Project",
+        sources: [],
+        properties: {
+          status: { value: "active", sources: [citation], validTime: interval },
+        },
+      },
+      {
+        id: "task_one",
+        type: "task",
+        name: "Task",
+        sources: [],
+        properties: { status: { value: "open", sources: [], validTime: null } },
+      },
+    ],
+    links: [
+      {
+        type: "part_of",
+        from: "task_one",
+        to: "project_one",
+        sources: [{ ...citation, excerpt: "Task belongs to Project." }],
+        validTime: interval,
+      },
+    ],
+  };
+  const saved = await publishOntology(actor, {
+    graph,
+    operationId: randomUUID(),
+    expectedRevision: source.revision,
+  });
+  const selected = await invokeWorkspaceTool(guest, {
+    path: "workspace_ontology_read",
+    args: { revision: saved.revision, validOn: "2026-09-15" },
+  });
+  expect(selected).toMatchObject({
+    revision: saved.revision,
+    validOn: "2026-09-15",
+    graph: { actions: [], links: graph.links },
+  });
+  const outside = await readOntology(guest, {
+    revision: saved.revision,
+    validOn: "2026-10-01",
+  });
+  expect(outside.graph.entities[0]?.properties).toEqual({});
+  expect(outside.graph.entities[1]?.properties.status?.validTime).toBeNull();
+  expect(outside.graph.links).toEqual([]);
+  expect(outside.mayManage).toBe(false);
+  expect(
+    (await readOntology(actor)).sources.every(
+      (item) => item.status === "passage-present"
+    )
+  ).toBe(true);
+  const changed = await applyOntologyAction(actor, {
+    operationId: randomUUID(),
+    expectedRevision: saved.revision,
+    actionId: "project_status",
+    entityId: "project_one",
+    value: "paused",
+    sources: [],
+    validTime: null,
+  });
+  expect(
+    (await readOntology(actor, { revision: saved.revision })).graph.entities[0]
+      ?.properties.status
+  ).toEqual(graph.entities[0]?.properties.status);
+  expect(
+    (await readOntology(actor)).graph.entities[0]?.properties.status
+  ).toEqual({ value: "paused", sources: [], validTime: null });
+  const edited = await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: changed.revision,
+    path: citation.path,
+    content: "# Project\nThe old relationship evidence has been corrected.",
+  });
+  expect((await readOntology(guest)).sources[0]?.status).toBe(
+    "passage-changed"
+  );
+  expect(
+    (await readOntology(guest, { revision: saved.revision })).sources.every(
+      (item) => item.status === "passage-changed"
+    )
+  ).toBe(true);
+  await expect(
+    publishOntology(actor, {
+      graph: {
+        ...graph,
+        links: [
+          {
+            ...graph.links[0],
+            type: "part_of",
+            from: "task_one",
+            to: "project_one",
+            validTime: interval,
+            sources: [{ ...citation, excerpt: "Invented passage" }],
+          },
+        ],
+      },
+      operationId: randomUUID(),
+      expectedRevision: edited.revision,
+    })
+  ).rejects.toMatchObject({ reason: "source" });
+  await expect(
+    readOntology(guestPersonal, { revision: saved.revision })
+  ).rejects.toThrow(Error);
+  const removed = await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: edited.revision,
+    path: citation.path,
+    content: null,
+  });
+  expect((await readOntology(guest)).sources[0]?.status).toBe("unavailable");
+  expect(
+    (await repository.read(actor, citation.path, source.revision)).content
+  ).toContain(citation.excerpt);
+  expect((await readOntology(actor)).revision).toBe(removed.revision);
+  await query(
+    sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
+  );
+  await expect(
+    readOntology(guest, { revision: saved.revision })
+  ).rejects.toMatchObject({ name: "WorkspaceAccessDenied" });
 });

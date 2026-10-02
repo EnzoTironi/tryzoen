@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
@@ -19,6 +19,7 @@ export function CreatorPreviewRequest({
   readonly disabled: boolean;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const pageStyles = usePageStyles();
   const [selectedCase, setSelectedCase] = useState<string>();
   const [choosing, setChoosing] = useState(false);
   const [question, setQuestion] = useState("");

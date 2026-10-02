@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
         ListHeaderComponent: ReactNode;
       },
   end: vi.fn<() => void>(),
+  node: undefined as unknown,
 }));
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
@@ -38,18 +39,19 @@ vi.mock("react-native", () => ({
     mocks.list = props;
     props.ref.current = {
       scrollToEnd: mocks.end,
-      getScrollableNode: () => undefined,
+      getScrollableNode: () => mocks.node,
     };
     return <div>{props.ListHeaderComponent}</div>;
   },
 }));
 vi.mock("../session/input", () => ({ messageContent: () => [] }));
-vi.mock("../theme", () => ({ colors: {} }));
+vi.mock("../theme", () => ({ useColors: () => ({}), systemFont: undefined }));
 vi.mock("lucide-react-native", () => ({
   Puzzle: () => null,
   ShieldCheck: () => null,
 }));
 vi.mock("../cards/resource", () => ({ ResourceCard: () => null }));
+vi.mock("./knowledge-query", () => ({ KnowledgeQueryCard: () => null }));
 vi.mock("../conversation/input-request", () => ({
   InputRequestCard: () => null,
 }));
@@ -93,6 +95,8 @@ function scroll(y: number) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  mocks.node = undefined;
   load.mockResolvedValue(undefined);
   mocks.effects = [];
   vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
@@ -111,6 +115,7 @@ it("initial measurements and follow-bottom do not scan old history", () => {
 it("loads once when intentionally scrolling toward the older edge", () => {
   render();
   scroll(800);
+  mocks.list?.onScrollBeginDrag();
   scroll(200);
   scroll(100);
   scroll(0);
@@ -126,6 +131,7 @@ it.each([
 ])("does not auto-load when blocked by %j", (extra) => {
   render(extra);
   scroll(800);
+  mocks.list?.onScrollBeginDrag();
   scroll(100);
   expect(load).not.toHaveBeenCalled();
 });
@@ -136,4 +142,38 @@ it("loads a short page on an intentional native drag without startup scanning", 
   expect(load).not.toHaveBeenCalled();
   mocks.list?.onScrollBeginDrag();
   expect(load).toHaveBeenCalledOnce();
+});
+
+it("late virtualized rows keep the initial viewport at the newest edge", () => {
+  render();
+  scroll(800);
+  mocks.end.mockClear();
+  mocks.list?.onScroll({
+    nativeEvent: {
+      contentSize: { height: 1400 },
+      contentOffset: { y: 800 },
+      layoutMeasurement: { height: 400 },
+    },
+  });
+  mocks.list?.onContentSizeChange();
+  expect(mocks.end).toHaveBeenCalledWith({ animated: false });
+  expect(load).not.toHaveBeenCalled();
+});
+
+it("uses actual web geometry rather than estimated virtualized row offsets", () => {
+  class ScrollElement {
+    scrollTop = 0;
+    scrollHeight = 1848;
+    addEventListener = vi.fn<() => void>();
+    removeEventListener = vi.fn<() => void>();
+  }
+  vi.stubGlobal("HTMLElement", ScrollElement);
+  const node = new ScrollElement();
+  mocks.node = node;
+  render();
+  expect(node.scrollTop).toBe(1848);
+  expect(mocks.end).not.toHaveBeenCalled();
+  node.scrollHeight = 2048;
+  mocks.list?.onContentSizeChange();
+  expect(node.scrollTop).toBe(2048);
 });

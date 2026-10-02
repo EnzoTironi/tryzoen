@@ -1,0 +1,149 @@
+import { z } from "zod";
+
+import {
+  WorkspacePathSchema,
+  GitRevisionSchema,
+  knowledgePathSchema,
+} from "./files-schema";
+import { ontologyPath } from "./ontology/schema";
+
+export const knowledgeChangePathSchema = z.union([
+  knowledgePathSchema,
+  z.literal(ontologyPath),
+]);
+export const knowledgeRoutingPath = "knowledge/routing/index.json";
+export const knowledgeRoutingSchema = z.strictObject({
+  version: z.literal(1),
+  records: z
+    .array(
+      z.strictObject({
+        id: z.uuid(),
+        title: z.string().trim().min(1).max(120),
+        summary: z.string().trim().min(1).max(1000),
+        terms: z.array(z.string().trim().min(1).max(80)).max(20),
+        paths: z
+          .array(
+            knowledgePathSchema.refine((path) => path !== knowledgeRoutingPath)
+          )
+          .min(1)
+          .max(3)
+          .refine((paths) => new Set(paths).size === paths.length),
+      })
+    )
+    .max(60)
+    .refine(
+      (records) =>
+        new Set(records.map((record) => record.id)).size === records.length
+    ),
+});
+const revision = GitRevisionSchema;
+export const knowledgeProposalPathSchema = WorkspacePathSchema.refine((path) =>
+  path.startsWith("proposals/knowledge/")
+);
+export const knowledgeProposalSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    summary: z.string().trim().min(1).max(2000),
+    baseRevision: revision.nullable(),
+    changes: z
+      .array(
+        z
+          .object({
+            path: knowledgeChangePathSchema,
+            content: z.string().max(262_144).nullable(),
+          })
+          .strict()
+          .refine(
+            (change) => change.path !== ontologyPath || change.content !== null,
+            "Propose an ontology document, rather than deleting its file"
+          )
+      )
+      .min(1)
+      .max(20)
+      .refine(
+        (changes) =>
+          new Set(changes.map(({ path }) => path)).size === changes.length,
+        "Each file must appear once"
+      ),
+    dependencies: z
+      .array(knowledgeChangePathSchema)
+      .max(20)
+      .refine(
+        (paths) => new Set(paths).size === paths.length,
+        "Each dependency must appear once"
+      ),
+    evidence: z
+      .array(
+        z.discriminatedUnion("kind", [
+          z
+            .object({
+              kind: z.literal("file"),
+              path: knowledgePathSchema,
+              revision,
+              excerpt: z.string().min(1).max(2000),
+            })
+            .strict(),
+          z
+            .object({
+              kind: z.literal("link"),
+              url: z
+                .url()
+                .max(2048)
+                .refine((url) => /^https?:\/\//u.test(url)),
+              title: z.string().min(1).max(200),
+              excerpt: z.string().min(1).max(2000),
+            })
+            .strict(),
+        ])
+      )
+      .min(1)
+      .max(20)
+      .refine(
+        (items) =>
+          new Set(items.map((item) => JSON.stringify(item))).size ===
+          items.length,
+        "Each citation must be unique"
+      ),
+  })
+  .strict()
+  .refine(
+    (proposal) =>
+      new Set([
+        ...proposal.changes.map(({ path }) => path),
+        ...proposal.dependencies,
+        ...proposal.evidence
+          .filter((item) => item.kind === "file")
+          .map((item) => item.path),
+      ]).size <= 24,
+    "A proposal may reference at most 24 workspace files"
+  );
+export const knowledgeProposalListSchema = z.object({
+  revision: revision.nullable(),
+  canReview: z.boolean(),
+  items: z
+    .array(
+      z.object({
+        path: knowledgeProposalPathSchema,
+        title: z.string(),
+        summary: z.string(),
+        files: z.number().int().min(1).max(20),
+      })
+    )
+    .max(24),
+});
+export const knowledgeProposalReviewSchema = z.object({
+  path: knowledgeProposalPathSchema,
+  revision,
+  canReview: z.boolean(),
+  proposal: knowledgeProposalSchema,
+  changes: z
+    .array(
+      z.object({
+        path: knowledgeChangePathSchema,
+        before: z.string().nullable(),
+        after: z.string().nullable(),
+      })
+    )
+    .max(20),
+  conflicts: z.array(knowledgeChangePathSchema).max(24),
+});

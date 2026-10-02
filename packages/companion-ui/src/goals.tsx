@@ -1,7 +1,7 @@
 import { useState, type ComponentProps } from "react";
 import { Text } from "react-native";
 import { Ellipsis } from "lucide-react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
 import { GoalOptions } from "./goals/options";
 import { CompanionSheet } from "./sheet";
@@ -33,6 +33,7 @@ export function Goals({
   readonly preferenceError?: string;
   readonly onPreference: ComponentProps<typeof GoalOptions>["onChange"];
 }) {
+  const pageStyles = usePageStyles();
   const [view, setView] = useState<"options" | "completed">();
   const sorted = preferences.sortAutomatically
     ? items

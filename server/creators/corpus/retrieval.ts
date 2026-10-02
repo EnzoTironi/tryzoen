@@ -2,19 +2,21 @@ import { z } from "zod";
 import { transaction } from "../../../db/queries";
 import type { WorkspaceActorSchema } from "../../workspaces/access";
 import { authorizedCreatorCorpus } from "./access";
-import { corpusAccessSchema, corpusDigest, corpusPageSchema } from "./schema";
-import {
-  openCreatorCorpus,
-  creatorCorpusTool,
-  readCreatorCorpusPage,
-} from "./engine";
-import { verifyCorpusManifest } from "./files";
-import { listNotePaths } from "../../memory/ai-memory/notes";
+import { corpusAccessSchema, corpusDigest } from "./schema";
+import { readCorpusManifest } from "./files";
 
 export const creatorCorpusSearchSchema = z.strictObject({
   access: corpusAccessSchema,
   query: z.string().trim().min(1).max(1000),
 });
+function terms(text: string) {
+  return (
+    text
+      .normalize("NFKC")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
+}
 export function searchCreatorCorpus(
   actor: z.infer<typeof WorkspaceActorSchema>,
   raw: z.infer<typeof creatorCorpusSearchSchema>
@@ -26,66 +28,27 @@ export function searchCreatorCorpus(
       throw new Error(
         "The creator must build this approved version's knowledge index before searching."
       );
-    await using engine = await openCreatorCorpus(corpus.namespace, true);
-    await verifyCorpusManifest(engine.data, corpus.manifest, true);
-    const paths = await listNotePaths(engine);
-    if (
-      paths.length !== corpus.manifest.pages.length ||
-      paths.some(
-        (path) => !corpus.manifest.pages.some((page) => page.path === path)
+    const manifest = await readCorpusManifest(
+      corpus.namespace,
+      corpus.manifest
+    );
+    const query = [...new Set(terms(input.query))].slice(0, 32);
+    const selected = manifest.pages
+      .map((page) => {
+        const words = new Set(terms(`${page.title} ${page.body}`));
+        return { page, score: query.filter((word) => words.has(word)).length };
+      })
+      .filter((hit) => hit.score > 0)
+      .toSorted(
+        (a, b) =>
+          b.score - a.score ||
+          (a.page.path < b.page.path ? -1 : a.page.path > b.page.path ? 1 : 0)
       )
-    )
-      throw new Error(
-        "Creator corpus source inventory does not match its manifest."
-      );
-    const terms = (
-      input.query
-        .normalize("NFKC")
-        .match(/[\p{L}\p{N}]+/gu)
-        ?.slice(0, 32) ?? []
-    )
-      .map((term) => `"${term}"`)
-      .join(" OR ");
-    const result = terms
-      ? z
-          .object({
-            hits: z
-              .array(z.object({ path: corpusPageSchema.shape.path }))
-              .max(8),
-            raw_hits: z.array(z.never()).max(0).optional(),
-            global_hits: z.array(z.never()).max(0).optional(),
-            global_scope_hits: z.array(z.never()).max(0).optional(),
-          })
-          .parse(
-            await creatorCorpusTool(
-              engine,
-              corpus.manifest.releaseId,
-              "memory_query",
-              { query: terms, limit: 8 }
-            )
-          )
-      : { hits: [] };
-    const selected = result.hits.map((hit) => {
-      const page = corpus.manifest.pages.find(
-        (candidate) => candidate.path === hit.path
-      );
-      if (!page)
-        throw new Error(
-          "Creator index returned a source outside the approved manifest."
-        );
-      return page;
-    });
-    if (new Set(selected.map((page) => page.path)).size !== selected.length)
-      throw new Error("Creator index returned duplicate sources.");
+      .slice(0, 8);
     const hits = [];
     let remaining = 16000;
-    for (const page of selected) {
-      const verified = await readCreatorCorpusPage(
-        engine,
-        corpus.manifest.releaseId,
-        page
-      );
-      let excerpt = verified.body.slice(0, Math.min(8000, remaining));
+    for (const { page } of selected) {
+      let excerpt = page.body.slice(0, Math.min(8000, remaining));
       if (/[\uD800-\uDBFF]$/.test(excerpt)) excerpt = excerpt.slice(0, -1);
       if (!excerpt) break;
       remaining -= excerpt.length;
@@ -97,7 +60,7 @@ export function searchCreatorCorpus(
         entryId: page.entryId,
         excerpt,
         source: page.source,
-        releaseId: corpus.manifest.releaseId,
+        releaseId: manifest.releaseId,
         manifestDigest: corpus.digest,
         pageDigest: page.digest,
         excerptDigest: corpusDigest(excerpt),
@@ -108,7 +71,7 @@ export function searchCreatorCorpus(
     }
     await authorizedCreatorCorpus(actor, input.access);
     return {
-      releaseId: corpus.manifest.releaseId,
+      releaseId: manifest.releaseId,
       manifestDigest: corpus.digest,
       retrieval: "lexical",
       hits,

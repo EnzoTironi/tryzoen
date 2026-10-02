@@ -1,17 +1,12 @@
 import { z } from "zod";
 import { defineEval } from "eve/evals";
 import { equals } from "eve/evals/expect";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
+import { OntologySchema } from "@zoen/companion-ui/ontology";
 
 const graphSchema = z.object({
-  revision: z.string(),
-  graph: z.object({
-    entities: z.array(
-      z.object({
-        id: z.string(),
-        properties: z.object({ status: z.string() }),
-      })
-    ),
-  }),
+  revision: GitRevisionSchema,
+  graph: OntologySchema,
 });
 
 export default defineEval({
@@ -38,6 +33,8 @@ export default defineEval({
         entityId: "release_project",
         actionId: "project_status",
         value: "active",
+        sources: [],
+        validTime: null,
         expectedRevision: before.revision,
       },
     });
@@ -61,6 +58,8 @@ export default defineEval({
         entityId: "release_project",
         actionId: "project_status",
         value: "active",
+        sources: [],
+        validTime: null,
         expectedRevision: before.revision,
       },
     });
@@ -76,7 +75,7 @@ export default defineEval({
     const after = await inspect();
     t.check(
       after.graph.entities.find((entity) => entity.id === "release_project")
-        ?.properties.status,
+        ?.properties.status?.value,
       equals("active")
     );
     t.check(after.revision === before.revision, equals(false)).label(

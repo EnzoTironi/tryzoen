@@ -55,7 +55,7 @@ test(
     const original = await sendMatrixMessage(fixture.actor, {
       id: direct.id,
       operationId: randomUUID(),
-      text: "Zoen, this copied text must not start a task.",
+      text: "@Zoen, this copied text must not start a task.",
     });
     const input = {
       id: direct.id,
@@ -74,7 +74,7 @@ test(
       messages.filter((message) => message.id === result.messageId)
     ).toHaveLength(1);
     expect(messages.at(-1)).toMatchObject({
-      text: "Zoen, this copied text must not start a task.",
+      text: "@Zoen, this copied text must not start a task.",
       forwarded: true,
       mine: false,
       reply: null,

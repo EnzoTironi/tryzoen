@@ -2,6 +2,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { EveMessage, EveMessagePart } from "eve/react";
 import { reactionTextFor, reactToMessageToolResultSchema } from "./reaction";
 import { sendMessageToolResultSchema } from "./message-delivery";
+import { SemanticQueryResultSchema } from "../library/semantic/schema";
 
 /** The tool receipt is the delivered message. Model completion markers are internal. */
 export function visibleConversationMessages(
@@ -19,7 +20,13 @@ export function visibleConversationMessages(
           !/^DELIVERY_COMPLETE[.!]?$/iu.test(part.text.trim())
         );
       if (part.type === "dynamic-tool")
-        return Boolean(part.toolMetadata?.eve?.inputRequest);
+        return (
+          Boolean(part.toolMetadata?.eve?.inputRequest) ||
+          (part.toolName === "workspace_knowledge_query" &&
+            part.state === "output-available" &&
+            !part.partial &&
+            SemanticQueryResultSchema.safeParse(part.output).success)
+        );
       return part.type === "authorization" || part.type === "file";
     });
     const visible: EveMessage[] = sent.map((delivery) =>

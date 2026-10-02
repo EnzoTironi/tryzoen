@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 import { workspaceFixture } from "./workspace-fixture";
-import { WorkspacePathSchema } from "../../shared/workspaces/files";
+import { WorkspacePathSchema } from "@zoen/companion-ui/workspace-files";
 import { readWorkspaceGit } from "../../server/workspaces/git";
 
 test("native analytic source stays an authorized versioned file through edits, conflicts and export", async () => {

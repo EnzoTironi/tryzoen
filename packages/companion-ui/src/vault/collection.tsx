@@ -3,7 +3,7 @@ import { AppState, Text, View } from "react-native";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { VaultData } from "./data";
 import type { vaultPageInputSchema } from "./schema";
 import { VaultItemForm } from "./form";
@@ -20,6 +20,7 @@ export function VaultCollection({
   readonly cacheScope: string;
   readonly renderPermission?: (id: string) => ReactNode;
 }) {
+  const pageStyles = usePageStyles();
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<string>();
   const list = useInfiniteQuery({

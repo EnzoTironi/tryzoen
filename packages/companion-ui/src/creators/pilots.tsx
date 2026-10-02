@@ -6,7 +6,7 @@ import { CreatorPilot } from "./pilot";
 import { CreatorPilotFeedback } from "./pilot-feedback";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPilots({
   data,
@@ -48,6 +48,7 @@ function PilotInvitations({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [selected, setSelected] = useState<string>();
   const [ending, setEnding] = useState<string>();
   const [feedback, setFeedback] = useState<string>();

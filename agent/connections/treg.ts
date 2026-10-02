@@ -111,7 +111,16 @@ async function currentActor(
   );
   if (actor.workspaceId !== connection.workspaceId || actor.agentGrantId)
     throw new WorkspaceAccessDenied();
-  await readToolConnection(actor, connection.id, connection.revision);
+  const current = await readToolConnection(
+    actor,
+    connection.id,
+    connection.revision
+  );
+  if (
+    current.kind !== "mcp" ||
+    current.endpoint.replace(/\/$/u, "") !== endpoint.slice(0, -1)
+  )
+    throw new WorkspaceAccessDenied();
   return actor;
 }
 

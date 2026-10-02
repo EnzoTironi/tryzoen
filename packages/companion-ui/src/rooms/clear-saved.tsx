@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Text, Pressable } from "react-native";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import type { RoomData } from "./schema";
@@ -13,6 +13,7 @@ export function ClearUnavailableSaved({
   readonly data: RoomData;
   readonly cacheScope: string;
 }) {
+  const colors = useColors();
   const [open, setOpen] = useState(false);
   const client = useQueryClient();
   const state = useQuery({
@@ -53,7 +54,9 @@ export function ClearUnavailableSaved({
           void state.refetch();
         }}
       >
-        <Text style={{ color: colors.muted, fontSize: 13 }}>
+        <Text
+          style={{ fontFamily: systemFont, color: colors.muted, fontSize: 13 }}
+        >
           Limpar referências sem acesso
         </Text>
       </Pressable>

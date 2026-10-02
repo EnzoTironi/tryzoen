@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Modal, useWindowDimensions } from "react-native";
+import { useAccessibilityPreferences } from "./theme";
 
 export interface CompanionOverlayProps {
   readonly title: string;
@@ -14,11 +15,12 @@ function NativeOverlay({
   focusOnOpen,
 }: CompanionOverlayProps) {
   const compact = useWindowDimensions().width < 720;
+  const { reduceMotion } = useAccessibilityPreferences();
   return (
     <Modal
       accessibilityLabel={title}
       transparent
-      animationType={compact ? "slide" : "fade"}
+      animationType={reduceMotion ? "none" : compact ? "slide" : "fade"}
       onRequestClose={onClose}
       onShow={focusOnOpen}
     >

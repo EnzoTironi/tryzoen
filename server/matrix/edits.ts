@@ -18,6 +18,7 @@ import {
   readRoomMessage,
 } from "./messages";
 import { projectMatrixActivity } from "./activity";
+import { resolveMatrixMentions } from "./mentions";
 
 /** App writers compare revisions under one message lock; external Matrix writers have no CAS. */
 export async function editMatrixMessage(
@@ -62,7 +63,12 @@ export async function editMatrixMessage(
         edit: undefined,
       };
     await requireMatrixRoom(actor, input.id);
-    const edit = await publishReplacement(room, input);
+    const edit = await publishReplacement(
+      actor,
+      room,
+      input,
+      latest?.content["m.new_content"] ?? original.content
+    );
     const current = await readRoomMessage(room, input.messageId, true);
     await requireMatrixRoom(actor, input.id);
     return {
@@ -80,9 +86,13 @@ export async function editMatrixMessage(
 }
 
 async function publishReplacement(
+  actor: z.infer<typeof WorkspaceActorSchema>,
   room: Awaited<ReturnType<typeof joinMatrixRoom>>,
-  input: z.infer<typeof roomEditSchema>
+  input: z.infer<typeof roomEditSchema>,
+  previous: z.infer<typeof MatrixEventSchema>["content"]
 ) {
+  const mentions = await resolveMatrixMentions(actor, room, input.text);
+  const existing = new Set(previous["m.mentions"]?.user_ids ?? []);
   const receipt = z.object({ event_id: z.string() }).parse(
     await matrixRequest(
       "PUT",
@@ -90,7 +100,14 @@ async function publishReplacement(
       {
         msgtype: "m.text",
         body: `* ${input.text}`,
-        "m.new_content": { msgtype: "m.text", body: input.text },
+        "m.mentions": {
+          user_ids: mentions.user_ids.filter((id) => !existing.has(id)),
+        },
+        "m.new_content": {
+          msgtype: "m.text",
+          body: input.text,
+          "m.mentions": mentions,
+        },
         "m.relates_to": { rel_type: "m.replace", event_id: input.messageId },
         "org.zoen.edit_operation": input.operationId,
       },

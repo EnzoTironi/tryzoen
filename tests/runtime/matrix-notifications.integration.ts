@@ -9,7 +9,7 @@ import {
   readRoomNotifications,
   setRoomNotifications,
 } from "../../server/matrix/notifications";
-import { matrixRequest } from "../../server/matrix/client";
+
 import { syncConversationInbox } from "../../server/matrix/sync";
 import { markMatrixRoomRead } from "../../server/matrix/read-position";
 import { saveDirectoryProfile } from "../../server/accounts/directory";
@@ -35,8 +35,10 @@ test(
       operationId: randomUUID(),
       name: "Synthetic native attention",
     });
-    const author = await joinMatrixRoom(actor, room.id);
-    const viewer = await joinMatrixRoom(guest, room.id);
+    await joinMatrixRoom(actor, room.id);
+    await joinMatrixRoom(guest, room.id);
+    const username = `attention_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    await saveDirectoryProfile(guest, { username, discoverable: false });
     let cursor: string | undefined;
     let focusedRoomId = room.id;
     const poll = async () => {
@@ -81,18 +83,11 @@ test(
       text: "Unread ordinary",
     });
     await count(1);
-    const mention = z.object({ event_id: z.string() }).parse(
-      await matrixRequest(
-        "PUT",
-        `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${randomUUID()}`,
-        {
-          msgtype: "m.text",
-          body: "Explicit mention",
-          "m.mentions": { user_ids: [viewer.matrixId] },
-        },
-        author.matrixId
-      )
-    );
+    const mention = await sendMatrixMessage(actor, {
+      id: room.id,
+      operationId: randomUUID(),
+      text: `Explicit @${username} mention`,
+    });
     await count(2, 1);
     await expect(
       syncConversationInbox(actor, { cursor, focusedRoomId })
@@ -120,8 +115,6 @@ test(
       rootId: message.event_id,
     });
     await count(0);
-    const username = `attention_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-    await saveDirectoryProfile(guest, { username, discoverable: false });
     const direct = await openDirectRoom(actor, {
       username,
       operationId: randomUUID(),
@@ -157,16 +150,11 @@ test(
       text: "Muted message is not an unread notification",
     });
     await count(0);
-    await matrixRequest(
-      "PUT",
-      `rooms/${encodeURIComponent(direct.roomId)}/send/m.room.message/${randomUUID()}`,
-      {
-        msgtype: "m.text",
-        body: "Muted explicit mention",
-        "m.mentions": { user_ids: [viewer.matrixId] },
-      },
-      author.matrixId
-    );
+    await sendMatrixMessage(actor, {
+      id: direct.id,
+      operationId: randomUUID(),
+      text: `@${username} Muted explicit mention`,
+    });
     await count(0);
     expect(
       await setRoomNotifications(guest, { id: direct.id, muted: false })
@@ -189,16 +177,11 @@ test(
     focusedRoomId = room.id;
     cursor = undefined;
     await poll();
-    await matrixRequest(
-      "PUT",
-      `rooms/${encodeURIComponent(room.roomId)}/send/m.room.message/${randomUUID()}`,
-      {
-        msgtype: "m.text",
-        body: "Muted group mention",
-        "m.mentions": { user_ids: [viewer.matrixId] },
-      },
-      author.matrixId
-    );
+    await sendMatrixMessage(actor, {
+      id: room.id,
+      operationId: randomUUID(),
+      text: `@${username} Muted group mention`,
+    });
     await count(0);
     for (const denied of [
       fixture.guestPersonal,

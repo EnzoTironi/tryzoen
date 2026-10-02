@@ -13,6 +13,7 @@ import { companionAgentData } from "@shared/companion/agent-data";
 import { api } from "@web/trpc/client";
 import { browserSessionClient } from "@web/eve/client";
 import { downloadMemoryBackup } from "@web/files/download";
+import { chooseMemoryArchive } from "@web/files/memory";
 
 function useAgentData() {
   const { client } = api.useUtils();
@@ -20,11 +21,10 @@ function useAgentData() {
   const space = params.get("space");
   const data = useMemo(
     () =>
-      companionAgentData(
-        getUntypedClient(client),
-        () => crypto.randomUUID(),
-        () => downloadMemoryBackup(window.location.origin, space)
-      ),
+      companionAgentData(getUntypedClient(client), () => crypto.randomUUID(), {
+        backup: () => downloadMemoryBackup(window.location.origin, space),
+        inspect: () => chooseMemoryArchive(window.location.origin, space),
+      }),
     [client, space]
   );
   return { data, cacheScope: space ?? "personal" };

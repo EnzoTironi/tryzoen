@@ -1,10 +1,14 @@
+import type { NetworkDestinationSchema } from "@zoen/companion-ui/approval";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { withTimeout, mapAsync } from "../operations/async";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 
-import { openNetworkBot } from "../workspaces/network";
+import {
+  openNetworkBot,
+  requireNetworkDestination,
+} from "../workspaces/network";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -42,6 +46,7 @@ const conversationSchema = z.object({
   name: z.string(),
   description: z.string(),
   destWorkspaceId: z.string(),
+  destBotId: z.uuid(),
   issuedBy: z.string(),
   networkKind: z.enum(["personal", "company"]),
 });
@@ -52,7 +57,7 @@ export const matrixConversationAuthority = async function (id: string) {
   const rows =
     await query(sql`SELECT c.id, c.workspace_id AS "workspaceId", c.requester_id AS "requesterId",
     c.grant_id AS "grantId", c.room_id AS "roomId", c.sender_id AS "senderId", c.bot_id AS "botId",
-    b.username, b.name, b.description, b.workspace_id AS "destWorkspaceId", g.issued_by AS "issuedBy", g.network_kind AS "networkKind"
+    b.username, b.name, b.description, b.workspace_id AS "destWorkspaceId", b.id AS "destBotId", g.issued_by AS "issuedBy", g.network_kind AS "networkKind"
     FROM matrix_agent_conversations c JOIN workspace_agent_grants g ON g.id = c.grant_id
     JOIN workspace_bots b ON b.id = g.bot_id
     WHERE c.id = ${id} AND c.closed_at IS NULL AND c.server_name = ${config.serverName}
@@ -90,11 +95,19 @@ const userConversation = async function (
 export const openMatrixConversation = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   username: string,
-  asAgent = false
+  asAgent = false,
+  expectedDestination?: z.output<typeof NetworkDestinationSchema>
 ) {
   return await withTimeout(async () => {
     return await withDatabaseTransaction(async () => {
-      const target = await openNetworkBot(actor, username, asAgent);
+      const target = await openNetworkBot(
+        actor,
+        username,
+        asAgent,
+        expectedDestination
+      );
+      // Hold the current grant and network authority before provisioning any room.
+      await requireWorkspaceAccess(target.destActor);
       const id = target.destActor.agentGrantId;
       await query(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 18))`
@@ -259,13 +272,14 @@ export const readMatrixConversation = async function (
 
 export const sendMatrixConversation = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  raw: z.output<typeof MatrixConversationSend>
+  raw: z.output<typeof MatrixConversationSend>,
+  expectedDestination?: z.output<typeof NetworkDestinationSchema>
 ) {
   const input = await MatrixConversationSend.parseAsync(raw);
 
   const hash = createHash("sha256").update(input.text).digest("hex");
   await withDatabaseTransaction(async () => {
-    await userConversation(actor, input.id);
+    await approvedConversation(actor, input.id, expectedDestination);
     await query(sql`INSERT INTO matrix_agent_sends(conversation_id, operation_id, request_hash)
       VALUES (${input.id}, ${input.operationId}, ${hash}) ON CONFLICT DO NOTHING`);
     const rows = await query<{
@@ -278,7 +292,7 @@ export const sendMatrixConversation = async function (
     return undefined;
   });
   return await withDatabaseTransaction(async () => {
-    const c = await userConversation(actor, input.id);
+    const c = await approvedConversation(actor, input.id, expectedDestination);
     // Synapse owns deduplication for this identity/room/transaction. Only its
     // authenticated appservice event creates the A2A task, never this UI request.
     const result = await z
@@ -297,6 +311,23 @@ export const sendMatrixConversation = async function (
     return result;
   });
 };
+
+async function approvedConversation(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  id: string,
+  expected?: z.output<typeof NetworkDestinationSchema>
+) {
+  const conversation = await userConversation(actor, id);
+  if (expected) {
+    await requireNetworkDestination(actor, conversation.username, expected);
+    if (
+      conversation.destBotId !== expected.botId ||
+      conversation.destWorkspaceId !== expected.workspaceId
+    )
+      throw new WorkspaceAccessDenied();
+  }
+  return conversation;
+}
 
 export const closeMatrixConversation = async function (
   actor: z.output<typeof WorkspaceActorSchema>,

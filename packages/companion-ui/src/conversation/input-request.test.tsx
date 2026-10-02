@@ -157,3 +157,167 @@ it("does not respond while the session is unavailable", () => {
   button?.onPress();
   expect(onRespond).not.toHaveBeenCalled();
 });
+
+const mailApproval = {
+  ...question,
+  toolName: "gmail-send",
+  input: {
+    to: ["recipient@example.invalid"],
+    cc: ["copy@example.invalid"],
+    bcc: ["hidden@example.invalid"],
+    subject: "Exact subject",
+    body: "Complete outgoing body with consequential details.",
+    inReplyTo: "<original@example.invalid>",
+    threadId: "original-thread",
+    approvalMessage: "A harmless supplementary summary.",
+  },
+  toolMetadata: {
+    eve: {
+      kind: "tool-call",
+      name: "gmail-send",
+      inputRequest: {
+        requestId: "request-mail",
+        kind: "tool-approval",
+        prompt: "Approve gmail-send?",
+        options: [
+          { id: "approve", label: "Approve" },
+          { id: "cancel", label: "Cancel", style: "danger" },
+        ],
+        allowFreeform: true,
+      },
+    },
+  },
+} satisfies EveDynamicToolPart;
+
+it("discloses the stored Gmail recipients, full body and reply context before approval", () => {
+  const markup = renderToStaticMarkup(
+    <InputRequestCard
+      part={mailApproval}
+      enabled
+      onRespond={async () => undefined}
+    />
+  );
+  for (const detail of [
+    ...mailApproval.input.to,
+    ...mailApproval.input.cc,
+    ...mailApproval.input.bcc,
+    mailApproval.input.subject,
+    mailApproval.input.body,
+    "original@example.invalid",
+    mailApproval.input.threadId,
+    mailApproval.input.approvalMessage,
+  ])
+    expect(markup).toContain(detail);
+  expect(buttons.get("Approve")?.disabled).toBe(false);
+  expect(markup).not.toContain("textarea");
+  expect(buttons.has("Send answer")).toBe(false);
+});
+
+it("discloses the frozen network recipient, workspace and revision", () => {
+  const input = {
+    username: "destination",
+    destination: {
+      botId: "10000000-0000-4000-8000-000000000001",
+      workspaceId: "synthetic-destination-workspace",
+      revision: "a".repeat(64),
+    },
+    text: "Complete network message.",
+  };
+  const part: EveDynamicToolPart = {
+    ...mailApproval,
+    toolName: "network-contact",
+    input,
+  };
+  const markup = renderToStaticMarkup(
+    <InputRequestCard part={part} enabled onRespond={async () => undefined} />
+  );
+  for (const detail of [
+    input.username,
+    input.destination.botId,
+    input.destination.workspaceId,
+    input.destination.revision,
+    input.text,
+  ])
+    expect(markup).toContain(detail);
+  expect(buttons.get("Approve")?.disabled).toBe(false);
+});
+
+it.each([
+  ["missing recipients", { ...mailApproval.input, to: [] }],
+  ["invalid recipient", { ...mailApproval.input, bcc: ["not-an-email"] }],
+  [
+    "header injection",
+    { ...mailApproval.input, subject: "Hi\r\nBcc: hidden@example.invalid" },
+  ],
+  ["oversize body", { ...mailApproval.input, body: "x".repeat(17_000) }],
+  [
+    "oversize summary",
+    { ...mailApproval.input, approvalMessage: "x".repeat(17_000) },
+  ],
+  ["malformed text", { ...mailApproval.input, body: "bad\ud800" }],
+  ["missing stored input", undefined],
+])(
+  "blocks invalid Gmail approval (%s) while permitting the exact native cancellation",
+  async (_name, input) => {
+    const onRespond = vi.fn<
+      ComponentProps<typeof InputRequestCard>["onRespond"]
+    >(async () => undefined);
+    const markup = renderToStaticMarkup(
+      <InputRequestCard
+        part={{ ...mailApproval, input }}
+        enabled
+        onRespond={onRespond}
+      />
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).not.toContain("textarea");
+    expect(buttons.get("Approve")?.disabled).toBe(true);
+    buttons.get("Approve")?.onPress();
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(buttons.get("Cancel")?.disabled).toBe(false);
+    buttons.get("Cancel")?.onPress();
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith([
+      { requestId: "request-mail", optionId: "cancel" },
+    ]);
+    await Promise.resolve();
+  }
+);
+
+it("blocks approval of a network request without the frozen destination", () => {
+  const onRespond = vi.fn<ComponentProps<typeof InputRequestCard>["onRespond"]>(
+    async () => undefined
+  );
+  renderToStaticMarkup(
+    <InputRequestCard
+      part={{
+        ...mailApproval,
+        toolName: "network-contact",
+        input: { username: "destination", text: "Message" },
+      }}
+      enabled
+      onRespond={onRespond}
+    />
+  );
+  expect(buttons.get("Approve")?.disabled).toBe(true);
+  buttons.get("Approve")?.onPress();
+  expect(onRespond).not.toHaveBeenCalled();
+});
+
+it("distinguishes unsupported tools from invalid Gmail or network payloads", () => {
+  const markup = renderToStaticMarkup(
+    <InputRequestCard
+      part={{
+        ...mailApproval,
+        toolName: "other-action",
+        input: { description: "Unknown action" },
+      }}
+      enabled
+      onRespond={async () => undefined}
+    />
+  );
+  expect(markup).toContain(
+    "Exact action details are unavailable for this tool."
+  );
+  expect(markup).toContain(mailApproval.toolMetadata.eve.inputRequest.prompt);
+  expect(markup).not.toContain('role="alert"');
+});

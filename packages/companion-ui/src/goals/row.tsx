@@ -1,8 +1,9 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check, ChevronRight, Ellipsis } from "lucide-react-native";
 import { IconButton } from "../icon-button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 
 export function GoalRow({
   item,
@@ -26,6 +27,9 @@ export function GoalRow({
   readonly onToggle: () => void;
   readonly onOptions?: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   return (
     <View style={[pageStyles.row, item.parentId && styles.subgoal]}>
       <Pressable
@@ -66,17 +70,19 @@ export function GoalRow({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  subgoal: { marginLeft: 28 },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: colors.muted,
-    borderRadius: 4,
-    alignSelf: "flex-start",
-    marginTop: 3,
-  },
-  checked: { backgroundColor: "#237a19", borderColor: "#237a19" },
-  completed: { textDecorationLine: "line-through", color: colors.muted },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    subgoal: { marginLeft: 28 },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderWidth: 2,
+      borderColor: colors.muted,
+      borderRadius: 4,
+      alignSelf: "flex-start",
+      marginTop: 3,
+    },
+    checked: { backgroundColor: "#237a19", borderColor: "#237a19" },
+    completed: { textDecorationLine: "line-through", color: colors.muted },
+  });
+}

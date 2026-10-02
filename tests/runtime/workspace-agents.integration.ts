@@ -14,6 +14,7 @@ import {
   saveWorkspaceBot,
   searchWorkspaceBots,
 } from "../../server/workspaces/bots";
+import { registerExternalAgentMember } from "../../server/workspaces/agent-members";
 import { requireWorkspaceAccess } from "../../server/workspaces/access";
 import {
   acceptProtocolTask,
@@ -24,7 +25,10 @@ import {
   readProtocolTask,
 } from "../../server/a2a/tasks";
 import { listProtocolTasks } from "../../server/a2a/list";
-import { readWorkspaceToolCatalog } from "../../server/tools/workspace";
+import {
+  readWorkspaceToolCatalog,
+  invokeWorkspaceTool,
+} from "../../server/tools/workspace";
 import { readAgentCard } from "../../server/a2a/card";
 
 const profile = () => ({
@@ -37,6 +41,16 @@ const grantInput = {
   label: "Test agent",
   capabilities: ["files" as const],
   days: 1,
+  externalMemberId: randomUUID(),
+};
+const registrationOperationId = randomUUID();
+const grantInputFor = async (owner: Parameters<typeof issueAgentGrant>[0]) => {
+  const { member } = await registerExternalAgentMember(owner, {
+    operationId: registrationOperationId,
+    username: "test_caller",
+    name: "Synthetic caller",
+  });
+  return { ...grantInput, externalMemberId: member.id };
 };
 const denied = (
   result: { ok: true; value: unknown } | { ok: false; error: unknown }
@@ -67,7 +81,7 @@ test("bot discovery is opt-in and grants never cross bot or workspace boundaries
       (error: unknown) => ({ ok: false as const, error })
     )
   );
-  const grant = await issueAgentGrant(actor, grantInput);
+  const grant = await issueAgentGrant(actor, await grantInputFor(actor));
   const authorized = await authenticateAgentGrant(
     `Bearer ${grant.token}`,
     bot.username
@@ -119,7 +133,7 @@ test("concurrent delivery, cancellation before binding, and late completion keep
   await using workspace = await workspaceFixture();
   const { actor } = workspace;
   const bot = await saveWorkspaceBot(actor, profile());
-  const grant = await issueAgentGrant(actor, grantInput);
+  const grant = await issueAgentGrant(actor, await grantInputFor(actor));
   const { actor: external } = await authenticateAgentGrant(
     `Bearer ${grant.token}`,
     bot.username
@@ -162,8 +176,8 @@ test("A2A pages have stable cursors, exact totals, filters and grant isolation",
   await using workspace = await workspaceFixture();
   const { actor } = workspace;
   const bot = await saveWorkspaceBot(actor, profile());
-  const grant = await issueAgentGrant(actor, grantInput);
-  const otherGrant = await issueAgentGrant(actor, grantInput);
+  const grant = await issueAgentGrant(actor, await grantInputFor(actor));
+  const otherGrant = await issueAgentGrant(actor, await grantInputFor(actor));
   const { actor: external } = await authenticateAgentGrant(
     `Bearer ${grant.token}`,
     bot.username
@@ -239,7 +253,7 @@ test("revocation, expiry and issuer removal deny every subsequent agent operatio
   await using workspace = await workspaceFixture();
   const { actor } = workspace;
   const bot = await saveWorkspaceBot(actor, profile());
-  const grant = await issueAgentGrant(actor, grantInput);
+  const grant = await issueAgentGrant(actor, await grantInputFor(actor));
   const { actor: external } = await authenticateAgentGrant(
     `Bearer ${grant.token}`,
     bot.username
@@ -259,7 +273,7 @@ test("revocation, expiry and issuer removal deny every subsequent agent operatio
       (error: unknown) => ({ ok: false as const, error })
     )
   );
-  const expiring = await issueAgentGrant(actor, grantInput);
+  const expiring = await issueAgentGrant(actor, await grantInputFor(actor));
   await query(
     sql`UPDATE workspace_agent_grants SET expires_at = now() - interval '1 second' WHERE id = ${expiring.id}`
   );
@@ -271,7 +285,7 @@ test("revocation, expiry and issuer removal deny every subsequent agent operatio
       (error: unknown) => ({ ok: false as const, error })
     )
   );
-  const removed = await issueAgentGrant(actor, grantInput);
+  const removed = await issueAgentGrant(actor, await grantInputFor(actor));
   expect(removed.id).not.toBe(grant.id);
   await query(
     sql`DELETE FROM workspace_memberships WHERE user_id = ${actor.userId} AND workspace_id = ${actor.workspaceId}`
@@ -302,7 +316,7 @@ test("external agents only read shared current files and cannot export memory, h
     path: "agent/USER.md",
     content: "Private profile",
   });
-  const grant = await issueAgentGrant(personal, grantInput);
+  const grant = await issueAgentGrant(personal, await grantInputFor(personal));
   const { actor: external } = await authenticateAgentGrant(
     `Bearer ${grant.token}`,
     bot.username
@@ -367,18 +381,68 @@ test("external agents only read shared current files and cannot export memory, h
   expect(
     (await readWorkspaceToolCatalog(external)).tools.map((tool) => tool.path)
   ).toEqual([
+    "workspace_knowledge_discover",
     "workspace_files_list",
     "workspace_files_read",
     "workspace_files_search",
   ]);
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_knowledge_discover",
+      args: {},
+    })
+  ).toMatchObject({
+    purpose: null,
+    records: [],
+    documents: [],
+  });
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_files_list",
+      args: {},
+    })
+  ).toMatchObject({
+    revision: second.revision,
+    files: ["knowledge/shared.md"],
+  });
+  expect(
+    await invokeWorkspaceTool(external, {
+      path: "workspace_files_read",
+      args: { path: "knowledge/shared.md", offset: 8 },
+    })
+  ).toMatchObject({ revision: second.revision, exists: true, content: "one" });
+  for (const path of [
+    "workspace_knowledge_discover",
+    "workspace_files_list",
+    "workspace_files_read",
+    "workspace_files_search",
+  ]) {
+    for (const view of [
+      { revision: second.revision },
+      { asOf: "2030-01-01T00:00:00Z" },
+    ]) {
+      await expect(
+        invokeWorkspaceTool(external, {
+          path,
+          args: {
+            ...view,
+            ...(path === "workspace_files_read"
+              ? { path: "knowledge/shared.md" }
+              : {}),
+            ...(path === "workspace_files_search" ? { query: "Version" } : {}),
+          },
+        })
+      ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
+    }
+  }
 });
 
 test("A2A messages are idempotent and tasks and contexts are private to their grant", async () => {
   await using workspace = await workspaceFixture();
   const { actor } = workspace;
   const bot = await saveWorkspaceBot(actor, profile());
-  const firstGrant = await issueAgentGrant(actor, grantInput);
-  const secondGrant = await issueAgentGrant(actor, grantInput);
+  const firstGrant = await issueAgentGrant(actor, await grantInputFor(actor));
+  const secondGrant = await issueAgentGrant(actor, await grantInputFor(actor));
   const { actor: first } = await authenticateAgentGrant(
     `Bearer ${firstGrant.token}`,
     bot.username

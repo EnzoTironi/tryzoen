@@ -32,7 +32,7 @@ const databaseCheck = Effect.gen(function* () {
     );
   yield* Effect.log(check.stdout ?? "Backup check passed");
   // File content lives on the paired web/Eve persistent volume. This verifies
-  // placement/version only; it is not a recall, restore or throughput proof.
+  // placement only; it is not a recall, restore or throughput proof.
   const webs = yield* Machines.listMachines({ app_name: production.web.app });
   const web = webs.find(
     (candidate) =>
@@ -47,16 +47,6 @@ const databaseCheck = Effect.gen(function* () {
   )
     return yield* Effect.fail(
       new Error("File-memory volume placement is not verified")
-    );
-  const memory = yield* Machines.execMachine({
-    app_name: production.web.app,
-    machine_id: web.id,
-    command: ["/usr/local/bin/ai-memory", "--version"],
-    timeout: 10,
-  });
-  if (memory.exit_code !== 0 || memory.stdout?.trim() !== "ai-memory 2.4.1")
-    return yield* Effect.fail(
-      new Error("File-memory engine version is not qualified")
     );
   const matrix = yield* Machines.execMachine({
     app_name: production.database.app,
@@ -95,7 +85,7 @@ const databaseCheck = Effect.gen(function* () {
       new Error("Application database role isolation failed")
     );
   return yield* Effect.log(
-    "PostgreSQL roles, backup status and file-memory placement/version verified."
+    "PostgreSQL roles, backup status and private-memory volume placement verified."
   );
 });
 

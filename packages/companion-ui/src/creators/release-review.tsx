@@ -5,7 +5,7 @@ import type { CreatorStudioData } from "./studio";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorReleaseEvidence } from "./release-evidence";
 
 export function CreatorReleaseReview({
@@ -21,6 +21,7 @@ export function CreatorReleaseReview({
   readonly onApproved: (id: string) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [id] = useState(data.newId);
   const [approving, setApproving] = useState(false);
   const candidate = useQuery({

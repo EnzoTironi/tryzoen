@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { CreatorStudioData } from "./studio";
 import { CreatorExamples } from "./examples";
 import { CreatorDraftActions } from "./actions";
@@ -26,6 +26,7 @@ export function CreatorDraft({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const client = useQueryClient();
   const queryKey = ["creator-draft", cacheScope, id];
   const draft = useQuery({ queryKey, queryFn: () => data.read(id) });

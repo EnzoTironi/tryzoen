@@ -1,41 +1,175 @@
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
+import type { LearnedNotesData, MemoryArchiveReview } from "./data";
 
 export function MemoryBackup({
   disabled,
-  onBackup,
+  data,
+  onRestored,
 }: {
   readonly disabled: boolean;
-  readonly onBackup: () => Promise<void>;
+  readonly data: LearnedNotesData["archives"];
+  readonly onRestored: () => Promise<void>;
 }) {
-  const backup = useMutation({ mutationFn: onBackup });
+  const pageStyles = usePageStyles();
+  const [review, setReview] = useState<MemoryArchiveReview>();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(
+    () => () => {
+      void review?.dispose().catch(() => {
+        console.warn("Could not remove a temporary private memory archive.");
+      });
+    },
+    [review]
+  );
+  const backup = useMutation({ mutationFn: data.backup });
+  const inspect = useMutation({
+    mutationFn: data.inspect,
+    onSuccess: async (selected) => {
+      if (!selected) return;
+      if (!mounted.current) await selected.dispose();
+      else setReview(selected);
+    },
+  });
+  const restore = useMutation({
+    mutationFn: async () => {
+      if (!review) throw new Error("Inspect an archive before applying it.");
+      return review.apply();
+    },
+    onSuccess: async () => {
+      await onRestored();
+      setReview(undefined);
+    },
+  });
+  const busy = backup.isPending || inspect.isPending || restore.isPending;
   return (
     <View style={pageStyles.section}>
       <Text accessibilityRole="header" style={pageStyles.heading}>
         Keep a copy
       </Text>
       <Text style={pageStyles.copy}>
-        Download your learned notes, relationships and history for this
-        workspace. Conversations, profile and workspace files are exported
-        separately. The copy can include older versions and previously removed
-        notes.
+        The complete private-memory archive includes retained claim history and
+        every delivered conversation journal event in this private workspace,
+        including uncited events. Profile, authored notes, workspace files,
+        creator records, account/session authority, allocator state and erasure
+        receipts are separate.
       </Text>
       <ActionButton
         quiet
-        disabled={backup.isPending || disabled}
+        disabled={busy || disabled}
         onPress={() => {
           backup.mutate();
         }}
       >
-        {backup.isPending ? "Preparing backup…" : "Download memory backup"}
+        {backup.isPending
+          ? "Preparing backup…"
+          : "Download complete private-memory archive"}
       </ActionButton>
-      {backup.error && (
+      <ActionButton
+        quiet
+        disabled={busy || disabled || Boolean(review)}
+        onPress={() => {
+          restore.reset();
+          inspect.mutate();
+        }}
+      >
+        {inspect.isPending
+          ? "Inspecting archive…"
+          : "Choose an archive to inspect"}
+      </ActionButton>
+      {(backup.error ?? inspect.error) && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The backup couldn’t be downloaded. Check your connection and try
-          again.
+          {(backup.error ?? inspect.error) instanceof Error
+            ? (backup.error ?? inspect.error)?.message
+            : "The archive could not be transferred or inspected."}
         </Text>
+      )}
+      {review && (
+        <View style={{ gap: 8 }}>
+          <Text accessibilityRole="header" style={pageStyles.heading}>
+            Review before applying
+          </Text>
+          <Text style={pageStyles.copy}>
+            {review.preview.coverage === "complete-journal"
+              ? "Complete delivered journal and retained claims"
+              : "Retained claims and cited journal events only"}{" "}
+            · version {review.preview.version}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            Workspace: {review.preview.scope.workspaceId}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            Owner: {review.preview.scope.userId}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            Namespace generation: {review.preview.namespaceId}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            Archive revision: {review.preview.revision ?? "empty memory"}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            Reviewed current head:{" "}
+            {review.preview.expectedRevision ?? "empty memory"}
+          </Text>
+          <Text selectable style={pageStyles.copy}>
+            SHA-256: {review.preview.archiveDigest}
+          </Text>
+          <Text style={pageStyles.copy}>
+            {review.preview.claimCount} claim identities ·{" "}
+            {review.preview.sourceEvents} journal events ·{" "}
+            {review.preview.sourceBytes.toLocaleString()} source bytes ·
+            retained history included
+          </Text>
+          {review.preview.version === 3 && (
+            <Text style={pageStyles.copy}>
+              Captured through sequence:{" "}
+              {review.preview.capturedThrough ?? "no delivered events"}
+            </Text>
+          )}
+          <Text style={pageStyles.copy}>
+            Applying uses this exact inspected file, hash and current head. It
+            cannot recover account/session ownership, allocator authority or
+            erasure receipts, or resurrect a later removal.
+          </Text>
+          <ActionButton
+            disabled={busy || disabled}
+            onPress={() => {
+              restore.mutate();
+            }}
+          >
+            {restore.isPending
+              ? "Applying reviewed archive…"
+              : "Apply this reviewed archive"}
+          </ActionButton>
+          <ActionButton
+            quiet
+            disabled={busy}
+            onPress={() => {
+              setReview(undefined);
+              restore.reset();
+            }}
+          >
+            Cancel archive review
+          </ActionButton>
+          {restore.error && (
+            <Text accessibilityRole="alert" style={pageStyles.copy}>
+              {restore.error instanceof Error
+                ? restore.error.message
+                : "The archive was not applied."}{" "}
+              The inspected file is retained. If the head changed, cancel and
+              inspect again before applying; nothing is silently rebased.
+            </Text>
+          )}
+        </View>
       )}
     </View>
   );

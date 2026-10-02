@@ -2,7 +2,7 @@ import { Text, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
@@ -15,6 +15,7 @@ export function CreatorDraftActions({
   readonly data: CreatorStudioData;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const pageStyles = usePageStyles();
   const archive = useMutation({
     mutationFn: () =>
       data.archive({

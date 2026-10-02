@@ -1,5 +1,6 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
+  "globalPassThroughEnv": ["GITHUB_STEP_SUMMARY"],
   "tasks": {
     "//#build:app": {
       "dependsOn": ["@zoen/companion-ui#build:ui"],
@@ -53,7 +54,9 @@
         "NODE_ENV",
         "SECRET_ENCRYPTION_KEY",
         "VERCEL_*",
-        "WORKFLOW_*"
+        "WORKFLOW_*",
+        "ZOEN_SEMANTIC_URLS",
+        "ZOEN_SEMANTIC_TOKEN"
       ],
       "persistent": true
     },
@@ -85,7 +88,9 @@
         "NODE_ENV",
         "SECRET_ENCRYPTION_KEY",
         "VERCEL_*",
-        "WORKFLOW_*"
+        "WORKFLOW_*",
+        "ZOEN_SEMANTIC_URLS",
+        "ZOEN_SEMANTIC_TOKEN"
       ],
       "persistent": true
     },

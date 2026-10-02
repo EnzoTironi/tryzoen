@@ -12,10 +12,10 @@ import {
   Compass,
   Lightbulb,
 } from "lucide-react-native";
-import { useCallback, useState, type ComponentProps } from "react";
+import { useMemo, useCallback, useState, type ComponentProps } from "react";
 import type { ConversationDraft } from "./session/input";
 import { Composer } from "./composer";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 import {
   readReplyMessage,
   replyMessage,
@@ -61,6 +61,8 @@ export function Welcome({
   readonly initialDraft?: ConversationDraft;
   readonly avatarUri?: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
     staged
@@ -156,79 +158,87 @@ export function Welcome({
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 56,
-    justifyContent: "center",
-  },
-  page: { width: "100%", maxWidth: 690, alignSelf: "center" },
-  greeting: { alignItems: "center", marginBottom: 40 },
-  avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 24 },
-  monogram: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: "#e5e8d8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  monogramText: {
-    fontSize: 48,
-    fontWeight: "500",
-    letterSpacing: -5,
-    color: colors.accent,
-  },
-  heading: {
-    color: colors.ink,
-    fontSize: 32,
-    fontWeight: "500",
-    lineHeight: 41,
-    letterSpacing: -1.3,
-    textAlign: "center",
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 23,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  suggestions: { marginTop: 38, gap: 6, paddingHorizontal: 6 },
-  eyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.7,
-    color: colors.muted,
-    marginBottom: 14,
-  },
-  suggestion: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    paddingVertical: 12,
-  },
-  suggestionIcon: {
-    width: 42,
-    height: 42,
-    backgroundColor: "#f0f1e9",
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  suggestionCopy: { flex: 1 },
-  suggestionTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 21,
-  },
-  suggestionDetail: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 2,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    scroll: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+      paddingTop: 28,
+      paddingBottom: 56,
+      justifyContent: "center",
+    },
+    page: { width: "100%", maxWidth: 690, alignSelf: "center" },
+    greeting: { alignItems: "center", marginBottom: 40 },
+    avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 24 },
+    monogram: {
+      width: 86,
+      height: 86,
+      borderRadius: 43,
+      backgroundColor: "#e5e8d8",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 24,
+    },
+    monogramText: {
+      fontFamily: systemFont,
+      fontSize: 48,
+      fontWeight: "500",
+      letterSpacing: -5,
+      color: colors.accent,
+    },
+    heading: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 32,
+      fontWeight: "500",
+      lineHeight: 41,
+      letterSpacing: -1.3,
+      textAlign: "center",
+    },
+    subtitle: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 23,
+      marginTop: 10,
+      textAlign: "center",
+    },
+    suggestions: { marginTop: 38, gap: 6, paddingHorizontal: 6 },
+    eyebrow: {
+      fontFamily: systemFont,
+      fontSize: 10,
+      letterSpacing: 1.7,
+      color: colors.muted,
+      marginBottom: 14,
+    },
+    suggestion: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      paddingVertical: 12,
+    },
+    suggestionIcon: {
+      width: 42,
+      height: 42,
+      backgroundColor: "#f0f1e9",
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    suggestionCopy: { flex: 1 },
+    suggestionTitle: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 14,
+      fontWeight: "500",
+      lineHeight: 21,
+    },
+    suggestionDetail: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 2,
+    },
+  });
+}

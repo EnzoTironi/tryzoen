@@ -7,7 +7,7 @@ import type { CreatorStudioData } from "./studio";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPilotFeedback({
   id,
@@ -20,6 +20,7 @@ export function CreatorPilotFeedback({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const cache = useQueryClient();
   const queryKey = ["creator-pilot-feedback", cacheScope, id];
   const pilot = useQuery({ queryKey, queryFn: () => data.pilotFeedback(id) });

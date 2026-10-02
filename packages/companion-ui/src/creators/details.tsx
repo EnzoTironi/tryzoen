@@ -6,7 +6,7 @@ import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorDetails({
   draft,
@@ -19,6 +19,7 @@ export function CreatorDetails({
   readonly onSaved: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [title, setTitle] = useState(draft.content.title);
   const [description, setDescription] = useState(draft.content.description);
   const [discarding, setDiscarding] = useState(false);

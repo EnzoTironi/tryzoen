@@ -1,11 +1,11 @@
-import { useRef, useState, type ComponentProps } from "react";
+import { useMemo, useRef, useState, type ComponentProps } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Pencil, PlusSquare, SquareCheck, Trash2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CompanionSheet, SheetSurface } from "../sheet";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { GoalDetail } from "./detail";
 import { GoalRename } from "./rename";
 
@@ -19,6 +19,9 @@ export function GoalActions({
   ComponentProps<typeof GoalDetail>,
   "goal" | "data" | "onChanged" | "onPrompt" | "onClose"
 >) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   // Keep the revision and receipt stable while this menu is open, including retries.
   const [target] = useState(goal);
   const [operations] = useState(() => ({
@@ -126,6 +129,8 @@ function GoalActionMenu({
     action: "complete" | "subgoal" | "rename" | "delete"
   ) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const actions = [
     {
       id: "complete",
@@ -182,23 +187,30 @@ function GoalActionMenu({
   );
 }
 
-const styles = StyleSheet.create({
-  sheet: { paddingHorizontal: 24, paddingBottom: 24 },
-  row: {
-    minHeight: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 8,
-  },
-  label: { color: colors.ink, fontSize: 16 },
-  destructive: {
-    marginTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    paddingTop: 12,
-  },
-  danger: { color: colors.danger },
-  error: { color: colors.danger, fontSize: 14, marginBottom: 12 },
-  pending: { opacity: 0.5 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    sheet: { paddingHorizontal: 24, paddingBottom: 24 },
+    row: {
+      minHeight: 46,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 8,
+    },
+    label: { fontFamily: systemFont, color: colors.ink, fontSize: 16 },
+    destructive: {
+      marginTop: 14,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+      paddingTop: 12,
+    },
+    danger: { color: colors.danger },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 14,
+      marginBottom: 12,
+    },
+    pending: { opacity: 0.5 },
+  });
+}

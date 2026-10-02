@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { RoomPrivacySettings } from "./privacy";
 import { RoomNotificationSettings } from "./notifications";
 import { PresenceIndicator } from "./presence";
@@ -8,7 +9,7 @@ import type { z } from "zod";
 import { ConversationAvatar } from "../chats/avatar";
 import { IconButton } from "../icon-button";
 import { SheetSurface } from "../sheet";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { ActionButton } from "../button";
 import { useDirectConversation } from "./direct";
 import type { RoomData, roomMemberSchema } from "./schema";
@@ -40,6 +41,8 @@ export function ParticipantProfile({
   readonly onClose: () => void;
   readonly onConversation: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const open = useDirectConversation(data, cacheScope, (id) => {
     onClose();
     onOpenRoom?.(id);
@@ -150,38 +153,58 @@ export function ParticipantProfile({
     </SheetSurface>
   );
 }
-const styles = StyleSheet.create({
-  toolbar: { alignItems: "flex-end", paddingHorizontal: 14 },
-  content: { paddingHorizontal: 24, paddingBottom: 32, gap: 28 },
-  hero: { alignItems: "center", gap: 12, paddingTop: 8, paddingBottom: 12 },
-  name: {
-    color: colors.ink,
-    fontSize: 28,
-    fontWeight: "600",
-    textAlign: "center",
-    letterSpacing: -0.6,
-  },
-  handle: { color: colors.muted, fontSize: 17, marginTop: -5 },
-  subtitle: { color: colors.muted, fontSize: 14 },
-  section: { gap: 12 },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "500",
-    letterSpacing: 0.6,
-    paddingHorizontal: 8,
-  },
-  group: {
-    backgroundColor: "#f3f3f5",
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  copy: { flex: 1, gap: 4 },
-  title: { color: colors.ink, fontSize: 16, fontWeight: "500" },
-  about: { flexDirection: "row", gap: 12, paddingHorizontal: 8 },
-  description: { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 20 },
-  pressed: { opacity: 0.6 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    toolbar: { alignItems: "flex-end", paddingHorizontal: 14 },
+    content: { paddingHorizontal: 24, paddingBottom: 32, gap: 28 },
+    hero: { alignItems: "center", gap: 12, paddingTop: 8, paddingBottom: 12 },
+    name: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 28,
+      fontWeight: "600",
+      textAlign: "center",
+      letterSpacing: -0.6,
+    },
+    handle: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 17,
+      marginTop: -5,
+    },
+    subtitle: { fontFamily: systemFont, color: colors.muted, fontSize: 14 },
+    section: { gap: 12 },
+    label: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "500",
+      letterSpacing: 0.6,
+      paddingHorizontal: 8,
+    },
+    group: {
+      backgroundColor: "#f3f3f5",
+      borderRadius: 20,
+      padding: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    copy: { flex: 1, gap: 4 },
+    title: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 16,
+      fontWeight: "500",
+    },
+    about: { flexDirection: "row", gap: 12, paddingHorizontal: 8 },
+    description: {
+      fontFamily: systemFont,
+      flex: 1,
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    pressed: { opacity: 0.6 },
+  });
+}

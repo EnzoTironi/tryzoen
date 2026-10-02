@@ -7,6 +7,8 @@ import { mapAsync } from "../operations/async";
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
 import { createHash } from "node:crypto";
+import type { AttachSessionFn } from "eve/channels";
+import { protocolInputTaskView } from "./inputs";
 
 import {
   requireWorkspaceAccess,
@@ -43,7 +45,8 @@ const cursorSchema = jsonString(
 
 export const listProtocolTasks = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  raw: z.output<typeof ListQuery> = {}
+  raw: z.output<typeof ListQuery> = {},
+  attachSession?: AttachSessionFn
 ) {
   const query = await ListQuery.strict().parseAsync(raw);
   if (query.statusTimestampAfter)
@@ -103,7 +106,14 @@ export const listProtocolTasks = async function (
         page,
         ({ id }) =>
           Promise.try(async () => readProtocolTask(actor, id)).then((task) =>
-            protocolTaskView(task, query.includeArtifacts ?? false)
+            attachSession
+              ? protocolInputTaskView(
+                  actor,
+                  task,
+                  attachSession,
+                  query.includeArtifacts ?? false
+                )
+              : protocolTaskView(task, query.includeArtifacts ?? false)
           ),
         1
       ),

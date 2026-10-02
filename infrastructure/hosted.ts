@@ -257,7 +257,6 @@ export const hosted = Effect.gen(function* () {
       BETTER_AUTH_URL: appOrigin,
       COMPANION_PUBLIC_BASE_URL: appOrigin,
       WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:3000",
-      ZOEN_AI_MEMORY_BINARY: "/usr/local/bin/ai-memory",
       ZOEN_SESSION_ARCHIVE_DIR: "/var/lib/zoen/memory",
       ZOEN_MATRIX_URL: `http://${matrixSecrets.name}.internal:8008`,
       ZOEN_MATRIX_SERVER_NAME: matrixServerName,

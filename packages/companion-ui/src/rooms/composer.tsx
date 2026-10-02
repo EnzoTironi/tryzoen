@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Composer } from "../composer";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { useRoomDraft } from "./draft";
 
 export function RoomComposer({
@@ -20,9 +21,15 @@ export function RoomComposer({
   readonly direct?: boolean;
   readonly onTyping?: (typing: boolean) => void;
 }) {
+  const colors = useColors();
+  const compact = useWindowDimensions().width < 720;
+  const styles = useMemo(
+    () => createStyles(colors, compact),
+    [colors, compact]
+  );
   const reply = disabled ? undefined : draft.reply;
   return (
-    <View style={styles.composer}>
+    <View pointerEvents="box-none" style={styles.composer}>
       {paused && visible && !disabled && (
         <Text accessibilityLiveRegion="polite" style={styles.connection}>
           Reconectando… Você pode continuar escrevendo.
@@ -69,13 +76,20 @@ export function RoomComposer({
   );
 }
 
-const styles = StyleSheet.create({
-  composer: { padding: 16 },
-  connection: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-    marginBottom: 10,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>, compact = true) {
+  return StyleSheet.create({
+    composer: {
+      paddingHorizontal: compact ? 24 : 10,
+      paddingTop: 8,
+      paddingBottom: compact ? 10 : 8,
+    },
+    connection: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: "center",
+      marginBottom: 10,
+    },
+  });
+}

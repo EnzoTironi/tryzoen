@@ -77,7 +77,7 @@ test(
     const input = {
       id: room.id,
       operationId: randomUUID(),
-      text: "Zoen, this stays between the two people.",
+      text: "@Zoen, this stays between the two people.",
     };
     const message = await sendMatrixMessage(actor, input);
     expect(await sendMatrixMessage(actor, input)).toEqual(message);

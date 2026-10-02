@@ -238,12 +238,17 @@ export default defineChannel({
         ).awaitingInput = true;
       }
     },
-    async "session.failed"(_event, channel) {
+    async "session.failed"(event, channel) {
       const token = channel.continuation?.token;
-      if (!token?.startsWith("matrix:")) return;
+      if (
+        !token?.startsWith("matrix:") ||
+        event.sessionId !== channel.session.id
+      )
+        return;
       await Promise.try(async () =>
         finishMatrixEvent(
           token.slice(7),
+          event.sessionId,
           "Não consegui concluir esta tarefa. Mencione Zoen para tentar novamente."
         )
       ).catch((error: unknown) => {
@@ -276,8 +281,8 @@ export default defineChannel({
       const message = response.text.trim();
       await Promise.try(async () =>
         response.delivered || message === "DELIVERY_COMPLETE" || !message
-          ? completeMatrixEvent(eventId)
-          : finishMatrixEvent(eventId, message)
+          ? completeMatrixEvent(eventId, context.session.id)
+          : finishMatrixEvent(eventId, context.session.id, message)
       ).catch((error: unknown) => {
         if (error instanceof WorkspaceAccessDenied) return Promise.resolve();
         throw error;
@@ -302,9 +307,10 @@ export default defineChannel({
         event.details?.semanticErrorId === "empty-model-response";
       await Promise.try(async () =>
         deliveredReaction
-          ? completeMatrixEvent(eventId)
+          ? completeMatrixEvent(eventId, context.session.id)
           : finishMatrixEvent(
               eventId,
+              context.session.id,
               "Não consegui concluir esta tarefa. Mencione Zoen para tentar novamente."
             )
       ).catch((error: unknown) => {

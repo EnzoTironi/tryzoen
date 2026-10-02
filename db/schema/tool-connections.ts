@@ -24,11 +24,12 @@ export const toolConnections = pgTable(
     organizationId: text("organization_id"),
     name: text("name").notNull(),
     kind: text("kind").notNull(),
-    endpoint: text("endpoint").notNull(),
+    endpoint: text("endpoint"),
     credentials: text("credentials"),
     requestHash: text("request_hash").notNull(),
     revision: uuid("revision").notNull().defaultRandom(),
-    operations: jsonb("operations").notNull(),
+    operations: jsonb("operations"),
+    postgresConfig: jsonb("postgres_config"),
     share: text("share").notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -53,7 +54,37 @@ export const toolConnections = pgTable(
       ],
     }).onDelete("cascade"),
     index("tool_connections_workspace_idx").on(t.workspaceId),
-    check("tool_connections_kind_check", sql`${t.kind} IN ('mcp', 'openapi')`),
+    check(
+      "tool_connections_kind_check",
+      sql`${t.kind} IN ('mcp', 'openapi', 'postgres')`
+    ),
+    check(
+      "tool_connections_configuration_check",
+      sql`
+      CASE WHEN ${t.kind} IN ('mcp', 'openapi') THEN
+        ${t.postgresConfig} IS NULL AND ${t.endpoint} IS NOT NULL
+        AND length(${t.endpoint}) BETWEEN 1 AND 1000
+        AND CASE WHEN jsonb_typeof(${t.operations}) = 'array'
+          THEN jsonb_array_length(${t.operations}) BETWEEN 1 AND 100 ELSE false END
+      WHEN ${t.kind} = 'postgres' THEN
+        ${t.endpoint} IS NULL AND ${t.operations} IS NULL AND ${t.postgresConfig} IS NOT NULL
+        AND jsonb_typeof(${t.postgresConfig}) = 'object'
+        AND ${t.postgresConfig} ?& ARRAY['host', 'port', 'database', 'tls']
+        AND (${t.postgresConfig} - ARRAY['host', 'port', 'database', 'tls']) = '{}'::jsonb
+        AND jsonb_typeof(${t.postgresConfig}->'host') = 'string'
+        AND length(${t.postgresConfig}->>'host') BETWEEN 1 AND 253
+        AND (${t.postgresConfig}->>'host') ~ '^[a-z0-9.:-]+$'
+        AND jsonb_typeof(${t.postgresConfig}->'database') = 'string'
+        AND octet_length(${t.postgresConfig}->>'database') BETWEEN 1 AND 63
+        AND jsonb_typeof(${t.postgresConfig}->'tls') = 'string'
+        AND ${t.postgresConfig}->>'tls' = 'verify-full'
+        AND CASE WHEN jsonb_typeof(${t.postgresConfig}->'port') = 'number'
+          THEN (${t.postgresConfig}->>'port')::numeric BETWEEN 1 AND 65535
+            AND trunc((${t.postgresConfig}->>'port')::numeric) = (${t.postgresConfig}->>'port')::numeric
+          ELSE false END
+      ELSE false END
+    `
+    ),
     check(
       "tool_connections_share_check",
       sql`${t.share} IN ('owner', 'workspace')`

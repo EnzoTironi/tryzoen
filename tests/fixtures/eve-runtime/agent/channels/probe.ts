@@ -6,6 +6,8 @@ import {
   deliveryContext,
   sendDurableMessage,
 } from "../../../../../agent/lib/durable-delivery";
+import { withDeadline } from "../../../../../server/operations/async";
+import matrix from "./matrix";
 
 const principal = z.object({
   principalId: z.string(),
@@ -23,6 +25,16 @@ export default defineChannel({
   context: deliveryContext,
   deliver: deliverOnce,
   routes: [
+    // Direct native admission is needed to observe and cancel an active first
+    // turn. The receipt route below waits for the next durable checkpoint.
+    POST("/probe/start", async (request, channel) => {
+      const input = message.parse(await request.json());
+      const session = await channel.from(input.address).send(input.message, {
+        auth: input.auth,
+        turnPolicy: "queue",
+      });
+      return Response.json({ sessionId: session.id });
+    }),
     POST("/probe/send", async (request, channel) => {
       const input = message.parse(await request.json());
       const session = await sendDurableMessage(
@@ -31,6 +43,26 @@ export default defineChannel({
         input.id,
         input.message,
         { auth: input.auth }
+      );
+      return Response.json({ sessionId: session.id });
+    }),
+    POST("/probe/matrix/recover", async (request, channel) => {
+      const { eventId } = z
+        .strictObject({ eventId: z.string().min(1) })
+        .parse(await request.json());
+      // Use the same native cross-channel receive path and application principal
+      // as the recovery schedule, under its actual inherited operation budget.
+      const session = await withDeadline(
+        () =>
+          channel.to(matrix, { eventId }).send("Resume accepted Matrix event", {
+            auth: {
+              attributes: {},
+              authenticator: "app",
+              principalId: "eve:app",
+              principalType: "runtime",
+            },
+          }),
+        Date.now() + 30_000
       );
       return Response.json({ sessionId: session.id });
     }),

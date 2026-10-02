@@ -1,5 +1,19 @@
-import type { ReactNode } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
+import {
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type FocusEvent,
+} from "react-native";
+import { CompanionVisibility } from "../visibility";
+import { useColors } from "../theme";
 
 export function ConversationNavigation({
   active,
@@ -20,35 +34,112 @@ export function ConversationNavigation({
   readonly children: (toggle: () => void) => ReactNode;
 }) {
   const compact = useWindowDimensions().width < 720;
-  const showInbox =
-    active && renderConversations && (!compact || !conversationOpen);
+  const visible = useContext(CompanionVisibility);
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const showInbox = Boolean(
+    active && renderConversations && (!compact || !conversationOpen)
+  );
+  const showContent = !compact || !showInbox;
+  const inboxFocus = useRef<HTMLElement | null>(null);
+  const contentFocus = useRef<HTMLElement | null>(null);
+  const shown = useRef({ inbox: showInbox, content: showContent });
+  useLayoutEffect(() => {
+    if (Platform.OS === "web") {
+      const target =
+        showContent && !shown.current.content
+          ? contentFocus.current
+          : showInbox && !shown.current.inbox
+            ? inboxFocus.current
+            : null;
+      if (target?.isConnected) target.focus({ preventScroll: true });
+    }
+    shown.current = { inbox: showInbox, content: showContent };
+  }, [showInbox, showContent]);
   return (
     <View style={styles.navigation}>
-      {showInbox && (
+      {renderConversations && (
+        <CompanionVisibility value={visible && showInbox}>
+          <View
+            testID="conversation-sidebar"
+            accessibilityLabel="Lista de conversas"
+            {...(Platform.OS === "web"
+              ? {
+                  inert: !showInbox,
+                  onFocus: (event: FocusEvent) => {
+                    const target: unknown = event.target;
+                    if (target instanceof HTMLElement)
+                      inboxFocus.current = target;
+                  },
+                }
+              : { "aria-hidden": !showInbox })}
+            importantForAccessibility={
+              showInbox ? "auto" : "no-hide-descendants"
+            }
+            pointerEvents={showInbox ? "auto" : "none"}
+            style={[
+              styles.sidebar,
+              compact && styles.mobile,
+              !showInbox && styles.hidden,
+            ]}
+          >
+            {renderConversations({
+              close: () => onShowConversation?.(),
+              selected: () => onShowConversation?.(),
+            })}
+          </View>
+        </CompanionVisibility>
+      )}
+      <CompanionVisibility value={visible && showContent}>
         <View
-          accessibilityLabel="Lista de conversas"
-          style={[styles.sidebar, compact && styles.mobile]}
+          testID="conversation-content"
+          {...(Platform.OS === "web"
+            ? {
+                inert: !showContent,
+                onFocus: (event: FocusEvent) => {
+                  const target: unknown = event.target;
+                  if (target instanceof HTMLElement)
+                    contentFocus.current = target;
+                },
+              }
+            : { "aria-hidden": !showContent })}
+          importantForAccessibility={
+            showContent ? "auto" : "no-hide-descendants"
+          }
+          pointerEvents={showContent ? "auto" : "none"}
+          style={[styles.content, !showContent && styles.hidden]}
         >
-          {renderConversations({
-            close: () => onShowConversation?.(),
-            selected: () => onShowConversation?.(),
-          })}
+          {children(() => onShowInbox?.())}
         </View>
-      )}
-      {(!compact || !showInbox) && (
-        <View style={styles.content}>{children(() => onShowInbox?.())}</View>
-      )}
+      </CompanionVisibility>
     </View>
   );
 }
-const styles = StyleSheet.create({
-  navigation: { flex: 1, flexDirection: "row", minWidth: 0, minHeight: 0 },
-  sidebar: {
-    width: 308,
-    borderRightWidth: 1,
-    borderRightColor: "#ededf0",
-    minHeight: 0,
-  },
-  mobile: { width: "100%", borderRightWidth: 0 },
-  content: { flex: 1, minWidth: 0 },
-});
+
+const createStyles = (palette: ReturnType<typeof useColors>) =>
+  StyleSheet.create({
+    navigation: { flex: 1, flexDirection: "row", minWidth: 0, minHeight: 0 },
+    sidebar: {
+      width: 280,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderRightColor: palette.line,
+      overflow: "hidden",
+      backgroundColor: palette.sidebar,
+      minHeight: 0,
+    },
+    mobile: { width: "100%", borderRightWidth: 0 },
+    content: { flex: 1, minWidth: 0, minHeight: 0 },
+    // Web lists keep their measured viewport while inert removes interaction.
+    hidden:
+      Platform.OS === "web"
+        ? {
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            opacity: 0,
+            zIndex: -1,
+          }
+        : { display: "none" },
+  });

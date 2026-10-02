@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
@@ -11,9 +11,11 @@ import {
   Globe,
   Image as ImageIcon,
   Music,
+  Network,
   Plus,
   Search,
   Shapes,
+  ShieldCheck,
   Braces,
   Video,
 } from "lucide-react-native";
@@ -26,17 +28,31 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
+import {
+  KnowledgeProposals,
+  type KnowledgeProposalData,
+} from "./library/knowledge";
 import { FileTree } from "./library/tree";
+import {
+  OntologyCollection,
+  type OntologyData,
+} from "./library/ontology/collection";
 
 const categories = [
+  {
+    label: "Review changes",
+    icon: ShieldCheck,
+    pattern: /^proposals\/knowledge\//u,
+  },
   {
     label: "All creations",
     icon: Shapes,
     pattern: /^(knowledge|artifacts)\//u,
   },
+  { label: "Knowledge", icon: Network, pattern: /^ontology\//u },
   {
     label: "Documents",
     icon: FileText,
@@ -66,29 +82,32 @@ export function Library({
   items,
   onOpen,
   onCreate,
+  proposals,
+  ontology,
   ...state
 }: Omit<ComponentProps<typeof CompanionPage>, "title" | "children"> & {
   readonly items: readonly { id: string; title: string; description: string }[];
+  readonly proposals: KnowledgeProposalData;
+  readonly ontology: OntologyData;
   readonly onOpen: (id: string) => void;
   readonly onCreate: (kind: "document" | "model") => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
-    categories[0]
+    categories[1]
   );
   const [showCategories, setShowCategories] = useState(false);
   const [query, setQuery] = useState("");
   const [descending, setDescending] = useState(false);
   const [list, setList] = useState(false);
+  const reviewing = category.label === "Review changes";
+  const knowledge = category.label === "Knowledge";
+  const fileControls = !["Review changes", "Knowledge"].includes(
+    category.label
+  );
   const systemFiles = category.label === "System files";
-  const matching = items
-    .filter(
-      (item) =>
-        (systemFiles || category.pattern.test(item.id)) &&
-        item.title.toLowerCase().includes(query.trim().toLowerCase())
-    )
-    // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
-    .sort((a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title));
   return (
     <View style={[styles.layout, compact && styles.compact]}>
       {(!compact || showCategories) && (
@@ -144,7 +163,7 @@ export function Library({
                   }}
                 />
               )}
-              {!systemFiles && (
+              {!systemFiles && fileControls && (
                 <IconButton
                   icon={list ? LayoutGrid : List}
                   label={list ? "Grid view" : "List view"}
@@ -160,27 +179,35 @@ export function Library({
                   setDescending(!descending);
                 }}
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={
-                  category.label === "Analysis models"
-                    ? "Create an analysis model"
-                    : "Create a file"
-                }
-                onPress={() => {
-                  onCreate(
-                    category.label === "Analysis models" ? "model" : "document"
-                  );
-                }}
-                style={styles.create}
-              >
-                <Plus size={22} color="white" />
-              </Pressable>
+              {fileControls && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    category.label === "Analysis models"
+                      ? "Create an analysis model"
+                      : "Create a file"
+                  }
+                  onPress={() => {
+                    onCreate(
+                      category.label === "Analysis models"
+                        ? "model"
+                        : "document"
+                    );
+                  }}
+                  style={styles.create}
+                >
+                  <Plus size={22} color="white" />
+                </Pressable>
+              )}
             </View>
           }
           {...state}
         >
-          {systemFiles ? (
+          {knowledge ? (
+            <OntologyCollection data={ontology} query={query} />
+          ) : reviewing ? (
+            <KnowledgeProposals data={proposals} query={query} />
+          ) : systemFiles ? (
             <FileTree
               paths={items.map((item) => item.id)}
               query={query}
@@ -188,159 +215,200 @@ export function Library({
               onOpen={onOpen}
             />
           ) : (
-            <>
-              <Text accessibilityRole="header" style={pageStyles.heading}>
-                {query ? "Search results" : "Your files"}
-              </Text>
-              <View style={list ? styles.rows : styles.grid}>
-                {matching.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={item.title}
-                    onPress={() => {
-                      onOpen(item.id);
-                    }}
-                    style={list ? styles.fileRow : styles.card}
-                  >
-                    {list ? (
-                      <FileText size={24} color={colors.muted} />
-                    ) : (
-                      <View style={styles.preview}>
-                        <FileText
-                          size={56}
-                          strokeWidth={1}
-                          color={colors.muted}
-                        />
-                        <Text numberOfLines={2} style={styles.previewTitle}>
-                          {item.title}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={list ? styles.rowCaption : styles.caption}>
-                      <Text numberOfLines={1} style={pageStyles.rowTitle}>
-                        {item.title}
-                      </Text>
-                      <Text numberOfLines={1} style={pageStyles.copy}>
-                        {item.description}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-              {!state.loading && !state.error && matching.length === 0 && (
-                <Text style={pageStyles.copy}>
-                  {query
-                    ? "No files match your search."
-                    : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
-                </Text>
-              )}
-            </>
+            <LibraryFiles
+              items={items}
+              descending={descending}
+              list={list}
+              query={query}
+              category={category}
+              settled={!state.loading && !state.error}
+              onOpen={onOpen}
+            />
           )}
         </CompanionPage>
       </View>
     </View>
   );
 }
-const styles = StyleSheet.create({
-  layout: { flex: 1, flexDirection: "row" },
-  compact: { flexDirection: "column" },
-  sidebar: {
-    width: 240,
-    flexGrow: 0,
-    borderRightWidth: 1,
-    borderRightColor: colors.line,
-    padding: 12,
-  },
-  mobileCategories: {
-    maxHeight: 300,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  content: { flex: 1, minWidth: 0 },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 24,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 14,
-    paddingVertical: 8,
-    outlineWidth: 0,
-  },
-  categoryHeading: {
-    color: colors.muted,
-    fontSize: 14,
-    marginTop: 8,
-    marginBottom: 8,
-    paddingHorizontal: 10,
-  },
-  category: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    minHeight: 38,
-    borderRadius: 20,
-  },
-  categoryLabel: { color: colors.ink, fontSize: 14 },
-  selectedCategory: { backgroundColor: colors.wash },
-  actions: { flexDirection: "row", alignItems: "center", gap: 4 },
-  create: {
-    width: 36,
-    height: 36,
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rows: { gap: 0 },
-  fileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    minHeight: 76,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  rowCaption: { flex: 1, gap: 4, paddingVertical: 16 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
-  card: {
-    width: 336,
-    maxWidth: "100%",
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 18,
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  preview: {
-    height: 190,
-    backgroundColor: "#f4f5f7",
-    padding: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 16,
-  },
-  previewTitle: {
-    color: colors.ink,
-    fontSize: 23,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  caption: {
-    padding: 18,
-    gap: 4,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-});
+function LibraryFiles({
+  items,
+  descending,
+  list,
+  query,
+  category,
+  settled,
+  onOpen,
+}: {
+  readonly items: ComponentProps<typeof Library>["items"];
+  readonly descending: boolean;
+  readonly onOpen: ComponentProps<typeof Library>["onOpen"];
+  readonly list: boolean;
+  readonly query: string;
+  readonly category: (typeof categories)[number];
+  readonly settled: boolean;
+}) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
+  const matching = items
+    .filter(
+      (item) =>
+        category.pattern.test(item.id) &&
+        item.title.toLowerCase().includes(query.trim().toLowerCase())
+    )
+    // oxlint-disable-next-line unicorn/no-array-sort -- filter returns a fresh array; retain the shared package’s ES2022 runtime contract.
+    .sort((a, b) => (descending ? -1 : 1) * a.title.localeCompare(b.title));
+  return (
+    <>
+      <Text accessibilityRole="header" style={pageStyles.heading}>
+        {query ? "Search results" : "Your files"}
+      </Text>
+      <View style={list ? styles.rows : styles.grid}>
+        {matching.map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            onPress={() => {
+              onOpen(item.id);
+            }}
+            style={list ? styles.fileRow : styles.card}
+          >
+            {list ? (
+              <FileText size={24} color={colors.muted} />
+            ) : (
+              <View style={styles.preview}>
+                <FileText size={56} strokeWidth={1} color={colors.muted} />
+                <Text numberOfLines={2} style={styles.previewTitle}>
+                  {item.title}
+                </Text>
+              </View>
+            )}
+            <View style={list ? styles.rowCaption : styles.caption}>
+              <Text numberOfLines={1} style={pageStyles.rowTitle}>
+                {item.title}
+              </Text>
+              <Text numberOfLines={1} style={pageStyles.copy}>
+                {item.description}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+      {settled && matching.length === 0 && (
+        <Text style={pageStyles.copy}>
+          {query
+            ? "No files match your search."
+            : `No ${category.label.toLowerCase()} yet. Create something with Zoen to add it here.`}
+        </Text>
+      )}
+    </>
+  );
+}
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    layout: { flex: 1, flexDirection: "row" },
+    compact: { flexDirection: "column" },
+    sidebar: {
+      width: 240,
+      flexGrow: 0,
+      borderRightWidth: 1,
+      borderRightColor: colors.line,
+      padding: 12,
+    },
+    mobileCategories: {
+      maxHeight: 300,
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.line,
+    },
+    content: { flex: 1, minWidth: 0 },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 24,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+    },
+    searchInput: {
+      fontFamily: systemFont,
+      flex: 1,
+      color: colors.ink,
+      fontSize: 14,
+      paddingVertical: 8,
+      outlineWidth: 0,
+    },
+    categoryHeading: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 14,
+      marginTop: 8,
+      marginBottom: 8,
+      paddingHorizontal: 10,
+    },
+    category: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 10,
+      minHeight: 38,
+      borderRadius: 20,
+    },
+    categoryLabel: { fontFamily: systemFont, color: colors.ink, fontSize: 14 },
+    selectedCategory: { backgroundColor: colors.wash },
+    actions: { flexDirection: "row", alignItems: "center", gap: 4 },
+    create: {
+      width: 36,
+      height: 36,
+      backgroundColor: colors.accent,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rows: { gap: 0 },
+    fileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      minHeight: 76,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    rowCaption: { flex: 1, gap: 4, paddingVertical: 16 },
+    grid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
+    card: {
+      width: 336,
+      maxWidth: "100%",
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 18,
+      overflow: "hidden",
+      marginBottom: 20,
+    },
+    preview: {
+      height: 190,
+      backgroundColor: colors.wash,
+      padding: 24,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 16,
+    },
+    previewTitle: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 23,
+      fontWeight: "500",
+      textAlign: "center",
+    },
+    caption: {
+      padding: 18,
+      gap: 4,
+      borderTopWidth: 1,
+      borderTopColor: colors.line,
+      backgroundColor: colors.surface,
+    },
+  });
+}

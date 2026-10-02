@@ -234,7 +234,11 @@ export function PersonalMemorySection({
             }}
           />
         </View>
-        <LearnedNotes data={data.learned} cacheScope={cacheScope} />
+        <LearnedNotes
+          key={cacheScope}
+          data={data.learned}
+          cacheScope={cacheScope}
+        />
       </View>
     );
   return (

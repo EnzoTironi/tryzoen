@@ -10,8 +10,8 @@ import { useAttachments } from "../attachments/provider";
 import { ConversationAvatar } from "../chats/avatar";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 import {
   roomAvatarFileSchema,
   type roomAvatarWriteSchema,
@@ -25,6 +25,8 @@ export function EditRoomAvatar({
   room,
   onClose,
 }: ComponentProps<typeof RenameRoom>) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   const attachments = useAttachments();
   const client = useQueryClient();
   const [selection, setSelection] =

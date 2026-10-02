@@ -1,7 +1,7 @@
 .root {
   flex: 1;
   min-width: 0;
-  color: #111112;
+  color: inherit;
 }
 .tools {
   display: flex;
@@ -52,13 +52,13 @@
   font:
     0.9em ui-monospace,
     monospace;
-  background: #f0f0f2;
+  background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 5px;
   padding: 1px 4px;
 }
 .input :global(.tiptap):has(> p:only-child > br:only-child)::before {
   content: attr(data-placeholder);
-  color: #92969b;
+  color: inherit;
   pointer-events: none;
   position: absolute;
 }

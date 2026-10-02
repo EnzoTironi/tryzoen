@@ -36,6 +36,16 @@ Neither command manages other local containers. Clear inherited database/provide
 environment variables when using the synthetic fixture; conflicting database
 settings are rejected by the integration test safety guard.
 
+## Workspace publication baseline
+
+Migration 0097 replaces the single receipt path with the set of files touched by
+one atomic publication. It requires empty workspace repository/revision/source
+tables. Use `pnpm test:runtime:reset` on an existing disposable runtime fixture
+before applying it. For a local review database, stop its app, clear only those
+three disposable workspace tables in a transaction with the migration role, then
+run `pnpm db:migrate`. Never run that cleanup against a persistent installation.
+This prelaunch change includes no backfill or alternate receipt format.
+
 ## Preview with synthetic configuration
 
 After setup, load the fixture in a shell and build:

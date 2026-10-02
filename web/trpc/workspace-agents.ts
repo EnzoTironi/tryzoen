@@ -1,19 +1,21 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
 import { withSignal } from "../../server/operations/async";
 import { WhatsAppBridgeUnavailable } from "../../server/whatsapp/client";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
-  OntologySchema,
-  OntologyActionSchema,
-} from "@shared/workspaces/ontology";
+  OntologyPublishInputSchema,
+  OntologyActInputSchema,
+  OntologyReadSchema,
+} from "@zoen/companion-ui/ontology";
 
 import {
   applyOntologyAction,
   publishOntology,
   readOntology,
 } from "../../server/workspaces/ontology";
+import { WorkspaceRepositoryError } from "../../server/workspaces/repository";
+import { OntologyInvalid } from "../../server/workspaces/ontology-validation";
 import {
   AgentGrantInputSchema,
   BotProfileSchema,
@@ -55,6 +57,8 @@ import {
   listPersonalNetwork,
 } from "../../server/workspaces/network";
 import { workspaceProcedure } from "./workspace-procedure";
+import { externalAgentsRouter } from "./agent-members";
+import { revokeExternalAgentMember } from "../../server/workspaces/agent-member-revocation";
 import {
   MatrixConversationInput,
   MatrixConversationSend,
@@ -64,34 +68,76 @@ import {
   sendMatrixConversation,
   closeMatrixConversation,
 } from "../../server/matrix/conversations";
-const revisionFields = {
-  expectedRevision: z.nullable(GitRevisionSchema),
-  operationId: z.uuid(),
-};
+async function ontologyRpc<Result>(run: () => Promise<Result>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof WorkspaceAccessDenied)
+      throw new TRPCError({ code: "FORBIDDEN", cause: error });
+    if (error instanceof WorkspaceRepositoryError)
+      throw new TRPCError({
+        cause: error,
+        code:
+          error.reason === "conflict"
+            ? "CONFLICT"
+            : error.reason === "unavailable"
+              ? "SERVICE_UNAVAILABLE"
+              : "BAD_REQUEST",
+        message:
+          error.reason === "conflict"
+            ? "This change conflicts. Review current knowledge before retrying."
+            : "Knowledge could not be saved.",
+      });
+    if (error instanceof OntologyInvalid)
+      throw new TRPCError({
+        cause: error,
+        code: error.reason === "source" ? "PRECONDITION_FAILED" : "BAD_REQUEST",
+        message:
+          error.reason === "source"
+            ? "Review the cited evidence. A source may have changed or become unavailable."
+            : "Check the property value, evidence and dates.",
+      });
+    throw error;
+  }
+}
 export const workspaceAgentsRouter = {
-  ontology: {
-    read: workspaceProcedure.query(({ ctx, signal }) =>
-      withSignal(signal, async () => readOntology(ctx.actor))
-    ),
-    publish: workspaceProcedure
-      .input(
-        z.object({
-          ...revisionFields,
-          graph: OntologySchema,
-        })
-      )
+  members: {
+    ...externalAgentsRouter,
+    revoke: workspaceProcedure
+      .input(z.strictObject({ id: z.uuid() }))
       .mutation(({ ctx, input, signal }) =>
-        withSignal(signal, async () => publishOntology(ctx.actor, input))
+        withSignal(signal, async () => {
+          try {
+            return await revokeExternalAgentMember(ctx.actor, input.id);
+          } catch (cause) {
+            if (cause instanceof WorkspaceAccessDenied)
+              throw new TRPCError({ code: "FORBIDDEN", cause });
+            throw cause;
+          }
+        })
+      ),
+  },
+  ontology: {
+    read: workspaceProcedure
+      .input(OntologyReadSchema.optional())
+      .query(({ ctx, input, signal }) =>
+        withSignal(signal, async () =>
+          ontologyRpc(() => readOntology(ctx.actor, input))
+        )
+      ),
+    publish: workspaceProcedure
+      .input(OntologyPublishInputSchema)
+      .mutation(({ ctx, input, signal }) =>
+        withSignal(signal, async () =>
+          ontologyRpc(() => publishOntology(ctx.actor, input))
+        )
       ),
     act: workspaceProcedure
-      .input(
-        z.object({
-          ...revisionFields,
-          ...OntologyActionSchema.shape,
-        })
-      )
+      .input(OntologyActInputSchema)
       .mutation(({ ctx, input, signal }) =>
-        withSignal(signal, async () => applyOntologyAction(ctx.actor, input))
+        withSignal(signal, async () =>
+          ontologyRpc(() => applyOntologyAction(ctx.actor, input))
+        )
       ),
   },
   bot: {

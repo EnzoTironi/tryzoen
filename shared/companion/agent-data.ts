@@ -1,8 +1,11 @@
 import { activityPageSchema } from "@zoen/companion-ui/activity";
 import type { z } from "zod";
 import {
-  learnedMemorySnapshotSchema,
-  learnedMemoryHistorySchema,
+  LearnedClaimReadSchema,
+  LearnedClaimSearchSchema,
+  LearnedClaimHistorySchema,
+  LearnedClaimChangeResultSchema,
+  LearnedClaimSetEnabledResultSchema,
 } from "@zoen/companion-ui/memory";
 import type { scheduleTimingSchema } from "../schedules/timing";
 import type { AgentPanelData } from "@zoen/companion-ui";
@@ -27,7 +30,7 @@ export function companionAgentData(
     mutation: (path: string, input?: unknown) => Promise<unknown>;
   },
   newOperationId: () => string,
-  backupMemory: () => Promise<void>
+  memoryArchives: AgentPanelData["learned"]["archives"]
 ): AgentPanelData {
   return {
     async activity(input, signal) {
@@ -36,65 +39,32 @@ export function companionAgentData(
       );
     },
     learned: {
-      backup: backupMemory,
+      archives: memoryArchives,
       newOperationId,
       async history(input) {
-        return learnedMemoryHistorySchema.parse(
+        return LearnedClaimHistorySchema.parse(
           await rpc.query("workspaces.memory.history", input)
         );
       },
-      async read() {
-        const snapshot = learnedMemorySnapshotSchema.parse(
-          await rpc.query("workspaces.memory.list")
+      async read(input = {}) {
+        return LearnedClaimReadSchema.parse(
+          await rpc.query("workspaces.memory.read", input)
         );
-        return {
-          enabled: snapshot.enabled,
-          workspaceEnabled: snapshot.workspaceEnabled,
-          needsAttention: snapshot.needsAttention,
-          documents: snapshot.results.map((item) => ({
-            id: item.id,
-            title: "Learned memory",
-            text: item.memory,
-            relations: item.relations,
-            updated: item.updatedAt
-              ? new Date(item.updatedAt).toLocaleString()
-              : "",
-          })),
-        };
       },
-      async save(id, text, operationId) {
-        await rpc.mutation("workspaces.memory.write", {
-          action: id ? "update" : "remember",
-          memoryId: id,
-          text,
-          operationId,
-        });
+      async search(input) {
+        return LearnedClaimSearchSchema.parse(
+          await rpc.query("workspaces.memory.search", input)
+        );
       },
-      async relate(input, operationId) {
-        await rpc.mutation("workspaces.memory.write", {
-          ...input,
-          action: "relate",
-          operationId,
-        });
+      async change(input) {
+        return LearnedClaimChangeResultSchema.parse(
+          await rpc.mutation("workspaces.memory.change", input)
+        );
       },
-      async remove(id, operationId) {
-        await rpc.mutation("workspaces.memory.write", {
-          action: "delete",
-          memoryId: id,
-          operationId,
-        });
-      },
-      async clear(operationId) {
-        await rpc.mutation("workspaces.memory.write", {
-          action: "clear",
-          operationId,
-        });
-      },
-      async setEnabled(enabled) {
-        await rpc.mutation("workspaces.memory.setEnabled", { enabled });
-      },
-      async recover() {
-        await rpc.mutation("workspaces.memory.recover");
+      async setEnabled(input) {
+        return LearnedClaimSetEnabledResultSchema.parse(
+          await rpc.mutation("workspaces.memory.setEnabled", input)
+        );
       },
     },
     documentHistory: (path, cacheScope) =>

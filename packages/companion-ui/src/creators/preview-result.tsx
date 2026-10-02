@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorPreviewReview, creatorReviewVerdicts } from "./review";
 import type { creatorDraftSchema, creatorPreviewSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
@@ -32,6 +32,7 @@ export function CreatorPreviewResult({
   readonly draft?: z.infer<typeof creatorDraftSchema>;
   readonly onChanged?: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const pageStyles = usePageStyles();
   const [reading, setReading] = useState(false);
   // Capture the opening version so background refresh cannot replace an unsaved review.
   const [reviewing, setReviewing] =

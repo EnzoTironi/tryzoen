@@ -3,14 +3,14 @@
 import { z } from "zod";
 
 import { useState } from "react";
-import type { OntologySchema } from "@shared/workspaces/ontology";
+import type { OntologySchema } from "@zoen/companion-ui/ontology";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
 import styles from "../space.module.css";
 
 type Graph = z.output<typeof OntologySchema>;
-export function OntologyValueField({
+function OntologyValueField({
   property,
   name = "value",
 }: {
@@ -73,11 +73,16 @@ export function OntologyEntityForm({
               : [
                   [
                     property.id,
-                    property.type === "number"
-                      ? Number(value)
-                      : property.type === "boolean"
-                        ? value === "true"
-                        : value,
+                    {
+                      value:
+                        property.type === "number"
+                          ? Number(value)
+                          : property.type === "boolean"
+                            ? value === "true"
+                            : value,
+                      sources: [],
+                      validTime: null,
+                    },
                   ],
                 ];
           })
@@ -163,7 +168,13 @@ export function OntologyRelations({
           const target = z
             .string()
             .parse(new FormData(event.currentTarget).get("target"));
-          const link = { type: relationId, from: entity.id, to: target };
+          const link = {
+            type: relationId,
+            from: entity.id,
+            to: target,
+            sources: [],
+            validTime: null,
+          };
           if (
             !graph.links.some(
               (entry) =>

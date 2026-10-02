@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { Pressable, StyleSheet } from "react-native";
 import type { LucideProps } from "lucide-react-native";
-import { colors } from "./theme";
+import { useColors } from "./theme";
 
 export function IconButton({
   label,
@@ -18,16 +18,18 @@ export function IconButton({
   readonly disabled?: boolean;
   readonly quiet?: boolean;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
+      hitSlop={2}
       onPress={onPress}
       style={({ pressed }) => [
         styles.icon,
-        selected && styles.selected,
+        selected && { backgroundColor: colors.wash },
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
@@ -35,7 +37,7 @@ export function IconButton({
       <Icon
         size={quiet ? 19 : 24}
         strokeWidth={1.8}
-        color={quiet && !selected ? colors.muted : colors.ink}
+        color={selected ? colors.accent : quiet ? colors.muted : colors.ink}
       />
     </Pressable>
   );
@@ -48,10 +50,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-  },
-  selected: {
-    backgroundColor: colors.wash,
-    boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+    outlineOffset: 2,
   },
   pressed: { opacity: 0.65 },
   disabled: { opacity: 0.35 },

@@ -13,7 +13,7 @@ import { ChevronRight, Search } from "lucide-react-native";
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { RoomMessageContext } from "./context";
 import type {
   RoomData,
@@ -37,6 +37,7 @@ export function RoomSearch({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const colors = useColors();
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
   const [senderId, setSenderId] = useState<string>();
@@ -98,7 +99,13 @@ export function RoomSearch({
           onChangeText={setText}
           maxLength={200}
           returnKeyType="search"
-          style={{ flex: 1, minHeight: 44, color: colors.ink, fontSize: 16 }}
+          style={{
+            fontFamily: systemFont,
+            flex: 1,
+            minHeight: 44,
+            color: colors.ink,
+            fontSize: 16,
+          }}
         />
       </View>
       <SearchAuthors
@@ -179,6 +186,7 @@ function SearchResult({
   readonly item: z.infer<typeof roomMessageSchema>;
   readonly onSelect: () => void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -200,11 +208,18 @@ function SearchResult({
       </View>
       <Text
         numberOfLines={4}
-        style={{ fontSize: 15, lineHeight: 21, color: colors.ink }}
+        style={{
+          fontFamily: systemFont,
+          fontSize: 15,
+          lineHeight: 21,
+          color: colors.ink,
+        }}
       >
         {item.text}
       </Text>
-      <Text style={{ fontSize: 12, color: colors.muted }}>
+      <Text
+        style={{ fontFamily: systemFont, fontSize: 12, color: colors.muted }}
+      >
         {new Date(item.timestamp).toLocaleString()}
         {item.editId ? " · Editada" : ""}
         {item.rootId ? " · Thread" : ""}
@@ -222,6 +237,7 @@ function SearchAuthors({
   readonly senderId: string | undefined;
   readonly onSelect: (id: string | undefined) => void;
 }) {
+  const colors = useColors();
   return (
     <ScrollView
       horizontal

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
 import {
@@ -14,7 +15,7 @@ import {
 import { CompanionOverlay } from "./overlay";
 import { IconButton } from "./icon-button";
 import { useSheetDrag, SheetGrabber } from "./sheet-drag";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 
 /** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
 export function SheetSurface({
@@ -30,6 +31,8 @@ export function SheetSurface({
   readonly panelStyle?: StyleProp<ViewStyle>;
   readonly maxWidth?: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const compact = useWindowDimensions().width < 720;
   const drag = useSheetDrag(compact, onClose);
   return (
@@ -73,6 +76,8 @@ export function CompanionSheet({
   readonly scrollable?: boolean;
   readonly maxWidth?: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
@@ -99,38 +104,46 @@ export function CompanionSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    backgroundColor: "rgba(252,252,252,0.45)",
-  },
-  sheet: {
-    width: "100%",
-    maxHeight: "86%",
-    backgroundColor: colors.canvas,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 12,
-    overflow: "hidden",
-  },
-  desktopBackdrop: { justifyContent: "center", padding: 32 },
-  desktopPanel: {
-    borderRadius: 28,
-    maxHeight: "90%",
-    paddingTop: 20,
-    boxShadow: "0 8px 48px rgba(0,0,0,0.12)",
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    flexDirection: "row",
-    gap: 16,
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  title: { flex: 1, fontSize: 23, fontWeight: "600", color: colors.ink },
-  content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },
-  listContent: { minHeight: 0, flexShrink: 1 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      justifyContent: "flex-end",
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.24)",
+    },
+    sheet: {
+      width: "100%",
+      maxHeight: "86%",
+      backgroundColor: colors.canvas,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingTop: 12,
+      overflow: "hidden",
+    },
+    desktopBackdrop: { justifyContent: "center", padding: 32 },
+    desktopPanel: {
+      borderRadius: 28,
+      maxHeight: "90%",
+      paddingTop: 20,
+      boxShadow: "0 8px 48px rgba(0,0,0,0.12)",
+    },
+    header: {
+      paddingHorizontal: 24,
+      paddingBottom: 16,
+      flexDirection: "row",
+      gap: 16,
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    title: {
+      fontFamily: systemFont,
+      flex: 1,
+      fontSize: 23,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },
+    listContent: { minHeight: 0, flexShrink: 1 },
+  });
+}

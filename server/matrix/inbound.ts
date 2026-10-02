@@ -1,4 +1,5 @@
 import { readNativeGroupMembership } from "./membership";
+import { lockMatrixAdmission } from "./authority";
 import { projectMatrixActivity } from "./activity";
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
@@ -9,6 +10,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { matrixConfiguration, MatrixError, MatrixEventSchema } from "./client";
 import { ingestWhatsAppMatrixEvent } from "../workspaces/whatsapp";
 import { acceptMatrixNetworkEvent } from "./network-delivery";
+import { readMatrixText } from "./messages";
 const transactionSchema = z.object({
   events: z.array(MatrixEventSchema).max(1000),
 });
@@ -75,6 +77,59 @@ export const acceptMatrixTransaction = async function (
     .digest("hex");
   const config = await matrixConfiguration();
   return await withDatabaseTransaction(async () => {
+    const rooms = [
+      ...new Set(
+        transaction.events.flatMap((event) =>
+          event.room_id ? [event.room_id] : []
+        )
+      ),
+    ].toSorted();
+    const locate = async () => {
+      if (!rooms.length) return { groups: [], network: [] };
+      const groups = await query<{
+        id: string;
+        workspaceId: string;
+        roomId: string;
+      }>(sql`SELECT id, workspace_id AS "workspaceId", conversation_id AS "roomId"
+        FROM workspace_group_bindings
+        WHERE channel = 'matrix' AND installation_id = ${config.serverName}
+          AND conversation_id = ANY(${sql.param(rooms)}::text[]) AND revoked_at IS NULL
+        ORDER BY id`);
+      const network = await query<{
+        id: string;
+        workspaceId: string;
+        destWorkspaceId: string;
+        grantId: string;
+        destBotId: string;
+        roomId: string;
+      }>(sql`SELECT c.id, c.workspace_id AS "workspaceId", b.workspace_id AS "destWorkspaceId",
+          c.grant_id AS "grantId", b.id AS "destBotId", c.room_id AS "roomId"
+        FROM matrix_agent_conversations c
+        JOIN workspace_agent_grants g ON g.id = c.grant_id
+        JOIN workspace_bots b ON b.id = g.bot_id
+        WHERE c.server_name = ${config.serverName} AND c.room_id = ANY(${sql.param(rooms)}::text[])
+          AND c.closed_at IS NULL ORDER BY c.id`);
+      return {
+        groups: groups.toSorted((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        network: network.toSorted((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+      };
+    };
+    // These raw mappings select fences only; they never grant membership or access.
+    const located = await locate();
+    await lockMatrixAdmission(
+      located.network.flatMap((conversation) => [
+        conversation.workspaceId,
+        conversation.destWorkspaceId,
+      ]),
+      located.groups.map((binding) => binding.id)
+    );
+    if (JSON.stringify(located) !== JSON.stringify(await locate()))
+      throw new MatrixError({ reason: "unavailable" });
+    // The whole batch's organization and room fences precede the server receipt lock.
     await query(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${config.serverName}, 6))`
     );
@@ -137,11 +192,13 @@ export const acceptMatrixTransaction = async function (
         JOIN organization_memberships o ON o.organization_id = s.organization_id AND o.user_id = m.user_id
         WHERE m.binding_id = ${binding.id} AND m.state = 'joined' AND i.matrix_id = ${event.sender}`);
       if (!users[0]) continue;
-      // In groups only an explicit Zoen mention activates the agent.
-      if (!/(^|\s)@?zoen\b/i.test(event.content.body)) continue;
-      if (event.content.body.length > 8000) continue;
+      // Native mention metadata is the only group invocation authority.
+      if (!event.content["m.mentions"]?.user_ids?.includes(config.botId))
+        continue;
+      const message = readMatrixText(event.content).text;
+      if (!message.trim() || message.length > 8000) continue;
       await query(sql`INSERT INTO matrix_deliveries(event_id, binding_id, epoch, user_id, message)
-        VALUES (${event.event_id}, ${binding.id}, ${binding.epoch}, ${users[0].userId}, ${event.content.body}) ON CONFLICT DO NOTHING`);
+        VALUES (${event.event_id}, ${binding.id}, ${binding.epoch}, ${users[0].userId}, ${message}) ON CONFLICT DO NOTHING`);
       accepted.push(event.event_id);
     }
     await query(

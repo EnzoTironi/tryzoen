@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
 import { DocumentEditor } from "../document-editor";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { creatorEvaluationCaseSchema, type creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
@@ -22,6 +22,7 @@ export function CreatorEvaluationCase({
   readonly onSaved: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [value, setValue] = useState(initial);
   const [editing, setEditing] = useState<"question" | "criteria">();
   const [confirming, setConfirming] = useState<"discard" | "remove">();

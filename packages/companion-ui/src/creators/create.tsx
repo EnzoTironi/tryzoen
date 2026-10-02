@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Text, TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { creatorPlaybookTemplate } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
@@ -17,6 +17,7 @@ export function CreatorDraftCreate({
   readonly onCreated: (id: string) => void;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const pageStyles = usePageStyles();
   const [title, setTitle] = useState("");
   const [draftId, setDraftId] = useState(data.newId);
   const create = useMutation({

@@ -1,0 +1,298 @@
+{
+  "recordedAt": "2026-09-30T13:45:45.622971+00:00",
+  "baselineCommit": "4d4bd77c29cbebee893b16211cf0ecb6f9aaa16b",
+  "scope": "Local bounded published CSV computation through the compiled Eve tool and shared web UI; not complete analytics or cross-platform parity.",
+  "sourceSha256": {
+    "server/workspaces/git.ts": "d8f4f574d4e3c591535f3179735090ce2450bfe6a93939b6a72a84937ac0d5f3",
+    "server/workspaces/repository.ts": "3feaef86da354677b0cf05e02c4c83a1d395c0ae6e550828a46da37041b38fbe",
+    "server/workspaces/semantic/published.ts": "7c2ac824d98322e32801902adb89e562b42bb1d88959e41ee429e5e67d40885d",
+    "server/workspaces/semantic/worker.ts": "bc433b68918dcb78ea9e2e254558b8dd52d38a5c220ecea4bc0afc2f3018bca1",
+    "server/workspaces/semantic/service.ts": "04fe24cb55fb73f06c532886869fd22f9f8b58357ad5dcb385217a84f574deb2",
+    "server/workspaces/semantic/process.ts": "fe8b55bccbabd8d2167a7b5402293c0fbef1ff03bbfd6d3e2b3a90a6aa5a0c6e",
+    "server/workspaces/semantic/execute.ts": "b3038d28ead3699d2cd4260c94eaffe145d4e66cdb57accae3e0c48e9ebac143",
+    "server/workspaces/semantic/memory.ts": "8ff83c835a42d43d19dbb13bbd77e63369626f8206e3c6e09be1794e25fbf3c9",
+    "server/workspaces/semantic/build.ts": "e5c857ffbae1a41f40d0133ea01d733f3aa39a6221c012119dea77a379dffb07",
+    "server/workspaces/semantic/snapshot.ts": "6d795c3b695101c138ba605f9a8d71af7fe12d0e7e126b1b37b15d95b21f253d",
+    "shared/environment/env/semantic.ts": "4b83b2474c6f1ed430028803629e08fdc7d613c4149962dd370e6b4f987a03df",
+    "packages/companion-ui/src/conversation/scroll.ts": "97e2006d4177f659a2eee5034f15171e22de8bda18f3f25fd8ab95f32826fa80",
+    "packages/companion-ui/src/conversation/knowledge-query.tsx": "a3f3dafc6115964653586878714d09a72aca64af5d95c383d1f973ae0cd92fa6",
+    "packages/companion-ui/src/sheet.tsx": "f9bbfb8e9d70527245aabae78de1c033c8a87de506fab6fe4a1b6a8c1731b401",
+    "infrastructure/semantic/Dockerfile": "a4f2b5c9384b2d8790fdc191def8944cfcac985507aa5e0901662f64b4f4efcf",
+    "tests/runtime/compose.yaml": "640372045e612b7f79e42e08c10b2fbde2583bdcdf3c60601a602d156724a4db"
+  },
+  "gates": {
+    "check": {
+      "passed": true,
+      "tasks": 9,
+      "testFiles": 301,
+      "tests": 1924,
+      "elapsedSeconds": 73.363
+    },
+    "build": {
+      "passed": true,
+      "tasks": 2,
+      "elapsedSeconds": 28.165
+    },
+    "runtime": {
+      "passed": true,
+      "files": 3,
+      "tests": 24,
+      "elapsedSeconds": 86.29,
+      "coverage": [
+        "18 bounded executor cases",
+        "4 publication and revocation cases",
+        "2 compiled Eve cancellation and restart/replay cases"
+      ]
+    },
+    "packagedArtifactSmoke": {
+      "passed": true,
+      "tests": 1,
+      "elapsedSeconds": 4.26,
+      "coverage": "Known totals from two isolated capsules after the final aggregate build"
+    },
+    "startupGuards": [
+      {
+        "case": "above-budget",
+        "finiteMemory": "2g",
+        "finiteTotalWithSwap": "2g",
+        "exit": 1,
+        "passed": true,
+        "message": "Semantic executor requires a bounded memory cgroup with swap disabled"
+      },
+      {
+        "case": "swap-enabled",
+        "finiteMemory": "1536m",
+        "finiteTotalWithSwap": "2g",
+        "exit": 1,
+        "passed": true,
+        "message": "Semantic executor requires a bounded memory cgroup with swap disabled"
+      }
+    ],
+    "web": {
+      "passed": true,
+      "at": "2026-09-30T13:08:03.803Z",
+      "browser": "Chrome/154.0.8037.92",
+      "checks": [
+        {
+          "name": "1440-light-initial-bottom",
+          "top": 1292,
+          "max": 1292,
+          "passed": true
+        },
+        {
+          "name": "1440-light-compact-card",
+          "passed": true
+        },
+        {
+          "name": "1440-light-real-result",
+          "passed": true
+        },
+        {
+          "name": "1440-light-provenance",
+          "passed": true
+        },
+        {
+          "name": "1440-light-escape-focus",
+          "passed": true,
+          "focus": "Abrir análise total"
+        },
+        {
+          "name": "1440-dark-initial-bottom",
+          "top": 1292,
+          "max": 1292,
+          "passed": true
+        },
+        {
+          "name": "1440-dark-compact-card",
+          "passed": true
+        },
+        {
+          "name": "1440-dark-real-result",
+          "passed": true
+        },
+        {
+          "name": "1440-dark-provenance",
+          "passed": true
+        },
+        {
+          "name": "1440-dark-escape-focus",
+          "passed": true,
+          "focus": "Abrir análise total"
+        },
+        {
+          "name": "390-light-initial-bottom",
+          "top": 1978,
+          "max": 1978,
+          "passed": true
+        },
+        {
+          "name": "390-light-compact-card",
+          "passed": true
+        },
+        {
+          "name": "390-light-real-result",
+          "passed": true
+        },
+        {
+          "name": "390-light-provenance",
+          "passed": true
+        },
+        {
+          "name": "390-light-escape-focus",
+          "passed": true,
+          "focus": "Abrir análise total"
+        },
+        {
+          "name": "390-dark-initial-bottom",
+          "top": 1978,
+          "max": 1978,
+          "passed": true
+        },
+        {
+          "name": "390-dark-compact-card",
+          "passed": true
+        },
+        {
+          "name": "390-dark-real-result",
+          "passed": true
+        },
+        {
+          "name": "390-dark-provenance",
+          "passed": true
+        },
+        {
+          "name": "390-dark-escape-focus",
+          "passed": true,
+          "focus": "Abrir análise total"
+        },
+        {
+          "name": "360-dark-initial-bottom",
+          "top": 2310,
+          "max": 2310,
+          "passed": true
+        },
+        {
+          "name": "360-dark-compact-card",
+          "passed": true
+        },
+        {
+          "name": "360-dark-real-result",
+          "passed": true
+        },
+        {
+          "name": "360-dark-provenance",
+          "passed": true
+        },
+        {
+          "name": "360-dark-escape-focus",
+          "passed": true,
+          "focus": "Abrir análise total"
+        },
+        {
+          "name": "no-browser-exceptions",
+          "passed": true
+        }
+      ],
+      "coverage": "Real shared components rendering actual compiled-Eve output; adapters use an isolated harness, not the complete authenticated app journey"
+    }
+  },
+  "memory": {
+    "before": {
+      "memory.max": "1610612736",
+      "memory.swap.max": "0",
+      "memory.current": "76029952",
+      "memory.peak": "1445785600",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0"
+    },
+    "after": {
+      "memory.max": "1610612736",
+      "memory.swap.max": "0",
+      "memory.current": "82694144",
+      "memory.peak": "1610612736",
+      "memory.events": "low 0\nhigh 0\nmax 204\noom 1\noom_kill 1\noom_group_kill 0\nsock_throttled 0"
+    },
+    "elapsedMs": 5549.927708000003,
+    "applicationBefore": {
+      "pid": 50260,
+      "rss": 47431680
+    },
+    "applicationAfter": {
+      "pid": 50260,
+      "rss": 46022656
+    },
+    "recoveredResult": 30
+  },
+  "limits": {
+    "workerTotalBytes": 1610612736,
+    "swapBytes": 0,
+    "concurrentWorkers": 2,
+    "combinedWorkerCeilingBytes": 3221225472,
+    "deadlineMs": 15000,
+    "inputBytes": 1048576,
+    "outputBytes": 65536,
+    "rows": 100
+  },
+  "publishedToolOutput": {
+    "rows": [
+      {
+        "total": 30
+      }
+    ],
+    "manifest": {
+      "id": "53bd9d35-c326-4f6f-b8a0-12f9f65ddd88",
+      "engine": "malloy-0.0.434/pglite-snapshot",
+      "inputSha256": "3dea0ea92c6b7ca5762979fddda78f91943ce1f99c8c73c0bacc1f39168dcba3",
+      "sqlSha256": "99095138d28f3003c134e91d8fb993925fdcc4629ccd0d2f7f158d3a852e898f",
+      "startedAt": "2026-09-30T12:58:57.763Z",
+      "completedAt": "2026-09-30T12:59:00.042Z",
+      "actor": "better-auth:workspace-guest-126a47aa-7c4e-4d7e-91f9-68f17343410b",
+      "workspaceId": "team-126a47aa-7c4e-4d7e-91f9-68f17343410b",
+      "revision": "d5405754c597539df60b8792954944fb1613c520",
+      "query": "knowledge/queries/total.json",
+      "arguments": {},
+      "sql": "WITH __stage0 AS (\n  SELECT \n     COALESCE(SUM(base.\"amount\"),0) as \"total\"\n  FROM public.items as base\n)\nSELECT row_to_json(finalStage) as row FROM __stage0 AS finalStage",
+      "sources": [
+        {
+          "path": "knowledge/queries/total.json",
+          "sha256": "e308d4eb9b61b0733e17e79f9815a696c441ce0ee1cdc703159f2fd7b1d8d83c"
+        },
+        {
+          "path": "knowledge/models/items.malloy",
+          "sha256": "7f6729f651f02cce32e099982788dd4d0c867dc525ac1b234939d22ce29131dc"
+        },
+        {
+          "path": "knowledge/data/items.csv",
+          "sha256": "a20a5cddb196bf4127d2a51d693f5e3a4b713a6d0fa5b8d0e7c7e1e7b15e4a75"
+        }
+      ],
+      "freshness": "Published CSV snapshot; live provider freshness is unknown",
+      "limits": {
+        "rows": 100,
+        "resultBytes": 65536,
+        "deadlineMs": 15000,
+        "memoryBytes": 1610612736,
+        "memoryController": "cgroup-v2"
+      }
+    }
+  },
+  "performance": {
+    "scenario": "Five fresh cold calls per loader, six sources of 2000 synthetic rows; shared local machine",
+    "individualInsert": {
+      "p50Ms": 3603.930458,
+      "p95Ms": 5478.533209
+    },
+    "parameterized200RowChunks": {
+      "p50Ms": 2545.138667,
+      "p95Ms": 2574.886875
+    },
+    "sameOutput": "Known total 2001000, exact SQL and input hash",
+    "limitation": "Small synthetic sample, not an application SLO, per-response cost measurement or engine comparison"
+  },
+  "remaining": [
+    "Native Electron/iOS/Android journeys unrun",
+    "The separately owned five-file room/reaction UI slice is unfinished",
+    "Private learned-memory repository and complete Akita consumer cutover remain K3 work",
+    "Historical source excerpts, per-cell lineage, live connectors and full analysis artifact/recurrence capabilities remain open",
+    "No production deployment, merge or push was performed"
+  ]
+}

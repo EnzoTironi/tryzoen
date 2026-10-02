@@ -1,4 +1,4 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { mapAsync } from "../operations/async";
 import { isValid } from "@shared/validation";
 import { z } from "zod";
@@ -143,7 +143,12 @@ export const publishCustomerTool = async function (
   await validateCustomerTool(actor, file.content);
   return await repository.write(
     actor,
-    { ...input, path: `tools/${input.slug}.json`, content: file.content },
+    {
+      operationId: input.operationId,
+      expectedRevision: input.expectedRevision,
+      path: `tools/${input.slug}.json`,
+      content: file.content,
+    },
     { kind: "tool-publication", proposal }
   );
 };
@@ -160,7 +165,12 @@ export const rollbackCustomerTool = async function (
   await validateCustomerTool(actor, file.content);
   return await repository.write(
     actor,
-    { ...input, path, content: file.content },
+    {
+      operationId: input.operationId,
+      expectedRevision: input.expectedRevision,
+      path,
+      content: file.content,
+    },
     { kind: "tool-rollback", revision: input.revision }
   );
 };
@@ -172,7 +182,12 @@ export const disableCustomerTool = async function (
   await requireWorkspaceAccess(actor, true);
   return await WorkspaceRepository.write(
     actor,
-    { ...input, path: `tools/${input.slug}.json`, content: null },
+    {
+      operationId: input.operationId,
+      expectedRevision: input.expectedRevision,
+      path: `tools/${input.slug}.json`,
+      content: null,
+    },
     { kind: "tool-disable" }
   );
 };

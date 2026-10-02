@@ -10,7 +10,7 @@ app keep their existing design, routes, languages and product capabilities.
 | `server/`         | Concrete product operations, current authorization and provider adapters                                    |
 | `db/`             | Drizzle schema, queries, transactions and migrations                                                        |
 | Git workspace     | Versioned documents, authored instructions, skills and customer tool proposals                              |
-| Private Mem0      | Learned facts scoped to a person and workspace                                                              |
+| Private claims    | PostgreSQL-authorized Git claims scoped to a person and workspace                                           |
 | `infrastructure/` | Independently installed Alchemy deployment and private services                                             |
 
 ## Runtime and product boundary
@@ -72,9 +72,16 @@ public ingress and explicit channel/callback rewrites. Changing the internal Eve
 port requires a matching build and startup configuration.
 
 Alchemy remains a separate infrastructure package, including its Effect dependency.
-No app module imports that package. Private Mem0 is stateless outside PostgreSQL;
-obsolete local-volume and legacy-memory import paths were removed. Optional private services are configured at
-their existing boundaries; absent credentials fail closed.
+No app module imports that package. PostgreSQL retains private namespace, consent,
+Git publication, journal completeness and erasure authority. Canonical claims
+retain actual Git revisions, cited sources and unknown-time markers. Eve's native
+memory slot uses bounded recall and replaces current reference facts after an
+explicit correction or forget. Shared and scheduled scopes cannot access private
+claims. Immutable JSONL journals and approved creator manifests require the
+private persistent volume. V2 exports cited claim lineage; v3 also covers every
+accepted journal event and refuses pending or missing bytes. Authored profile
+documents remain in their existing Eve fileMemory provider. Optional private
+services fail closed when unconfigured.
 
 This product is prelaunch, with no production users or data. Delete obsolete
 interfaces and update callers atomically. Development and test databases can be

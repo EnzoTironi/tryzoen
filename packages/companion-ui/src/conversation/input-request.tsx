@@ -4,14 +4,15 @@ import {
   MessageCircle,
   ShieldCheck,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import type { EveDynamicToolPart } from "eve/react";
 import type { InputResponse } from "eve/client";
 import { ResourceCard } from "../cards/resource";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { useInputResponse } from "./response";
+import { renderApprovalDisclosure } from "./approval";
 
 export function InputRequestCard({
   part,
@@ -22,6 +23,8 @@ export function InputRequestCard({
   readonly enabled: boolean;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [text, setText] = useState("");
   const [expanded, setExpanded] = useState(false);
   const request = part.toolMetadata?.eve?.inputRequest;
@@ -37,6 +40,10 @@ export function InputRequestCard({
   // durable input.resolved event. Only the native pending state accepts input.
   const waiting = part.state === "approval-requested" && !response;
   const approval = request.kind === "tool-approval";
+  const disclosure = approval
+    ? renderApprovalDisclosure(part.toolName, part.input)
+    : undefined;
+  const invalidApproval = disclosure?.kind === "invalid";
   const outcome =
     part.state === "output-error"
       ? "The action failed."
@@ -70,9 +77,24 @@ export function InputRequestCard({
       tint="#4c9984"
     >
       {(waiting || expanded) && (
-        <Text selectable style={styles.text}>
-          {request.prompt}
-        </Text>
+        <>
+          <Text
+            selectable
+            accessibilityRole={invalidApproval ? "alert" : undefined}
+            style={invalidApproval ? styles.error : styles.text}
+          >
+            {disclosure?.kind === "ready"
+              ? disclosure.text
+              : disclosure?.kind === "invalid"
+                ? disclosure.message
+                : request.prompt}
+          </Text>
+          {disclosure?.kind === "unsupported" && (
+            <Text selectable style={styles.text}>
+              Exact action details are unavailable for this tool.
+            </Text>
+          )}
+        </>
       )}
       {!waiting && (
         <>
@@ -102,43 +124,49 @@ export function InputRequestCard({
               <ActionButton
                 key={option.id}
                 quiet={option.style !== "danger"}
-                disabled={!enabled || submission.pending}
-                onPress={() =>
+                disabled={
+                  !enabled ||
+                  submission.pending ||
+                  (invalidApproval && option.id !== "cancel")
+                }
+                onPress={() => {
+                  if (invalidApproval && option.id !== "cancel") return;
                   void submission.submit({
                     requestId: request.requestId,
                     optionId: option.id,
-                  })
-                }
+                  });
+                }}
               >
                 {option.label}
               </ActionButton>
             ))}
           </View>
-          {((request.allowFreeform ?? false) || !request.options?.length) && (
-            <View style={styles.request}>
-              <TextInput
-                accessibilityLabel="Your answer"
-                placeholder="Your answer"
-                value={text}
-                onChangeText={setText}
-                editable={enabled && !submission.pending}
-                multiline
-                textAlignVertical="top"
-                style={styles.answer}
-              />
-              <ActionButton
-                disabled={!enabled || submission.pending || !text.trim()}
-                onPress={() =>
-                  void submission.submit({
-                    requestId: request.requestId,
-                    text: text.trim(),
-                  })
-                }
-              >
-                Send answer
-              </ActionButton>
-            </View>
-          )}
+          {!approval &&
+            ((request.allowFreeform ?? false) || !request.options?.length) && (
+              <View style={styles.request}>
+                <TextInput
+                  accessibilityLabel="Your answer"
+                  placeholder="Your answer"
+                  value={text}
+                  onChangeText={setText}
+                  editable={enabled && !submission.pending}
+                  multiline
+                  textAlignVertical="top"
+                  style={styles.answer}
+                />
+                <ActionButton
+                  disabled={!enabled || submission.pending || !text.trim()}
+                  onPress={() =>
+                    void submission.submit({
+                      requestId: request.requestId,
+                      text: text.trim(),
+                    })
+                  }
+                >
+                  Send answer
+                </ActionButton>
+              </View>
+            )}
         </>
       )}
       {submission.failed && (
@@ -150,21 +178,34 @@ export function InputRequestCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: 600 },
-  text: { fontSize: 16, lineHeight: 25, color: colors.ink },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  request: { gap: 12, paddingVertical: 8 },
-  answer: {
-    minHeight: 88,
-    maxHeight: 240,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
-    padding: 12,
-    fontSize: 16,
-    lineHeight: 24,
-    color: colors.ink,
-  },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 21 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    card: { width: 600 },
+    text: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      lineHeight: 25,
+      color: colors.ink,
+    },
+    options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    request: { gap: 12, paddingVertical: 8 },
+    answer: {
+      fontFamily: systemFont,
+      minHeight: 88,
+      maxHeight: 240,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 14,
+      padding: 12,
+      fontSize: 16,
+      lineHeight: 24,
+      color: colors.ink,
+    },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 21,
+    },
+  });
+}

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,7 +12,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  AccessibilityInfo,
   Animated,
   PanResponder,
   Platform,
@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { Reply } from "lucide-react-native";
 import { useDoubleTapReaction } from "./double-tap";
-import { colors } from "../theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "../theme";
 
 const MessageInteractionContext = createContext<
   | {
@@ -58,12 +58,18 @@ export function MessageInteraction({
   readonly outgoing: boolean;
   readonly disabled?: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const bubble = useRef<View>(null);
   const tap = useDoubleTapReaction(onQuickReact, reaction, disabled);
   const [offset] = useState(() => new Animated.Value(0));
   const reply = useRef(onReply);
   const inactive = useRef(disabled);
-  const motion = useRef(false);
+  const { reduceMotion } = useAccessibilityPreferences();
+  const motion = useRef(reduceMotion);
+  useLayoutEffect(() => {
+    motion.current = reduceMotion;
+  }, [reduceMotion]);
   const held = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const origin = useRef<{ x: number; y: number } | undefined>(undefined);
   const suppressClick = useRef(false);
@@ -73,24 +79,13 @@ export function MessageInteraction({
     reply.current = onReply;
     inactive.current = disabled;
   }, [onReply, disabled]);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (active) motion.current = value;
-    });
-    const listener = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      (value) => {
-        motion.current = value;
-      }
-    );
-    return () => {
-      active = false;
-      listener.remove();
+  useEffect(
+    () => () => {
       clearTimeout(held.current);
       offset.stopAnimation();
-    };
-  }, [offset]);
+    },
+    [offset]
+  );
   const open = useCallback(() => {
     if (inactive.current) return;
     bubble.current?.measureInWindow((x, y, width, height) => {
@@ -302,23 +297,30 @@ function interactiveTarget(target: unknown) {
   );
 }
 
-const styles = StyleSheet.create({
-  quickStatus: { position: "absolute", right: 8, bottom: -4 },
-  error: { fontSize: 12, color: colors.danger, maxWidth: 260 },
-  root: { maxWidth: "100%", alignItems: "flex-start", position: "relative" },
-  outgoing: { alignItems: "flex-end" },
-  bubble: { maxWidth: "100%" },
-  selected: { borderRadius: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.12)" },
-  reply: {
-    position: "absolute",
-    left: 6,
-    top: "50%",
-    marginTop: -16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    quickStatus: { position: "absolute", right: 8, bottom: -4 },
+    error: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: colors.danger,
+      maxWidth: 260,
+    },
+    root: { maxWidth: "100%", alignItems: "flex-start", position: "relative" },
+    outgoing: { alignItems: "flex-end" },
+    bubble: { maxWidth: "100%" },
+    selected: { borderRadius: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.12)" },
+    reply: {
+      position: "absolute",
+      left: 6,
+      top: "50%",
+      marginTop: -16,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.wash,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });
+}

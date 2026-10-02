@@ -1,9 +1,15 @@
 "use client";
 import { ConnectedCreatorStudio } from "./settings/creators";
 import { ConnectedSearch } from "./search";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { getUntypedClient } from "@trpc/client";
+import {
+  companionKnowledgeData,
+  companionOntologyData,
+} from "@shared/companion/knowledge";
+import { authClient } from "@web/auth/client";
 import { companionGoalsData } from "@shared/companion/goals";
 import {
   IdeaCollection,
@@ -91,39 +97,109 @@ function ConnectedLibrary({
 }: {
   readonly onPrompt: (text: string) => void;
 }) {
+  const cache = useQueryClient();
+  const utils = api.useUtils();
+  const params = useSearchParams();
+  const scope = params.get("space") ?? "personal";
+  const account = authClient.useSession();
+  const knowledgeScope = `${account.data?.session.id ?? "signed-out"}:${scope}`;
+  const ontology = useMemo(
+    () =>
+      companionOntologyData(
+        getUntypedClient(utils.client),
+        knowledgeScope,
+        () => crypto.randomUUID(),
+        () => {
+          void utils.workspaces.files.invalidate();
+          void cache.invalidateQueries({
+            queryKey: ["ontology", knowledgeScope],
+          });
+        }
+      ),
+    [utils, knowledgeScope, cache]
+  );
+  const proposals = useMemo(
+    () =>
+      companionKnowledgeData(
+        getUntypedClient(utils.client),
+        knowledgeScope,
+        () => crypto.randomUUID(),
+        () => {
+          void utils.workspaces.files.invalidate();
+          void cache.invalidateQueries({ queryKey: ontology.cacheKey });
+        }
+      ),
+    [utils, knowledgeScope, cache, ontology]
+  );
   const files = api.workspaces.files.useQuery({});
   const [path, setPath] = useState<string>();
-  if (path)
-    return (
-      <ConnectedFile
-        key={path}
-        path={path}
-        onClose={() => {
-          setPath(undefined);
-        }}
-      />
-    );
+  const library = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const target = returnFocus.current;
+    if (path !== undefined || !target) return undefined;
+    returnFocus.current = null;
+    // Restore after the editor portal finishes its own close/focus cleanup.
+    const frame = requestAnimationFrame(() => {
+      if (target.isConnected) target.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [path]);
   return (
-    <Library
-      items={(files.data?.files ?? []).map((file) => ({
-        id: file,
-        title: file.split("/").at(-1) ?? file,
-        description: file,
-      }))}
-      onOpen={setPath}
-      onCreate={(kind) => {
-        onPrompt(
-          kind === "model"
-            ? "Help me create an analysis model. Ask what I want to analyze, then save the Malloy source in knowledge/models/ so I can review it in my library."
-            : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
-        );
-      }}
-      loading={files.isPending}
-      error={files.error?.message}
-      onRetry={() => {
-        void files.refetch();
-      }}
-    />
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+      <div
+        ref={library}
+        inert={path !== undefined}
+        aria-hidden={path !== undefined}
+        style={{ visibility: path !== undefined ? "hidden" : undefined }}
+        className="flex min-h-0 min-w-0 flex-1"
+      >
+        <Library
+          proposals={proposals}
+          ontology={ontology}
+          items={(files.data?.files ?? [])
+            .filter((file) => !file.startsWith("proposals/knowledge/"))
+            .map((file) => ({
+              id: file,
+              title: file.split("/").at(-1) ?? file,
+              description: file,
+            }))}
+          onOpen={(next) => {
+            const active = document.activeElement;
+            returnFocus.current =
+              active instanceof HTMLElement && library.current?.contains(active)
+                ? active
+                : null;
+            setPath(next);
+          }}
+          onCreate={(kind) => {
+            onPrompt(
+              kind === "model"
+                ? "Help me create an analysis model. Ask what I want to analyze, then use workspace-knowledge-propose to propose the Malloy source in knowledge/models/ together with its definition and evidence. I will review and publish the proposal in my library."
+                : "Help me create a document. Ask what I want to make, then save the finished file in my workspace knowledge folder so I can find it in my library."
+            );
+          }}
+          loading={files.isPending}
+          error={files.error?.message}
+          onRetry={() => {
+            void files.refetch();
+          }}
+        />
+      </div>
+      {path !== undefined && (
+        <div className="absolute inset-0 flex min-h-0 min-w-0">
+          <ConnectedFile
+            key={path}
+            path={path}
+            onClose={() => {
+              setPath(undefined);
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -48,6 +48,6 @@ export async function readMatrixMedia(
     type: "file",
     filename: (filename ?? body ?? "attachment").slice(0, 255),
     mediaType: info?.mimetype ?? "application/octet-stream",
-    url: `data:${info?.mimetype ?? "application/octet-stream"};base64,${Buffer.from(bytes).toString("base64")}`,
+    url: `data:${info?.mimetype ?? "application/octet-stream"};base64,${bytes.toString("base64")}`,
   });
 }

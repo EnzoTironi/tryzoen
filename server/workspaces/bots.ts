@@ -20,16 +20,20 @@ export const BotProfileSchema = z.object({
   discoverable: z.boolean(),
 });
 const botSchema = BotProfileSchema.extend({ id: z.uuid() });
-export const AgentGrantInputSchema = z.object({
+export const AgentGrantInputSchema = z.strictObject({
   label: z.string().trim().min(1).max(80),
   capabilities: z
     .array(z.enum(["files", "ontology"]))
     .min(1)
     .max(2),
   days: z.number().int().min(1).max(90),
+  externalMemberId: z.uuid(),
+  replacesGrantId: z.uuid().optional(),
 });
 const grantSchema = z.object({
   id: z.string(),
+  externalMemberId: z.uuid().nullable(),
+  callerKind: z.enum(["external-member", "human-network", "unbound"]),
   label: z.string(),
   capabilities: z.array(z.string()),
   expiresAt: z.coerce.date(),
@@ -47,7 +51,10 @@ export const readWorkspaceBot = async function (
   const bot = rows[0] ? await botSchema.parseAsync(rows[0]) : null;
   const grants =
     bot && access.role !== "member" && actor.authSessionId
-      ? await dbQuery(sql`SELECT id, label, capabilities, expires_at AS "expiresAt", revoked_at AS "revokedAt"
+      ? await dbQuery(sql`SELECT id, external_member_id AS "externalMemberId",
+        CASE WHEN external_member_id IS NOT NULL THEN 'external-member'
+          WHEN requester_user_id IS NOT NULL THEN 'human-network' ELSE 'unbound' END AS "callerKind",
+        label, capabilities, expires_at AS "expiresAt", revoked_at AS "revokedAt"
         FROM workspace_agent_grants WHERE bot_id = ${bot.id} ORDER BY created_at DESC LIMIT 50`)
       : [];
   return {
@@ -142,6 +149,19 @@ export const issueAgentGrant = async function (
     await dbQuery(
       sql`SELECT id FROM workspace_bots WHERE id = ${bot.id} FOR UPDATE`
     );
+    {
+      const members = await dbQuery(sql`SELECT id FROM workspace_agent_members
+        WHERE id = ${input.externalMemberId} AND workspace_id = ${actor.workspaceId} AND revoked_at IS NULL FOR SHARE`);
+      if (members.length !== 1) throw new WorkspaceAccessDenied();
+    }
+    if (input.replacesGrantId) {
+      const replaced =
+        await dbQuery(sql`UPDATE workspace_agent_grants SET revoked_at = clock_timestamp()
+        WHERE id = ${input.replacesGrantId} AND bot_id = ${bot.id}
+          AND external_member_id = ${input.externalMemberId}
+          AND revoked_at IS NULL RETURNING id`);
+      if (replaced.length !== 1) throw new WorkspaceAccessDenied();
+    }
     const active = await dbQuery(
       sql`SELECT id FROM workspace_agent_grants WHERE bot_id = ${bot.id} AND revoked_at IS NULL AND expires_at > now()`
     );
@@ -149,8 +169,8 @@ export const issueAgentGrant = async function (
     const token = `zoen_a2a_${randomBytes(32).toString("base64url")}`;
     const id = randomUUID();
     const expiresAt = new Date(new Date().getTime() + input.days * 86400000);
-    await dbQuery(sql`INSERT INTO workspace_agent_grants(id, bot_id, issued_by, label, token_hash, capabilities, expires_at)
-      VALUES (${id}, ${bot.id}, ${actor.userId}, ${input.label}, ${createHash("sha256").update(token).digest("hex")}, ${JSON.stringify(input.capabilities)}::jsonb, ${expiresAt})`);
+    await dbQuery(sql`INSERT INTO workspace_agent_grants(id, bot_id, issued_by, external_member_id, label, token_hash, capabilities, expires_at)
+      VALUES (${id}, ${bot.id}, ${actor.userId}, ${input.externalMemberId}, ${input.label}, ${createHash("sha256").update(token).digest("hex")}, ${JSON.stringify(input.capabilities)}::jsonb, ${expiresAt})`);
     return { id, token, expiresAt };
   });
 };
@@ -187,7 +207,8 @@ export const authenticateAgentGrant = async function (
     user_id: string;
     workspace_id: string;
     organization_id: string | null;
-  }>(sql`SELECT g.id, g.issued_by AS user_id, b.workspace_id, w.organization_id
+  }>(sql`SELECT g.id, CASE WHEN g.external_member_id IS NULL THEN g.issued_by
+      ELSE ('agent:' || g.external_member_id) END AS user_id, b.workspace_id, w.organization_id
     FROM workspace_agent_grants g JOIN workspace_bots b ON b.id = g.bot_id JOIN workspaces w ON w.id = b.workspace_id
     WHERE g.token_hash = ${createHash("sha256").update(token.slice(7)).digest("hex")} AND b.username = ${username}
       AND g.revoked_at IS NULL AND g.expires_at > clock_timestamp()`);

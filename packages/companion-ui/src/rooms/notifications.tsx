@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOff } from "lucide-react-native";
 import {
@@ -8,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomData } from "./schema";
 
 export function RoomNotificationSettings({
@@ -20,6 +21,8 @@ export function RoomNotificationSettings({
   readonly cacheScope: string;
   readonly roomId: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
   const queryKey = ["matrix-room-notifications", cacheScope, roomId];
   const preference = useQuery({
@@ -92,31 +95,34 @@ export function RoomNotificationSettings({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  section: { gap: 10 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 64,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-  },
-  icon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: "#ad68d8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: { flex: 1, fontSize: 16, color: colors.ink },
-  caption: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.muted,
-    paddingHorizontal: 14,
-  },
-  error: { gap: 8 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    section: { gap: 10 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 64,
+      paddingHorizontal: 16,
+      borderRadius: 20,
+      backgroundColor: colors.surface,
+    },
+    icon: {
+      width: 32,
+      height: 32,
+      borderRadius: 9,
+      backgroundColor: "#ad68d8",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    label: { fontFamily: systemFont, flex: 1, fontSize: 16, color: colors.ink },
+    caption: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.muted,
+      paddingHorizontal: 14,
+    },
+    error: { gap: 8 },
+  });
+}

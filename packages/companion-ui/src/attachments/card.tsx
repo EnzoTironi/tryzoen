@@ -1,15 +1,24 @@
-import { useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Download, FileText } from "lucide-react-native";
 import type { FileUIPart } from "ai";
 import { useAttachments } from "./provider";
 import { inlineAttachmentSchema } from "./schema";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { IconButton } from "../icon-button";
 import { ResourceCard } from "../cards/resource";
 import { CompanionSheet } from "../sheet";
 
 export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const attachments = useAttachments();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -69,9 +78,18 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
                   style={{ width: "100%", aspectRatio: ratio }}
                   resizeMode="contain"
                   onLoad={(event) => {
-                    const { width, height } = event.nativeEvent.source;
-                    if (width > 0 && height > 0)
-                      setRatio(Math.max(0.6, Math.min(2, width / height)));
+                    const updateRatio = (width: number, height: number) => {
+                      if (width > 0 && height > 0)
+                        setRatio(Math.max(0.6, Math.min(2, width / height)));
+                    };
+                    if (Platform.OS === "web")
+                      Image.getSize(file.url, updateRatio, () => {
+                        setPreviewFailed(true);
+                      });
+                    else {
+                      const { width, height } = event.nativeEvent.source;
+                      updateRatio(width, height);
+                    }
                   }}
                   onError={() => {
                     setPreviewFailed(true);
@@ -121,24 +139,26 @@ export function AttachmentCard({ file }: { readonly file: FileUIPart }) {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  container: { maxWidth: "100%", gap: 6 },
-  mediaRow: {
-    width: 390,
-    maxWidth: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  media: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 24,
-    borderCurve: "continuous",
-    overflow: "hidden",
-    backgroundColor: colors.wash,
-  },
-  audio: { padding: 5, borderRadius: 30 },
-  expanded: { width: "100%", height: 440 },
-  error: { fontSize: 13, color: colors.danger },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    container: { maxWidth: "100%", gap: 6 },
+    mediaRow: {
+      width: 390,
+      maxWidth: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    media: {
+      flex: 1,
+      minWidth: 0,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      overflow: "hidden",
+      backgroundColor: colors.wash,
+    },
+    audio: { padding: 5, borderRadius: 30 },
+    expanded: { width: "100%", height: 440 },
+    error: { fontFamily: systemFont, fontSize: 13, color: colors.danger },
+  });
+}

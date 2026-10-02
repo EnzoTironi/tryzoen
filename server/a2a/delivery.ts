@@ -6,6 +6,7 @@ import type { z } from "zod";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import type { ChannelReceiveContext } from "eve/channels";
+import type { SessionAuthContext } from "eve/context";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -24,8 +25,8 @@ export const deliverProtocolTask = async function (
     protocolTaskId: taskId,
   });
   const task = await readProtocolTask(actor, taskId);
-  const auth = {
-    principalType: "user" as const,
+  const auth: SessionAuthContext = {
+    principalType: actor.userId.startsWith("agent:") ? "service" : "user",
     principalId: actor.userId,
     authenticator: "a2a",
     attributes: {
@@ -76,7 +77,9 @@ export const recoverableProtocolActor = async function (taskId: string) {
     workspaceId: string;
     agentGrantId: string;
   }>(sql`
-    SELECT g.issued_by AS "userId", b.workspace_id AS "workspaceId", g.id AS "agentGrantId"
+    SELECT CASE WHEN g.external_member_id IS NULL THEN g.issued_by
+      ELSE ('agent:' || g.external_member_id) END AS "userId",
+      b.workspace_id AS "workspaceId", g.id AS "agentGrantId"
     FROM agent_protocol_tasks t JOIN workspace_agent_grants g ON g.id = t.grant_id
     JOIN workspace_bots b ON b.id = g.bot_id WHERE t.id = ${taskId} AND t.state = 'TASK_STATE_SUBMITTED'`);
   if (!rows[0]) throw new WorkspaceAccessDenied();

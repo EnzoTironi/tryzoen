@@ -10,9 +10,12 @@ import { apiOrigin } from "./environment";
 import { companionAgentData } from "../../../shared/companion/agent-data";
 import { client } from "./conversation";
 import { rpc } from "./api";
-import { exportMemory } from "./files/memory";
+import { exportMemory, inspectMemory } from "./files/memory";
 
-const data = companionAgentData(rpc, randomUUID, exportMemory);
+const data = companionAgentData(rpc, randomUUID, {
+  backup: exportMemory,
+  inspect: inspectMemory,
+});
 export function MobileAgentName() {
   return <AgentName data={data} cacheScope="personal" />;
 }

@@ -1,10 +1,10 @@
-import { GitRevisionSchema } from "@shared/workspaces/files";
+import { GitRevisionSchema } from "@zoen/companion-ui/workspace-files";
 import { withSignal } from "../../operations/async";
 import { z } from "zod";
 
 import { defineDynamic, defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
-import { OntologyActionSchema } from "@shared/workspaces/ontology";
+import { OntologyActionSchema } from "@zoen/companion-ui/ontology";
 import { authorizeApprovalResponse } from "../../../agent/lib/approval-response";
 import { workspaceOperationId } from "../../../agent/lib/workspace-operation";
 import {
@@ -27,7 +27,7 @@ export default defineDynamic({
       return {
         "ontology-action": defineTool({
           description:
-            "Propose a declared action to a structured entity. First read workspace_ontology_read. Invoke this tool with the entity, action, proposed value, revision and approvalMessage; Eve presents the exact native approval before any mutation. Do not request approval by sending a chat message. Only workspace admins can execute actions. A stale revision must be re-read and approved again.",
+            "Propose a declared action to a structured entity. First read workspace_ontology_read. Invoke with the entity, action, value, sources, validTime, revision and approvalMessage; Eve presents the exact native approval before mutation. sources are authorized knowledge file citations with path, Git revision and exact excerpt. Pass [] for a manually entered value; do not inherit citations for a previous value. validTime is null when world-valid dates are unknown, otherwise {from:<ISO date or null>,until:<exclusive ISO date or null>} and requires cited evidence. Publication timestamps are not world-valid dates. Do not request approval by sending a chat message. Only workspace admins can execute actions. A stale revision must be re-read and approved again.",
           approval: { request: always(), response: authorizeApprovalResponse },
           inputSchema: ontologyActionInputSchema.strict(),
           execute: (input, execution) =>

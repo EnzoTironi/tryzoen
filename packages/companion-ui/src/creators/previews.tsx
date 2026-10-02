@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 
@@ -24,6 +24,7 @@ export function CreatorPreviews({
   readonly onClose: () => void;
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
 }) {
+  const pageStyles = usePageStyles();
   const previews = useQuery({
     queryKey: ["creator-previews", cacheScope, draft.id],
     queryFn: () => data.previews(draft.id),

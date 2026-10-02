@@ -1181,5 +1181,15 @@
   "Connected services have their own terms and privacy policies. Review them when connecting an account.": "Connected services have their own terms and privacy policies. Review them when connecting an account.",
   "Source code and license": "Source code and license",
   "Cancel": "Cancel",
-  "Remove": "Remove"
+  "Remove": "Remove",
+  "Registro": "Record",
+  "Sem evidência vinculada": "No linked evidence",
+  "Válido de": "Valid from",
+  "Até (exclusivo)": "Until (exclusive)",
+  "O trecho mudou na fonte atual": "The passage changed in the current source",
+  "Fonte atual indisponível": "Current source unavailable",
+  "Evidência para": "Evidence for",
+  "Trecho usado como evidência": "Passage used as evidence",
+  "Informe datas apenas quando constarem na evidência.": "Only enter dates established by the evidence.",
+  "Copie um trecho exato da fonte selecionada.": "Copy an exact passage from the selected source."
 }

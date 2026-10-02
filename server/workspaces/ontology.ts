@@ -1,33 +1,92 @@
 import { jsonString } from "@shared/validation";
 import type { z } from "zod";
-import { validateOntology } from "./ontology-validation";
+import {
+  OntologyInvalid,
+  ontologyCitations,
+  ontologyValidOn,
+  validateOntology,
+} from "./ontology-validation";
 
 import {
   emptyOntology,
   OntologyActionSchema,
-  OntologyInvalid,
+  OntologyReadSchema,
   ontologyPath,
   OntologySchema,
-} from "@shared/workspaces/ontology";
+} from "@zoen/companion-ui/ontology";
 import type { WorkspaceWriteSchema } from "./repository";
-import { WorkspaceRepository } from "./repository";
+import { WorkspaceRepository, WorkspaceRepositoryError } from "./repository";
 import { requireWorkspaceAccess, type WorkspaceActorSchema } from "./access";
 
-export const readOntology = async function (
-  actor: z.output<typeof WorkspaceActorSchema>
+function ontologyPassageStates(
+  graph: z.output<typeof OntologySchema>,
+  documents: Awaited<
+    ReturnType<typeof WorkspaceRepository.selection>
+  >["documents"]
 ) {
+  return ontologyCitations(graph).map((source) => {
+    const content = documents.find(
+      (file) => file.path === source.path
+    )?.content;
+    return {
+      path: source.path,
+      revision: source.revision,
+      excerpt: source.excerpt,
+      status:
+        content === undefined
+          ? ("unavailable" as const)
+          : content.includes(source.excerpt)
+            ? ("passage-present" as const)
+            : ("passage-changed" as const),
+    };
+  });
+}
+
+export const readOntology = async function (
+  actor: z.output<typeof WorkspaceActorSchema>,
+  raw: z.output<typeof OntologyReadSchema> = {}
+) {
+  const input = OntologyReadSchema.parse(raw);
   const access = await requireWorkspaceAccess(actor);
-  const selection = await WorkspaceRepository.selection(actor, [ontologyPath]);
+  const listing = await WorkspaceRepository.read(actor);
+  const selection = await WorkspaceRepository.selection(actor, [ontologyPath], {
+    revision: input.revision,
+    asOf: input.asOf,
+  });
+  const historical = !!input.revision || !!input.asOf;
+  if (!historical && listing.revision !== selection.revision)
+    throw new WorkspaceRepositoryError({ reason: "conflict" });
   const document = selection.documents[0];
-  const graph = document
-    ? await Promise.try(async () =>
-        jsonString(OntologySchema).parseAsync(document.content)
-      ).then(validateOntology)
+  const original = document
+    ? await validateOntology(
+        await jsonString(OntologySchema).parseAsync(document.content)
+      )
     : emptyOntology;
+  const graph = input.validOn
+    ? ontologyValidOn(original, input.validOn)
+    : historical
+      ? { ...original, actions: [] }
+      : original;
+  const citations = ontologyCitations(graph);
+  const current = citations.length
+    ? await WorkspaceRepository.selection(actor, [
+        ...new Set(citations.map((source) => source.path)),
+      ])
+    : { revision: listing.revision, documents: [] };
+  if (current.revision !== listing.revision)
+    throw new WorkspaceRepositoryError({ reason: "conflict" });
   return {
     graph,
     revision: selection.revision,
-    mayManage: access.role !== "member" && !!actor.authSessionId,
+    asOf: input.asOf ?? null,
+    validOn: input.validOn ?? null,
+    sourceCheckedAtRevision: current.revision,
+    sources: ontologyPassageStates(graph, current.documents),
+    mayManage:
+      !historical &&
+      !input.validOn &&
+      access.role !== "member" &&
+      !!actor.authSessionId,
   };
 };
 
@@ -42,16 +101,6 @@ export const publishOntology = async function (
   await requireWorkspaceAccess(actor, true);
   const graph = await validateOntology(input.graph);
   const repository = WorkspaceRepository;
-  const checked = new Set<string>();
-  for (const entity of graph.entities)
-    for (const source of entity.sources) {
-      const key = `${source.revision}:${source.path}`;
-      if (checked.has(key)) continue;
-      if (source.path.includes(".."))
-        throw new OntologyInvalid({ reason: "source" });
-      await repository.read(actor, source.path, source.revision);
-      checked.add(key);
-    }
   return await repository.write(
     actor,
     {
@@ -105,7 +154,11 @@ export const applyOntologyAction = async function (
             ? Object.assign({}, item, {
                 properties: {
                   ...item.properties,
-                  [action.property]: actionInput.value,
+                  [action.property]: {
+                    value: actionInput.value,
+                    sources: actionInput.sources,
+                    validTime: actionInput.validTime,
+                  },
                 },
               })
             : item

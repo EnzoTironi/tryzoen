@@ -12,8 +12,8 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 
 const goalCategories = [
   { name: "Health", title: "Create a health goal", icon: Heart },
@@ -38,6 +38,8 @@ export function GoalCreation({
 }: {
   readonly onCreate: (category: string) => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   const [category, setCategory] = useState<(typeof goalCategories)[number]>();
   return (
     <>

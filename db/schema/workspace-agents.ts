@@ -13,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { workspaceMemberships, workspaces } from "./workspaces";
+import { workspaceAgentMembers } from "./agent-members";
 
 export const workspaceConnections = pgTable(
   "workspace_connections",
@@ -73,6 +74,10 @@ export const workspaceAgentGrants = pgTable(
       .notNull()
       .references(() => workspaceBots.id, { onDelete: "cascade" }),
     issuedBy: text("issued_by").notNull(),
+    externalMemberId: uuid("external_member_id").references(
+      () => workspaceAgentMembers.id,
+      { onDelete: "cascade" }
+    ),
     label: text("label").notNull(),
     tokenHash: text("token_hash").notNull(),
     capabilities: jsonb("capabilities").$type<readonly string[]>().notNull(),
@@ -90,6 +95,15 @@ export const workspaceAgentGrants = pgTable(
   (table) => [
     uniqueIndex("workspace_agent_grants_token_uidx").on(table.tokenHash),
     index("workspace_agent_grants_bot_idx").on(table.botId),
+    index("workspace_agent_grants_external_member_idx").on(
+      table.externalMemberId
+    ),
+    check(
+      "workspace_agent_grants_external_subject_check",
+      sql`${table.externalMemberId} IS NULL OR (${table.requesterUserId} IS NULL
+        AND ${table.sourceWorkspaceId} IS NULL AND ${table.networkKind} IS NULL
+        AND ${table.networkId} IS NULL AND ${table.originBotId} IS NULL)`
+    ),
     index("workspace_agent_grants_requester_idx").on(table.requesterUserId),
     foreignKey({
       name: "workspace_agent_grants_source_member_fkey",

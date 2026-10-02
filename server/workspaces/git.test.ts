@@ -1,24 +1,23 @@
+import { GitBundleError } from "../files/git";
 import { expect, test } from "vitest";
 import {
   publishWorkspaceGit,
   readWorkspaceGit,
-  WorkspaceGitError,
+  readWorkspaceGitSelection,
 } from "./git";
 
 test("exports real Git history and restores prior file contents from a fresh bundle", async () => {
   const initial = await publishWorkspaceGit({
     bundle: null,
     parent: null,
-    path: "knowledge/plan.md",
-    content: "# Original\n",
+    changes: [{ path: "knowledge/plan.md", content: "# Original\n" }],
     message: "Create plan",
   });
   expect(initial.bundle.subarray(0, 16).toString()).toContain("git bundle");
   const updated = await publishWorkspaceGit({
     bundle: initial.bundle,
     parent: initial.revision,
-    path: "knowledge/plan.md",
-    content: "# Revised\n",
+    changes: [{ path: "knowledge/plan.md", content: "# Revised\n" }],
     message: "Revise plan",
   });
   const previous = await readWorkspaceGit(
@@ -36,8 +35,7 @@ test("exports real Git history and restores prior file contents from a fresh bun
   const deleted = await publishWorkspaceGit({
     bundle: updated.bundle,
     parent: updated.revision,
-    path: "knowledge/plan.md",
-    content: null,
+    changes: [{ path: "knowledge/plan.md", content: null }],
     message: "Remove plan",
   });
   expect(
@@ -52,17 +50,22 @@ test("adds a published skill and removes its proposal in one revision", async ()
   const drafted = await publishWorkspaceGit({
     bundle: null,
     parent: null,
-    path: "proposals/skills/inbox.md",
-    content: "---\nrequires: []\n---\n# Inbox\n",
+    changes: [
+      {
+        path: "proposals/skills/inbox.md",
+        content: "---\nrequires: []\n---\n# Inbox\n",
+      },
+    ],
     message: "Propose inbox",
   });
   const published = await publishWorkspaceGit({
     bundle: drafted.bundle,
     parent: drafted.revision,
-    path: "skills/inbox.md",
-    content: "---\nrequires: []\n---\n# Inbox\n",
+    changes: [
+      { path: "skills/inbox.md", content: "---\nrequires: []\n---\n# Inbox\n" },
+      { path: "proposals/skills/inbox.md", content: null },
+    ],
     message: "Publish inbox",
-    remove: "proposals/skills/inbox.md",
   });
   expect(
     (await readWorkspaceGit(published.bundle, published.revision)).files
@@ -86,15 +89,14 @@ test.each([
     publishWorkspaceGit({
       bundle: null,
       parent: null,
-      path,
-      content: "content",
+      changes: [{ path, content: "content" }],
       message: "Invalid",
     })
   ).then(
     (value) => ({ ok: true as const, value }),
     (error: unknown) => ({ ok: false as const, error })
   );
-  expect(!result.ok && result.error).toBeInstanceOf(WorkspaceGitError);
+  expect(!result.ok && result.error).toBeInstanceOf(GitBundleError);
 });
 
 test("enforces byte limits and rejects corrupt bundles instead of returning missing files", async () => {
@@ -102,8 +104,7 @@ test("enforces byte limits and rejects corrupt bundles instead of returning miss
     publishWorkspaceGit({
       bundle: null,
       parent: null,
-      path: "knowledge/large.md",
-      content: "🌳".repeat(100_000),
+      changes: [{ path: "knowledge/large.md", content: "🌳".repeat(100_000) }],
       message: "Too large",
     })
   ).then(
@@ -122,4 +123,66 @@ test("enforces byte limits and rejects corrupt bundles instead of returning miss
   expect(!corrupt.ok && corrupt.error).toMatchObject({
     reason: "unavailable",
   });
+});
+
+test("selects existing files from the captured revision without losing deleted history", async () => {
+  const first = await publishWorkspaceGit({
+    bundle: null,
+    parent: null,
+    changes: [{ path: "knowledge/old.md", content: "Original" }],
+    message: "Create source",
+  });
+  const current = await publishWorkspaceGit({
+    bundle: first.bundle,
+    parent: first.revision,
+    changes: [
+      { path: "knowledge/old.md", content: null },
+      { path: "knowledge/new.md", content: "Current" },
+    ],
+    message: "Move source",
+  });
+  const paths = [
+    "knowledge/old.md",
+    "knowledge/new.md",
+    "knowledge/missing.md",
+  ];
+  expect(
+    await readWorkspaceGitSelection(current.bundle, first.revision, paths)
+  ).toEqual([{ path: "knowledge/old.md", content: "Original" }]);
+  expect(
+    await readWorkspaceGitSelection(current.bundle, current.revision, paths)
+  ).toEqual([{ path: "knowledge/new.md", content: "Current" }]);
+  await expect(
+    readWorkspaceGitSelection(Buffer.from("invalid"), current.revision, paths)
+  ).rejects.toMatchObject({ reason: "unavailable" });
+});
+
+test("linked discovery stays at its captured revision after the current source changes", async () => {
+  const original = await publishWorkspaceGit({
+    bundle: null,
+    parent: null,
+    changes: [
+      { path: "knowledge/index.md", content: "knowledge/fact.md" },
+      { path: "knowledge/fact.md", content: "Original fact" },
+    ],
+    message: "Publish linked knowledge",
+  });
+  const latest = await publishWorkspaceGit({
+    bundle: original.bundle,
+    parent: original.revision,
+    changes: [{ path: "knowledge/fact.md", content: "Corrected fact" }],
+    message: "Correct fact",
+  });
+  const documents = await readWorkspaceGitSelection(
+    latest.bundle,
+    original.revision,
+    async (read) => {
+      const index = await read(["knowledge/index.md"]);
+      return [...index, ...(await read([index[0]?.content ?? ""]))];
+    }
+  );
+  expect(documents).toEqual([
+    { path: "knowledge/index.md", content: "knowledge/fact.md" },
+    { path: "knowledge/fact.md", content: "Original fact" },
+  ]);
 });
