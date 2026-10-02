@@ -84,9 +84,11 @@ export function NativeDeviceForm({
       <PendingAuthorization
         challenge={bound}
         purpose={bound.purpose}
-        callbackUrl={bound.purpose === "link" ? "/account" : "/"}
+        callbackUrl={bound.purpose === "link" ? "/?view=settings" : "/"}
         onRestart={() => {
-          window.location.assign(purpose === "link" ? "/account" : "/sign-in");
+          window.location.assign(
+            purpose === "link" ? "/?view=settings" : "/sign-in"
+          );
         }}
       />
     );
@@ -132,12 +134,14 @@ export function NativeDeviceForm({
         </section>
       ) : null}
       {purpose === "link" && action.error?.status === 401 ? (
-        <SignInAgain callbackUrl="/account" />
+        <SignInAgain callbackUrl="/?view=settings" />
       ) : null}
       {action.error ? (
         <Button
           nativeButton={false}
-          render={<Link href={purpose === "link" ? "/account" : "/sign-in"} />}
+          render={
+            <Link href={purpose === "link" ? "/?view=settings" : "/sign-in"} />
+          }
           variant="outline"
         >
           {t("Start again")}
@@ -162,12 +166,14 @@ export function DeviceChallengeRecovery({
       <p role="alert">{message}</p>
       <Button
         nativeButton={false}
-        render={<Link href={purpose === "link" ? "/account" : "/sign-in"} />}
+        render={
+          <Link href={purpose === "link" ? "/?view=settings" : "/sign-in"} />
+        }
         variant="outline"
       >
         {t("Start again")}
       </Button>
-      {showSignInAgain ? <SignInAgain callbackUrl="/account" /> : null}
+      {showSignInAgain ? <SignInAgain callbackUrl="/?view=settings" /> : null}
     </div>
   );
 }

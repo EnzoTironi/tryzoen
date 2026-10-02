@@ -19,7 +19,7 @@ describe("docs panel", () => {
     expect(html).not.toContain("poke.com");
     expect(html).toContain("Primeiros passos");
     expect(html).not.toContain('aria-haspopup="dialog"');
-    expect(html).toContain('href="/get-started"');
+    expect(html).toContain('href="https://app.tryzoen.com/"');
     expect(html).toContain('href="/"');
   });
 });

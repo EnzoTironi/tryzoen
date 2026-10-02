@@ -106,7 +106,9 @@ export async function proxy(request: NextRequest) {
 
   if (pathname === "/") {
     if (isAppHost(hostname)) {
-      return NextResponse.redirect(`${companionPublicOrigin}/${search}`, 308);
+      const signIn = new URL("/sign-in", request.url);
+      signIn.searchParams.set("callbackUrl", `/${search}`);
+      return NextResponse.redirect(signIn);
     }
     return rewriteLanding(request);
   }

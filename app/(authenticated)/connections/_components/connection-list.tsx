@@ -1,5 +1,7 @@
 "use client";
 
+import type { z } from "zod";
+import type { channelProviderSchema } from "@shared/identity/channel-auth";
 import { useState, type ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { ChannelAuthForm } from "@web/auth/channel/form";
@@ -15,11 +17,15 @@ export function ConnectionList({
   identities,
   returnTo,
   kind = "all",
+  availableChannels = ["telegram", "kapso"],
 }: {
   readonly googleState: ComponentProps<typeof GoogleWorkspaceAction>["state"];
   readonly identities: ComponentProps<typeof LinkedChannels>["identities"];
   readonly returnTo: string;
   readonly kind?: "all" | "services" | "channels";
+  readonly availableChannels?: readonly z.output<
+    typeof channelProviderSchema
+  >[];
 }) {
   const { t } = useI18n();
   const showGoogle = kind !== "channels";
@@ -29,7 +35,7 @@ export function ConnectionList({
   const availableGoogle = showGoogle && !connectedGoogle && !pausedGoogle;
   const hasConnected =
     connectedGoogle || pausedGoogle || (showChannels && identities.length > 0);
-  const availableChannels = (["telegram", "kapso"] as const).filter(
+  const unlinkedChannels = availableChannels.filter(
     (channel) =>
       showChannels &&
       !identities.some((identity) => identity.channel === channel)
@@ -51,7 +57,7 @@ export function ConnectionList({
         )}
       </section>
       {showChannels && <PersonalWhatsApp />}
-      {(availableGoogle || availableChannels.length > 0) && (
+      {(availableGoogle || unlinkedChannels.length > 0) && (
         <section className={styles.group} aria-label={t("Adicionar conexão")}>
           <h2 className={styles.label}>{t("Adicionar conexão")}</h2>
           <div className={styles.list}>
@@ -73,11 +79,11 @@ export function ConnectionList({
                 <PlusIcon className={styles.trailing} aria-hidden="true" />
               </GoogleWorkspaceAction>
             )}
-            {availableChannels.length > 0 && (
+            {unlinkedChannels.length > 0 && (
               <ChannelAuthForm purpose="link" callbackUrl={returnTo}>
                 {({ start, busy }) => (
                   <div className={styles.list}>
-                    {availableChannels.map((channel) => (
+                    {unlinkedChannels.map((channel) => (
                       <button
                         key={channel}
                         type="button"

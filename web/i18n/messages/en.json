@@ -1191,5 +1191,18 @@
   "Evidência para": "Evidence for",
   "Trecho usado como evidência": "Passage used as evidence",
   "Informe datas apenas quando constarem na evidência.": "Only enter dates established by the evidence.",
-  "Copie um trecho exato da fonte selecionada.": "Copy an exact passage from the selected source."
+  "Copie um trecho exato da fonte selecionada.": "Copy an exact passage from the selected source.",
+  "Seu Companion": "Your Companion",
+  "Como você quer me chamar?": "What would you like to call me?",
+  "Um nome para o Companion que vai acompanhar seu dia.": "A name for the Companion that will be part of your day.",
+  "Seu dia, mais perto.": "Bring your day together.",
+  "Conecte seus serviços e mensageiros. Você também pode fazer isso depois.": "Connect your services and messengers. You can also do this later.",
+  "Nome do Companion": "Companion name",
+  "Você pode mudar o nome e a personalidade depois.": "You can change the name and personality later.",
+  "Não foi possível preparar seu Companion.": "Could not prepare your Companion.",
+  "Não foi possível salvar. Tente novamente.": "Could not save. Try again.",
+  "Configure seu Companion no seu espaço pessoal.": "Set up your Companion in your personal space.",
+  "Preparar meu cofre": "Set up my vault",
+  "Adicione somente os acessos que você quer usar com seu Companion.": "Add only the credentials you want to use with your Companion.",
+  "As conexões são opcionais. Você controla as permissões e pode revisar tudo nas configurações.": "Connections are optional. You control permissions and can review everything in settings."
 }

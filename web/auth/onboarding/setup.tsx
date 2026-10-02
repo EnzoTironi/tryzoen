@@ -1,166 +1,196 @@
 "use client";
 
+import { useRef, useState } from "react";
 import type { z } from "zod";
-
-import { useState } from "react";
-
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRightIcon,
-  BriefcaseBusinessIcon,
-  CheckIcon,
-  HomeIcon,
-} from "lucide-react";
-import type { listUserWorkspaces } from "../../../server/workspaces/directory";
-import type { readLinkedChannelIdentities } from "../../../server/accounts/controls";
+import { ArrowRightIcon } from "lucide-react";
 import type { channelProviderSchema } from "@shared/identity/channel-auth";
-import { ChannelAuthForm } from "@web/auth/channel/form";
+import { agentFiles } from "@shared/workspaces/agent-files";
+import { api } from "@web/trpc/client";
 import { Button } from "@web/components/ui/button";
+import { Input } from "@web/components/ui/input";
 import { useI18n } from "@web/i18n/context";
-import { workspaceHref } from "@web/workspaces/navigation";
 import { safeCallbackUrl } from "@web/auth/channel/client";
+import { ConnectionList } from "@app/(authenticated)/connections/_components/connection-list";
+import { SettingsVault } from "@app/companion/settings/vault";
 import { OnboardingFrame } from "./frame";
 import styles from "./onboarding.module.css";
 
 export function OnboardingSetup({
-  workspaces,
-  identities,
   available,
   callbackUrl,
+  initialStep,
 }: {
-  readonly workspaces: Awaited<ReturnType<typeof listUserWorkspaces>>;
-  readonly identities: Awaited<ReturnType<typeof readLinkedChannelIdentities>>;
   readonly available: readonly z.output<typeof channelProviderSchema>[];
   readonly callbackUrl: string;
+  readonly initialStep: "companion" | "connections";
 }) {
   const { t } = useI18n();
   const router = useRouter();
-  const [step, setStep] = useState(identities.length ? 2 : 1);
-  const [linked, setLinked] = useState(
-    identities.map((identity) => identity.channel)
-  );
-  const [selected, setSelected] = useState(
-    workspaces.find((space) => !space.organizationId)?.id ?? workspaces[0]?.id
-  );
+  const utils = api.useUtils();
+  const [step, setStep] = useState(initialStep === "connections" ? 2 : 1);
+  const [name, setName] = useState<string>();
+  const identity = api.companion.identity.useQuery();
+  const google = api.googleWorkspace.read.useQuery();
+  const identities = api.accountChannels.list.useQuery();
+  const document =
+    identity.data?.documents.find((item) => item.path === "agent/IDENTITY.md")
+      ?.content ??
+    agentFiles.find((item) => item.path === "agent/IDENTITY.md")?.content ??
+    "";
+  const initialName =
+    /^Name:[ \t]*(\S[^\r\n]*)$/im.exec(document)?.[1]?.trim().slice(0, 80) ??
+    "Zoen";
+  const operation = useRef<{
+    content: string;
+    operationId: string;
+    expectedRevision: string | null;
+  } | null>(null);
+  const returnTo = `/onboarding?step=connections&callbackUrl=${encodeURIComponent(callbackUrl)}`;
+  const save = api.workspaces.write.useMutation({
+    onError: async (error) => {
+      if (error.data?.code === "CONFLICT") {
+        operation.current = null;
+        await identity.refetch();
+      }
+    },
+    onSuccess: async () => {
+      await utils.companion.identity.invalidate();
+      setStep(2);
+      router.replace(returnTo);
+    },
+  });
+  const loading = step === 1 && identity.isPending;
+  const readError = step === 1 && identity.error;
   return (
-    <OnboardingFrame step={step} onStep={setStep} signedIn>
-      {step === 1 ? (
-        <>
-          <ChannelAuthForm
-            purpose="link"
-            callbackUrl="/onboarding"
-            onComplete={(channel) => {
-              setLinked((previous) => [...new Set([...previous, channel])]);
-              setStep(2);
-            }}
-          >
-            {({ start, busy }) => (
-              <div className={styles.choiceList}>
-                {available.map((channel) => {
-                  const connected = linked.includes(channel);
-                  const name = channel === "telegram" ? "Telegram" : "WhatsApp";
-                  return (
-                    <Button
-                      key={channel}
-                      variant="surface"
-                      size="lg"
-                      disabled={busy || connected}
-                      onClick={() => {
-                        start(channel);
-                      }}
-                    >
-                      <Image
-                        alt=""
-                        src={`/marketing/${channel === "kapso" ? "whatsapp" : "telegram"}.avif`}
-                        width={30}
-                        height={30}
-                      />
-                      <span className={styles.choiceText}>{name}</span>
-                      {connected ? (
-                        <CheckIcon
-                          className={styles.connected}
-                          aria-label={t("Conectado")}
-                        />
-                      ) : (
-                        <ArrowRightIcon aria-hidden="true" />
-                      )}
-                    </Button>
-                  );
-                })}
-                {!available.length && (
-                  <p className={styles.note}>
-                    {t("Você já pode conversar com o Zoen pelo app.")}
-                  </p>
-                )}
-              </div>
-            )}
-          </ChannelAuthForm>
+    <OnboardingFrame step={step} onStep={setStep} signedIn furthestStep={step}>
+      {loading ? (
+        <output>{t("Loading…")}</output>
+      ) : readError ? (
+        <div role="alert">
+          <p>{t("Não foi possível preparar seu Companion.")}</p>
           <Button
-            className={styles.skip}
-            variant="quiet"
             onClick={() => {
-              setStep(2);
+              void identity.refetch();
+              void google.refetch();
+              void identities.refetch();
             }}
           >
-            {t("Conectar depois")}
+            {t("Try again")}
           </Button>
-        </>
-      ) : (
-        <>
-          <fieldset
-            className={styles.choiceList}
-            aria-label={t("Escolha seu espaço")}
+        </div>
+      ) : step === 1 ? (
+        <form
+          className={styles.choiceList}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!identity.data || !identity.data.canEdit) return;
+            const chosen = (name ?? initialName).trim();
+            if (!chosen) return;
+            const content = /^Name:/im.test(document)
+              ? document.replace(/^Name:[^\r\n]*/im, `Name: ${chosen}`)
+              : `Name: ${chosen}\n\n${document}`;
+            if (operation.current?.content !== content)
+              operation.current = {
+                content,
+                operationId: crypto.randomUUID(),
+                expectedRevision: identity.data.revision,
+              };
+            save.mutate({ path: "agent/IDENTITY.md", ...operation.current });
+          }}
+        >
+          <label htmlFor="companion-name" className="type-label">
+            {t("Nome do Companion")}
+          </label>
+          <Input
+            id="companion-name"
+            name="companionName"
+            maxLength={80}
+            required
+            value={name ?? initialName}
+            onChange={(event) => {
+              setName(event.target.value);
+            }}
+            disabled={save.isPending || !identity.data?.canEdit}
+            autoComplete="off"
+          />
+          <p className={styles.note}>
+            {t("Você pode mudar o nome e a personalidade depois.")}
+          </p>
+          {save.error && (
+            <p role="alert">{t("Não foi possível salvar. Tente novamente.")}</p>
+          )}
+          {!identity.data?.canEdit && (
+            <p role="alert">
+              {t("Configure seu Companion no seu espaço pessoal.")}
+            </p>
+          )}
+          <Button
+            type="submit"
+            className={styles.continue}
+            disabled={
+              save.isPending ||
+              !identity.data?.canEdit ||
+              !(name ?? initialName).trim()
+            }
           >
-            {workspaces.map((space) => (
+            {save.isPending ? t("Saving…") : t("Continuar")}{" "}
+            <ArrowRightIcon aria-hidden="true" />
+          </Button>
+        </form>
+      ) : (
+        <div className="space-y-6">
+          {google.isPending || identities.isPending ? (
+            <output>{t("Loading…")}</output>
+          ) : google.error || identities.error ? (
+            <div role="alert">
+              <p>{t("Não foi possível carregar suas conexões")}</p>
               <Button
-                key={space.id}
-                variant="surface"
-                size="lg"
-                aria-pressed={selected === space.id}
                 onClick={() => {
-                  setSelected(space.id);
+                  void google.refetch();
+                  void identities.refetch();
                 }}
               >
-                {space.organizationId ? (
-                  <BriefcaseBusinessIcon aria-hidden="true" />
-                ) : (
-                  <HomeIcon aria-hidden="true" />
-                )}
-                <span className={styles.choiceText}>
-                  {space.organizationId ? space.name : t("Pessoal")}
-                  <small>
-                    {space.organizationId
-                      ? t("Com sua equipe")
-                      : t("Só você e seu Zoen")}
-                  </small>
-                </span>
-                {selected === space.id && (
-                  <CheckIcon className={styles.connected} aria-hidden="true" />
-                )}
+                {t("Try again")}
               </Button>
-            ))}
-          </fieldset>
+            </div>
+          ) : (
+            <ConnectionList
+              googleState={google.data.state}
+              identities={identities.data}
+              returnTo={returnTo}
+              availableChannels={available}
+            />
+          )}
+          <details>
+            <summary className="cursor-pointer type-label">
+              {t("Preparar meu cofre")}
+            </summary>
+            <p className={styles.note}>
+              {t(
+                "Adicione somente os acessos que você quer usar com seu Companion."
+              )}
+            </p>
+            <SettingsVault />
+          </details>
+          <p className={styles.note}>
+            {t(
+              "As conexões são opcionais. Você controla as permissões e pode revisar tudo nas configurações."
+            )}
+          </p>
           <Button
             className={styles.continue}
-            disabled={!selected}
             onClick={() => {
-              const space = workspaces.find((item) => item.id === selected);
-              if (space)
-                router.push(
-                  workspaceHref(
-                    safeCallbackUrl(callbackUrl),
-                    space.organizationId ? space.id : null
-                  )
-                );
+              router.push(
+                callbackUrl === "/"
+                  ? "/?compose=1"
+                  : safeCallbackUrl(callbackUrl)
+              );
             }}
           >
-            {t("Entrar no meu espaço")} <ArrowRightIcon aria-hidden="true" />
+            {t("Começar uma conversa")} <ArrowRightIcon aria-hidden="true" />
           </Button>
-          <p className={styles.note}>
-            {t("Você pode criar ou entrar em outras equipes pelo seu perfil.")}
-          </p>
-        </>
+        </div>
       )}
     </OnboardingFrame>
   );

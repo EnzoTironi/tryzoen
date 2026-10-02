@@ -74,7 +74,7 @@ function handoffFailure(
       "Google Workspace needs your authorization. Return to your conversation and start the connection again.",
   };
   return new Response(
-    `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t("Connect Google Workspace")}</title></head><body><main><h1>${t("Google Workspace could not be connected")}</h1><p>${t(messages[reason])}</p><p><a href="/chat/history">${t("Return to your conversations")}</a></p><p><a href="/">${t("Return home")}</a></p></main></body></html>`,
+    `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${t("Connect Google Workspace")}</title></head><body><main><h1>${t("Google Workspace could not be connected")}</h1><p>${t(messages[reason])}</p><p><a href="/">${t("Return to your conversations")}</a></p><p><a href="/">${t("Return home")}</a></p></main></body></html>`,
     {
       status:
         reason === "unauthenticated"
