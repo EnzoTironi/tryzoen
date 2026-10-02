@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
-import { PgDialect } from "drizzle-orm/pg-core";
+import { Client } from "pg";
+import { z } from "zod";
 import * as queries from "@db/queries";
+import { env } from "@shared/environment/env";
+import { dbMigrationEnv } from "../../db/env/migration";
 import {
   PrivateMemoryRepository,
   PrivateMemoryError,
 } from "../../server/memory/repository";
 import { readWorkspaceGit } from "../../server/workspaces/git";
 import { workspaceFixture } from "./workspace-fixture";
+import { privateMemoryFixture } from "./private-memory-fixture";
+import { requireRuntimeDatabase } from "./database";
 
 const body = (text: string) => ({
   text,
@@ -23,6 +28,97 @@ const assertion = (text: string) => ({
   expectedRevision: null,
   body: body(text),
 });
+
+/** Real, narrowly targeted SQL failure; the application retains only DML. */
+async function rejectPrivateMemoryReceipt(
+  namespaceId: string,
+  operationId: string
+) {
+  await requireRuntimeDatabase();
+  const namespace = z.uuid().parse(namespaceId);
+  const operation = z.uuid().parse(operationId);
+  const applicationUrl = new URL(env.DATABASE_URL);
+  const migrationUrl = new URL(dbMigrationEnv.DATABASE_URL_UNPOOLED);
+  if (
+    migrationUrl.hostname !== applicationUrl.hostname ||
+    migrationUrl.port !== applicationUrl.port ||
+    migrationUrl.pathname !== "/companion_runtime_test" ||
+    migrationUrl.username !== "zoen_migrator" ||
+    applicationUrl.username !== "zoen_app"
+  )
+    throw new Error(
+      "Receipt faults require the same isolated migrator and DML-only app roles"
+    );
+  const [app] = await queries.query(sql`SELECT current_user AS role`);
+  if (app?.role !== "zoen_app")
+    throw new Error("Receipt fault application role mismatch");
+  const constraint = `private_memory_receipt_${randomUUID().replaceAll("-", "")}`;
+  const migration = new Client({
+    connectionString: migrationUrl.toString(),
+    connectionTimeoutMillis: 5_000,
+  });
+  try {
+    await migration.connect();
+    const principal = await migration.query(
+      "SELECT current_database() AS database,current_user AS role"
+    );
+    const [owner] = z
+      .array(z.object({ database: z.string(), role: z.string() }))
+      .parse(principal.rows);
+    if (
+      owner?.database !== "companion_runtime_test" ||
+      owner.role !== "zoen_migrator"
+    )
+      throw new Error("Receipt fault migration identity mismatch");
+    // Identifier is generated, and both literals are validated fixture UUIDs.
+    // NOT VALID preserves existing rows but checks every subsequent INSERT.
+    await migration.query(`ALTER TABLE private_memory_operation ADD CONSTRAINT "${constraint}"
+      CHECK (namespace_id <> '${namespace}'::uuid OR operation_id <> '${operation}') NOT VALID`);
+    return {
+      constraint,
+      async [Symbol.asyncDispose]() {
+        try {
+          await migration.query(
+            `ALTER TABLE private_memory_operation DROP CONSTRAINT "${constraint}"`
+          );
+        } finally {
+          await migration.end();
+        }
+      },
+    };
+  } catch (error) {
+    await migration.end();
+    throw error;
+  }
+}
+
+function receiptConstraintCause(error: unknown) {
+  for (let depth = 0; depth < 8; depth++) {
+    const cause = z
+      .object({ code: z.string(), constraint: z.string() })
+      .safeParse(error);
+    if (cause.success) return cause.data;
+    if (!(error instanceof Error)) return null;
+    error = error.cause;
+  }
+  return null;
+}
+
+async function expectReceiptConstraintFailure(
+  attempt: Promise<unknown>,
+  constraint: string
+) {
+  const failure: unknown = await attempt.then(
+    () => undefined,
+    (error: unknown) => error
+  );
+  expect(failure).toBeInstanceOf(PrivateMemoryError);
+  expect(failure).toMatchObject({ reason: "unavailable" });
+  expect(receiptConstraintCause(failure)).toEqual({
+    code: "23514",
+    constraint,
+  });
+}
 
 test("two people in one workspace own different private bundles; shared history/export/search contain neither", async () => {
   await using fixture = await workspaceFixture();
@@ -129,34 +225,19 @@ test("lost receipt indexes rebuild from files/Git without losing facts, timestam
 });
 
 test("receipt persistence failure rolls back bundle/head and retry cannot observe a partial publication", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor } = fixture;
   const change = assertion("Atomic publication only");
-  const original = queries.query;
-  const dialect = new PgDialect();
-  const spy = vi
-    .spyOn(queries, "query")
-    .mockImplementation(
-      async <Row extends Record<string, unknown>>(
-        statement: Parameters<typeof queries.query>[0]
-      ): Promise<Row[]> => {
-        if (
-          dialect
-            .sqlToQuery(statement)
-            .sql.startsWith("INSERT INTO private_memory_operation")
-        )
-          throw new queries.SqlError(
-            new Error("Synthetic receipt persistence failure")
-          );
-        return original<Row>(statement);
-      }
+  const namespace = await fixture.namespace(actor);
+  {
+    await using fault = await rejectPrivateMemoryReceipt(
+      namespace.id,
+      change.operationId
     );
-  try {
-    await expect(
-      PrivateMemoryRepository.change(actor, change)
-    ).rejects.toMatchObject({ reason: "unavailable" });
-  } finally {
-    spy.mockRestore();
+    await expectReceiptConstraintFailure(
+      PrivateMemoryRepository.change(actor, change),
+      fault.constraint
+    );
   }
   expect(
     (await PrivateMemoryRepository.read(actor)).snapshot.revision
@@ -492,7 +573,7 @@ test("expired or foreign-format recall payloads stay invalid receipts rather tha
 });
 
 test("atomic clear keeps all history, rolls back on receipt failure and concurrent retries publish only once", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor } = fixture;
   const firstInput = assertion("Cedar confidential preference");
   const first = await PrivateMemoryRepository.change(actor, firstInput);
@@ -505,32 +586,37 @@ test("atomic clear keeps all history, rolls back on receipt failure and concurre
     operationId: randomUUID(),
     expectedRevision: second.receipt.revision,
   };
-  const original = queries.query;
-  const dialect = new PgDialect();
-  const spy = vi
-    .spyOn(queries, "query")
-    .mockImplementation(
-      async <Row extends Record<string, unknown>>(
-        statement: Parameters<typeof queries.query>[0]
-      ): Promise<Row[]> => {
-        if (
-          dialect
-            .sqlToQuery(statement)
-            .sql.startsWith("INSERT INTO private_memory_operation")
-        )
-          throw new queries.SqlError(
-            new Error("Synthetic clear receipt failure")
-          );
-        return original<Row>(statement);
-      }
+  const namespace = await fixture.namespace(actor);
+  const scopeKey = `clear-${randomUUID()}`;
+  const recallId = randomUUID();
+  const recalled = await PrivateMemoryRepository.recall(
+    actor,
+    scopeKey,
+    recallId,
+    "confidential"
+  );
+  expect(recalled.matches).toHaveLength(2);
+  {
+    await using fault = await rejectPrivateMemoryReceipt(
+      namespace.id,
+      clear.operationId
     );
-  try {
-    await expect(
-      PrivateMemoryRepository.change(actor, clear)
-    ).rejects.toMatchObject({ reason: "unavailable" });
-  } finally {
-    spy.mockRestore();
+    await expectReceiptConstraintFailure(
+      PrivateMemoryRepository.change(actor, clear),
+      fault.constraint
+    );
   }
+  expect(
+    await PrivateMemoryRepository.recall(
+      actor,
+      scopeKey,
+      recallId,
+      "confidential"
+    )
+  ).toEqual(recalled);
+  expect((await PrivateMemoryRepository.read(actor)).snapshot.revision).toBe(
+    second.receipt.revision
+  );
   expect(
     (await PrivateMemoryRepository.read(actor)).snapshot.claims.filter(
       (claim) => claim.file.state.kind === "active"
@@ -637,7 +723,7 @@ test("an older backup cannot resurrect notes after correction or clear, includin
 });
 
 test("restore rolls back the entire bundle/index on SQL receipt failure and revalidates current source evidence", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor, repository } = fixture;
   const path = "knowledge/restore-source.md";
   const shared = await repository.publish(actor, {
@@ -676,36 +762,18 @@ test("restore rolls back the entire bundle/index on SQL receipt failure and reva
       WHERE namespace_id=${archive.namespaceId}`)
     ).toEqual([{ operationId: input.operationId, revision: archive.revision }]);
   };
-  // Historical injected SQL-failure evidence; actual rollback acceptance uses
-  // the separate no-mock collision journey. Damaged authority stays unavailable.
-  const original = queries.query;
-  const dialect = new PgDialect();
-  const spy = vi
-    .spyOn(queries, "query")
-    .mockImplementation(
-      async <Row extends Record<string, unknown>>(
-        statement: Parameters<typeof queries.query>[0]
-      ): Promise<Row[]> => {
-        if (
-          dialect
-            .sqlToQuery(statement)
-            .sql.startsWith("INSERT INTO private_memory_operation")
-        )
-          throw new queries.SqlError(
-            new Error("Synthetic restore receipt failure")
-          );
-        return original<Row>(statement);
-      }
+  {
+    await using fault = await rejectPrivateMemoryReceipt(
+      archive.namespaceId,
+      input.operationId
     );
-  try {
-    await expect(
+    await expectReceiptConstraintFailure(
       PrivateMemoryRepository.restore(actor, {
         expectedRevision: null,
         archive,
-      })
-    ).rejects.toMatchObject({ reason: "unavailable" });
-  } finally {
-    spy.mockRestore();
+      }),
+      fault.constraint
+    );
   }
   await expectRetainedDamagedState();
   await repository.publish(actor, {

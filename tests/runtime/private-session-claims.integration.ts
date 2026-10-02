@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
 import { query, transaction } from "@db/queries";
+import { env } from "@shared/environment/env";
 import { claimSession } from "../../db/services/sessions";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import {
@@ -23,30 +24,14 @@ import {
   lockSessionSourceAllocation,
 } from "../../server/memory/session-export";
 import { PrivateMemoryRepository } from "../../server/memory/repository";
-import { workspaceFixture } from "./workspace-fixture";
+import { privateMemoryFixture } from "./private-memory-fixture";
 import type { z } from "zod";
 
-const { directory } = await vi.hoisted(async () => {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const path = await import("node:path");
-  return {
-    directory: await fs.mkdtemp(
-      path.join(os.tmpdir(), "zoen-private-source-proof-")
-    ),
-  };
-});
-vi.mock("@shared/environment/env", async (original) => {
-  const actual = await original<typeof import("@shared/environment/env")>();
-  return {
-    ...actual,
-    env: {
-      ...actual.env,
-      ZOEN_SESSION_ARCHIVE_DIR: directory,
-    },
-  };
-});
-afterAll(() => rm(directory, { recursive: true, force: true }));
+const directory = env.ZOEN_SESSION_ARCHIVE_DIR;
+if (!directory)
+  throw new Error(
+    "Configure the isolated private K3 journal root before running this suite"
+  );
 const citation = (
   source: z.infer<typeof sessionSourceSchema>,
   excerpt: string
@@ -75,7 +60,7 @@ const userSource = (sessionId: string) => {
 };
 
 test("a private claim cites the actual immutable user event digest only after journal delivery", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor } = fixture;
   const sessionId = `private-source-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -124,7 +109,7 @@ test("a private claim cites the actual immutable user event digest only after jo
 });
 
 test("assistant stream completion is withheld while the native settled reply is verified without inventing a timestamp", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor } = fixture;
   const sessionId = `private-source-${randomUUID()}`;
   const turn = { id: "source-turn", sequence: 0 };
@@ -162,7 +147,7 @@ test("assistant stream completion is withheld while the native settled reply is 
 });
 
 test("source coordinates never grant another person, delegated runtime, group or revoked owner access", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor, guest } = fixture;
   const sessionId = `private-source-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -190,7 +175,7 @@ test("source coordinates never grant another person, delegated runtime, group or
 });
 
 test("source receipt loss rebuilds from files without changing the actual claim version or permitting cross-owner recovery", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor, guest } = fixture;
   const sessionId = `private-source-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -235,7 +220,7 @@ test("source receipt loss rebuilds from files without changing the actual claim 
 });
 
 test("a source index rebuild does not bypass an existing pending delivery after disk write", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const { actor } = fixture;
   const sessionId = `private-source-${randomUUID()}`;
   await claimSession(actor, sessionId);
@@ -272,7 +257,7 @@ test("a source index rebuild does not bypass an existing pending delivery after 
 
 for (const workspace of ["personal", "actor"] as const) {
   test(`v2 same-head recovery restores complete cited journals and missing receipts in ${workspace} scope without reviving cleared claims`, async () => {
-    await using fixture = await workspaceFixture();
+    await using fixture = await privateMemoryFixture();
     const actor = fixture[workspace];
     const sessionId = `private-v2-${randomUUID()}`;
     await claimSession(actor, sessionId);
@@ -404,7 +389,7 @@ async function sourceAllocationWaiters() {
 }
 
 test("receipt recovery waits for native allocation commit and does not allocate a second sequence", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const originalSession = `source-allocation-${randomUUID()}`;
   const nextSession = `source-allocation-${randomUUID()}`;
   await claimSession(fixture.actor, originalSession);
@@ -462,7 +447,7 @@ test("receipt recovery waits for native allocation commit and does not allocate 
 });
 
 test("global retained receipt collision denies cross-namespace repair without replacing evidence", async () => {
-  await using fixture = await workspaceFixture();
+  await using fixture = await privateMemoryFixture();
   const ownSession = `source-collision-${randomUUID()}`;
   const otherSession = `source-collision-${randomUUID()}`;
   await claimSession(fixture.actor, ownSession);
