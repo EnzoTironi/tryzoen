@@ -2,8 +2,8 @@ import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, Switch, Text, View } from "react-native";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 import type {
   goalPreferencesSchema,
   goalPreferenceChangeSchema,
@@ -26,6 +26,8 @@ export function GoalOptions({
   readonly onCompleted: () => void;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   return (
     <CompanionSheet title="Goal options" onClose={onClose}>
       {(

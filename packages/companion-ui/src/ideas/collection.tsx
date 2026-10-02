@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { Ellipsis, Sparkles } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { CompanionPage, pageStyles } from "../page";
+import { CompanionPage, usePageStyles } from "../page";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { IdeaDetail } from "./detail";
 import {
   ideaStatusLabels,
@@ -35,6 +35,9 @@ export function IdeaCollection({
   readonly onPrompt: (prompt: string) => void;
   readonly onConversation: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [selection, setSelection] = useState<{
     id: string;
     feedbackOnly: boolean;
@@ -187,21 +190,28 @@ export function IdeaCollection({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    paddingVertical: 12,
-  },
-  idea: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 14,
-    paddingVertical: 4,
-    paddingRight: 4,
-  },
-  emoji: { fontSize: 28, width: 38, lineHeight: 38 },
-  status: { color: colors.accent, fontSize: 13, marginTop: 5 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+      paddingVertical: 12,
+    },
+    idea: {
+      flex: 1,
+      flexDirection: "row",
+      gap: 14,
+      paddingVertical: 4,
+      paddingRight: 4,
+    },
+    emoji: { fontFamily: systemFont, fontSize: 28, width: 38, lineHeight: 38 },
+    status: {
+      fontFamily: systemFont,
+      color: colors.accent,
+      fontSize: 13,
+      marginTop: 5,
+    },
+  });
+}

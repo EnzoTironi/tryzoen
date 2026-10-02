@@ -38,11 +38,24 @@ export async function downloadMemoryBackup(
   space?: string | null
 ) {
   const url = new URL("/api/workspaces/memory/backup", origin);
+  url.searchParams.set("coverage", "complete-journal");
   if (space) url.searchParams.set("space", space);
   const response = await fetch(url, {
     credentials: "include",
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Couldn’t download your memory backup.");
-  downloadBlob(await response.blob(), "zoen-learned-memory.zip");
+  const archive = privateMemoryArchiveDownloads["complete-journal"];
+  if (
+    response.headers.get("content-type")?.split(";")[0] !== archive.contentType
+  )
+    throw new Error("This response is not a canonical private-memory archive.");
+  const blob = await response.blob();
+  if (blob.size > privateMemoryArchiveLimits.wireBytes)
+    throw new Error("The memory archive exceeds its download limit.");
+  downloadBlob(blob, archive.filename);
 }
+import {
+  privateMemoryArchiveDownloads,
+  privateMemoryArchiveLimits,
+} from "@zoen/companion-ui/memory";

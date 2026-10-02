@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { StyleSheet, Text, View } from "react-native";
 import { OntologySchema, type OntologyClaimSchema } from "./schema";
 import { ActionButton } from "../../button";
-import { colors } from "../../theme";
-import { pageStyles } from "../../page";
+import { systemFont, useColors } from "../../theme";
+import { usePageStyles } from "../../page";
 
 /** A file proposal is rendered from its canonical graph, never a second model. */
 export function OntologyReview({ content }: { readonly content: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [limit, setLimit] = useState(25);
   let graph: z.output<typeof OntologySchema>;
   try {
@@ -122,6 +125,9 @@ function OntologyReviewClaim({
     "sources" | "validTime"
   >;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   return (
     <View style={styles.content}>
       <Text style={styles.detail}>
@@ -146,19 +152,26 @@ function OntologyReviewClaim({
   );
 }
 
-const styles = StyleSheet.create({
-  content: { gap: 8 },
-  card: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    gap: 10,
-  },
-  detail: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  citation: {
-    borderLeftWidth: 2,
-    borderColor: colors.line,
-    paddingLeft: 10,
-    gap: 4,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    content: { gap: 8 },
+    card: {
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      gap: 10,
+    },
+    detail: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    citation: {
+      borderLeftWidth: 2,
+      borderColor: colors.line,
+      paddingLeft: 10,
+      gap: 4,
+    },
+  });
+}

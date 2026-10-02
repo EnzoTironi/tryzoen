@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState, Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { VaultData } from "./data";
 import type { VaultCreateItem, VaultItem } from "./schema";
 import { VaultItemForm } from "./form";
@@ -16,6 +16,7 @@ export function VaultItemEditor({
   readonly data: VaultData;
   readonly onDone: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [value, setValue] = useState<VaultCreateItem | null>();
   const [failed, setFailed] = useState(false);
   const done = useRef(onDone);

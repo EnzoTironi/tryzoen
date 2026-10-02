@@ -1,0 +1,280 @@
+{
+  "kind": "synthetic-kernel-baseline",
+  "assembledAt": "2026-09-30T12:21:14.450891+00:00",
+  "pgliteVersion": "0.5.8",
+  "completedRuns": [
+    {
+      "capturedAt": "2026-09-30T12:10:53.295Z",
+      "node": "v24.21.0",
+      "git": "git version 2.54.0 (Apple Git-157)",
+      "platform": "darwin",
+      "architecture": "arm64",
+      "serialChildProcesses": 3,
+      "v8OldSpaceLimitMiB": 192,
+      "observedRssGuardBytes": 805306368,
+      "notes": [
+        "Synthetic kernels, not application latency or financial savings.",
+        "First trial is not a cold machine/filesystem cache measurement; no OS caches flushed.",
+        "Nearest-rank p95 with low trial counts is descriptive, not a production estimate.",
+        "RSS guard is checked between operations; V8 heap limit is not a WASM/OS memory ceiling.",
+        "No services, environment files, application credentials or PostgreSQL connections."
+      ],
+      "results": [
+        {
+          "variant": "git-repeated",
+          "status": "passed",
+          "fixture": {
+            "files": 16,
+            "rawBytes": 1064944,
+            "bundleBytes": 621982,
+            "selectedFiles": 3
+          },
+          "firstTrialMs": 181.93429199999997,
+          "repeatedTrialMs": {
+            "samples": [
+              173.63679100000002, 173.34191599999997, 172.5558329999999,
+              171.0005000000001, 170.0245420000001, 171.56349999999998
+            ],
+            "p50": 171.56349999999998,
+            "p95": 173.63679100000002
+          },
+          "nodeCpuMs": {
+            "samples": [22.07, 23.154, 20.992, 22.33, 20.824, 20.04],
+            "p50": 20.992,
+            "p95": 23.154
+          },
+          "gitSpawnsPerTrial": [16, 16, 16, 16, 16, 16],
+          "reconstructedBundlesPerTrial": 3,
+          "bundleBytesWrittenPerTrial": 1865946,
+          "outputDigest": "28a8405a1047291d1c4e88114b2e1e4170ab012193ee91cde0a4f35f527b4a6e",
+          "databaseBytes": null,
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 140967936,
+          "processFinalRssBytes": 140967936,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        },
+        {
+          "variant": "git-captured",
+          "status": "passed",
+          "fixture": {
+            "files": 16,
+            "rawBytes": 1064944,
+            "bundleBytes": 621982,
+            "selectedFiles": 3
+          },
+          "firstTrialMs": 65.86729199999996,
+          "repeatedTrialMs": {
+            "samples": [
+              65.915166, 66.291541, 67.92233300000004, 67.21666700000003,
+              67.73850000000004, 68.66712500000006
+            ],
+            "p50": 67.21666700000003,
+            "p95": 68.66712500000006
+          },
+          "nodeCpuMs": {
+            "samples": [8.399, 8.044, 8.452, 8.843, 7.834, 7.833],
+            "p50": 8.044,
+            "p95": 8.843
+          },
+          "gitSpawnsPerTrial": [6, 6, 6, 6, 6, 6],
+          "reconstructedBundlesPerTrial": 1,
+          "bundleBytesWrittenPerTrial": 621982,
+          "outputDigest": "28a8405a1047291d1c4e88114b2e1e4170ab012193ee91cde0a4f35f527b4a6e",
+          "databaseBytes": null,
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 140230656,
+          "processFinalRssBytes": 140230656,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        },
+        {
+          "variant": "git-batched",
+          "status": "passed",
+          "fixture": {
+            "files": 16,
+            "rawBytes": 1064944,
+            "bundleBytes": 621982,
+            "selectedFiles": 3
+          },
+          "firstTrialMs": 67.10641600000002,
+          "repeatedTrialMs": {
+            "samples": [
+              70.01233400000001, 66.96100000000001, 70.02337500000004,
+              67.59145799999999, 65.55808400000001, 71.68437499999993
+            ],
+            "p50": 67.59145799999999,
+            "p95": 71.68437499999993
+          },
+          "nodeCpuMs": {
+            "samples": [9.278, 8.112, 8.195, 8.325, 8.464, 8.299],
+            "p50": 8.299,
+            "p95": 9.278
+          },
+          "gitSpawnsPerTrial": [5, 5, 5, 5, 5, 5],
+          "reconstructedBundlesPerTrial": 1,
+          "bundleBytesWrittenPerTrial": 621982,
+          "outputDigest": "28a8405a1047291d1c4e88114b2e1e4170ab012193ee91cde0a4f35f527b4a6e",
+          "databaseBytes": null,
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 139870208,
+          "processFinalRssBytes": 139870208,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        }
+      ]
+    },
+    {
+      "capturedAt": "2026-09-30T12:12:39.476Z",
+      "node": "v24.21.0",
+      "git": "git version 2.54.0 (Apple Git-157)",
+      "platform": "darwin",
+      "architecture": "arm64",
+      "serialChildProcesses": 3,
+      "v8OldSpaceLimitMiB": 192,
+      "observedRssGuardBytes": 805306368,
+      "notes": [
+        "Synthetic kernels, not application latency or financial savings.",
+        "First trial is not a cold machine/filesystem cache measurement; no OS caches flushed.",
+        "Nearest-rank p95 with low trial counts is descriptive, not a production estimate.",
+        "RSS guard is checked between operations; V8 heap limit is not a WASM/OS memory ceiling.",
+        "No services, environment files, application credentials or PostgreSQL connections."
+      ],
+      "results": [
+        {
+          "variant": "media-copy-base64",
+          "status": "passed",
+          "fixture": {
+            "inputBytes": 3145728,
+            "inputByteOffset": 16,
+            "base64Bytes": 4194304
+          },
+          "firstTrialMs": 0.8688330000000235,
+          "warmTrialMs": {
+            "samples": [
+              0.40987499999999955, 0.20866699999999128, 0.2207920000000172,
+              0.3752499999999941, 0.18141599999998448, 0.1765839999999912,
+              0.17962499999998727, 0.17958400000000552, 0.17929200000000378,
+              0.1835410000000195, 0.1880000000000166, 0.3193330000000003
+            ],
+            "p50": 0.1835410000000195,
+            "p95": 0.40987499999999955
+          },
+          "cpuMs": {
+            "samples": [
+              1.112, 0.964, 0.986, 1.171, 0.751, 0.738, 0.903, 0.714, 0.504,
+              0.898, 0.236, 1.032
+            ],
+            "p50": 0.898,
+            "p95": 1.171
+          },
+          "extraBufferCopyBytesPerTrial": 3145728,
+          "encodedPayloadBytesPerTrial": 4194304,
+          "outputContract": "identical base64 string",
+          "outputDigest": "aac962fdec57e9c8cc2652724d039172db75a76e2503f97280d8d049f315bc45",
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 166215680,
+          "processFinalRssBytes": 166215680,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        },
+        {
+          "variant": "media-view-base64",
+          "status": "passed",
+          "fixture": {
+            "inputBytes": 3145728,
+            "inputByteOffset": 16,
+            "base64Bytes": 4194304
+          },
+          "firstTrialMs": 0.7085830000000044,
+          "warmTrialMs": {
+            "samples": [
+              0.37733400000001893, 0.1394160000000113, 0.28195800000000304,
+              0.19700000000000273, 0.17995799999999917, 0.196708000000001,
+              0.1490000000000009, 0.13170799999997485, 0.13287500000001273,
+              0.13170900000000074, 0.13083299999999554, 0.12995800000001623
+            ],
+            "p50": 0.1394160000000113,
+            "p95": 0.37733400000001893
+          },
+          "cpuMs": {
+            "samples": [
+              1.239, 0.168, 1.073, 0.73, 0.865, 0.882, 0.781, 0.174, 0.238,
+              0.14, 0.592, 0.134
+            ],
+            "p50": 0.592,
+            "p95": 1.239
+          },
+          "extraBufferCopyBytesPerTrial": 0,
+          "encodedPayloadBytesPerTrial": 4194304,
+          "outputContract": "identical base64 string",
+          "outputDigest": "aac962fdec57e9c8cc2652724d039172db75a76e2503f97280d8d049f315bc45",
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 158007296,
+          "processFinalRssBytes": 158007296,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        },
+        {
+          "variant": "media-binary-contract",
+          "status": "passed",
+          "fixture": {
+            "inputBytes": 3145728,
+            "inputByteOffset": 16,
+            "base64Bytes": 4194304
+          },
+          "firstTrialMs": 0.015749999999997044,
+          "warmTrialMs": {
+            "samples": [
+              0.0016249999999899956, 0.002417000000008329,
+              0.0016250000000184173, 0.0016249999999899956,
+              0.0014170000000035543, 0.001082999999994172,
+              0.0009170000000153777, 0.003708000000017364,
+              0.0011660000000119908, 0.0012919999999780885,
+              0.0008339999999975589, 0.001416000000006079
+            ],
+            "p50": 0.001416000000006079,
+            "p95": 0.003708000000017364
+          },
+          "cpuMs": {
+            "samples": [
+              0.011, 0.015, 0.011, 0.014, 0.01, 0.009, 0.006, 0.007, 0.009,
+              0.005, 0.003, 0.004
+            ],
+            "p50": 0.009,
+            "p95": 0.015
+          },
+          "extraBufferCopyBytesPerTrial": 0,
+          "encodedPayloadBytesPerTrial": 3145728,
+          "outputContract": "Uint8Array; different client API, no transport measured",
+          "outputDigest": "56a51b0cca174fb964839f3e9db1b904c3b5529e626293ca57a0b1c03c43b53a",
+          "applicationTransactionMs": null,
+          "processPeakRssBytes": 144261120,
+          "processFinalRssBytes": 143392768,
+          "scope": "single Node child including initialization, fixtures and correctness checks; excludes native Git child RSS"
+        }
+      ]
+    }
+  ],
+  "sqlAttempt": {
+    "status": "blocked-rss-guard",
+    "attemptFileTimestamp": "2026-09-30T12:04:49.512457+00:00",
+    "variant": "sql-row-autocommit",
+    "fixture": {
+      "rows": 500,
+      "columns": 6,
+      "bootstrap": "new PGlite(), fresh database; does not use the current worker empty-database.tgz"
+    },
+    "observedError": "Synthetic benchmark exceeded its observed RSS guard",
+    "rssExceededBytes": 805306368,
+    "processPeakRssBytes": null,
+    "trialMs": null,
+    "furtherSqlVariantsRun": false,
+    "notes": "Attempt stopped safely; no guard increase or second SQL run. Exact RSS and completed samples were not emitted by that earlier runner version. Current runner records the failure and stops subsequent variants."
+  },
+  "postgresqlCorpusTransactionMs": null,
+  "productionEdits": false,
+  "limitations": [
+    "No application, services, DB connections or provider requests.",
+    "CPU/peak RSS for Node only; native Git child RSS/CPU are not included.",
+    "No cold-machine cache flush; low sample p95 is descriptive.",
+    "Git and media output hashes match within their comparable contracts.",
+    "Binary pass-through is a different API, not a drop-in optimization.",
+    "SQL failure is a fresh-bootstrap macOS kernel observation, not evidence of current production service failure."
+  ]
+}

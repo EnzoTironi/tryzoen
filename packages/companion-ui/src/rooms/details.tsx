@@ -6,7 +6,7 @@ import type { roomPresenceSchema } from "./schema";
 import { RenameRoom } from "./rename";
 import { EditRoomAvatar } from "./avatar";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   LockKeyhole,
@@ -19,7 +19,7 @@ import type { z } from "zod";
 import { ConversationAvatar } from "../chats/avatar";
 import { IconButton } from "../icon-button";
 import { SheetSurface } from "../sheet";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomData, roomPageSchema } from "./schema";
 
 export function RoomDetails({
@@ -47,6 +47,8 @@ export function RoomDetails({
     person: z.infer<typeof roomPageSchema>["members"][number]
   ) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
   const [panel, setPanel] = useState<
     "rename" | "avatar" | "manage" | "leave"
@@ -318,129 +320,160 @@ export function RoomDetails({
   );
 }
 
-const styles = StyleSheet.create({
-  panel: { backgroundColor: "#f5f5f7" },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingLeft: 24,
-    paddingRight: 12,
-  },
-  eyebrow: { color: colors.muted, fontSize: 13, fontWeight: "500" },
-  content: { paddingHorizontal: 20, paddingBottom: 28, gap: 24 },
-  hero: { alignItems: "center", paddingTop: 8, gap: 8, paddingHorizontal: 8 },
-  portrait: {
-    marginBottom: 8,
-    borderWidth: 4,
-    borderColor: colors.surface,
-    borderRadius: 56,
-    boxShadow: "0 4px 18px rgba(42,64,54,0.08)",
-  },
-  agentPortrait: {
-    position: "absolute",
-    bottom: -4,
-    right: -8,
-    borderWidth: 3,
-    borderColor: "#f5f5f7",
-    borderRadius: 24,
-  },
-  name: {
-    fontSize: 25,
-    fontWeight: "600",
-    letterSpacing: -0.6,
-    color: colors.ink,
-    textAlign: "center",
-    lineHeight: 31,
-  },
-  subtitle: { color: colors.muted, fontSize: 14 },
-  messageAction: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    paddingHorizontal: 28,
-    minHeight: 46,
-    marginTop: 10,
-  },
-  actionText: { color: colors.accent, fontSize: 14, fontWeight: "500" },
-  pressed: { opacity: 0.6 },
-  section: { gap: 10 },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.muted,
-    paddingHorizontal: 14,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-  member: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 14,
-    gap: 12,
-  },
-  memberCopy: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    gap: 4,
-    minHeight: 70,
-    paddingVertical: 12,
-    paddingRight: 14,
-  },
-  memberHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
-  memberName: {
-    flexShrink: 1,
-    fontSize: 16,
-    fontWeight: "500",
-    color: colors.ink,
-  },
-  memberCaption: { fontSize: 12, color: colors.muted },
-  badge: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.accent,
-    backgroundColor: "#e9f2ff",
-    borderRadius: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    overflow: "hidden",
-  },
-  divider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ebebee",
-  },
-  more: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  aboutRow: { flexDirection: "row", paddingLeft: 14, gap: 12 },
-  aboutIcon: {
-    width: 32,
-    height: 32,
-    marginTop: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: "#edf3fd",
-  },
-  privacyIcon: { backgroundColor: "#edf4ef" },
-  aboutCopy: { flex: 1, gap: 4, paddingVertical: 16, paddingRight: 16 },
-  aboutTitle: { fontSize: 14, fontWeight: "500", color: colors.ink },
-  aboutDescription: { fontSize: 13, color: colors.muted, lineHeight: 19 },
-  footnote: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    paddingHorizontal: 14,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    panel: { backgroundColor: "#f5f5f7" },
+    toolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingLeft: 24,
+      paddingRight: 12,
+    },
+    eyebrow: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    content: { paddingHorizontal: 20, paddingBottom: 28, gap: 24 },
+    hero: { alignItems: "center", paddingTop: 8, gap: 8, paddingHorizontal: 8 },
+    portrait: {
+      marginBottom: 8,
+      borderWidth: 4,
+      borderColor: colors.surface,
+      borderRadius: 56,
+      boxShadow: "0 4px 18px rgba(42,64,54,0.08)",
+    },
+    agentPortrait: {
+      position: "absolute",
+      bottom: -4,
+      right: -8,
+      borderWidth: 3,
+      borderColor: "#f5f5f7",
+      borderRadius: 24,
+    },
+    name: {
+      fontFamily: systemFont,
+      fontSize: 25,
+      fontWeight: "600",
+      letterSpacing: -0.6,
+      color: colors.ink,
+      textAlign: "center",
+      lineHeight: 31,
+    },
+    subtitle: { fontFamily: systemFont, color: colors.muted, fontSize: 14 },
+    messageAction: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      paddingHorizontal: 28,
+      minHeight: 46,
+      marginTop: 10,
+    },
+    actionText: {
+      fontFamily: systemFont,
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    pressed: { opacity: 0.6 },
+    section: { gap: 10 },
+    sectionTitle: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      fontWeight: "500",
+      color: colors.muted,
+      paddingHorizontal: 14,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      overflow: "hidden",
+    },
+    member: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingLeft: 14,
+      gap: 12,
+    },
+    memberCopy: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: "center",
+      gap: 4,
+      minHeight: 70,
+      paddingVertical: 12,
+      paddingRight: 14,
+    },
+    memberHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
+    memberName: {
+      fontFamily: systemFont,
+      flexShrink: 1,
+      fontSize: 16,
+      fontWeight: "500",
+      color: colors.ink,
+    },
+    memberCaption: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: colors.muted,
+    },
+    badge: {
+      fontFamily: systemFont,
+      fontSize: 10,
+      fontWeight: "600",
+      color: colors.accent,
+      backgroundColor: "#e9f2ff",
+      borderRadius: 5,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      overflow: "hidden",
+    },
+    divider: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: "#ebebee",
+    },
+    more: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    aboutRow: { flexDirection: "row", paddingLeft: 14, gap: 12 },
+    aboutIcon: {
+      width: 32,
+      height: 32,
+      marginTop: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 10,
+      backgroundColor: "#edf3fd",
+    },
+    privacyIcon: { backgroundColor: "#edf4ef" },
+    aboutCopy: { flex: 1, gap: 4, paddingVertical: 16, paddingRight: 16 },
+    aboutTitle: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      fontWeight: "500",
+      color: colors.ink,
+    },
+    aboutDescription: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      color: colors.muted,
+      lineHeight: 19,
+    },
+    footnote: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      paddingHorizontal: 14,
+    },
+  });
+}

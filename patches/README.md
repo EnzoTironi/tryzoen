@@ -2,7 +2,7 @@
 
 The application uses `eve@0.63.0` and the public Workflow PostgreSQL adapter.
 
-`eve@0.63.0` has four narrowly scoped corrections. In its bundled Workflow core, the existing
+`eve@0.63.0` has five narrowly scoped corrections. In its bundled Workflow core, the existing
 `WORKFLOW_MAX_INLINE_STEPS` setting accepts zero. Upstream currently rejects zero
 and restores the default of three. Zoen's supervisor and compiled runtime tests
 set it to zero so new steps use Workflow's existing durable step dispatcher.
@@ -64,6 +64,23 @@ native approval, process restart, exact attachment bytes and the next turn's
 catalog. Remove this correction when upstream accepts SDK media in durable memory
 callbacks and that regression passes without the patch. No diagnostic logging
 of message contents or credentials is included.
+
+The approval delivery coordinator now schedules native coordination when a
+consumed duplicate response leaves its existing same-request candidate active.
+Upstream consumes that duplicate without changing the candidate, then returns
+before its authorizer runs; the conversation harness parks with the candidate
+still pending. The correction preserves the separate ingestion and authorization
+phases, stripped input, feedback, candidate identity and expiry. The next empty
+step prepares normal policy tools and reviews the stored responder and action.
+Existing response-policy requester checks and Eve's authorization challenges,
+cancellation, settlement and replay remain unchanged.
+
+The focused SDK regression preserves the candidate and exact action across the
+duplicate, then checks authorization, settlement, cancellation, replay and restored
+native state. The original compiled group concurrency and approval-restart tests
+remain the runtime acceptance gates. Remove this correction when an upstream
+release advances the existing candidate after duplicate delivery and these
+regressions pass without the patch.
 
 `@workflow/world-postgres@5.0.0-beta.44` commits terminal step state and its
 `step_completed` or `step_failed` replay event in one transaction. Upstream writes

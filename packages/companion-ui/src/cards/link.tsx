@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Image,
   Linking,
@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Globe, ImagePlus } from "lucide-react-native";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { IconButton } from "../icon-button";
 import { isSafeWebLink } from "../links";
 import { useLinkPreviews } from "./provider";
@@ -20,6 +20,8 @@ export function MessageLinks({ text }: { text: string }) {
   return messageLinks(text).map((url) => <LinkCard key={url} url={url} />);
 }
 export function LinkCard({ url, title }: { url: string; title?: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const source = useLinkPreviews();
   const [load, setLoad] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -109,12 +111,23 @@ export function LinkCard({ url, title }: { url: string; title?: string }) {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  container: { width: 340, maxWidth: "100%", gap: 2 },
-  card: { overflow: "hidden", borderRadius: 24, backgroundColor: colors.wash },
-  image: { width: "100%", aspectRatio: 1.8 },
-  description: { fontSize: 14, lineHeight: 20, color: colors.muted },
-  preview: { flexDirection: "row", alignItems: "center" },
-  caption: { fontSize: 12, color: colors.muted },
-  error: { fontSize: 13, color: colors.danger },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    container: { width: 340, maxWidth: "100%", gap: 2 },
+    card: {
+      overflow: "hidden",
+      borderRadius: 24,
+      backgroundColor: colors.wash,
+    },
+    image: { width: "100%", aspectRatio: 1.8 },
+    description: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.muted,
+    },
+    preview: { flexDirection: "row", alignItems: "center" },
+    caption: { fontFamily: systemFont, fontSize: 12, color: colors.muted },
+    error: { fontFamily: systemFont, fontSize: 13, color: colors.danger },
+  });
+}

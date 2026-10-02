@@ -1,3 +1,4 @@
+import { privateMemoryArchiveDownloads } from "@zoen/companion-ui/memory";
 import { z } from "zod";
 
 import { notFound } from "next/navigation";
@@ -62,7 +63,18 @@ export default async function AccountArchivesPage({
           <nav className={styles.actionList}>
             <a href={`/api/account/archives/${archive.id}?section=memory`}>
               <DownloadIcon aria-hidden="true" />
-              <span>{t("Baixar memórias anteriores")}</span>
+              <span>{t("Baixar perfil, notas e revisão da memória")}</span>
+            </a>
+            <a
+              href={`/api/account/archives/${archive.id}?section=private-memory`}
+              download={
+                privateMemoryArchiveDownloads["complete-journal"].filename
+              }
+            >
+              <DownloadIcon aria-hidden="true" />
+              <span>
+                {t("Baixar arquivo privado completo da conta anterior")}
+              </span>
             </a>
             {archive.hasRepository && (
               <a href={`/api/account/archives/${archive.id}?section=files`}>
@@ -105,6 +117,11 @@ export default async function AccountArchivesPage({
               </a>
             ))}
           </nav>
+          <p>
+            {t(
+              "O arquivo privado mantém a memória e os registros entregues da conta anterior. Ele não adiciona esses dados à memória ativa da conta atual."
+            )}
+          </p>
           {archive.nextFile && (
             <PanelLink
               href={`/account/archives?id=${archive.id}&filesAfter=${archive.nextFile}`}

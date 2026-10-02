@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { UsernameSchema } from "../accounts/directory";
+import { NetworkDestinationSchema } from "@zoen/companion-ui/approval";
 import {
   A2AError,
   acceptProtocolTask,
@@ -15,7 +16,7 @@ import {
   WorkspaceAccessDenied,
   type WorkspaceActorSchema,
 } from "./access";
-import { BotProfileSchema } from "./bots";
+import { BotProfileSchema, searchWorkspaceBots } from "./bots";
 
 const identifier = z.string().min(1).max(128);
 export const PersonalTrustUsernameSchema = z.object({
@@ -216,10 +217,19 @@ export const listPersonalNetwork = async function (
 
 const resolvePublishedBot = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
-  username: string
+  username: string,
+  publish = false
 ) {
   const access = await requireWorkspaceAccess(actor);
   const handle = await UsernameSchema.parseAsync(username);
+  // Lock identity before selecting its current profile and issuing a grant.
+  // Publication takes the exclusive lock directly rather than upgrading a shared lock.
+  const identities = await query<{
+    id: string;
+  }>(sql`SELECT id FROM workspace_bots
+    WHERE username = ${handle} AND discoverable ${publish ? sql`FOR UPDATE` : sql`FOR SHARE`}`);
+  const identity = identities[0];
+  if (!identity) throw new WorkspaceAccessDenied();
 
   const rows = await query<{
     id: string;
@@ -230,14 +240,15 @@ const resolvePublishedBot = async function (
     organization_id: string | null;
     issued_by: string;
     owner_id: string | null;
+    updated_at: string;
   }>(sql`SELECT DISTINCT ON (b.id) b.id, b.username, b.name, b.description, b.workspace_id,
-        w.organization_id, issuer.user_id AS issued_by, owner.user_id AS owner_id
+        w.organization_id, issuer.user_id AS issued_by, owner.user_id AS owner_id, (extract(epoch FROM b.updated_at) * 1000000)::bigint::text AS updated_at
       FROM workspace_bots b
       JOIN workspaces w ON w.id = b.workspace_id
       JOIN workspace_memberships issuer ON issuer.workspace_id = b.workspace_id AND issuer.role IN ('owner', 'admin')
       LEFT JOIN workspace_memberships owner ON owner.workspace_id = b.workspace_id AND owner.role = 'owner'
-      WHERE b.username = ${handle} AND b.discoverable
-      ORDER BY b.id, CASE issuer.role WHEN 'owner' THEN 0 ELSE 1 END`);
+      WHERE b.id = ${identity.id} AND b.username = ${handle} AND b.discoverable
+      ORDER BY b.id, CASE issuer.role WHEN 'owner' THEN 0 ELSE 1 END, issuer.user_id, owner.user_id`);
   const bot = rows[0];
   if (!bot) throw new WorkspaceAccessDenied();
   if (access.organizationId) {
@@ -265,6 +276,82 @@ const resolvePublishedBot = async function (
     networkId: personalNetworkId(actor.userId, bot.owner_id),
   };
 };
+
+function networkDestination(
+  bot: Awaited<ReturnType<typeof resolvePublishedBot>>
+) {
+  return NetworkDestinationSchema.parse({
+    botId: bot.id,
+    workspaceId: bot.workspace_id,
+    revision: createHash("sha256")
+      .update(
+        JSON.stringify([
+          bot.id,
+          bot.workspace_id,
+          bot.username,
+          bot.name,
+          bot.description,
+          bot.updated_at,
+          bot.issued_by,
+          bot.owner_id,
+          bot.organization_id,
+        ])
+      )
+      .digest("hex"),
+  });
+}
+
+function requireExpectedDestination(
+  bot: Awaited<ReturnType<typeof resolvePublishedBot>>,
+  raw: z.output<typeof NetworkDestinationSchema>
+) {
+  const expected = NetworkDestinationSchema.parse(raw);
+  const current = networkDestination(bot);
+  if (
+    current.botId !== expected.botId ||
+    current.workspaceId !== expected.workspaceId ||
+    current.revision !== expected.revision
+  )
+    throw new A2AError({
+      code: -32602,
+      message:
+        "The network recipient changed. Find the bot again and request a new approval.",
+    });
+  return current;
+}
+
+/** Bounded discovery returns the immutable recipient for a later native approval. */
+export async function discoverNetworkBots(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  prefix: string
+) {
+  return withDatabaseTransaction(async () => {
+    const profiles = await searchWorkspaceBots(actor, prefix);
+    const destinations = [];
+    for (const profile of profiles) {
+      const bot = await resolvePublishedBot(actor, profile.username);
+      destinations.push({
+        ...BotProfileSchema.parse({ ...bot, discoverable: true }),
+        destination: networkDestination(bot),
+      });
+    }
+    return destinations;
+  });
+}
+
+/** Read-only admission; publication rechecks this same identity under its own transaction. */
+export async function requireNetworkDestination(
+  actor: z.output<typeof WorkspaceActorSchema>,
+  username: string,
+  expected: z.output<typeof NetworkDestinationSchema>
+) {
+  return withDatabaseTransaction(async () =>
+    requireExpectedDestination(
+      await resolvePublishedBot(actor, username),
+      expected
+    )
+  );
+}
 
 const conversationGrant = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
@@ -311,12 +398,15 @@ const conversationGrant = async function (
 export const openNetworkBot = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
   username: string,
-  asAgent = false
+  asAgent = false,
+  expectedDestination?: z.output<typeof NetworkDestinationSchema>
 ) {
   return await withDatabaseTransaction(async () => {
     if (!actor.authSessionId) throw new WorkspaceAccessDenied();
     await requireWorkspaceAccess(actor);
-    const dest = await resolvePublishedBot(actor, username);
+    const dest = await resolvePublishedBot(actor, username, true);
+    if (expectedDestination)
+      requireExpectedDestination(dest, expectedDestination);
     const source = asAgent
       ? (
           await query<{
@@ -357,7 +447,7 @@ export const contactNetworkBot = async function (
   return await withDatabaseTransaction(async () => {
     if (!actor.authSessionId) throw new WorkspaceAccessDenied();
     await requireWorkspaceAccess(actor);
-    const dest = await resolvePublishedBot(actor, input.destUsername);
+    const dest = await resolvePublishedBot(actor, input.destUsername, true);
     let chain: ProtocolTaskChain | undefined;
     let originBotId: string | null = null;
     if (input.originTaskId) {

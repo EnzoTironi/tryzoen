@@ -1,3 +1,6 @@
+import { transaction } from "@db/queries";
+import { SemanticQuerySchema } from "../workspaces/semantic/schema";
+import { executePublishedSemanticQuery } from "../workspaces/semantic/published";
 import { withSignal } from "../operations/async";
 import { z } from "zod";
 import { env } from "@shared/environment/env";
@@ -7,13 +10,17 @@ import {
   workspaceActorFromPrincipal,
   type WorkspaceActorSchema,
 } from "../workspaces/access";
-import { WorkspaceRepository } from "../workspaces/repository";
+import {
+  WorkspaceRepository,
+  WorkspaceRepositoryError,
+} from "../workspaces/repository";
 import {
   WorkspacePathSchema,
   WorkspaceRecordedViewSchema,
 } from "@zoen/companion-ui/workspace-files";
 import { readWorkspaceCapabilities } from "../workspaces/capabilities";
-import { LearnedMemory } from "../memory/learned";
+import { PrivateMemoryRepository } from "../memory/repository";
+import { LearnedClaimSearchInputSchema } from "@zoen/companion-ui/memory";
 import type { SandboxToolInvoker } from "../../vendor/executor/core";
 import { readOntology } from "../workspaces/ontology";
 import { OntologyReadSchema } from "@zoen/companion-ui/ontology";
@@ -32,6 +39,14 @@ import { discoverToolConnections } from "../connectors/connections";
 import { ConnectorDiscovery } from "../connectors/definition";
 
 const tools = [
+  {
+    path: "workspace_knowledge_query",
+    plugin: "files",
+    description:
+      "Execute a published knowledge/queries/*.json definition at its exact current revision against its declared published CSV snapshots. Discover and read the definition first. Supply only its declared typed arguments. Results include SQL, source hashes, revision and an execution manifest retained in tool history. Live provider freshness is unknown. Imports, raw SQL sources, arbitrary credentials, shared/group and external-agent execution are unavailable. No new definition is implicitly approved by asking a question.",
+    input:
+      "{ path: string, revision: string, arguments?: Record<string, string | number | boolean> }",
+  },
   {
     path: "workspace_knowledge_discover",
     plugin: "files",
@@ -73,8 +88,9 @@ const tools = [
     path: "workspace_memory_search",
     plugin: "memory",
     description:
-      "Find this person's private learned memories within the current workspace.",
-    input: "{ query: string }",
+      "Search this person's private learned claims within the current workspace. Results retain actual recorded revision, evidence and unknown world-valid dates. An explicit recorded audit may use view.asOf or view.revision, never both; validOn is a separate world date. Explicit review remains available when automatic recall is paused. Shared, delegated and scheduled executions cannot read these claims.",
+    input:
+      "{ query: string, view?: { revision?: string, asOf?: string }, validOn?: string, limit?: number }",
   },
   {
     path: "workspace_ontology_read",
@@ -116,12 +132,13 @@ const FileSearch = WorkspaceRecordedViewSchema.safeExtend({
   query: Query.shape.query,
 });
 const schemas = {
+  workspace_knowledge_query: SemanticQuerySchema,
   workspace_knowledge_discover: DiscoverKnowledgeSchema,
   workspace_tools_connections: ConnectorDiscovery,
   workspace_files_list: WorkspaceRecordedViewSchema,
   workspace_files_read: ReadFile,
   workspace_files_search: FileSearch,
-  workspace_memory_search: Query,
+  workspace_memory_search: LearnedClaimSearchInputSchema,
   workspace_ontology_read: OntologyReadSchema,
   workspace_google_mail_search: GoogleSearchQuery,
   workspace_google_contacts_search: GoogleSearchQuery,
@@ -140,33 +157,40 @@ class ToolAccessDenied extends Error {
 export const readWorkspaceToolCatalog = async function (
   actor: z.output<typeof WorkspaceActorSchema>
 ) {
-  const capabilities = await readWorkspaceCapabilities(actor);
-  const granted = actor.agentGrantId
-    ? await readAgentGrantCapabilities(actor)
-    : capabilities.enabled;
-  return {
-    revision: capabilities.revision,
-    tools: tools
-      .filter(
-        (tool) =>
-          capabilities.enabled.includes(tool.plugin) &&
-          granted.includes(tool.plugin) &&
-          (tool.plugin !== "memory" ||
-            Boolean(
-              env.ZOEN_SESSION_ARCHIVE_DIR && env.ZOEN_AI_MEMORY_BINARY
-            )) &&
-          (!actor.agentGrantId ||
-            tool.path !== "workspace_tools_connections") &&
-          (!(actor.agentGrantId ?? actor.groupBindingId) ||
-            (tool.plugin !== "memory" && tool.plugin !== "google"))
-      )
-      .map((tool) => ({
-        path: tool.path,
-        plugin: tool.plugin,
-        description: tool.description,
-        input: tool.input,
-      })),
-  };
+  return transaction(async () => {
+    const capabilities = await readWorkspaceCapabilities(actor);
+    const granted = actor.agentGrantId
+      ? await readAgentGrantCapabilities(actor)
+      : capabilities.enabled;
+    return {
+      revision: capabilities.revision,
+      tools: tools
+        .filter(
+          (tool) =>
+            capabilities.enabled.includes(tool.plugin) &&
+            granted.includes(tool.plugin) &&
+            (tool.plugin !== "memory" ||
+              (Boolean(env.ZOEN_SESSION_ARCHIVE_DIR) &&
+                !actor.agentGrantId &&
+                !actor.protocolTaskId &&
+                !actor.scheduledRunId &&
+                !actor.groupBindingId &&
+                !actor.groupEpoch)) &&
+            (!(actor.agentGrantId ?? actor.groupBindingId) ||
+              tool.path !== "workspace_knowledge_query") &&
+            (!actor.agentGrantId ||
+              tool.path !== "workspace_tools_connections") &&
+            (!(actor.agentGrantId ?? actor.groupBindingId) ||
+              (tool.plugin !== "memory" && tool.plugin !== "google"))
+        )
+        .map((tool) => ({
+          path: tool.path,
+          plugin: tool.plugin,
+          description: tool.description,
+          input: tool.input,
+        })),
+    };
+  });
 };
 
 async function listPublishedFiles(
@@ -236,6 +260,21 @@ export const invokeWorkspaceTool = async function (
   const catalog = await readWorkspaceToolCatalog(actor);
   if (!catalog.tools.some((tool) => tool.path === call.path))
     throw new ToolAccessDenied();
+  async function admittedFile<Result extends { revision: string | null }>(
+    result: Result,
+    view: z.output<typeof WorkspaceRecordedViewSchema>
+  ) {
+    if (!view.revision && !view.asOf && result.revision !== catalog.revision)
+      throw new WorkspaceRepositoryError({ reason: "conflict" });
+    // Recheck current rights after data access, including for historical data.
+    // This is a bounded final check, not revocation atomic with network delivery.
+    const current = await readWorkspaceToolCatalog(actor);
+    if (!current.tools.some((tool) => tool.path === call.path))
+      throw new ToolAccessDenied();
+    if (current.revision !== catalog.revision)
+      throw new WorkspaceRepositoryError({ reason: "conflict" });
+    return result;
+  }
   const repository = WorkspaceRepository;
   switch (call.path) {
     case "workspace_knowledge_discover": {
@@ -249,33 +288,35 @@ export const invokeWorkspaceTool = async function (
       return await discoverToolConnections(actor, input);
     }
     case "workspace_files_list": {
-      return await listPublishedFiles(
-        actor,
-        await WorkspaceRecordedViewSchema.parseAsync(call.args)
-      );
+      const input = await WorkspaceRecordedViewSchema.parseAsync(call.args);
+      return admittedFile(await listPublishedFiles(actor, input), input);
     }
     case "workspace_files_read": {
-      return await readPublishedFile(
-        actor,
-        await ReadFile.parseAsync(call.args)
-      );
+      const input = await ReadFile.parseAsync(call.args);
+      return admittedFile(await readPublishedFile(actor, input), input);
     }
     case "workspace_files_search": {
       const input = await FileSearch.parseAsync(call.args);
-      return {
-        ...(await repository.search(actor, input.query, {
-          revision: input.revision,
-          asOf: input.asOf,
-        })),
-        asOf: input.asOf ?? null,
-      };
+      return admittedFile(
+        {
+          ...(await repository.search(actor, input.query, {
+            revision: input.revision,
+            asOf: input.asOf,
+          })),
+          asOf: input.asOf ?? null,
+        },
+        input
+      );
     }
     case "workspace_memory_search": {
-      const { query } = await Query.strict().parseAsync(call.args);
-      const memory = await LearnedMemory.read(actor, query);
-      if (memory.needsAttention) throw new ToolAccessDenied();
-      return { results: memory.results.slice(0, 8) };
+      const input = await LearnedClaimSearchInputSchema.parseAsync(call.args);
+      return PrivateMemoryRepository.search(actor, input);
     }
+    case "workspace_knowledge_query":
+      return executePublishedSemanticQuery(
+        actor,
+        SemanticQuerySchema.parse(call.args)
+      );
     case "workspace_ontology_read": {
       const input = await OntologyReadSchema.parseAsync(call.args);
       const { mayManage: _mayManage, ...result } = await readOntology(

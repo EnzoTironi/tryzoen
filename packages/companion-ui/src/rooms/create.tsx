@@ -3,7 +3,7 @@ import { Text, TextInput } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { RoomData } from "./schema";
 
 export function CreateRoom({
@@ -17,6 +17,7 @@ export function CreateRoom({
   readonly onCreated: (id: string) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [name, setName] = useState("");
   const operationId = useRef<string | undefined>(undefined);
   const client = useQueryClient();

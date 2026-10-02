@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ActionButton } from "./button";
-import { pageStyles } from "./page";
-import { colors } from "./theme";
+import { usePageStyles } from "./page";
+import { systemFont, useColors } from "./theme";
 
 export interface DocumentHistoryData {
   readonly cacheKey: readonly string[];
@@ -26,6 +26,9 @@ export function DocumentHistory({
   readonly readOnly: boolean;
   readonly onRestore: (text: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [selected, setSelected] = useState<string>();
   const history = useQuery({
     queryKey: [...data.cacheKey, "history"],
@@ -121,18 +124,20 @@ export function DocumentHistory({
   );
 }
 
-const styles = StyleSheet.create({
-  caption: { color: colors.muted, fontSize: 12 },
-  surface: {
-    padding: 16,
-    gap: 8,
-    backgroundColor: colors.wash,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  versions: { maxHeight: 130 },
-  version: { padding: 10, borderRadius: 10, gap: 4 },
-  selected: { backgroundColor: colors.canvas },
-  preview: { gap: 8 },
-  source: { maxHeight: 140 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    caption: { fontFamily: systemFont, color: colors.muted, fontSize: 12 },
+    surface: {
+      padding: 16,
+      gap: 8,
+      backgroundColor: colors.wash,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    versions: { maxHeight: 130 },
+    version: { padding: 10, borderRadius: 10, gap: 4 },
+    selected: { backgroundColor: colors.canvas },
+    preview: { gap: 8 },
+    source: { maxHeight: 140 },
+  });
+}

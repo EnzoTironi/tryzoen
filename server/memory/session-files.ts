@@ -1,17 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, lstat, mkdir, open, readFile, rm } from "node:fs/promises";
+import { link, lstat, mkdir, open, rm } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { HookEvent } from "eve/hooks";
 import type { MemoryTurnCompletedContext } from "eve/memory";
 import { redactSensitiveText } from "@shared/observability/redaction";
+import { privateMemoryArchiveLimits } from "../../packages/companion-ui/src/learned/archive";
 
 export const sessionSourceSchema = z.object({
   version: z.literal(2),
   source: z.literal("eve"),
   sessionId: z.string().min(1).max(256),
   eventId: z.string().min(1).max(256),
-  occurredAt: z.iso.datetime().nullable(),
+  occurredAt: z.string().max(32).pipe(z.iso.datetime()).nullable(),
   kind: z.enum([
     "message.received",
     "message.completed",
@@ -20,7 +22,7 @@ export const sessionSourceSchema = z.object({
     "turn.cancelled",
     "turn.failed",
   ]),
-  turnId: z.string().nullable(),
+  turnId: z.string().max(256).nullable(),
   sequence: z.number().int().nonnegative().nullable(),
   stepIndex: z.number().int().nonnegative().nullable(),
   role: z.enum(["user", "assistant"]).nullable(),
@@ -132,6 +134,92 @@ export function sessionSourceSegments(
   return segments;
 }
 
+export const sessionArchiveLimits = {
+  fileBytes: privateMemoryArchiveLimits.sourceFileBytes,
+  bytes: privateMemoryArchiveLimits.sourceBytes,
+  events: privateMemoryArchiveLimits.events,
+} as const;
+
+export const SessionSourceBackupSchema = z.strictObject({
+  sessionId: sessionSourceSchema.shape.sessionId,
+  eventId: sessionSourceSchema.shape.eventId,
+  captureSequence: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+  content: z
+    .instanceof(Uint8Array)
+    .refine((bytes) => bytes.byteLength <= sessionArchiveLimits.fileBytes),
+});
+
+const segmentSchema = sessionSourceSchema.extend({
+  segment: z.object({
+    index: z.int().nonnegative(),
+    count: z.int().positive().max(512),
+  }),
+  captureSequence: SessionSourceBackupSchema.shape.captureSequence,
+});
+
+/** One canonical encoder owns persisted files and authenticated recovery bytes. */
+export function encodeSessionSource(
+  source: z.infer<typeof sessionSourceSchema>,
+  captureSequence: number
+) {
+  const parsed = sessionSourceSchema.parse(source);
+  const sequence =
+    SessionSourceBackupSchema.shape.captureSequence.parse(captureSequence);
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for (const segment of sessionSourceSegments(parsed)) {
+    // Metadata is bounded before segmentation. Check each bounded serialized
+    // line before retaining it, so escaping cannot amplify a malformed source
+    // into an oversized concatenation or final allocation.
+    const chunk = Buffer.from(
+      `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`,
+      "utf8"
+    );
+    bytes += chunk.byteLength;
+    if (bytes > sessionArchiveLimits.fileBytes)
+      throw new Error("Session source exceeds the archive limit.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, bytes);
+}
+
+/** Bound line count before JSON parsing; exact re-encoding detects every coordinate,
+ * UTF-8, segment, whitespace and sequence mismatch without trusting prose. */
+export function decodeSessionSource(content: Uint8Array) {
+  if (content.byteLength > sessionArchiveLimits.fileBytes)
+    throw new Error("Session source exceeds the archive limit.");
+  const bytes = Buffer.from(
+    content.buffer,
+    content.byteOffset,
+    content.byteLength
+  );
+  const lines = bytes.toString("utf8").split("\n", 514);
+  if (lines.length > 513 || lines.at(-1) !== "")
+    throw new Error("Invalid session source segments.");
+  lines.pop();
+  if (lines.some((line) => line.length === 0))
+    throw new Error("Invalid session source segments.");
+  const segments = lines.map((line) => segmentSchema.parse(JSON.parse(line)));
+  const first = segments[0];
+  if (!first || first.segment.count !== segments.length)
+    throw new Error("Invalid session source coordinates.");
+  const source = sessionSourceSchema.parse({
+    ...first,
+    text:
+      first.text === null
+        ? null
+        : segments.map((segment) => segment.text).join(""),
+  });
+  if (!bytes.equals(encodeSessionSource(source, first.captureSequence)))
+    throw new Error("Inconsistent session source bytes.");
+  return {
+    content: bytes,
+    source,
+    captureSequence: first.captureSequence,
+    digest: digest(JSON.stringify(source)),
+  };
+}
+
 export async function privateMemoryDirectory(path: string) {
   const created = await mkdir(path, { recursive: true, mode: 0o700 });
   const info = await lstat(path);
@@ -156,12 +244,8 @@ export async function writeSessionSource(
   captureSequence: number
 ) {
   const namespace = z.uuid().parse(namespaceId);
-  const sequence = z
-    .number()
-    .int()
-    .positive()
-    .max(Number.MAX_SAFE_INTEGER)
-    .parse(captureSequence);
+  source = sessionSourceSchema.parse(source);
+  const content = encodeSessionSource(source, captureSequence);
   await privateMemoryDirectory(root);
   const owner = join(root, namespace);
   await privateMemoryDirectory(owner);
@@ -172,16 +256,10 @@ export async function writeSessionSource(
   const session = join(eve, digest(source.sessionId));
   await privateMemoryDirectory(session);
   const path = join(session, `${digest(source.eventId)}.jsonl`);
-  const content = sessionSourceSegments(source)
-    .map(
-      (segment) =>
-        `${JSON.stringify({ ...segment, captureSequence: sequence })}\n`
-    )
-    .join("");
   const temporary = join(session, `.${randomUUID()}.tmp`);
   try {
     await using file = await open(temporary, "wx", 0o600);
-    await file.writeFile(content, "utf8");
+    await file.writeFile(content);
     await file.sync();
     try {
       await link(temporary, path);
@@ -192,17 +270,43 @@ export async function writeSessionSource(
         error.code !== "EEXIST"
       )
         throw error;
-      const info = await lstat(path);
-      if (
-        !info.isFile() ||
-        info.isSymbolicLink() ||
-        (info.mode & 0o077) !== 0 ||
-        (await readFile(path, "utf8")) !== content
-      )
+      try {
+        await using existing = await open(
+          path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        );
+        const info = await existing.stat();
+        const expected = content;
+        if (
+          !info.isFile() ||
+          (info.mode & 0o077) !== 0 ||
+          info.size !== expected.byteLength
+        )
+          throw new Error("Invalid immutable source file", { cause: error });
+        // One extra byte detects growth after stat without reading an unbounded
+        // pre-existing file. Match exact bytes, not a lossy UTF-8 decoding.
+        const bytes = Buffer.alloc(expected.byteLength + 1);
+        let length = 0;
+        while (length < bytes.byteLength) {
+          const result = await existing.read(
+            bytes,
+            length,
+            bytes.byteLength - length,
+            null
+          );
+          if (result.bytesRead === 0) break;
+          length += result.bytesRead;
+        }
+        if (!expected.equals(bytes.subarray(0, length)))
+          throw new Error("Conflicting immutable source bytes", {
+            cause: error,
+          });
+      } catch (cause) {
         throw new Error(
           "Session archive event conflicts with the stored source.",
-          { cause: error }
+          { cause }
         );
+      }
     }
   } finally {
     await rm(temporary, { force: true });
@@ -220,8 +324,6 @@ export async function writeSessionSource(
 export async function eraseSessionSources(root: string, namespaceId: string) {
   const namespace = z.uuid().parse(namespaceId);
   await erasePrivateSubtree(root, [namespace, "raw", "eve"]);
-  await erasePrivateSubtree(root, [namespace, "ai-memory"]);
-  await erasePrivateSubtree(root, [namespace, "learned-memory"]);
   await erasePrivateSubtree(root, [namespace, "creator-knowledge"]);
 }
 

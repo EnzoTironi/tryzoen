@@ -1,7 +1,7 @@
 import type { Client } from "eve/client";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { ActionButton } from "./button";
 import { MessagePart } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
@@ -17,6 +17,7 @@ export function ConversationReview({
   readonly sessionId: string;
   readonly approvals?: boolean;
 }) {
+  const pageStyles = usePageStyles();
   const agent = useSessionAgent(sessionId, client, cacheScope);
   const [error, setError] = useState<string>();
   const parts = agent.data.messages.flatMap((message) =>

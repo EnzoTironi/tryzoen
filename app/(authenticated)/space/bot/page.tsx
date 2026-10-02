@@ -2,12 +2,19 @@
 
 import { z } from "zod";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AtSignIcon, KeyRoundIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { api } from "@web/trpc/client";
 import { useI18n } from "@web/i18n/context";
 import { Button } from "@web/components/ui/button";
 import { Input } from "@web/components/ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@web/components/ui/select";
 import { PanelIntro } from "../../_components/panel-intro";
 import panel from "../../_components/panel.module.css";
 import styles from "../space.module.css";
@@ -15,6 +22,26 @@ import styles from "../space.module.css";
 export default function WorkspaceBotPage() {
   const { t } = useI18n();
   const state = api.workspaces.bot.read.useQuery();
+  const members = api.workspaces.members.list.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (last) => last.nextCursor ?? undefined }
+  );
+  const register = api.workspaces.members.register.useMutation();
+  const retireMember = api.workspaces.members.revoke.useMutation();
+  const registrationRequest = useRef<{
+    operationId: string;
+    username: string;
+    name: string;
+  } | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
+  const listed = members.data?.pages.flatMap((page) => page.members) ?? [];
+  const registered = listed.filter((member) => member.status === "registered");
+  const fresh = register.data?.member;
+  if (
+    fresh?.status === "registered" &&
+    !listed.some((member) => member.id === fresh.id)
+  )
+    registered.push(fresh);
   const save = api.workspaces.bot.save.useMutation();
   const issue = api.workspaces.bot.grant.useMutation();
   const revoke = api.workspaces.bot.revoke.useMutation();
@@ -25,7 +52,9 @@ export default function WorkspaceBotPage() {
     { query },
     { enabled: /^[a-z][a-z0-9_]{1,29}$/.test(query) }
   );
-  const refresh = () => state.refetch();
+  const refresh = async () => {
+    await Promise.all([state.refetch(), members.refetch()]);
+  };
   return (
     <div className={panel.page}>
       <PanelIntro
@@ -103,7 +132,13 @@ export default function WorkspaceBotPage() {
           )}
         </form>
       )}
-      {(state.error ?? save.error ?? issue.error ?? revoke.error) && (
+      {(state.error ??
+        members.error ??
+        register.error ??
+        retireMember.error ??
+        save.error ??
+        issue.error ??
+        revoke.error) && (
         <p role="alert" className={styles.error}>
           {t("Não foi possível concluir. Confira o @ e tente novamente.")}
         </p>
@@ -123,10 +158,80 @@ export default function WorkspaceBotPage() {
             className={styles.create}
             onSubmit={(event) => {
               event.preventDefault();
+              const form = event.currentTarget;
+              const values = new FormData(form);
+              const username = z
+                .string()
+                .parse(values.get("agentUsername"))
+                .trim()
+                .toLowerCase();
+              const name = z.string().parse(values.get("agentName")).trim();
+              if (
+                !registrationRequest.current ||
+                registrationRequest.current.username !== username ||
+                registrationRequest.current.name !== name
+              )
+                registrationRequest.current = {
+                  operationId: crypto.randomUUID(),
+                  username,
+                  name,
+                };
+              void register
+                .mutateAsync(registrationRequest.current)
+                .then(async (result) => {
+                  registrationRequest.current = null;
+                  setMemberId(result.member.id);
+                  form.reset();
+                  await refresh();
+                })
+                .catch(() => undefined);
+            }}
+          >
+            <Input
+              name="agentName"
+              aria-label={t("Nome do agente")}
+              placeholder={t("Nome do agente")}
+              maxLength={60}
+              required
+            />
+            <Input
+              name="agentUsername"
+              aria-label={t("Username do agente")}
+              placeholder={t("Username do agente")}
+              pattern="[a-z][a-z0-9_]{2,29}"
+              minLength={3}
+              maxLength={30}
+              required
+            />
+            <Button type="submit" disabled={register.isPending}>
+              {t("Cadastrar agente")}
+            </Button>
+          </form>
+          <p className={styles.empty}>
+            {t(
+              "Cadastro cria uma identidade. O agente se conecta ao receber um acesso explícito."
+            )}
+          </p>
+          {members.hasNextPage && (
+            <Button
+              type="button"
+              disabled={members.isFetchingNextPage}
+              onClick={() => {
+                void members.fetchNextPage();
+              }}
+            >
+              {t("Mostrar mais agentes")}
+            </Button>
+          )}
+          <form
+            className={styles.create}
+            onSubmit={(event) => {
+              event.preventDefault();
               const values = new FormData(event.currentTarget);
               void issue
                 .mutateAsync({
                   label: z.string().parse(values.get("label")).trim(),
+                  externalMemberId: z.uuid().parse(memberId),
                   capabilities: ["files", "ontology"],
                   days: 30,
                 })
@@ -138,6 +243,31 @@ export default function WorkspaceBotPage() {
                 .catch(() => undefined);
             }}
           >
+            <Select
+              value={memberId}
+              onValueChange={(value) => {
+                setMemberId(value);
+                setToken("");
+              }}
+              items={registered.map((member) => ({
+                value: member.id,
+                label: member.name + " (@" + member.username + ")",
+              }))}
+              disabled={
+                members.isPending || issue.isPending || registered.length === 0
+              }
+            >
+              <SelectTrigger aria-label={t("Agente que receberá acesso")}>
+                <SelectValue placeholder={t("Escolha um agente")} />
+              </SelectTrigger>
+              <SelectContent>
+                {registered.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name} (@{member.username})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               name="label"
               aria-label={t("Nome do acesso")}
@@ -145,10 +275,42 @@ export default function WorkspaceBotPage() {
               required
               maxLength={80}
             />
-            <Button type="submit" disabled={issue.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                issue.isPending ||
+                !registered.some((member) => member.id === memberId)
+              }
+            >
               {t("Criar acesso por 30 dias")}
             </Button>
           </form>
+          {registered.map((member) => (
+            <div className={styles.row} key={member.id}>
+              <span>
+                {member.name}
+                <small>@{member.username}</small>
+              </span>
+              <Button
+                variant="ghost"
+                disabled={retireMember.isPending}
+                onClick={() => {
+                  void retireMember
+                    .mutateAsync({ id: member.id })
+                    .then(async () => {
+                      setToken("");
+                      if (memberId === member.id) setMemberId(null);
+                      if (register.data?.member.id === member.id)
+                        register.reset();
+                      await refresh();
+                    })
+                    .catch(() => undefined);
+                }}
+              >
+                {t("Revogar agente e acessos")}
+              </Button>
+            </div>
+          ))}
           {token && (
             <div className={styles.create}>
               <Input value={token} readOnly aria-label={t("Chave de acesso")} />
@@ -171,6 +333,13 @@ export default function WorkspaceBotPage() {
                 <KeyRoundIcon />
                 <span>
                   {grant.label}
+                  {grant.callerKind === "unbound" && (
+                    <small>
+                      {t(
+                        "Sem identidade vinculada. Recrie este acesso para um agente cadastrado."
+                      )}
+                    </small>
+                  )}
                   <small>
                     {t(grant.revokedAt ? "Revogado" : "Expira em")}{" "}
                     {!grant.revokedAt &&

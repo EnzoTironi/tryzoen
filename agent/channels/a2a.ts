@@ -1,4 +1,3 @@
-import { deliveryContext, deliverOnce } from "../lib/durable-delivery";
 import { withTimeout } from "../../server/operations/async";
 import { ZodError as SchemaError } from "zod";
 import { TimeoutError } from "../../server/operations/async";
@@ -6,6 +5,14 @@ import { isValid } from "@shared/validation";
 import { z } from "zod";
 import { defineChannel, GET, POST } from "eve/channels";
 import { deliverProtocolCancellation } from "../../server/a2a/cancellation";
+import {
+  deliverProtocolInput,
+  protocolInputContext,
+  projectProtocolInputs,
+  protocolInputTaskView,
+  respondProtocolInput,
+  type ProtocolInputState,
+} from "../../server/a2a/inputs";
 import { matrixConfiguration } from "../../server/matrix/client";
 import {
   matrixProtocolTask,
@@ -44,12 +51,15 @@ type RpcResult =
       task: ReturnType<typeof protocolTaskView>;
     }
   | Awaited<ReturnType<typeof listProtocolTasks>>;
+const state: ProtocolInputState = {
+  receipts: {},
+  questions: {},
+  humanInput: false,
+};
 export default defineChannel({
-  state: {
-    receipts: {},
-  },
-  context: deliveryContext,
-  deliver: deliverOnce,
+  state,
+  context: protocolInputContext,
+  deliver: deliverProtocolInput,
   receive(input, context) {
     return (async function () {
       if (
@@ -157,7 +167,9 @@ export default defineChannel({
                     rpc.params
                   );
                   const task = await acceptProtocolTask(actor, message);
-                  if (task.state === "TASK_STATE_SUBMITTED") {
+                  if (message.message.taskId) {
+                    await respondProtocolInput(actor, message, attachSession);
+                  } else if (task.state === "TASK_STATE_SUBMITTED") {
                     await deliverProtocolTask(actor, task.id, {
                       from,
                       resolveSession,
@@ -182,18 +194,28 @@ export default defineChannel({
                           throw error;
                         });
                   return success({
-                    task: protocolTaskView(result),
+                    task: await protocolInputTaskView(
+                      actor,
+                      result,
+                      attachSession
+                    ),
                   });
                 } else if (rpc.method === "GetTask") {
                   const query = await TaskQuery.strict().parseAsync(rpc.params);
                   return success(
-                    protocolTaskView(await readProtocolTask(actor, query.id))
+                    await protocolInputTaskView(
+                      actor,
+                      await readProtocolTask(actor, query.id),
+                      attachSession
+                    )
                   );
                 } else if (rpc.method === "ListTasks") {
                   const query = await ListQuery.strict().parseAsync(
                     rpc.params ?? {}
                   );
-                  return success(await listProtocolTasks(actor, query));
+                  return success(
+                    await listProtocolTasks(actor, query, attachSession)
+                  );
                 } else if (rpc.method === "CancelTask") {
                   const query = await TaskQuery.strict().parseAsync(rpc.params);
                   const task = await cancelProtocolTask(actor, query.id);
@@ -290,6 +312,18 @@ export default defineChannel({
     ),
   ],
   events: {
+    async "context.cleared"(_event, channel, context) {
+      channel.questions = {};
+      channel.state.questions = channel.questions;
+      channel.state.humanInput = false;
+      await failProtocolSession(
+        context.session.id,
+        channel.continuation?.token
+      );
+    },
+    async "input.requested"(event, channel, context) {
+      await projectProtocolInputs(channel, event.requests, context.session);
+    },
     "session.failed"(event, channel) {
       return failProtocolSession(event.sessionId, channel.continuation?.token);
     },

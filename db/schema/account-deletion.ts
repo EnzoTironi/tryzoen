@@ -45,8 +45,16 @@ export const accountDeletionLedger = pgTable(
       .references(() => accountDeletionRequests.id, { onDelete: "cascade" }),
     surface: text("surface").notNull(),
     status: text("status").notNull(),
+    matrixIds: text("matrix_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
   },
   (table) => [
+    check(
+      "account_deletion_ledger_matrix_ids_check",
+      sql`cardinality(${table.matrixIds}) = 0 OR (${table.surface} = 'matrix' AND ${table.status} = 'pending_external')`
+    ),
     uniqueIndex("account_deletion_ledger_surface_uidx").on(
       table.requestId,
       table.surface

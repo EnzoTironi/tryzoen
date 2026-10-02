@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Text, View } from "react-native";
 import { ActionButton } from "./button";
-import { pageStyles } from "./page";
+import { usePageStyles } from "./page";
 import type { AgentPanelData } from "./agent-content";
 
 export interface ScheduleHistoryPage {
@@ -24,6 +24,7 @@ export function UpcomingHistory({
   readonly data: AgentPanelData;
   readonly cacheScope: string;
 }) {
+  const pageStyles = usePageStyles();
   const history = useInfiniteQuery({
     queryKey: ["schedule-history", cacheScope, id],
     queryFn: ({ pageParam }) => data.scheduleHistory(id, pageParam),

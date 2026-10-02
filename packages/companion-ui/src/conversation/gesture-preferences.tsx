@@ -1,8 +1,8 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { useMemo, createContext, useContext, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { quickReactions } from "../reactions/quick";
 
 export interface GesturePreferenceStorage {
@@ -70,6 +70,8 @@ export function useQuickReaction() {
 }
 
 export function MessageGestureSettings() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const value = useContext(GesturePreferenceContext);
   if (!value) return null;
   const { preference, save } = value;
@@ -120,23 +122,35 @@ export function MessageGestureSettings() {
   );
 }
 
-const styles = StyleSheet.create({
-  section: { gap: 12, paddingVertical: 16 },
-  title: { color: colors.ink, fontSize: 17, fontWeight: "600" },
-  description: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: {
-    minWidth: 44,
-    height: 44,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    backgroundColor: colors.wash,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  selected: { borderColor: colors.ink },
-  emoji: { fontSize: 23 },
-  error: { color: colors.danger, fontSize: 14 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    section: { gap: 12, paddingVertical: 16 },
+    title: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 17,
+      fontWeight: "600",
+    },
+    description: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    choice: {
+      minWidth: 44,
+      height: 44,
+      paddingHorizontal: 8,
+      borderRadius: 14,
+      backgroundColor: colors.wash,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    selected: { borderColor: colors.ink },
+    emoji: { fontFamily: systemFont, fontSize: 23 },
+    error: { fontFamily: systemFont, color: colors.danger, fontSize: 14 },
+  });
+}

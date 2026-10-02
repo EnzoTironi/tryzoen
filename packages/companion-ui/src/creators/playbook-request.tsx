@@ -6,7 +6,7 @@ import type { creatorDraftSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPlaybookRequest({
   draft,
@@ -19,6 +19,7 @@ export function CreatorPlaybookRequest({
   readonly disabled: boolean;
   readonly onRefresh: () => Promise<unknown>;
 }) {
+  const pageStyles = usePageStyles();
   const [open, setOpen] = useState(false);
   const [guidance, setGuidance] = useState(
     "Turn these examples into a playbook of useful strategies, the context each needs, alternatives and limits. Credit the examples and flag what still needs validation."

@@ -1,8 +1,8 @@
-import { useState, type ComponentProps } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Grip } from "lucide-react-native";
 import { GoalRow } from "./row";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 
 export function GoalGroup({
   title,
@@ -25,6 +25,8 @@ export function GoalGroup({
   readonly pendingId?: string;
   readonly showSubtitle: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
   if (parents.length === 0) return null;
   const visible = expanded ? parents : parents.slice(0, 3);
@@ -79,28 +81,35 @@ export function GoalGroup({
   );
 }
 
-const styles = StyleSheet.create({
-  group: {
-    paddingBottom: 20,
-    marginBottom: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  header: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  marker: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  title: { fontSize: 17, fontWeight: "600" },
-  more: { flexDirection: "row", gap: 10, alignItems: "center", minHeight: 44 },
-  moreText: { color: colors.muted, fontSize: 14 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    group: {
+      paddingBottom: 20,
+      marginBottom: 20,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    header: {
+      flexDirection: "row",
+      gap: 10,
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    marker: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dot: { width: 6, height: 6, borderRadius: 3 },
+    title: { fontFamily: systemFont, fontSize: 17, fontWeight: "600" },
+    more: {
+      flexDirection: "row",
+      gap: 10,
+      alignItems: "center",
+      minHeight: 44,
+    },
+    moreText: { fontFamily: systemFont, color: colors.muted, fontSize: 14 },
+  });
+}

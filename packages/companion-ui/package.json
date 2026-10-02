@@ -103,6 +103,18 @@
     "./ontology": {
       "types": "./dist/library/ontology/schema.d.ts",
       "default": "./dist/library/ontology/schema.js"
+    },
+    "./semantic-query": {
+      "types": "./dist/library/semantic/schema.d.ts",
+      "default": "./dist/library/semantic/schema.js"
+    },
+    "./approval": {
+      "types": "./dist/conversation/approval.d.ts",
+      "default": "./dist/conversation/approval.js"
+    },
+    "./workspace-sources": {
+      "types": "./dist/library/sources-schema.d.ts",
+      "default": "./dist/library/sources-schema.js"
     }
   },
   "dependencies": {

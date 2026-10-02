@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { parseInputResponses } from "eve/client";
 import type {
   ChannelDefinition,
   ChannelReceiveContext,
   ChannelSendOptions,
+  Session,
+  SessionRespondOptions,
 } from "eve/channels";
 import { sleep, withTimeout } from "../../server/operations/async";
 import {
@@ -22,34 +25,34 @@ export const deliveryContext = (
   session: Parameters<NonNullable<ChannelDefinition["context"]>>[1]
 ) => ({ state, session });
 
+export class ConflictingDeliveryReplay extends Error {
+  constructor() {
+    super("Conflicting delivery replay");
+  }
+}
 const marker = "zoen.delivery:";
 const receiptSchema = z.strictObject({
   id: z.string().min(1),
   digest: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
-export const deliverOnce: NonNullable<
-  ChannelDefinition<
-    DeliveryState,
-    ReturnType<typeof deliveryContext>
-  >["deliver"]
-> = async (payload, channel) => {
+export async function deliverOnce(
+  payload: Parameters<NonNullable<ChannelDefinition["deliver"]>>[0],
+  channel: ReturnType<typeof deliveryContext>,
+  accept?: (receipt: z.output<typeof receiptSchema>) => Promise<boolean>
+) {
   const header = payload.context?.[0];
-  if (!header?.startsWith(marker)) return payload;
+  if (!header?.startsWith(marker)) return accept ? undefined : payload;
   const receipt = receiptSchema.parse(JSON.parse(header.slice(marker.length)));
   const previous = channel.state.receipts[receipt.id];
   if (previous !== undefined) {
-    if (previous !== receipt.digest)
-      throw new Error("Conflicting delivery replay");
+    if (previous !== receipt.digest) throw new ConflictingDeliveryReplay();
     return undefined;
   }
+  if (accept && !(await accept(receipt))) return undefined;
   const continuation = channel.session.continuation;
   if (!continuation)
     throw new Error("Durable delivery requires a channel address");
-  channel.state.receipts[receipt.id] = receipt.digest;
-  const address = continuation.token;
-  continuation.alias(`session:${channel.session.id}`);
-  channel.session.continuation?.alias(address);
   await recordNativeReceipt({
     workspaceId: z
       .string()
@@ -59,8 +62,12 @@ export const deliverOnce: NonNullable<
     sessionId: channel.session.id,
     digest: receipt.digest,
   });
+  channel.state.receipts[receipt.id] = receipt.digest;
+  const address = continuation.token;
+  continuation.alias(`session:${channel.session.id}`);
+  channel.session.continuation?.alias(address);
   return { ...payload, context: payload.context?.slice(1) };
-};
+}
 
 export async function acceptedDelivery(
   channel: ChannelReceiveContext<DeliveryState>,
@@ -97,7 +104,7 @@ export async function sendDurableMessage(
           .digest("hex");
         const receipt = await readNativeReceipt(workspaceId, inputId);
         if (receipt && receipt.digest !== digest)
-          throw new Error("Conflicting delivery replay");
+          throw new ConflictingDeliveryReplay();
         if (!receipt)
           await channel.from(address).send(message, {
             ...options,
@@ -117,6 +124,66 @@ export async function sendDurableMessage(
           await sleep(100);
         }
       }),
+    25_000
+  );
+}
+
+/** Fixed-session input answers use the same native consumption fence as messages. */
+export async function respondDurableInput(
+  session: Session,
+  inputId: string,
+  responses: ReturnType<typeof parseInputResponses>,
+  options: SessionRespondOptions,
+  validate: () => Promise<ReturnType<typeof parseInputResponses>>
+) {
+  const workspaceId = z
+    .string()
+    .min(1)
+    .parse(options.auth?.attributes.workspaceId);
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify({
+        sessionId: session.id,
+        responses,
+        auth: options.auth,
+        context: options.context,
+      })
+    )
+    .digest("hex");
+  return withTimeout(
+    () =>
+      withNativeDeliveryLock(
+        `${workspaceId}:session:${session.id}`,
+        async () => {
+          const receipt = await readNativeReceipt(workspaceId, inputId);
+          if (
+            receipt &&
+            (receipt.digest !== digest || receipt.sessionId !== session.id)
+          )
+            throw new ConflictingDeliveryReplay();
+          if (receipt) return;
+          const validated = await validate();
+          await session.respond(validated, {
+            ...options,
+            context: [
+              marker + JSON.stringify({ id: inputId, digest }),
+              ...(options.context ?? []),
+            ],
+          });
+          for (;;) {
+            const accepted = await readNativeReceipt(workspaceId, inputId);
+            if (accepted) {
+              if (
+                accepted.digest !== digest ||
+                accepted.sessionId !== session.id
+              )
+                throw new ConflictingDeliveryReplay();
+              return;
+            }
+            await sleep(100);
+          }
+        }
+      ),
     25_000
   );
 }

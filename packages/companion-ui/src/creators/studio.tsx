@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import { CreatorDraftCreate } from "./create";
 import { CreatorDraft } from "./draft";
 import { CreatorPilots } from "./pilots";
@@ -124,6 +124,7 @@ function StudioDrafts({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [archived, setArchived] = useState(false);
   const [selected, setSelected] = useState<string>();
   const drafts = useQuery({

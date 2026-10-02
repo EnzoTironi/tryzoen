@@ -51,7 +51,7 @@ const live = {
   vaultwarden: "No live Vaultwarden in this environment.",
   matrix: "No Synapse in this environment.",
   file_memory:
-    "Local Akita engine and ownership tests pass; hosted volume recovery and cutover remain unqualified.",
+    "Canonical private Git claims, SQL consent and immutable journals are implemented; real compiled runtime, hosted volume recovery and UI cutover remain unqualified.",
   kernel: "No Kernel browser session in this qualification run.",
   model: "Launch evals were listed, not executed against a live model.",
   load: "Closed-beta load, soak and burst were not measured.",
@@ -140,7 +140,7 @@ const memory = "tests/runtime/personal-memory.integration.ts";
 const ontology = "tests/runtime/workspace-ontology.integration.ts";
 const google = "tests/runtime/team-connections.integration.ts";
 const boundaries = "tests/agent-tool-boundaries.test.ts";
-const learned = "tests/runtime/learned-memory.integration.ts";
+const learned = "tests/runtime/private-memory-native-adapter.integration.ts";
 const launchExecutor = "evals/launch/workspace.eval.ts";
 const launchApproval = "evals/launch/approval.eval.ts";
 const launchBrowser = "evals/launch/browser.eval.ts";
@@ -176,6 +176,11 @@ const rows: readonly QualificationRow[] = [
     "none",
     "tests/runtime/workspace-knowledge.integration.ts"
   ),
+  coordinator(
+    "workspace_knowledge_query",
+    "none",
+    "tests/runtime/eve-semantic.integration.ts"
+  ),
   coordinator("workspace_files_read", "none", files),
   coordinator("workspace_files_search", "none", files),
   coordinator(
@@ -183,7 +188,16 @@ const rows: readonly QualificationRow[] = [
     "none",
     "tests/runtime/customer-connectors.integration.ts"
   ),
-  coordinator("workspace_memory_search", "file_memory", learned),
+  {
+    id: "tool:workspace_memory_search",
+    family: "tool",
+    path: "workspace_memory_search",
+    surface: "coordinator",
+    provider: "file_memory",
+    advertised: true,
+    fixture: blockedFixture("integration", learned),
+    live: blocked(live.file_memory),
+  },
   coordinator("workspace_ontology_read", "none", ontology),
   coordinator("workspace_google_mail_search", "google", google),
   coordinator("workspace_google_calendar_list", "google", google),

@@ -45,6 +45,29 @@ export const matrixRoomMembers = pgTable(
       .where(sql`${t.nativePending}`),
   ]
 );
+/** Native departure receipts survive account/identity removal; presence fences egress. */
+export const matrixErasureDepartures = pgTable(
+  "matrix_erasure_departures",
+  {
+    bindingId: uuid("binding_id")
+      .notNull()
+      .references(() => workspaceGroupBindings.id, { onDelete: "cascade" }),
+    matrixId: text("matrix_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    nativeRetryAt: timestamp("native_retry_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.bindingId, table.matrixId] }),
+    index("matrix_erasure_departures_due_idx").on(
+      table.nativeRetryAt,
+      table.bindingId,
+      table.matrixId
+    ),
+    index("matrix_erasure_departures_owner_idx").on(table.ownerUserId),
+  ]
+);
 export const matrixTransactions = pgTable("matrix_transactions", {
   id: text("id").primaryKey(),
   hash: text("hash").notNull(),

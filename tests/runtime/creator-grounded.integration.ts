@@ -149,7 +149,7 @@ async function approved(actor: Parameters<typeof saveCreatorDraft>[0]) {
   return { request, release };
 }
 
-test("real Akita evidence reaches isolated structured specialist and human review survives restart without qualifying snapshot release", async () => {
+test("real approved manifest evidence reaches isolated structured specialist and human review survives restart without qualifying snapshot release", async () => {
   await using workspace = await workspaceFixture();
   const { request } = await approved(workspace.personal);
   const preview = await createCreatorPreview(workspace.personal, request);
@@ -204,13 +204,38 @@ test("real Akita evidence reaches isolated structured specialist and human revie
     auth,
     responses: [{ requestId: verdict.requestId, optionId: "useful" }],
   });
-  const notesEvents = await resumed.settled(sessionId, 4);
+  let notesEvents = await resumed.settled(sessionId, 4);
+  // Restart can park the same step again before the next human question exists.
+  await expect
+    .poll(
+      async () => {
+        notesEvents = await resumed.settled(sessionId, 4);
+        const next = z
+          .object({ requests: z.array(inputRequestSchema) })
+          .parse(
+            notesEvents.findLast((event) => event.type === "input.requested")
+              ?.data
+          ).requests[0];
+        return next?.requestId === verdict.requestId ? undefined : next;
+      },
+      { timeout: 30000 }
+    )
+    .toMatchObject({
+      kind: "question",
+      display: "text",
+      allowFreeform: true,
+      action: {
+        toolName: "creator-review",
+        callId: verdict.action.callId,
+      },
+    });
   const notes = z
     .object({ requests: z.array(inputRequestSchema) })
     .parse(
       notesEvents.findLast((event) => event.type === "input.requested")?.data
     ).requests[0];
   if (!notes) throw new Error("Expected notes");
+  expect(notes.requestId).not.toBe(verdict.requestId);
   await resumed.request(`/probe/input/${sessionId}`, {
     auth,
     responses: [
@@ -220,7 +245,19 @@ test("real Akita evidence reaches isolated structured specialist and human revie
       },
     ],
   });
-  await resumed.settled(sessionId, 5);
+  await expect
+    .poll(
+      async () => {
+        await resumed.settled(sessionId, 5);
+        return (await exportCreatorPreview(workspace.personal, preview.id))
+          .review?.content;
+      },
+      { timeout: 30000 }
+    )
+    .toMatchObject({
+      verdict: "useful",
+      notes: "Human verified exact source support.",
+    });
   const final = await exportCreatorPreview(workspace.personal, preview.id);
   expect(final.review?.content.verdict).toBe("useful");
   expect(final.grounding).toEqual(preview.grounding);

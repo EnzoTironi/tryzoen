@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { gmail, type gmail_v1 } from "@googleapis/gmail";
 import type { ToolContext } from "eve/tools";
-import { z } from "zod";
+import type { z } from "zod";
 import { googleApiErrorStatus, withGoogleAuth } from "./client";
+import { gmailSendSchema } from "@zoen/companion-ui/approval";
 type GmailMessage = gmail_v1.Schema$Message;
 type GmailPart = gmail_v1.Schema$MessagePart;
 export const GMAIL_UPDATE_ACTIONS = [
@@ -14,21 +15,6 @@ export const GMAIL_UPDATE_ACTIONS = [
   "unstar",
 ] as const;
 export type GmailUpdateAction = (typeof GMAIL_UPDATE_ACTIONS)[number];
-// Keep Zod's strict email check at execution without publishing its lookahead regex.
-const emailAddress = z
-  .string()
-  .refine((value) => z.email().safeParse(value).success, {
-    message: "Invalid email address",
-  });
-export const gmailSendSchema = z.object({
-  bcc: z.array(emailAddress).max(20).default([]),
-  body: z.string().min(1).max(100_000),
-  cc: z.array(emailAddress).max(20).default([]),
-  inReplyTo: z.string().max(998).optional(),
-  subject: z.string().min(1).max(998),
-  threadId: z.string().max(200).optional(),
-  to: z.array(emailAddress).min(1).max(20),
-});
 export async function searchGmail(
   ctx: ToolContext,
   query: string,
@@ -165,6 +151,12 @@ export async function sendGmail(
   ctx: ToolContext,
   payload: z.infer<typeof gmailSendSchema>
 ) {
+  // Copy and validate before awaiting auth: later caller mutation cannot change
+  // the wire payload. Eve owns authorization of the stored native tool input.
+  payload = gmailSendSchema.parse(payload);
+  const payloadHash = createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex");
   const idempotencyKey = gmailSendIdempotencyKey(ctx);
   const messageId = gmailSendMessageId(ctx);
   const headers = [
@@ -178,6 +170,7 @@ export async function sendGmail(
     `Subject: ${safeHeader(payload.subject)}`,
     `Message-ID: ${messageId}`,
     `X-OpenInstinct-Idempotency-Key: ${idempotencyKey}`,
+    `X-Zoen-Payload-Sha256: ${payloadHash}`,
     ...(payload.inReplyTo
       ? [
           `In-Reply-To: ${safeHeader(payload.inReplyTo)}`,
@@ -196,6 +189,7 @@ export async function sendGmail(
     const existing = await findSentGmailByIdempotencyKey(
       client,
       idempotencyKey,
+      payloadHash,
       ctx.abortSignal
     );
     if (existing) return existing;
@@ -228,6 +222,7 @@ export async function sendGmail(
       const recovered = await findSentGmailByIdempotencyKey(
         client,
         idempotencyKey,
+        payloadHash,
         ctx.abortSignal
       );
       if (recovered) return recovered;
@@ -238,12 +233,13 @@ export async function sendGmail(
 async function findSentGmailByIdempotencyKey(
   client: ReturnType<typeof gmail>,
   idempotencyKey: string,
+  payloadHash: string,
   signal: AbortSignal
 ) {
   const listed = await client.users.messages.list(
     {
       maxResults: 1,
-      q: gmailSendIdempotencyQuery(idempotencyKey),
+      q: `in:sent ${gmailSendIdempotencyQuery(idempotencyKey)}`,
       userId: "me",
     },
     {
@@ -254,7 +250,11 @@ async function findSentGmailByIdempotencyKey(
   if (!id) return null;
   const { data } = await client.users.messages.get(
     {
-      format: "minimal",
+      format: "metadata",
+      metadataHeaders: [
+        "X-OpenInstinct-Idempotency-Key",
+        "X-Zoen-Payload-Sha256",
+      ],
       id,
       userId: "me",
     },
@@ -262,6 +262,23 @@ async function findSentGmailByIdempotencyKey(
       signal,
     }
   );
+  const exactHeader = (name: string, expected: string) => {
+    const values = data.payload?.headers?.filter(
+      (item) => item.name?.toLowerCase() === name.toLowerCase()
+    );
+    return values?.length === 1 && values[0]?.value === expected;
+  };
+  if (
+    data.id !== id ||
+    !data.labelIds?.includes("SENT") ||
+    !exactHeader("X-OpenInstinct-Idempotency-Key", idempotencyKey) ||
+    !exactHeader("X-Zoen-Payload-Sha256", payloadHash)
+  )
+    throw new Error(
+      "Gmail reconciliation receipt does not match this exact payload and operation."
+    );
+  // Searching before sending does not serialize concurrent attempts, and Gmail
+  // visibility may lag acceptance. This verifies receipt integrity, not once-only delivery.
   return data;
 }
 export function gmailUpdateLabels(action: GmailUpdateAction) {

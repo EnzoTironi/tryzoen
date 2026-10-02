@@ -1,7 +1,6 @@
-import { colors } from "./theme";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccessibilityPreferences, useColors } from "./theme";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  AccessibilityInfo,
   Animated,
   PanResponder,
   Platform,
@@ -13,28 +12,21 @@ import {
 export function useSheetDrag(enabled: boolean, onClose: () => void) {
   const [offset] = useState(() => new Animated.Value(0));
   const current = useRef({ enabled, onClose });
-  const reduced = useRef(false);
+  const { reduceMotion } = useAccessibilityPreferences();
+  const reduced = useRef(reduceMotion);
+  useLayoutEffect(() => {
+    reduced.current = reduceMotion;
+  }, [reduceMotion]);
   useEffect(() => {
     current.current = { enabled, onClose };
     if (!enabled) offset.setValue(0);
   }, [enabled, onClose, offset]);
-  useEffect(() => {
-    let mounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (mounted) reduced.current = value;
-    });
-    const listener = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      (value) => {
-        reduced.current = value;
-      }
-    );
-    return () => {
-      mounted = false;
-      listener.remove();
+  useEffect(
+    () => () => {
       offset.stopAnimation();
-    };
-  }, [offset]);
+    },
+    [offset]
+  );
   const pan = useMemo(() => {
     const reset = () => {
       if (reduced.current) offset.setValue(0);
@@ -80,6 +72,8 @@ export function SheetGrabber({
 }: {
   readonly handlers: ReturnType<typeof useSheetDrag>["handlers"];
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View
       {...handlers}
@@ -94,19 +88,21 @@ export function SheetGrabber({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  grabber: {
-    height: 44,
-    marginTop: -12,
-    paddingTop: 12,
-    width: "100%",
-    ...(Platform.OS === "web" ? { touchAction: "none" as const } : {}),
-  },
-  handle: {
-    width: 48,
-    height: 4,
-    borderRadius: 3,
-    backgroundColor: colors.line,
-    alignSelf: "center",
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    grabber: {
+      height: 44,
+      marginTop: -12,
+      paddingTop: 12,
+      width: "100%",
+      ...(Platform.OS === "web" ? { touchAction: "none" as const } : {}),
+    },
+    handle: {
+      width: 48,
+      height: 4,
+      borderRadius: 3,
+      backgroundColor: colors.line,
+      alignSelf: "center",
+    },
+  });
+}

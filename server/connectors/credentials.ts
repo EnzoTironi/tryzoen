@@ -1,34 +1,42 @@
+import { createHmac } from "node:crypto";
+import { getInstallationSecrets } from "@db/services/installation-secrets";
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { getAuth } from "@db/services/auth";
-import { ConnectorError } from "./definition";
+import {
+  ConnectorCredentialSchema,
+  ConnectorError,
+  type ConnectorInput,
+} from "./definition";
 
-const Envelope = z.object({
+const CredentialScope = z.strictObject({
+  workspaceId: z.string().min(1).max(256),
+  id: z.uuid(),
+  revision: z.uuid(),
+});
+const Envelope = z.strictObject({
   purpose: z.literal("tool-connector"),
-  workspaceId: z.string(),
-  id: z.string(),
-  revision: z.string(),
-  value: z.string(),
+  scope: CredentialScope,
+  credential: ConnectorCredentialSchema,
 });
 
 export const sealConnectorCredential = async function (
-  workspaceId: string,
-  id: string,
-  revision: string,
-  value: string
+  scope: z.output<typeof CredentialScope>,
+  credential: z.output<typeof ConnectorCredentialSchema>
 ) {
-  const auth = await getAuth();
+  const envelope = await Envelope.parseAsync({
+    purpose: "tool-connector",
+    scope,
+    credential,
+  }).catch(() => {
+    throw new ConnectorError({ reason: "invalid" });
+  });
   try {
+    const auth = await getAuth();
     return await symmetricEncrypt({
       key: (await auth.$context).secretConfig,
-      data: JSON.stringify({
-        purpose: "tool-connector",
-        workspaceId,
-        id,
-        revision,
-        value,
-      }),
+      data: JSON.stringify(envelope),
     });
   } catch {
     throw new ConnectorError({ reason: "unavailable" });
@@ -36,15 +44,17 @@ export const sealConnectorCredential = async function (
 };
 
 export const openConnectorCredential = async function (
-  workspaceId: string,
-  id: string,
-  revision: string,
+  scope: z.output<typeof CredentialScope>,
+  kind: z.output<typeof ConnectorCredentialSchema>["kind"],
   data: string
 ) {
-  const auth = await getAuth();
-  const plain = await Promise.try(async () =>
-    symmetricDecrypt({ key: (await auth.$context).secretConfig, data })
-  ).catch(() => {
+  const plain = await Promise.try(async () => {
+    const auth = await getAuth();
+    return await symmetricDecrypt({
+      key: (await auth.$context).secretConfig,
+      data,
+    });
+  }).catch(() => {
     throw new ConnectorError({ reason: "unavailable" });
   });
   const envelope = await Promise.try(async () =>
@@ -53,12 +63,13 @@ export const openConnectorCredential = async function (
     throw new ConnectorError({ reason: "denied" });
   });
   if (
-    envelope.workspaceId !== workspaceId ||
-    envelope.id !== id ||
-    envelope.revision !== revision
+    envelope.scope.workspaceId !== scope.workspaceId ||
+    envelope.scope.id !== scope.id ||
+    envelope.scope.revision !== scope.revision ||
+    envelope.credential.kind !== kind
   )
     throw new ConnectorError({ reason: "denied" });
-  return envelope.value;
+  return envelope.credential;
 };
 
 /** Remove this connection's credential if a provider echoes it in metadata or output. */
@@ -81,4 +92,29 @@ export function redactConnectorCredential(
       "[redacted]"
     );
   return serialized;
+}
+
+/** A database fingerprint must not allow offline guesses of a stored password.
+ * Reuse the existing installation key; scope and domain prevent transplanting
+ * a request digest. Restore must preserve that key; rotation requires reconnect.
+ */
+export async function connectorRequestFingerprint(
+  scope: { workspaceId: string; userId: string },
+  input: z.output<typeof ConnectorInput>
+) {
+  try {
+    const { secretEncryptionKey } = await getInstallationSecrets();
+    return createHmac("sha256", Buffer.from(secretEncryptionKey, "base64"))
+      .update(
+        JSON.stringify([
+          "zoen:tool-connector:request:v1",
+          scope.workspaceId,
+          scope.userId,
+          input,
+        ])
+      )
+      .digest("hex");
+  } catch {
+    throw new ConnectorError({ reason: "unavailable" });
+  }
 }

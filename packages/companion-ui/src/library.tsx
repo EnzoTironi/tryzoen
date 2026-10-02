@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
@@ -28,9 +28,9 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { CompanionPage, pageStyles } from "./page";
+import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 import {
   KnowledgeProposals,
   type KnowledgeProposalData,
@@ -92,6 +92,8 @@ export function Library({
   readonly onOpen: (id: string) => void;
   readonly onCreate: (kind: "document" | "model") => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
     categories[1]
@@ -245,6 +247,9 @@ function LibraryFiles({
   readonly category: (typeof categories)[number];
   readonly settled: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const matching = items
     .filter(
       (item) =>
@@ -300,105 +305,110 @@ function LibraryFiles({
     </>
   );
 }
-const styles = StyleSheet.create({
-  layout: { flex: 1, flexDirection: "row" },
-  compact: { flexDirection: "column" },
-  sidebar: {
-    width: 240,
-    flexGrow: 0,
-    borderRightWidth: 1,
-    borderRightColor: colors.line,
-    padding: 12,
-  },
-  mobileCategories: {
-    maxHeight: 300,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  content: { flex: 1, minWidth: 0 },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 24,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 14,
-    paddingVertical: 8,
-    outlineWidth: 0,
-  },
-  categoryHeading: {
-    color: colors.muted,
-    fontSize: 14,
-    marginTop: 8,
-    marginBottom: 8,
-    paddingHorizontal: 10,
-  },
-  category: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    minHeight: 38,
-    borderRadius: 20,
-  },
-  categoryLabel: { color: colors.ink, fontSize: 14 },
-  selectedCategory: { backgroundColor: colors.wash },
-  actions: { flexDirection: "row", alignItems: "center", gap: 4 },
-  create: {
-    width: 36,
-    height: 36,
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rows: { gap: 0 },
-  fileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    minHeight: 76,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  rowCaption: { flex: 1, gap: 4, paddingVertical: 16 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
-  card: {
-    width: 336,
-    maxWidth: "100%",
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 18,
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  preview: {
-    height: 190,
-    backgroundColor: "#f4f5f7",
-    padding: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 16,
-  },
-  previewTitle: {
-    color: colors.ink,
-    fontSize: 23,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  caption: {
-    padding: 18,
-    gap: 4,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    layout: { flex: 1, flexDirection: "row" },
+    compact: { flexDirection: "column" },
+    sidebar: {
+      width: 240,
+      flexGrow: 0,
+      borderRightWidth: 1,
+      borderRightColor: colors.line,
+      padding: 12,
+    },
+    mobileCategories: {
+      maxHeight: 300,
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.line,
+    },
+    content: { flex: 1, minWidth: 0 },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 24,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+    },
+    searchInput: {
+      fontFamily: systemFont,
+      flex: 1,
+      color: colors.ink,
+      fontSize: 14,
+      paddingVertical: 8,
+      outlineWidth: 0,
+    },
+    categoryHeading: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 14,
+      marginTop: 8,
+      marginBottom: 8,
+      paddingHorizontal: 10,
+    },
+    category: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 10,
+      minHeight: 38,
+      borderRadius: 20,
+    },
+    categoryLabel: { fontFamily: systemFont, color: colors.ink, fontSize: 14 },
+    selectedCategory: { backgroundColor: colors.wash },
+    actions: { flexDirection: "row", alignItems: "center", gap: 4 },
+    create: {
+      width: 36,
+      height: 36,
+      backgroundColor: colors.accent,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rows: { gap: 0 },
+    fileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+      minHeight: 76,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    rowCaption: { flex: 1, gap: 4, paddingVertical: 16 },
+    grid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
+    card: {
+      width: 336,
+      maxWidth: "100%",
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 18,
+      overflow: "hidden",
+      marginBottom: 20,
+    },
+    preview: {
+      height: 190,
+      backgroundColor: colors.wash,
+      padding: 24,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 16,
+    },
+    previewTitle: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 23,
+      fontWeight: "500",
+      textAlign: "center",
+    },
+    caption: {
+      padding: 18,
+      gap: 4,
+      borderTopWidth: 1,
+      borderTopColor: colors.line,
+      backgroundColor: colors.surface,
+    },
+  });
+}

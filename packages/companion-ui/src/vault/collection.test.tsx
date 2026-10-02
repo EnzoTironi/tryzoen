@@ -39,7 +39,7 @@ vi.mock("@tanstack/react-query", () => ({
   }),
   useMutation: () => ({ isError: false, mutate: state.remove }),
 }));
-vi.mock("../page", () => ({ pageStyles: {} }));
+vi.mock("../page", () => ({ usePageStyles: () => ({}) }));
 vi.mock("./form", () => ({ VaultItemForm: () => null }));
 vi.mock("../button", () => ({
   ActionButton: ({

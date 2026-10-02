@@ -25,6 +25,8 @@ export const accountArchives = pgTable(
       .notNull()
       .unique()
       .references(() => workspaces.id, { onDelete: "restrict" }),
+    // Retained generation identity, deliberately not a cascading namespace FK.
+    privateMemoryNamespaceId: uuid("private_memory_namespace_id"),
     challengeId: uuid("challenge_id").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import type { z } from "zod";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 import type { creatorDraftSchema, creatorEvaluationCaseSchema } from "./schema";
 import type { CreatorStudioData } from "./studio";
 import { CreatorEvaluationCase } from "./evaluation-case";
@@ -19,6 +19,7 @@ export function CreatorEvaluation({
   readonly onChanged: (draft: z.infer<typeof creatorDraftSchema>) => void;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const [editing, setEditing] = useState<{
     draft: typeof draft;
     value: z.infer<typeof creatorEvaluationCaseSchema>;

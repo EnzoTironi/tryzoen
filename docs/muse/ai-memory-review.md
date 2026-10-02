@@ -1,5 +1,7 @@
 # Akita ai-memory and Zoen
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 **Superseded target decision, 2026-09-28:** the user now explicitly requires Akita's file-authoritative memory, persisted sessions, relations, temporal recall and dreaming. The earlier decision below to retain Mem0 is historical, not the implementation target. Follow [the accepted adoption plan](file-memory.md). The existing Mem0/profile implementation still runs until its complete replacement is operational; no dual-write or fallback migration is approved.
 
 Reviewed on 2026-09-27 against [akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory), commit `49147a5d173657031b6b846e5beb8a839219c050`. The project is MIT licensed, copyright Fabio Akita. No upstream source has been copied, installed or executed in Zoen.

@@ -1,3 +1,4 @@
+import { KnowledgeQueryCard } from "./conversation/knowledge-query";
 import { MessageInteraction } from "./conversation/interaction";
 import { MessageDelivery } from "./conversation/delivery";
 import { ConnectionStatus } from "./conversation/connection";
@@ -6,7 +7,14 @@ import { Puzzle, ShieldCheck } from "lucide-react-native";
 import { ResourceCard } from "./cards/resource";
 import { InputRequestCard } from "./conversation/input-request";
 import { LinkCard, MessageLinks } from "./cards/link";
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,7 +28,7 @@ import type { InputResponse } from "eve/client";
 import { AssistantMarkdown } from "./markdown";
 import { ActionButton } from "./button";
 import { Composer } from "./composer";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 import { MessageActions } from "./message-actions";
 import { AttachmentCard } from "./attachments/card";
 import { messageContent, type ConversationDraft } from "./session/input";
@@ -31,6 +39,8 @@ import {
   replyMessage,
   type MessageReply,
 } from "./session/reply";
+
+export const ConversationChrome = createContext({ topInset: 0, compact: true });
 
 export function Conversation({
   messages,
@@ -71,6 +81,13 @@ export function Conversation({
   readonly onReact?: (messageId: string, emoji: string | null) => Promise<void>;
   readonly onVisibleMessagesChange?: (ids: string[]) => void;
 }) {
+  const colors = useColors();
+  const { compact, topInset } = useContext(ConversationChrome);
+  const styles = useMemo(
+    () => createStyles(colors, compact),
+    [colors, compact]
+  );
+  const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
   const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
     staged
@@ -109,12 +126,16 @@ export function Conversation({
   );
   return (
     <View style={styles.root}>
-      <ConnectionStatus />
+      <ConnectionStatus top={topInset} />
       <FlatList
         ref={listRef}
         data={messages}
         keyExtractor={(message) => message.id}
-        contentContainerStyle={[styles.messages, styles.column]}
+        contentContainerStyle={[
+          styles.messages,
+          styles.column,
+          { paddingTop: topInset + 12, paddingBottom: composerHeight + 12 },
+        ]}
         keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
         windowSize={7}
@@ -255,8 +276,15 @@ export function Conversation({
           </View>
         }
       />
-      <View style={styles.composer}>
-        <View style={styles.column}>
+      <View
+        testID="conversation-composer"
+        pointerEvents="box-none"
+        onLayout={({ nativeEvent }) => {
+          setComposerHeight(nativeEvent.layout.height);
+        }}
+        style={styles.composer}
+      >
+        <View pointerEvents="box-none" style={styles.column}>
           <Composer
             initialDraft={{
               text: staged?.text ?? initialDraft?.text ?? "",
@@ -298,23 +326,29 @@ export function Conversation({
 }
 
 function UserMessage({ text }: { readonly text: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const quoted = readReplyMessage(text);
-  if (!quoted) return <AssistantMarkdown text={text} compact />;
+  if (!quoted) return <AssistantMarkdown text={text} compact outgoing />;
   return (
     <View style={styles.quotedMessage}>
       <View style={styles.quote}>
-        <Text style={styles.caption}>
+        <Text style={[styles.caption, styles.outgoingText]}>
           {quoted.id.startsWith("feed:")
             ? "Discussing a Feed post"
             : quoted.role === "assistant"
               ? "Replying to Zoen"
               : "Replying to you"}
         </Text>
-        <Text selectable numberOfLines={4} style={styles.caption}>
+        <Text
+          selectable
+          numberOfLines={4}
+          style={[styles.caption, styles.outgoingText]}
+        >
           {quoted.quote}
         </Text>
       </View>
-      <AssistantMarkdown text={quoted.text} compact />
+      <AssistantMarkdown text={quoted.text} compact outgoing />
     </View>
   );
 }
@@ -330,6 +364,8 @@ export function MessagePart({
   readonly canRespond: boolean;
   readonly onRespond: (responses: readonly InputResponse[]) => Promise<void>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   if (part.type === "text") {
     return (
       <>
@@ -355,6 +391,8 @@ export function MessagePart({
           onRespond={onRespond}
         />
       );
+    if (part.toolName === "workspace_knowledge_query")
+      return <KnowledgeQueryCard part={part} />;
     return (
       <ResourceCard
         title={part.toolName.replaceAll("_", " ")}
@@ -411,59 +449,89 @@ export function MessagePart({
   return null;
 }
 
-const styles = StyleSheet.create({
-  quotedMessage: { gap: 12 },
-  quote: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.muted,
-    paddingLeft: 12,
-    gap: 4,
-  },
-  root: { flex: 1, minHeight: 0 },
-  messages: {
-    flexGrow: 1,
-    justifyContent: "flex-end",
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 30,
-  },
-  column: { width: "100%", maxWidth: 900, alignSelf: "center" },
-  message: {
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginVertical: 3,
-    borderRadius: 24,
-  },
-  assistant: {
-    backgroundColor: "#e9e9eb",
-  },
-  user: {
-    backgroundColor: "#cbe5ff",
-    borderRadius: 22,
-    paddingHorizontal: 20,
-    marginVertical: 10,
-  },
-  userGroup: {
-    alignSelf: "flex-end",
-    maxWidth: "88%",
-    alignItems: "flex-end",
-    marginBottom: 12,
-  },
-  assistantGroup: {
-    alignSelf: "flex-start",
-    maxWidth: "90%",
-    marginBottom: 12,
-  },
-  author: { fontSize: 13, fontWeight: "600", color: colors.ink },
-  text: { fontSize: 16, lineHeight: 25, color: colors.ink },
-  caption: { fontSize: 13, lineHeight: 21, color: colors.muted },
-  progress: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    paddingVertical: 20,
-  },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 21 },
-  composer: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
-});
+function createStyles(colors: ReturnType<typeof useColors>, compact = true) {
+  return StyleSheet.create({
+    quotedMessage: { gap: 12 },
+    outgoingText: { color: colors.selectedInk },
+    quote: {
+      borderLeftWidth: 2,
+      borderLeftColor: colors.selectedInk,
+      paddingLeft: 12,
+      gap: 4,
+    },
+    root: { flex: 1, minHeight: 0 },
+    messages: {
+      flexGrow: 1,
+      justifyContent: "flex-end",
+      paddingHorizontal: compact ? 16 : 20,
+    },
+    column: { width: "100%", alignSelf: "center" },
+    message: {
+      gap: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      marginVertical: 3,
+      borderRadius: 24,
+    },
+    assistant: {
+      backgroundColor: colors.incoming,
+    },
+    user: {
+      backgroundColor: colors.outgoing,
+      borderRadius: 22,
+      paddingHorizontal: 20,
+      marginVertical: 10,
+    },
+    userGroup: {
+      alignSelf: "flex-end",
+      maxWidth: "88%",
+      alignItems: "flex-end",
+      marginBottom: 12,
+    },
+    assistantGroup: {
+      alignSelf: "flex-start",
+      maxWidth: "90%",
+      marginBottom: 12,
+    },
+    author: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    text: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      lineHeight: 25,
+      color: colors.ink,
+    },
+    caption: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      lineHeight: 21,
+      color: colors.muted,
+    },
+    progress: {
+      flexDirection: "row",
+      gap: 10,
+      alignItems: "center",
+      paddingVertical: 20,
+    },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 21,
+    },
+    composer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 20,
+      paddingHorizontal: compact ? 24 : 10,
+      paddingTop: 8,
+      paddingBottom: compact ? 10 : 8,
+    },
+  });
+}

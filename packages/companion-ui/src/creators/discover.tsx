@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ArrowUpRight, Search, Sparkles } from "lucide-react-native";
 import { CompanionPage } from "../page";
 import { ActionButton } from "../button";
 import { ConversationAvatar } from "../chats/avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { CreatorStudioData } from "./studio";
 
 const creatorInterviewPrompt =
@@ -22,6 +22,8 @@ export function DiscoverBots({
   readonly onPrompt: (prompt: string) => void;
   readonly avatarUri?: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [search, setSearch] = useState("");
   const pilots = useQuery({
     queryKey: ["creator-pilots", cacheScope],
@@ -167,66 +169,97 @@ export function DiscoverBots({
     </CompanionPage>
   );
 }
-const styles = StyleSheet.create({
-  intro: {
-    color: colors.muted,
-    fontSize: 18,
-    lineHeight: 28,
-    maxWidth: 620,
-    marginBottom: 28,
-  },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 16,
-    backgroundColor: "#f2f2f4",
-    paddingHorizontal: 16,
-    maxWidth: 620,
-    minHeight: 48,
-  },
-  input: { flex: 1, outlineWidth: 0, color: colors.ink, fontSize: 16 },
-  section: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: colors.ink,
-    marginTop: 36,
-    marginBottom: 18,
-  },
-  cards: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
-  card: {
-    width: 250,
-    flexGrow: 1,
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: "#e9e9ee",
-    borderRadius: 24,
-    padding: 24,
-    gap: 14,
-    backgroundColor: colors.surface,
-  },
-  title: { fontSize: 17, fontWeight: "600", color: colors.ink },
-  copy: { fontSize: 14, lineHeight: 22, color: colors.muted },
-  byline: { fontSize: 12, color: colors.muted },
-  link: { fontSize: 14, color: colors.accent, marginTop: 4 },
-  note: { fontSize: 13, color: colors.muted, lineHeight: 21, marginTop: 16 },
-  create: {
-    marginTop: 36,
-    padding: 24,
-    borderRadius: 24,
-    backgroundColor: "#edf4fd",
-    gap: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  createCopy: { flex: 1, gap: 6, minWidth: 160 },
-  draft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ededf0",
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    intro: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 18,
+      lineHeight: 28,
+      maxWidth: 620,
+      marginBottom: 28,
+    },
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: 16,
+      backgroundColor: "#f2f2f4",
+      paddingHorizontal: 16,
+      maxWidth: 620,
+      minHeight: 48,
+    },
+    input: {
+      fontFamily: systemFont,
+      flex: 1,
+      outlineWidth: 0,
+      color: colors.ink,
+      fontSize: 16,
+    },
+    section: {
+      fontFamily: systemFont,
+      fontSize: 20,
+      fontWeight: "600",
+      color: colors.ink,
+      marginTop: 36,
+      marginBottom: 18,
+    },
+    cards: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
+    card: {
+      width: 250,
+      flexGrow: 1,
+      maxWidth: 340,
+      borderWidth: 1,
+      borderColor: "#e9e9ee",
+      borderRadius: 24,
+      padding: 24,
+      gap: 14,
+      backgroundColor: colors.surface,
+    },
+    title: {
+      fontFamily: systemFont,
+      fontSize: 17,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    copy: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      lineHeight: 22,
+      color: colors.muted,
+    },
+    byline: { fontFamily: systemFont, fontSize: 12, color: colors.muted },
+    link: {
+      fontFamily: systemFont,
+      fontSize: 14,
+      color: colors.accent,
+      marginTop: 4,
+    },
+    note: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      color: colors.muted,
+      lineHeight: 21,
+      marginTop: 16,
+    },
+    create: {
+      marginTop: 36,
+      padding: 24,
+      borderRadius: 24,
+      backgroundColor: "#edf4fd",
+      gap: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+    },
+    createCopy: { flex: 1, gap: 6, minWidth: 160 },
+    draft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 18,
+      borderBottomWidth: 1,
+      borderBottomColor: "#ededf0",
+    },
+  });
+}

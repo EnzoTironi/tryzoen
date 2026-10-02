@@ -1,9 +1,10 @@
+import { useMemo } from "react";
 import type { z } from "zod";
 import { ChevronRight, Network } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { OntologyReadResultSchema } from "./schema";
-import { pageStyles } from "../../page";
-import { colors } from "../../theme";
+import { usePageStyles } from "../../page";
+import { useColors } from "../../theme";
 
 export function OntologyRecords({
   graph,
@@ -14,6 +15,9 @@ export function OntologyRecords({
   readonly query: string;
   readonly onOpen: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const term = query.toLocaleLowerCase().trim();
   const matching = graph.entities.filter((entity) =>
     `${entity.name} ${graph.types.find((type) => type.id === entity.type)?.name ?? ""} ${Object.values(
@@ -66,21 +70,23 @@ export function OntologyRecords({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  icon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.wash,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+    },
+    icon: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.wash,
+    },
+  });
+}

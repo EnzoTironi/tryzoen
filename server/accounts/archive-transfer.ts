@@ -83,8 +83,10 @@ export const archiveChannelAccount = async function (input: {
       AND consumed_at IS NULL AND cancelled_at IS NULL AND expires_at > clock_timestamp()`);
   if (proof.length !== 1)
     throw new ChannelAccountError({ reason: "invalid_challenge" });
-  await query(sql`INSERT INTO account_archive (source_user_id, target_user_id, workspace_id, challenge_id)
-      VALUES (${input.sourceUserId}, ${input.targetUserId}, ${source.workspaceId}, ${input.challengeId})`);
+  await query(sql`INSERT INTO account_archive (source_user_id, target_user_id, workspace_id, challenge_id, private_memory_namespace_id)
+      VALUES (${input.sourceUserId}, ${input.targetUserId}, ${source.workspaceId}, ${input.challengeId},
+        (SELECT namespace_id FROM workspace_memory_namespace
+          WHERE workspace_id=${source.workspaceId} AND user_id=${source.principalId} FOR SHARE))`);
   await query(sql`UPDATE channel_identity SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
       WHERE user_id = ${input.sourceUserId} AND revoked_at IS NULL`);
   for (const identity of identities) {

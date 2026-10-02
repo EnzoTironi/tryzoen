@@ -67,3 +67,20 @@ export {
 
 export type { KnowledgeProposalData } from "./library/knowledge";
 export type { OntologyData } from "./library/ontology/collection";
+export { OntologyActionEditor } from "./library/ontology/action-editor";
+export {
+  beginOntologyAction,
+  ontologyActionFailure,
+} from "./library/ontology/action-draft";
+export type { OntologyActionDraft } from "./library/ontology/action-draft";
+
+export { useAccessibilityPreferences, useDarkAppearance } from "./theme";
+
+export { LearnedClaimEditor } from "./learned/editor";
+export { LearnedClaimProvenance } from "./learned/provenance";
+export { MemoryHistory } from "./learned/history";
+export { MemoryBackup } from "./learned/backup";
+export { createLearnedClaimEdit } from "./learned/draft";
+export type { LearnedClaimEdit } from "./learned/draft";
+export type { LearnedNotesData, MemoryArchiveReview } from "./learned/data";
+export { isLearnedMemoryConflict } from "./learned/data";

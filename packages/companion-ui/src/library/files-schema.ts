@@ -1,9 +1,17 @@
 import { z } from "zod";
 
+export const sourceBindingPathSchema = z
+  .string()
+  .regex(/^knowledge\/sources\/[a-z][a-z0-9_-]{0,63}\.json$/);
+
 export const WorkspacePathSchema = z
   .string()
-  .regex(
-    /^(?:(?:knowledge|skills|agent|proposals\/skills)\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.md|knowledge\/models\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.malloy|knowledge\/routing\/index\.json|(?:plugins|ontology)\/workspace\.json|(?:tools|proposals\/tools)\/[a-z][a-z0-9-]{0,39}\.json|proposals\/knowledge\/[a-f0-9-]{36}\.json)$/
+  .refine((path) =>
+    path.startsWith("knowledge/sources/")
+      ? sourceBindingPathSchema.safeParse(path).success
+      : /^(?:(?:knowledge|skills|agent|proposals\/skills)\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.md|knowledge\/models\/[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}\.malloy|knowledge\/routing\/index\.json|knowledge\/queries\/[a-z][a-z0-9_-]{0,39}\.json|knowledge\/data\/[a-z][a-z0-9_-]{0,39}\.csv|(?:plugins|ontology)\/workspace\.json|(?:tools|proposals\/tools)\/[a-z][a-z0-9-]{0,39}\.json|proposals\/knowledge\/[a-f0-9-]{36}\.json)$/.test(
+          path
+        )
   )
   .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
 export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);

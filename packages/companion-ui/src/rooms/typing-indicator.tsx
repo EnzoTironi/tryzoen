@@ -1,6 +1,6 @@
 import { Text } from "react-native";
 import type { z } from "zod";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { roomMemberSchema } from "./schema";
 
 export function RoomTypingIndicator({
@@ -10,6 +10,7 @@ export function RoomTypingIndicator({
   readonly userIds: string[];
   readonly members: z.infer<typeof roomMemberSchema>[];
 }) {
+  const colors = useColors();
   const people = members.filter(
     (person) => !person.mine && userIds.includes(person.id)
   );
@@ -22,6 +23,7 @@ export function RoomTypingIndicator({
     <Text
       accessibilityLiveRegion="polite"
       style={{
+        fontFamily: systemFont,
         color: colors.muted,
         fontSize: 12,
         paddingHorizontal: 18,

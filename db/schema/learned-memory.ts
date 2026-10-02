@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -50,17 +51,23 @@ export const workspaceMemoryNamespaces = pgTable(
     userId: text("user_id").notNull(),
     namespaceId: uuid("namespace_id").notNull().defaultRandom().unique(),
     enabled: boolean("enabled").notNull().default(true),
-    learnedMemoryInitialized: boolean("learned_memory_initialized")
+    preferenceRevision: uuid("preference_revision").notNull().defaultRandom(),
+    journalEventCount: bigint("journal_event_count", { mode: "number" })
       .notNull()
-      .default(false),
-    sessionMemoryInitialized: boolean("session_memory_initialized")
-      .notNull()
-      .default(false),
+      .default(0),
+    journalHighWater: bigint("journal_high_water", { mode: "number" }),
     eveScopeKey: text("eve_scope_key").unique(),
-    pendingOperation: text("pending_operation"),
-    pendingHash: text("pending_hash"),
   },
-  (table) => [primaryKey({ columns: [table.workspaceId, table.userId] })]
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    check(
+      "workspace_memory_namespace_journal_check",
+      sql`
+      ${table.journalEventCount} BETWEEN 0 AND 9007199254740991 AND
+      ((${table.journalEventCount} = 0 AND ${table.journalHighWater} IS NULL) OR
+       (${table.journalEventCount} > 0 AND ${table.journalHighWater} BETWEEN ${table.journalEventCount} AND 9007199254740991))`
+    ),
+  ]
 );
 
 export const workspaceMemoryRecalls = pgTable(

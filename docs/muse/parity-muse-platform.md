@@ -1,5 +1,7 @@
 # Muse and universal-platform parity
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 Planning baseline: 2026-09-28, current shared worktree after the message-history/DM checkpoint. This lane complements the messaging and Akita/creator plans; it does not replace their ownership. No new runtime behavior was implemented in this audit.
 
 ## Evidence and status rules

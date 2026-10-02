@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellRing } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomData } from "./schema";
 
 export function ThreadSubscription({
@@ -17,6 +18,8 @@ export function ThreadSubscription({
   readonly rootId: string;
   readonly active: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const client = useQueryClient();
   const queryKey = ["matrix-thread-subscription", cacheScope, roomId, rootId];
   const current = useQuery({
@@ -92,16 +95,23 @@ export function ThreadSubscription({
   );
 }
 
-const styles = StyleSheet.create({
-  section: { paddingHorizontal: 16 },
-  control: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  pressed: { opacity: 0.65 },
-  label: { fontSize: 13, color: colors.ink },
-  caption: { fontSize: 12, color: colors.muted },
-  error: { fontSize: 12, color: colors.muted, paddingBottom: 8 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    section: { paddingHorizontal: 16 },
+    control: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    pressed: { opacity: 0.65 },
+    label: { fontFamily: systemFont, fontSize: 13, color: colors.ink },
+    caption: { fontFamily: systemFont, fontSize: 12, color: colors.muted },
+    error: {
+      fontFamily: systemFont,
+      fontSize: 12,
+      color: colors.muted,
+      paddingBottom: 8,
+    },
+  });
+}

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ComponentProps } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -11,7 +12,7 @@ import {
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { ConversationAvatar } from "../chats/avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { RoomMessages } from "./messages";
 
 export function RoomReactors({
@@ -28,6 +29,8 @@ export function RoomReactors({
   readonly messageId: string;
   readonly onClose: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const result = useInfiniteQuery({
     queryKey: ["matrix-reactors", cacheScope, roomId, messageId],
     initialPageParam: undefined as string | undefined,
@@ -119,19 +122,26 @@ export function RoomReactors({
     </CompanionSheet>
   );
 }
-const styles = StyleSheet.create({
-  list: { maxHeight: 460, minHeight: 100 },
-  person: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderRadius: 16,
-  },
-  pressed: { backgroundColor: colors.wash },
-  copy: { flex: 1, gap: 3 },
-  name: { fontSize: 16, fontWeight: "500", color: colors.ink },
-  caption: { fontSize: 13, color: colors.muted },
-  emoji: { fontSize: 26 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    list: { maxHeight: 460, minHeight: 100 },
+    person: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+      borderRadius: 16,
+    },
+    pressed: { backgroundColor: colors.wash },
+    copy: { flex: 1, gap: 3 },
+    name: {
+      fontFamily: systemFont,
+      fontSize: 16,
+      fontWeight: "500",
+      color: colors.ink,
+    },
+    caption: { fontFamily: systemFont, fontSize: 13, color: colors.muted },
+    emoji: { fontFamily: systemFont, fontSize: 26 },
+  });
+}

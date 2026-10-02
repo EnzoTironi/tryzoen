@@ -1,10 +1,12 @@
 # Knowledge and ontology — implementation contract
 
-Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The greenfield preference permits direct removal of obsolete interfaces and recreation of development/test corpora. The current repository policy treats hosted records as persistent from the 19 September rollout; this plan does not authorize production resets or deletion of existing accounts or corpora. This does not reopen creator marketplace work.
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
+Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The pre-launch preference permits direct removal of obsolete interfaces and atomic caller updates. Data-destructive resets and migration-baseline consolidation require specific coordinated authorization. The current repository policy is greenfield and supersedes the 19 September persistent-rollout assumption. This plan does not authorize destructive migration, deletion of hosted records, credential use or deployment. This does not reopen creator marketplace work.
 
 ## Decisions
 
-- Target one knowledge system for authored ontology, learned claims and retained sessions. Replace the current Akita 2.4.1 implementation directly with the unified file-backed owner and update callers/tests together. Existing development corpora may be recreated; do not build an Akita history importer. Preserve the product behaviors in the new design, not the old implementation. Dreams require source-edit and erasure safety before activation. Do not maintain parallel authoritative memory copies or add dual-write compatibility paths.
+- Target one knowledge system for authored ontology, learned claims and retained sessions. Replace the current Akita 2.4.1 implementation directly with the unified file-backed owner and update callers/tests together. Do not build an Akita history importer or infer permission to reset existing corpora. Preserve the product behaviors in the new design, not the old implementation. Dreams require source-edit and erasure safety before activation. Do not maintain parallel authoritative memory copies or add dual-write compatibility paths.
 - TextQL is the product and workflow reference; Akita supplies behavioral lessons, not the permanent architecture. A semantic compiler is an execution dependency, not another knowledge authority.
 - Keep Eve for execution and approvals, PostgreSQL for identities/grants/product records, Matrix for communication and Kernel for the browser. Opening chat must not start an analytics engine or VM.
 - Ontology definitions are authored files at a published Git revision. Object IDs survive labels and paths. Any graph/search projection names its source revision and cannot grant access.
@@ -26,7 +28,7 @@ skills or an available open-source TextQL runtime.
 
 For Zoen this means:
 
-- **One user-owned knowledge tree.** Sessions, claims, definitions, relationships,
+- **One file-backed knowledge system.** Distinct visibility scopes require distinct repositories; private `(workspace, user)` claims and sessions must never enter a shared bundle, export, history or router. Sessions, claims, definitions, relationships,
   evidence, procedures and generated artifacts use one publication/access
   contract. Personal, group and organization scopes select visibility; they do
   not select separate memory products. Live source data stays at its source
@@ -77,12 +79,12 @@ journal: fencing concurrent writers, crash recovery, source/projected revision
 checks, quotas, ownership placement and complete snapshot/restore. Do not replace
 the current atomic bundle transaction with unrelated filesystem and SQL writes.
 Replace the runtime owner and callers atomically,
-remove obsolete Akita APIs/configuration/storage contracts, and recreate affected
-development/test data where needed. No old-corpus converter, compatibility shim,
+remove obsolete Akita APIs/configuration/storage contracts. Recreating affected
+development/test corpora requires specific coordinated reset authorization. No old-corpus converter, compatibility shim,
 legacy alias, dual reads/writes or backfill is planned. Changing applied migration
 history still requires resetting the affected local databases; consolidate a
-baseline only as an explicit coordinated change, not incidentally. Hosted
-records remain persistent under the repository's deployment policy.
+baseline only as an explicit coordinated change, not incidentally. Destructive changes to hosted records require separate explicit authorization;
+greenfield architecture is not authorization to delete hosted data.
 
 Unified memory acceptance: search/retrieval, relations, historical `as_of`,
 session-ingestion idempotency, source edits, deletion/tombstones, scope isolation,
@@ -483,3 +485,312 @@ Final checks: all nine tasks pass, 285 files / 1,756 tests in 1m2.063s; the
 build passes in 24.032s. The final native file-view case passes in 7.33s.
 The structural delta retains a repeated-edit dispatcher finding and a minor
 eight-line size increase, without new complexity or duplication findings.
+
+## K2 progress — bounded published computation (30 September 2026)
+
+The native `workspace_knowledge_query` accepts one published query path, exact
+Git revision and declared scalar arguments. It captures the definition, Malloy
+model and declared CSV sources in one immutable Git reconstruction. Current
+membership and head are checked again after calculation without retrieving the
+bundle; a revoked reader or changed publication receives no answer or manifest.
+Generic agent writes cannot publish analytic definitions/models/data, and broken
+source references cannot be published or deleted through the repository.
+
+Malloy 0.0.434 compiles inside a fresh PGlite 0.5.8 snapshot. The compiler has no
+URL reader, network client, raw SQL source or undeclared table. Numeric CSV
+values remain parameters; unsafe integer and decimal result values remain exact
+strings. This is bounded published CSV computation, not live multi-provider SQL,
+TextQL's proprietary runtime, a general sandbox or complete analytics parity.
+
+The executor is a separate credential-free container, not a child sharing the
+application's memory boundary. Startup rejects non-Linux, unbounded cgroup v2
+memory, a limit above 1536 MiB, or enabled swap. Each capsule admits one worker;
+the application admits at most two calculations. The configured per-job upper
+bound includes WASM/native allocation, with a 3 GiB maximum for two capsules.
+Deadlines remain independently 15 seconds; inputs are 1 MiB, results plus their
+manifest 64 KiB and at most 100 rows. Cancellation waits for child termination
+before admission is reusable. No host security configuration was changed.
+
+A credential-free empty database template avoids repeated initdb initialization;
+valid inputs are loaded in parameterized 200-row chunks (at most 6000 parameters
+with 30 columns). The template contains no imported facts and is rebuilt with
+the pinned engine. Authoritative query/model/data files and current access remain
+outside the executor. No second knowledge authority or result cache was added.
+
+Measured Linux qualification: a cold known-total query returned 30 in 1866 ms,
+with a cgroup peak of 1160409088 bytes. The previous 768 MiB budget killed even
+this valid calculation. With the measured 1536 MiB ceiling, 18 isolated runtime
+cases pass, including joins, scalar parameters, precision, input/output bounds,
+actual timeout/cancellation and concurrent admission. A computed 1 GB value hit
+the cgroup ceiling and incremented `oom_kill`; the application process survived
+and the next calculation returned 30. These are local synthetic measurements,
+not service latency/cost objectives or fleet-capacity qualification.
+
+Manifests record actor/workspace, publication, effective arguments, exact SQL,
+input/SQL/source hashes, time, engine and limits. Eve owns the durable tool result;
+compact chat artifacts reveal rows and provenance on demand. Freshness states
+that the CSV is published and live provider freshness is unknown. Per-cell
+lineage, clickable historical source excerpts, governed live connectors,
+charts/files/dashboards and recurrence remain separate acceptance gaps.
+
+On the parameterized-loader artifact, 24 runtime gates pass: 18 executor cases,
+four native publication/revocation cases and two compiled Eve cancellation and
+restart/replay cases (86.29 seconds). The complete check passes all nine tasks,
+301 files / 1924 tests in 73.363 seconds; the build passes in 28.165 seconds.
+A smoke test against capsules repackaged from that final build also passes;
+finite configurations above the approved ceiling or with swap are refused.
+
+Chrome 154 passes 26 checks using real shared components and the actual compiled
+Eve result: 1440 × 900 and 390 × 844 in light/dark, plus 360 × 800 dark. The
+initial transcript reaches its actual DOM bottom, rather than VirtualizedList's
+estimated offset; the compact artifact opens the result and provenance, and
+Escape restores focus. The browser adapters are an isolated harness, so this
+qualifies rendering of the verified runtime output, not a full authenticated
+multi-account app journey or native Electron/iOS/Android. The separately owned
+room/reaction visual work is unfinished. Versioned numeric evidence and source
+hashes are in [the K2 report](evidence/semantic-query-2026-09-30.json). These
+checks qualify this bounded computation slice, not complete product parity.
+
+## K3 private owner and future sharing boundaries
+
+Private learned files require a repository authority keyed by authenticated
+`(workspaceId, userId)`, excluded from every shared Git bundle/history/export and
+router. `PrivateMemoryRepository` now implements this separate scope with actual
+Git publication and transactional PostgreSQL heads/receipt indexes. Its isolated
+journeys are verified; the live learned-memory tools/UI still use Akita until the
+complete consumer cutover. Publication binds current authorization, verified
+source excerpts, CAS and an operation receipt atomically. Reconstruct claim envelopes,
+corrections/tombstones and receipts from authoritative files plus Git metadata;
+SQL may index heads/grants/receipts but cannot own the only memory history.
+
+The publisher chooses UTC microsecond order and actual Git revision. File payloads
+must not contain their own hash. The next integration contract is a two-step
+publication inside one authorized database transaction:
+
+1. Capture the private head and current membership under its scope lock. Choose
+   trusted author and UTC microsecond time strictly after the previous publication.
+   Pure transition planning validates the change and returns its file, operation
+   identifier and request hash; it must not require the future publication SHA.
+2. Commit that canonical file with authoritative operation metadata (scope,
+   author, recorded time, operation identifier and request hash) to the private
+   Git bundle. Bind the version envelope and receipt to the resulting actual SHA,
+   then CAS-publish the bundle/head and receipt index together. A retry returns its
+   old receipt without applying the old file over a later correction/tombstone.
+
+The scope comes from the authenticated principal, never a caller-selected owner.
+Shared/group/delegated executions remain denied before repository lookup. Verify
+file evidence against authorized recorded source revisions and verify session
+evidence against that owner's immutable source journal; formatting a citation
+never proves access or truth. Historical reversal must identify an actual ancestor.
+A projection/receipt rebuild uses only that private bundle and operation metadata,
+then rechecks current membership/source permissions before release. This contract
+requires coordination of the five existing pure worker files before wiring; no
+placeholder SHA, duplicate transition builder or live dual writer is acceptable. Rebuild
+projections for the exact private scope/revision and revalidate source permission
+before output. The small claim snapshot limits are fail-closed processing limits,
+not a session-retention policy. Cut over session capture, memory tools, dreams,
+export/restore and creator corpus consumers together before removing Akita.
+
+Future sharing follows the user-approved hybrid intent model: trusted user intent
+specifies exact data, audience and purpose; an independent Sentinel reviews the
+proposal. Deterministic current ACL/membership, deny/revocation and a broker bind
+a grant to the actual payload and destination. Uncertainty requires explicit
+user selection. Group agents receive no blanket access to private files. This
+criterion does not replace deterministic authorization or authorize an external
+Boat setup, provider credentials or deployment.
+
+The local loading comparison used five fresh capsule calls on each side, six
+sources of 2000 synthetic rows each, identical known total 2001000, SQL and input
+hash. Median latency was 3603.9 ms with individual inserts and 2545.1 ms with
+200-row parameterized chunks; the sample p95 was 5478.5 versus 2574.9 ms. Small
+samples and shared-machine load limit this result; it is not a production SLO,
+per-response cost claim or broad engine comparison. The separate synthetic Git
+benchmark favors one reconstruction over three; batching Git framing added no
+benefit, so current native readers were retained.
+
+### Private publication and source qualification — 2026-09-30
+
+The additive `0098_private-memory` migration was applied only to the guarded
+`companion_runtime_test` database and rerun idempotently. No database reset or
+applied migration rewrite occurred. Six real publisher journeys establish private
+isolation inside one company workspace, concurrent CAS, atomic rollback on receipt
+failure, lost-index reconstruction, tombstone/replay safety, and current source or
+membership revocation. Five source-journal journeys establish actual SHA256-bound
+user/accepted-assistant evidence, cross-principal denial, receipt reconstruction
+without changing a claim's actual commit/time, and no bypass of pending delivery.
+A private Git regression rejects a valid operation message that conceals a change
+to another claim. See [private-memory evidence](evidence/private-memory-2026-09-30.json).
+
+Session evidence uses the actual immutable event digest, `sessionId`, `eventId`
+and excerpt; there is no invented Git revision for a JSONL source. Unverified
+assistant stream completions cannot support a claim. A settled assistant answer
+remains evidence rather than verified truth, and its absent source timestamp stays
+absent. Receipt rebuild changes only missing derived indexes under current owner
+membership; it does not recreate permissions or acknowledge pending deliveries.
+
+Remaining K3 gates: the atomic live tools/UI/recall cutover, complete bounded
+backup/restore with retained tombstones and source journals, session/creator corpus
+consumer cutover, erasure integration and capacity qualification. No Akita removal,
+full parity, production throughput or enforced account quota is claimed by these
+foundation tests. Current quota functions have no production admission/settlement
+callers; durable native operation identity and once-only atomic settlement, payer
+scope and reconciliation remain explicit work.
+
+External-agent identity follows one stable directory UUID mapped to `agent:<uuid>`
+and the existing Matrix identity/room membership/reconciler. It must not create a
+second room transport or membership authority. Independent subject-bound grants
+may coexist; rotating a selected grant never rebinds old tasks. The sponsor is an
+audit fact, not the service principal's OAuth or private-memory authority. Identity
+registration inhibits Matrix login and is not external runtime connectivity. The
+integration owner retains grant/resolver/migration/offboarding changes; new member
+schema/service and roster projections require coordinated ownership before edits.
+
+### Private claim recovery archive v2 — 2026-10-01
+
+The private repository backup now authenticates the Git bundle and the exact
+canonical JSONL bytes of every session event cited anywhere in its retained
+lineage, including claims corrected or cleared later. The envelope binds the
+private namespace/scope, Git revision, session/event coordinates, capture sequence
+and byte hashes with the installation key. Version 1 is deliberately rejected;
+old artifacts are not deleted or silently upgraded. This internal format does not
+yet replace the active Akita ZIP download or its callers.
+
+Restore first checks current private app/session ownership, the erasure receipt,
+Git ancestry/CAS, historical and current file-source permissions, exact citation
+coverage, all existing paths/files and all delivery receipts. A pending delivery,
+conflicting immutable file, sequence collision, missing native allocator high-water
+or archive sequence ahead of that high-water blocks recovery. The same native
+allocator fence protects explicit source-index rebuilds. Default capture and
+repair both hold the namespace then the same allocation mutex; recovery cannot
+overlook a still-uncommitted allocation after a counter restore. Recovery retains
+that mutex through bounded filesystem repair. A nonpartial capture-sequence index
+covers collision checks for delivered receipts as well as pending deliveries.
+This adds serialized SQL allocation admission, not a new allocator/queue. Maximum
+restore contention remains unqualified. No `setval` or reconstructed permissions
+are used.
+
+Only after the entire preflight passes are missing immutable files fsynced and
+missing stored-receipt indexes inserted. Existing pending receipts are never
+acknowledged. SQL rollback can leave authenticated immutable files without indexes;
+exact replay repairs those indexes without overwriting/deleting bytes. Identical
+Git heads still run source repair; `applied` continues to describe Git publication,
+not whether a missing source/index was recovered. Recorded source dates and Git
+publication history remain unchanged; operational receipt rebuild time is separate.
+
+Processing limits are 10,000 cited events, 8 MiB per canonical file and 128 MiB
+source bytes per archive, in addition to the existing Git bundle bound. These are
+explicit refusal limits, not total conversation retention or production capacity
+claims. Timestamp metadata is bounded before ISO validation and segmentation;
+serialized chunks are bounded before final allocation. Source tests exercise
+native temporary Git/files and mocked SQL. Isolated PostgreSQL journeys cover
+personal/team recovery, allocation commit ordering and retained cross-namespace
+collision denial. A populated temporary-table plan verifies the additive index;
+it does not measure application throughput or maximum restore contention. Private archives cannot reconstruct lost session authority or prove
+completed erasure safety after a database rewind; installation recovery must retain
+the allocator, ownership and the non-restored erasure journal. Full K3 still requires
+active-consumer/recall/creator cutover and recovery/erasure qualification.
+
+The private repository now checks the exact namespace's pending erasure before
+read, recall, change, history or index rebuild, including claims without citations.
+The namespace lock fences ordinary deletion; the receipt presence read adds no
+worker lock or due-time filter. Backup/restore retain their explicit checks. This
+withholds a recovered namespace while its erasure marker remains. Before filesystem
+work, the erasure worker locks any restored exact namespace generation with
+`FOR UPDATE NOWAIT` and requires its known receipt owner to match. Contention or
+unproven ownership retains the obligation without filesystem effects. After file
+erasure, it retires only that generation; existing foreign-key cascades remove its
+private Git bundle, operation receipts, recalls and pending source outbox before
+acknowledging the erasure. A new generation for the same workspace/user is not a
+delete target, and an archive from the retired generation cannot restore into it.
+Synthetic tests verify the SQL, owner checks and savepoint retry ordering; real
+PostgreSQL cascade/concurrency and restore acceptance still require qualification.
+This does not establish safety after completed erasure followed by a whole-database
+rewind that loses the retained deletion journal. Coordinated recovery must preserve
+that non-restored journal before the active-consumer cutover can be qualified.
+
+## PostgreSQL registry boundary — 1 October 2026
+
+The existing connector registry now has an exclusive PostgreSQL configuration
+branch using the canonical file-source endpoint contract. PostgreSQL rows keep
+HTTP endpoint/operations SQL-null; HTTP rows keep PostgreSQL configuration
+SQL-null. Migration 0103 adds this invariant without changing the existing
+workspace/organization owner constraints. Registration requires the current
+authenticated app session and management access. Personal and organization
+workspaces share this contract; private channel, group, external-agent and
+scheduled contexts do not receive PostgreSQL registry entries.
+
+Credentials use one strict encrypted envelope bound to workspace, connection,
+revision and connector kind. This replaces the old untyped prelaunch envelope
+directly: existing connections with that envelope require a new registration.
+There is no dual reader, automatic reseal or data deletion. Secrets are absent
+from metadata, ontology files and remote discovery. PostgreSQL is rejected before
+remote credential selection/decryption and cannot become an HTTP operation.
+
+This is a registry foundation, not enabled live analytics. The current setup
+form remains HTTP-only, and PostgreSQL metadata reports live reads unavailable.
+Trusted payer resolution, durable once-only admission/settlement, bounded TLS
+transport and post-read authorization/provenance remain required before any
+live warehouse read. Synthetic schema/crypto/mocked-boundary tests and local
+PGlite CHECK tests do not qualify that remaining journey or native platforms.
+
+The workspace billing subject resolver reuses the existing app session and
+workspace/organization authorization inside the public database transaction.
+Personal subjects retain the exact raw authenticated user ID; company subjects
+use the verified organization, including a member actor, with no member/issuer
+fallback. This resolves identity only. Entitlements, physical installation
+limits and durable once-only reservation/settlement remain separate required
+admission gates; the billing UI's Free-on-query-error behavior is not suitable
+for protected live reads.
+
+Local registry qualification covers 83 synthetic schema/crypto/caller tests and
+17 authorization-SQL payer tests. An initial eleven-case serial run on isolated PostgreSQL
+15443 covers personal/team registry and payer behavior plus existing MCP/OpenAPI
+import/dispatch/revocation regressions. The existing migration owner verified
+the source prefix and applied additive 0102/0103 (104 app, 20 workflow entries).
+No warehouse connection, model turn, charge or global erasure drain was used.
+The subsequent static cleanup moves the private-channel assertions into a
+separate test, without changing production code; that final twelve-case runtime
+layout awaits a fresh exclusive lease. These checks do not establish live
+analytics, durable quota enforcement or aggregate/native approval qualification.
+
+## Durable source-read accounting foundation — 1 October 2026
+
+The operations owner now reserves exactly one daily tool call for the current
+app actor using the verified payer's current per-user entitlement. Usage follows
+that actor across personal/company workspaces and payers. The existing plan
+catalog defines 200 calls for Free and 1,000 for active Pro/Org; this slice does
+not invent a pooled organization budget, license-seat admission or a physical
+PostgreSQL execution cap, and does not count a source read as another agent turn.
+Other tool/model/storage usage remains outside this narrow accounting boundary.
+
+A supported Eve `sessionId/callId` must be supplied out of band, with the exact
+currently owned session, workspace authority, PostgreSQL connection revision,
+current published source file and canonical parameter ordering. One true outer
+transaction commits its unique allocation before any warehouse work. An
+identical replay returns the existing allocation without another dispatch permit;
+changed operation-bound input fails closed. Billing SQL failure propagates rather
+than becoming the account UI's availability-oriented Free fallback.
+
+Allocations are separate from provider results and contain keyed opaque actor,
+payer, native-operation and request identities plus their original UTC window and
+counts. Connector/account cascades cannot refund them. A singleton nonsecret key
+fingerprint and composite RESTRICT foreign key make replacing the installation
+key fail closed instead of presenting all identities as fresh. Restore requires
+the coherent accounting ledger and its existing installation key. No key rotation,
+ledger rewind reconciliation or irreversible cleanup is implemented here.
+
+Settlement serializes the exact accounting scope and allocation once. Confirmed
+zero/one consumption updates only that original window; duplicate matching
+settlement is inert, conflicting final claims fail, and crash/timeout/unknown
+work retains its hold. Observed work can be recorded after auth revocation using
+the exact internal receipt; clients/models receive no settlement endpoint.
+
+This foundation has no productive live source-tool caller. A new budget allocation
+proves authorization/accounting, not executable parameter validation or a transport
+grant. The owning fixed-read builder must validate exact filter arity/types before
+credential decryption, DNS or socket I/O. Live PostgreSQL execution remains
+disabled until physical/account policy, bounded TLS/cancellation, post-read
+permission/provenance and actual runtime qualification pass. Local PGlite tests
+exercise real authorization/accounting SQL and the additive 0104 constraints on
+one connection; they do not prove PostgreSQL multi-connection lock schedules,
+provider billing, whole-installation enforcement or full TextQL/K3 parity.

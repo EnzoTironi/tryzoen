@@ -3,6 +3,7 @@ import {
   GitRevisionSchema,
   knowledgePathSchema,
   WorkspaceRecordedViewSchema,
+  WorkspacePublishSchema,
 } from "../files-schema";
 
 const key = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
@@ -139,10 +140,22 @@ export const ontologyPath = "ontology/workspace.json";
 export const OntologyReadSchema = WorkspaceRecordedViewSchema.safeExtend({
   validOn: z.iso.date().optional(),
 });
-export const OntologyActionSchema = z.object({
+export const OntologyActionSchema = OntologyClaimSchema.safeExtend({
   entityId: key,
   actionId: key,
-  ...OntologyClaimSchema.shape,
+}).strip();
+const publication = WorkspacePublishSchema.pick({
+  expectedRevision: true,
+  operationId: true,
+});
+export const OntologyActInputSchema = OntologyActionSchema.safeExtend(
+  publication.shape
+).strict();
+export const OntologyPublishInputSchema = publication.extend({
+  graph: OntologySchema,
+});
+export const OntologyPublishedResultSchema = z.strictObject({
+  revision: GitRevisionSchema,
 });
 
 export const OntologyReadResultSchema = z.strictObject({

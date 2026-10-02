@@ -46,8 +46,11 @@ fact; this operation deletes stored notes, not conversation history.
 notes. Group scope uses its own conversation identity. Personal wipe never erases
 shared-group keys.
 
-Learned facts use the private Akita file corpus with person/workspace scope.
-This does not replace the authored profile documents or their Eve provider.
+Learned facts use canonical private Git claims with person/workspace scope,
+PostgreSQL consent and immutable cited journal evidence. Their native Eve memory
+slot replaces current reference facts after correction or forget. Authored profile
+documents retain the provider described above. Complete journal archives are a
+separate export from profile documents.
 
 ## Verification
 

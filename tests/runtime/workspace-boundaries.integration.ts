@@ -201,6 +201,7 @@ test("SP07: a guest reaches only the granted scope and none of its management", 
         label: "x",
         capabilities: ["files"],
         days: 1,
+        externalMemberId: randomUUID(),
       })
     ).then(
       (value) => ({

@@ -15,6 +15,7 @@ import { projectMatrixActivity } from "./activity";
 import { uploadMatrixMedia } from "./media/upload";
 import { readMatrixText, readRoomMessage } from "./messages";
 import { setThreadSubscription } from "./thread-subscriptions";
+import { resolveMatrixMentions } from "./mentions";
 
 export const sendMatrixMessage = async function (
   actor: z.output<typeof WorkspaceActorSchema>,
@@ -61,6 +62,7 @@ export const sendMatrixMessage = async function (
             msgtype: "m.text",
             "org.zoen.transaction_id": input.operationId,
             body,
+            "m.mentions": await resolveMatrixMentions(actor, room, input.text),
             ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
           },
           room.matrixId
@@ -82,6 +84,7 @@ export const sendMatrixMessage = async function (
               : "m.file",
             body: file.filename ?? "Attachment",
             filename: file.filename ?? "Attachment",
+            "m.mentions": { user_ids: [] },
             ...(input.rootId || reply ? { "m.relates_to": relation } : {}),
           },
           room.matrixId

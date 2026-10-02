@@ -57,6 +57,41 @@ services:
       interval: 2s
       timeout: 3s
       retries: 60
+  semantic-1: &semantic
+    build:
+      context: ../..
+      dockerfile: infrastructure/semantic/Dockerfile
+    image: zoen-semantic-test
+    profiles: [semantic]
+    init: true
+    environment:
+      ZOEN_SEMANTIC_TOKEN: zoen-semantic-synthetic-test-token-0123456789
+    ports:
+      - "127.0.0.1:18130:18130"
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 1
+    pids_limit: 64
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:18130/health',{headers:{authorization:'Bearer '+process.env.ZOEN_SEMANTIC_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+  semantic-2:
+    <<: *semantic
+    ports:
+      - "127.0.0.1:18131:18130"
+
 volumes:
   postgres:
   matrix:

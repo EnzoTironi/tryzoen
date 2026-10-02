@@ -5,6 +5,7 @@ import * as PeopleApi from "@googleapis/people";
 import type { ToolContext } from "eve/tools";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCalendarEvent } from "@agent/lib/google-workspace/calendar";
+import { gmailSendSchema } from "@zoen/companion-ui/approval";
 import { googleApiFailure } from "@agent/lib/google-workspace/client";
 import { searchGoogleContacts } from "@agent/lib/google-workspace/contacts";
 import {
@@ -79,12 +80,14 @@ describe("generated Google Workspace clients", () => {
 
     const idempotencyKey = gmailSendIdempotencyKey(ctx);
     const messageId = gmailSendMessageId(ctx);
+    const payloadHash = gmailPayloadHash();
     const raw = Buffer.from(
       [
         "To: person@example.com",
         "Subject: Status",
         `Message-ID: ${messageId}`,
         `X-OpenInstinct-Idempotency-Key: ${idempotencyKey}`,
+        `X-Zoen-Payload-Sha256: ${payloadHash}`,
         "MIME-Version: 1.0",
         'Content-Type: text/plain; charset="UTF-8"',
         "Content-Transfer-Encoding: 8bit",
@@ -94,7 +97,7 @@ describe("generated Google Workspace clients", () => {
     expect(list).toHaveBeenCalledWith(
       {
         maxResults: 1,
-        q: gmailSendIdempotencyQuery(idempotencyKey),
+        q: `in:sent ${gmailSendIdempotencyQuery(idempotencyKey)}`,
         userId: "me",
       },
       { signal: ctx.abortSignal }
@@ -120,12 +123,17 @@ describe("generated Google Workspace clients", () => {
     const get = vi
       .fn<
         (
-          request: { format?: string; id: string; userId: string },
+          request: {
+            format?: string;
+            metadataHeaders?: string[];
+            id: string;
+            userId: string;
+          },
           options: RequestOptions
-        ) => Promise<{ data: { id: string; threadId: string } }>
+        ) => Promise<{ data: GmailApi.gmail_v1.Schema$Message }>
       >()
       .mockResolvedValue({
-        data: { id: "existing-1", threadId: "thread-existing" },
+        data: gmailReceipt(ctx, "existing-1", "thread-existing"),
       });
     const send = vi.fn<() => never>(() => {
       throw new Error(
@@ -154,18 +162,26 @@ describe("generated Google Workspace clients", () => {
         subject: "Status",
         to: ["person@example.com"],
       })
-    ).resolves.toEqual({ id: "existing-1", threadId: "thread-existing" });
+    ).resolves.toEqual(gmailReceipt(ctx, "existing-1", "thread-existing"));
 
     expect(list).toHaveBeenCalledWith(
       {
         maxResults: 1,
-        q: gmailSendIdempotencyQuery(idempotencyKey),
+        q: `in:sent ${gmailSendIdempotencyQuery(idempotencyKey)}`,
         userId: "me",
       },
       { signal: ctx.abortSignal }
     );
     expect(get).toHaveBeenCalledWith(
-      { format: "minimal", id: "existing-1", userId: "me" },
+      {
+        format: "metadata",
+        metadataHeaders: [
+          "X-OpenInstinct-Idempotency-Key",
+          "X-Zoen-Payload-Sha256",
+        ],
+        id: "existing-1",
+        userId: "me",
+      },
       { signal: ctx.abortSignal }
     );
     expect(send).not.toHaveBeenCalled();
@@ -187,12 +203,17 @@ describe("generated Google Workspace clients", () => {
     const get = vi
       .fn<
         (
-          request: { format?: string; id: string; userId: string },
+          request: {
+            format?: string;
+            metadataHeaders?: string[];
+            id: string;
+            userId: string;
+          },
           options: RequestOptions
-        ) => Promise<{ data: { id: string; threadId: string } }>
+        ) => Promise<{ data: GmailApi.gmail_v1.Schema$Message }>
       >()
       .mockResolvedValue({
-        data: { id: "landed-1", threadId: "thread-landed" },
+        data: gmailReceipt(ctx, "landed-1", "thread-landed"),
       });
     const send = vi
       .fn<() => Promise<never>>()
@@ -219,7 +240,7 @@ describe("generated Google Workspace clients", () => {
         subject: "Status",
         to: ["person@example.com"],
       })
-    ).resolves.toEqual({ id: "landed-1", threadId: "thread-landed" });
+    ).resolves.toEqual(gmailReceipt(ctx, "landed-1", "thread-landed"));
 
     expect(send).toHaveBeenCalledOnce();
     expect(list).toHaveBeenCalledTimes(2);
@@ -227,13 +248,21 @@ describe("generated Google Workspace clients", () => {
       2,
       {
         maxResults: 1,
-        q: gmailSendIdempotencyQuery(idempotencyKey),
+        q: `in:sent ${gmailSendIdempotencyQuery(idempotencyKey)}`,
         userId: "me",
       },
       { signal: ctx.abortSignal }
     );
     expect(get).toHaveBeenCalledWith(
-      { format: "minimal", id: "landed-1", userId: "me" },
+      {
+        format: "metadata",
+        metadataHeaders: [
+          "X-OpenInstinct-Idempotency-Key",
+          "X-Zoen-Payload-Sha256",
+        ],
+        id: "landed-1",
+        userId: "me",
+      },
       { signal: ctx.abortSignal }
     );
   });
@@ -414,4 +443,37 @@ class GoogleApiError extends Error {
     super(`Google API returned ${String(status)}`);
     this.response = { status };
   }
+}
+
+function gmailPayloadHash() {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        gmailSendSchema.parse({
+          bcc: [],
+          body: "Hello",
+          cc: [],
+          subject: "Status",
+          to: ["person@example.com"],
+        })
+      )
+    )
+    .digest("hex");
+}
+
+function gmailReceipt(ctx: ToolContext, id: string, threadId: string) {
+  return {
+    id,
+    threadId,
+    labelIds: ["SENT"],
+    payload: {
+      headers: [
+        {
+          name: "X-OpenInstinct-Idempotency-Key",
+          value: gmailSendIdempotencyKey(ctx),
+        },
+        { name: "X-Zoen-Payload-Sha256", value: gmailPayloadHash() },
+      ],
+    },
+  } satisfies GmailApi.gmail_v1.Schema$Message;
 }

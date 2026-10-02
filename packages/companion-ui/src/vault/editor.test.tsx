@@ -32,7 +32,7 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-vi.mock("../page", () => ({ pageStyles: {} }));
+vi.mock("../page", () => ({ usePageStyles: () => ({}) }));
 vi.mock("../button", () => ({
   ActionButton: ({ children }: { children: string }) => (
     <button>{children}</button>

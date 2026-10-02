@@ -10,12 +10,16 @@ export default {
   workspaces: {
     ".": {
       vitest: {
-        config: ["vitest.config.ts", "vitest.runtime.config.ts"],
+        config: [
+          "vitest.config.ts",
+          "vitest.runtime.config.ts",
+          "tests/runtime/matrix-security.config.ts",
+        ],
       },
       entry: [
         "agent/channels/**/*.ts",
         "agent/instrumentation/**/*.ts",
-        "tests/fixtures/eve-runtime/agent/**/*.ts",
+        "tests/fixtures/eve-*/agent/**/*.ts",
         "agent/hooks/**/*.ts",
         "agent/instructions/**/*.ts",
         "agent/memory/**/*.ts",
@@ -35,6 +39,18 @@ export default {
         "scripts/groups-live-e2e.ts",
         // Launched in a separate process before web/worker traffic is admitted.
         "scripts/reconcile-account-erasures.ts",
+        // Dedicated execution capsule and standalone synthetic performance runner.
+        "server/workspaces/semantic/worker.ts",
+        "server/workspaces/semantic/service.ts",
+        "benchmarks/performance/run.ts",
+        // Read-only platform prerequisite inventory, invoked independently of native builds.
+        "scripts/native-readiness.ts",
+        // Standalone private demo commands invoked directly through Node.
+        "scripts/demo/app.ts",
+        "scripts/demo/seed.ts",
+        "scripts/demo/stack.ts",
+        // Manual CDP regression against the isolated shared conversation UI.
+        "tests/companion/composer-hit-targets.ts",
       ],
       ignoreDependencies: [
         // Next resolves React Native imports to this web renderer.

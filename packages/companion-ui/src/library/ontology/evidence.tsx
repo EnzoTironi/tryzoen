@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react-native";
@@ -10,8 +10,8 @@ import type {
 } from "./schema";
 import type { OntologyData } from "./collection";
 import { ActionButton } from "../../button";
-import { pageStyles } from "../../page";
-import { colors } from "../../theme";
+import { usePageStyles } from "../../page";
+import { systemFont, useColors } from "../../theme";
 
 export function OntologyEvidence({
   claim,
@@ -25,6 +25,9 @@ export function OntologyEvidence({
   readonly record: z.output<typeof OntologyReadResultSchema>;
   readonly data: OntologyData;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const pageStyles = usePageStyles();
   const [selected, setSelected] =
     useState<z.output<typeof OntologySourceSchema>>();
   const source = useQuery({
@@ -112,22 +115,39 @@ export function OntologyEvidence({
   );
 }
 
-const styles = StyleSheet.create({
-  evidence: { gap: 10 },
-  citation: {
-    borderLeftWidth: 2,
-    borderColor: colors.line,
-    paddingLeft: 12,
-    gap: 4,
-  },
-  passage: { color: colors.ink, fontSize: 15, lineHeight: 23 },
-  source: { flexDirection: "row", alignItems: "center", minHeight: 44, gap: 8 },
-  filename: { flex: 1 },
-  warning: { color: colors.danger, fontSize: 13, lineHeight: 19 },
-  original: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    gap: 8,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    evidence: { gap: 10 },
+    citation: {
+      borderLeftWidth: 2,
+      borderColor: colors.line,
+      paddingLeft: 12,
+      gap: 4,
+    },
+    passage: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 15,
+      lineHeight: 23,
+    },
+    source: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 8,
+    },
+    filename: { flex: 1 },
+    warning: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    original: {
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      gap: 8,
+    },
+  });
+}

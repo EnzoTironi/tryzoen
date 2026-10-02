@@ -1,5 +1,7 @@
 # Memory, creator bots and marketplace parity
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 Audit date: 2026-09-28. Baseline: `f17b039`. This is an implementation plan, not a claim of deployed parity. It complements [file-memory](file-memory.md) and the [social handoff](tryzoen-social-matrix-handoff.md). Those documents retain detailed evidence and historical checkpoints; later checkpoints supersede earlier limitations.
 
 ## Product contract

@@ -9,7 +9,7 @@ import {
 import type { z } from "zod";
 import { SlidersHorizontal } from "lucide-react-native";
 import { Text, View } from "react-native";
-import { CompanionPage, pageStyles } from "../page";
+import { CompanionPage, usePageStyles } from "../page";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
 import { FeedCard } from "./card";
@@ -44,6 +44,7 @@ export function FeedCollection({
   readonly cacheScope: string;
   readonly onPrompt: (prompt: string) => void;
 }) {
+  const pageStyles = usePageStyles();
   const client = useQueryClient();
   const [likeError, setLikeError] = useState<string>();
   const [selected, setSelected] = useState<string>();

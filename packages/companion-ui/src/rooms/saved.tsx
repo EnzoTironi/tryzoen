@@ -14,7 +14,7 @@ import {
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { SaveRoomMessage } from "./save-message";
 import type {
   RoomData,
@@ -33,6 +33,7 @@ export function SavedRoomMessages({
   readonly onClose: () => void;
   readonly onOpenRoom: (id: string) => void;
 }) {
+  const colors = useColors();
   const client = useQueryClient();
   const refresh = () =>
     client.resetQueries({
@@ -74,7 +75,14 @@ export function SavedRoomMessages({
     );
   return (
     <CompanionSheet title="Mensagens salvas" onClose={onClose}>
-      <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 16 }}>
+      <Text
+        style={{
+          fontFamily: systemFont,
+          color: colors.muted,
+          fontSize: 13,
+          marginBottom: 16,
+        }}
+      >
         Só você · até 100 mensagens. As salvas deste espaço aparecem aqui.
       </Text>
       {(result.isError || reset) && (
@@ -144,6 +152,7 @@ function SavedRow({
   readonly onSelect: (value: z.infer<typeof roomMediaReadSchema>) => void;
   readonly onRemove: (value: z.infer<typeof roomMediaReadSchema>) => void;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{
@@ -171,6 +180,7 @@ function SavedRow({
           <Text
             numberOfLines={1}
             style={{
+              fontFamily: systemFont,
               flex: 1,
               fontWeight: "600",
               fontSize: 16,
@@ -185,12 +195,19 @@ function SavedRow({
         </View>
         <Text
           numberOfLines={3}
-          style={{ color: colors.ink, fontSize: 15, lineHeight: 21 }}
+          style={{
+            fontFamily: systemFont,
+            color: colors.ink,
+            fontSize: 15,
+            lineHeight: 21,
+          }}
         >
           {item.message?.text ??
             "O acesso ou a mensagem original não está mais disponível."}
         </Text>
-        <Text style={{ color: colors.muted, fontSize: 12 }}>
+        <Text
+          style={{ fontFamily: systemFont, color: colors.muted, fontSize: 12 }}
+        >
           Salva em {new Date(item.savedAt).toLocaleDateString()}
         </Text>
       </Pressable>

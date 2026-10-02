@@ -1,6 +1,7 @@
 import { query, transaction as withDatabaseTransaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { sleep } from "../operations/async";
+import { readNativeReceipt } from "../messaging/native-receipts";
 import { isValid } from "@shared/validation";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
@@ -22,6 +23,14 @@ export const A2AMessageSchema = z.object({
       .max(4),
     contextId: z.optional(z.uuid()),
     taskId: z.optional(z.uuid()),
+    metadata: z.optional(
+      z.strictObject({
+        zoenInput: z.strictObject({
+          requestId: identifier,
+          revision: z.string().regex(/^[a-f0-9]{64}$/),
+        }),
+      })
+    ),
   }),
   configuration: z.optional(
     z.object({
@@ -79,12 +88,6 @@ export const acceptProtocolTask = async function (
   chain?: ProtocolTaskChain
 ) {
   const input = await A2AMessageSchema.strict().parseAsync(raw);
-  if (input.message.taskId)
-    throw new A2AError({
-      code: -32004,
-      message:
-        "Start a new task in the same context instead of reopening a terminal task",
-    });
 
   const hash = createHash("sha256")
     .update(JSON.stringify(input.message))
@@ -111,11 +114,36 @@ export const acceptProtocolTask = async function (
         });
       return await readProtocolTask(actor, previous[0].id);
     }
+    if (input.message.taskId) {
+      const task = await readProtocolTask(actor, input.message.taskId);
+      if (input.message.contextId && input.message.contextId !== task.contextId)
+        throw new A2AError({
+          code: -32602,
+          message: "Context does not match the task",
+        });
+      if (!input.message.metadata?.zoenInput)
+        throw new A2AError({
+          code: -32602,
+          message: "An exact pending question reference is required",
+        });
+      return task;
+    }
+    if (
+      input.message.metadata?.zoenInput ||
+      (await readNativeReceipt(
+        actor.workspaceId,
+        protocolInputReceiptId(actor.agentGrantId, input.message.messageId)
+      ))
+    )
+      throw new A2AError({
+        code: -32602,
+        message: "Message ID or input reference cannot start a new task",
+      });
     const recent = await query<{
       active: number;
       recent: number;
     }>(
-      sql`SELECT count(*) FILTER (WHERE state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING'))::int AS active, count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS recent FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId}`
+      sql`SELECT count(*) FILTER (WHERE state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED'))::int AS active, count(*) FILTER (WHERE created_at > now() - interval '1 hour')::int AS recent FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId}`
     );
     if ((recent[0]?.active ?? 0) >= 5 || (recent[0]?.recent ?? 0) >= 60)
       throw new A2AError({
@@ -132,7 +160,7 @@ export const acceptProtocolTask = async function (
           message: "Context not found",
         });
       const active = await query(
-        sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`
+        sql`SELECT id FROM agent_protocol_tasks WHERE grant_id = ${actor.agentGrantId} AND context_id = ${input.message.contextId} AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED')`
       );
       if (active.length)
         throw new A2AError({
@@ -261,5 +289,9 @@ export const failProtocolSession = async function (
   await query(sql`UPDATE agent_protocol_tasks SET state = 'TASK_STATE_FAILED', session_id = ${sessionId},
     output = 'The task could not be completed. Start a new task to retry.', updated_at = now()
     WHERE id = ${parts[2]} AND grant_id = ${parts[1]} AND (session_id IS NULL OR session_id = ${sessionId})
-      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`);
+      AND state IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED')`);
 };
+
+export function protocolInputReceiptId(grantId: string, messageId: string) {
+  return `a2a-input:${grantId}:${messageId}`;
+}

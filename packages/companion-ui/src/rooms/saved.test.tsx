@@ -19,6 +19,8 @@ vi.mock("@tanstack/react-query", () => ({
   useInfiniteQuery: mocks.query,
 }));
 vi.mock("react-native", () => ({
+  Platform: { OS: "web" },
+  useColorScheme: () => "light",
   View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   Pressable: ({ children }: { children: ReactNode }) => (
@@ -55,6 +57,7 @@ vi.mock("../button", () => ({
   },
 }));
 const data: RoomData = {
+  participate: vi.fn<RoomData["participate"]>(),
   pins: vi.fn<RoomData["pins"]>(),
   pin: vi.fn<RoomData["pin"]>(),
   reactors: vi.fn<RoomData["reactors"]>(),

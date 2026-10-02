@@ -1,5 +1,7 @@
 # Semantic engine qualification — initial slice
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 29 September 2026. Two candidates only; no application dependency or production data changed. Official npm releases inspected: `@malloydata/malloy` and `@malloydata/db-postgres` **0.0.434** (MIT), `@wrenai/wren-core-wasm` **0.4.1** (Apache-2.0). Node 24.21.0, local PostgreSQL 18, synthetic schemas/roles in the isolated runtime database on port 15432.
 
 The user subsequently clarified that **TextQL is the primary ontology reference**.

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -6,7 +7,7 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { VaultFormDraft } from "./forms";
 
 const autofill: Partial<
@@ -32,6 +33,8 @@ export function VaultFields({
   readonly revealed: boolean;
   readonly onChange: (field: keyof VaultFormDraft, value: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const fields: readonly (readonly [keyof VaultFormDraft, string, boolean?])[] =
     kind === "login"
       ? [
@@ -103,31 +106,39 @@ export function VaultFields({
   );
 }
 
-const styles = StyleSheet.create({
-  picker: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 15,
-    backgroundColor: colors.wash,
-  },
-  option: {
-    flex: 1,
-    minHeight: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-  },
-  selected: {
-    backgroundColor: colors.surface,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-  },
-  optionText: { color: colors.ink, fontSize: 14, fontWeight: "500" },
-  label: { color: colors.ink, fontSize: 14 },
-  input: {
-    borderRadius: 12,
-    backgroundColor: colors.wash,
-    padding: 12,
-    color: colors.ink,
-    fontSize: 16,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    picker: {
+      flexDirection: "row",
+      padding: 4,
+      borderRadius: 15,
+      backgroundColor: colors.wash,
+    },
+    option: {
+      flex: 1,
+      minHeight: 40,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 11,
+    },
+    selected: {
+      backgroundColor: colors.surface,
+      boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+    },
+    optionText: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    label: { fontFamily: systemFont, color: colors.ink, fontSize: 14 },
+    input: {
+      fontFamily: systemFont,
+      borderRadius: 12,
+      backgroundColor: colors.wash,
+      padding: 12,
+      color: colors.ink,
+      fontSize: 16,
+    },
+  });
+}

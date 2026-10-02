@@ -23,6 +23,8 @@ export const memorySessionSources = pgTable(
         onDelete: "cascade",
       }),
     eventId: text("event_id").notNull(),
+    // Identity survives payload clearing, allowing exact per-session export.
+    sessionId: text("session_id").notNull(),
     captureSequence: bigserial("capture_sequence", {
       mode: "number",
     }).notNull(),
@@ -51,6 +53,13 @@ export const memorySessionSources = pgTable(
     check(
       "memory_session_source_failures",
       sql`${table.deliveryFailures} >= 0 AND (${table.deliveryFailures} = 0) = (${table.lastFailedAt} IS NULL)`
+    ),
+    // Recovery checks every retained receipt, including delivered rows.
+    index("memory_session_sources_capture_idx").on(table.captureSequence),
+    index("memory_session_sources_session_idx").on(
+      table.namespaceId,
+      table.sessionId,
+      table.captureSequence
     ),
     index("memory_session_sources_pending_idx")
       .on(table.availableAt, table.captureSequence)

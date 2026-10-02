@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import type { z } from "zod";
 import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "../chats/avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import type { roomMemberSchema, roomReadReceiptSchema } from "./schema";
 
 /** Exact native event anchors, never a guess from message timestamps or delivery. */
@@ -16,6 +16,8 @@ export function MessageReaders({
   readonly members: z.infer<typeof roomMemberSchema>[];
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const readers = members
     .filter((person) => !person.bot && !person.mine)
@@ -101,23 +103,30 @@ export function MessageReaders({
   );
 }
 
-const styles = StyleSheet.create({
-  receipt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 28,
-    paddingHorizontal: 4,
-  },
-  avatars: { flexDirection: "row", gap: 2 },
-  caption: { fontSize: 11, color: colors.muted },
-  note: { fontSize: 13, color: colors.muted, marginBottom: 12 },
-  list: { maxHeight: 460 },
-  person: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-  },
-  name: { flex: 1, color: colors.ink, fontSize: 16 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    receipt: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      minHeight: 28,
+      paddingHorizontal: 4,
+    },
+    avatars: { flexDirection: "row", gap: 2 },
+    caption: { fontFamily: systemFont, fontSize: 11, color: colors.muted },
+    note: {
+      fontFamily: systemFont,
+      fontSize: 13,
+      color: colors.muted,
+      marginBottom: 12,
+    },
+    list: { maxHeight: 460 },
+    person: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+    },
+    name: { fontFamily: systemFont, flex: 1, color: colors.ink, fontSize: 16 },
+  });
+}

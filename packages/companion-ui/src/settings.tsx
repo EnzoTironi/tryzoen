@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
@@ -18,7 +19,7 @@ import {
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SheetSurface } from "./sheet";
 import { IconButton } from "./icon-button";
-import { colors } from "./theme";
+import { systemFont, useColors } from "./theme";
 
 const pages = [
   { id: "general", label: "General", icon: Cog },
@@ -69,6 +70,8 @@ export function SettingsPanel({
   readonly children?: ReactNode;
   readonly translate?: (text: string) => string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const title = translate(
     pages.find((item) => item.id === page)?.label ?? "Settings"
   );
@@ -157,40 +160,55 @@ export function SettingsPanel({
   );
 }
 
-const styles = StyleSheet.create({
-  panel: { height: "85%", maxHeight: 780 },
-  header: {
-    minHeight: 40,
-    paddingHorizontal: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 8,
-  },
-  title: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "600",
-    color: colors.ink,
-  },
-  content: { paddingHorizontal: 28, paddingBottom: 28 },
-  icon: {
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  vaultLock: { position: "absolute", top: 5 },
-  row: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-  },
-  label: { flex: 1, fontSize: 16, lineHeight: 22, color: colors.ink },
-  pressed: { opacity: 0.55 },
-  divider: { height: 1, backgroundColor: "#eeeeef", marginVertical: 6 },
-  error: { color: colors.danger, fontSize: 14, lineHeight: 20, marginTop: 12 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    panel: { height: "85%", maxHeight: 780 },
+    header: {
+      minHeight: 40,
+      paddingHorizontal: 28,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 8,
+    },
+    title: {
+      fontFamily: systemFont,
+      flex: 1,
+      fontSize: 16,
+      lineHeight: 22,
+      fontWeight: "600",
+      color: colors.ink,
+    },
+    content: { paddingHorizontal: 28, paddingBottom: 28 },
+    icon: {
+      width: 20,
+      height: 20,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    vaultLock: { position: "absolute", top: 5 },
+    row: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+    },
+    label: {
+      fontFamily: systemFont,
+      flex: 1,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.ink,
+    },
+    pressed: { opacity: 0.55 },
+    divider: { height: 1, backgroundColor: "#eeeeef", marginVertical: 6 },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 12,
+    },
+  });
+}

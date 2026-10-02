@@ -8,7 +8,7 @@ import { CreatorReleaseEvidence } from "./release-evidence";
 import { CreatorPreviewResult } from "./preview-result";
 import { ActionButton } from "../button";
 import { CompanionSheet } from "../sheet";
-import { pageStyles } from "../page";
+import { usePageStyles } from "../page";
 
 export function CreatorPilot({
   id,
@@ -21,6 +21,7 @@ export function CreatorPilot({
   readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
+  const pageStyles = usePageStyles();
   const pilot = useQuery({
     queryKey: ["creator-pilot", cacheScope, id],
     queryFn: () => data.pilot(id),
@@ -71,6 +72,7 @@ function PilotQuestions({
   readonly data: CreatorStudioData;
   readonly cacheScope: string;
 }) {
+  const pageStyles = usePageStyles();
   const [question, setQuestion] = useState("");
   const requestId = useRef<string | undefined>(undefined);
   const previews = useQuery({

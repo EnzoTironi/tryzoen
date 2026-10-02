@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import { Text, View } from "react-native";
 import { ActionButton } from "../button";
-import { pageStyles } from "../page";
-import { colors } from "../theme";
+import { usePageStyles } from "../page";
+import { useColors } from "../theme";
 import {
   ideaStatusLabels,
   type ideaSchema,
@@ -24,6 +24,8 @@ export function IdeaDetail({
   readonly onStart: () => void;
   readonly onFeedback: (feedback: z.infer<typeof ideaFeedbackSchema>) => void;
 }) {
+  const colors = useColors();
+  const pageStyles = usePageStyles();
   return (
     <>
       {!feedbackOnly && (

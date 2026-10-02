@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { useMemo, useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import {
 import { MessageCircle, Search, Users } from "lucide-react-native";
 import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "./avatar";
-import { colors } from "../theme";
+import { systemFont, useColors } from "../theme";
 import { useDirectConversation } from "../rooms/direct";
 import type { RoomData } from "../rooms/schema";
 
@@ -37,6 +37,8 @@ export function CreateConversation({
   readonly onGroup: () => void;
   readonly onOpened: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [search, setSearch] = useState("");
   const needle = useDeferredValue(search.trim());
   const people = useQuery({
@@ -151,40 +153,63 @@ export function CreateConversation({
     </CompanionSheet>
   );
 }
-const styles = StyleSheet.create({
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.wash,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-  },
-  input: { flex: 1, minHeight: 48, fontSize: 16, color: colors.ink },
-  actions: {
-    borderRadius: 20,
-    backgroundColor: colors.wash,
-    overflow: "hidden",
-  },
-  row: {
-    minHeight: 76,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e8f1ff",
-  },
-  copy: { flex: 1, minWidth: 0, gap: 4 },
-  name: { color: colors.ink, fontSize: 16, fontWeight: "600" },
-  caption: { color: colors.muted, fontSize: 13, lineHeight: 20 },
-  results: { maxHeight: 340 },
-  pressed: { opacity: 0.65 },
-  error: { color: colors.danger, fontSize: 14, padding: 12 },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    search: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: colors.wash,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+    },
+    input: {
+      fontFamily: systemFont,
+      flex: 1,
+      minHeight: 48,
+      fontSize: 16,
+      color: colors.ink,
+    },
+    actions: {
+      borderRadius: 20,
+      backgroundColor: colors.wash,
+      overflow: "hidden",
+    },
+    row: {
+      minHeight: 76,
+      padding: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    icon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#e8f1ff",
+    },
+    copy: { flex: 1, minWidth: 0, gap: 4 },
+    name: {
+      fontFamily: systemFont,
+      color: colors.ink,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    caption: {
+      fontFamily: systemFont,
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    results: { maxHeight: 340 },
+    pressed: { opacity: 0.65 },
+    error: {
+      fontFamily: systemFont,
+      color: colors.danger,
+      fontSize: 14,
+      padding: 12,
+    },
+  });
+}

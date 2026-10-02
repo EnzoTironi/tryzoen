@@ -2,6 +2,8 @@ import type { KnowledgeProposalData, OntologyData } from "@zoen/companion-ui";
 import {
   OntologyReadResultSchema,
   ontologyPath,
+  OntologyActInputSchema,
+  OntologyPublishedResultSchema,
 } from "@zoen/companion-ui/ontology";
 import { companionDocumentHistory } from "./files";
 import {
@@ -13,10 +15,25 @@ import { z } from "zod";
 
 export function companionOntologyData(
   rpc: Parameters<typeof companionKnowledgeData>[0],
-  scope: string
+  scope: string,
+  operationId: OntologyData["operationId"],
+  onChanged: () => void
 ): OntologyData {
   return {
     cacheKey: ["ontology", scope],
+    operationId,
+    async act(input) {
+      try {
+        return OntologyPublishedResultSchema.parse(
+          await rpc.mutation(
+            "workspaces.ontology.act",
+            OntologyActInputSchema.parse(input)
+          )
+        );
+      } finally {
+        onChanged();
+      }
+    },
     history: companionDocumentHistory(rpc, ontologyPath, scope).list,
     async read(input) {
       return OntologyReadResultSchema.parse(
