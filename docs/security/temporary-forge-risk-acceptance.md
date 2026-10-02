@@ -72,3 +72,16 @@ still ends at **2026-10-04T02:59:00Z**.
 
 The deployment workflow reruns both dependency audits immediately before applying
 infrastructure, so an earlier CI success cannot carry this exception past expiry.
+
+The 2026-10-02 cleanup review compared all 111 guarded files with `ca60406e`.
+Only the root manifest and lock changed: the unused direct `yaml@2.9.1` importer
+was removed, and pnpm renamed the `@vercel/connect@2.0.0` peer-context key without
+changing its dependency snapshot. The node-forge, Expo CLI and certificate
+snapshots and the signing, deployment and distribution configuration are
+unchanged. An independent review of the fresh official-registry audit confirmed
+the same advisory, version and 100 dependency paths; the infrastructure audit
+reported zero findings. The reviewed configuration fingerprint is
+`c7c8307728af9f47aeef36a3a28e67f34169172244e981f16d74b37514a68b6e`.
+Acceptance still ends at **2026-10-04T02:59:00Z**. The audit wrapper now passes
+the pinned lockfile directory through pnpm's supported `--config.lockfile-dir`
+option; the previous `--lockfile-dir` option was rejected by pnpm 11.24.0.

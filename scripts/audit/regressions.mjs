@@ -307,7 +307,7 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       JSON.stringify([
         "audit",
         `--dir=${repository}`,
-        `--lockfile-dir=${repository}`,
+        `--config.lockfile-dir=${repository}`,
         "--only=null",
         "--production=false",
         "--dev=false",
