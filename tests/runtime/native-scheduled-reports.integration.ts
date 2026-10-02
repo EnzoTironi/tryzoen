@@ -427,19 +427,9 @@ test.each(["telegram", "kapso"] as const)(
       );
       // Actual provider adapter configuration is absent: it must reject before HTTP,
       // after the outbox transaction commits. No response or service is fabricated.
-      const delivery = await Promise.try(async () =>
-        deliverNativeScheduledReport(runId)
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      );
-      expect(!delivery.ok).toBe(true);
+      await expect(
+        Promise.try(async () => deliverNativeScheduledReport(runId))
+      ).rejects.toBeInstanceOf(Error);
       expect(
         await query(sql`SELECT status, attempts, payload->>'text' AS text, provider_message_id
       FROM channel_outbox WHERE identity_id = ${identityId}`)

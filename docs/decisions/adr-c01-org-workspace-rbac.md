@@ -1,85 +1,70 @@
-# ADR: C01 minimum company control plane (org + workspace RBAC)
+# ADR: Company workspace authorization (C01)
 
-- **Status:** Accepted (minimum viable)
-- **Date:** 2026-09-10 (America/Sao_Paulo)
-- **Decision:** Extend the existing workspace membership model with an
-  optional **organization** parent and `admin` | `member` roles, without
-  breaking personal `owner` installs. SSO / audit erasure remain C02.
-- **Worker:** C01-RBAC — org/workspace model + authorization gates
+- **Status:** Accepted; implemented by the workspace and account owners below.
+- **Decision:** Keep organization and workspace membership in PostgreSQL.
+  Better Auth supplies identity; product membership determines company access.
+  Personal workspaces retain their separate owner boundary.
 
-## Inventory (verified on `origin/main` @ 01d3148)
+## Membership model and owners
 
-| Surface                              | Behavior before C01                                                    | Gap                                                    |
-| ------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| Better Auth (`db/schema/auth.ts`)    | `user` / `session` / `account` / `verification`                        | No org plugin; keep as identity provider only          |
-| `workspaces`                         | Id + `created_at` only                                                 | No company parent                                      |
-| `workspace_memberships.role`         | CHECK `= 'owner'` only                                                 | No admin/member for shared company workspaces          |
-| `accessScopeForUser` / `ensureScope` | Mints `personal:<hash>` + owner membership                             | Must keep working unchanged for personal path          |
-| `scopeFromPrincipal`                 | Personal workspace binding only                                        | Company workspace selection is a later product surface |
-| Blueprint                            | Private workspaces first; team sharing needs explicit membership/grant | Company control plane missing                          |
+| Responsibility                                            | Current owner                    |
+| --------------------------------------------------------- | -------------------------------- |
+| Organizations and organization membership                 | `db/schema/organizations.ts`     |
+| Workspace parent and membership roles                     | `db/schema/workspaces.ts`        |
+| Personal workspace provisioning                           | `db/services/scope.ts`           |
+| Company workspace creation and listing                    | `server/workspaces/directory.ts` |
+| Current membership, management and delegated-access gates | `server/workspaces/access.ts`    |
+| Invitations and member removal                            | `server/workspaces/team.ts`      |
+| Admin transfer and account-deletion safeguards            | `server/accounts/deletion.ts`    |
 
-## Decision
+Organizations have `admin` and `member` roles. A workspace with no organization
+is personal; its canonical user has the `owner` membership. Company workspace
+creation grants the creator `admin` in both the organization and workspace.
+Accepted invitations grant the recipient `member` in both scopes.
 
-1. **Organizations** (`organizations`, `organization_memberships`) are the B2B
-   control-plane tenant. Roles: `admin` | `member`.
-2. **Workspaces** gain nullable `organization_id`:
-   - `NULL` → personal workspace (existing install path).
-   - set → company workspace under that org.
-3. **Workspace roles** widen to `owner` | `admin` | `member`:
-   - Personal: **`owner` only** (helpers enforce).
-   - Company: **`admin` | `member` only** (helpers enforce; never assign
-     `owner` on company workspaces).
-4. **Authorization helpers** (`shared/identity/org-rbac.ts`, authorized):
-   - Admin/owner may manage members.
-   - Member cannot elevate (cannot grant `admin`).
-   - Typed `RbacDenied` fails closed.
-5. **DB service** (`db/services/organizations.ts`) applies those gates when
-   creating company workspaces / setting membership roles. `ensureScope`
-   remains the personal provisioning path (`role: "owner"`).
-6. **Migration** `0029_org-workspace-rbac` adds tables/column and widens the
-   role CHECK with `NOT VALID` + `VALIDATE` (authorized adoption).
-7. **Removal ends issued authority** (`server/workspaces/team.ts`
-   `removeWorkspaceMember`). `agent_sessions`, `scheduled_agent_jobs`, their
-   runs and rendered report outputs cascade from the membership row. Before
-   deleting it, removal cancels the queued `channel_outbox` rows of those
-   reports, revokes the `workspace_agent_grants` the member issued for the
-   workspace's bots, cancels open `agent_protocol_tasks` on those grants, and
-   records `removedSessions`, `removedJobs`, `cancelledOutbox`,
-   `revokedGrants` and `canceledTasks` in the `member_removed` receipt.
-   Use-time gates (`requireWorkspaceAccess`, `ensureScope`,
-   `getWorkspaceGoogleToken`) deny the removed member on the next request,
-   message or scheduled run. A shared Google connection stays in workspace
-   custody and never follows a person into a personal space. A group binding
-   grants access only while it is unrevoked and points at a workspace the
-   sender belongs to.
+Company access requires both current workspace and organization membership.
+`requireWorkspaceAccess` denies management actions to members and returns
+`WorkspaceAccessDenied` when authority is missing. A copied workspace ID, group
+binding or delegated task cannot create membership or elevate a role. Personal
+access also requires the canonical personal workspace and its owner membership.
 
-## Alternatives considered
+## Invitations and removal
 
-- **Better Auth organization plugin as source of truth:** deferred — would
-  couple product RBAC to Auth plugin migrations and risk personal-path churn;
-  C02 may revisit for SSO.
-- **Replace `owner` with `admin` everywhere:** rejected — breaks existing
-  personal membership rows and `ensureScope`.
-- **Workspace-of-workspaces without `organizations` table:** rejected — need a
-  clear company tenant for member management independent of any one workspace.
+`server/workspaces/team.ts` invites an existing user by exact username through
+`workspace_invites`. Creation requires current management access and an app
+session. Acceptance requires the intended authenticated recipient, a pending
+unexpired invitation and current access. Accepted or revoked invitations cannot
+be accepted again.
 
-## Out of scope (follow-ups)
+Member removal requires management access and targets another workspace member;
+it cannot remove the caller or an administrator through the member-removal path.
+Before deleting membership, it cancels queued reports, revokes affected agent
+grants, cancels their open protocol tasks and revokes the member's vault and
+WhatsApp delegations. Membership removal cascades sessions, scheduled jobs, runs
+and report outputs, and retires the member's private memory namespace.
 
-- **C02** SSO audit / erasure, IdP suite, invite emails.
-- UI for org switching / invites.
-- G02 group shared-memory policy (do not collide; this PR stays on
-  auth/org/membership).
-- Last-admin resignation locks (helper reason reserved; not enforced yet).
+The `member_removed` receipt records the affected session, job, outbox, grant and
+task counts. Use-time checks deny subsequent access. Shared Google connections
+remain in workspace custody; a removed member cannot use them or move them into
+a personal workspace. Group access requires a current binding and membership.
 
-## Consequences
+## Account lifecycle
 
-- Existing personal installs keep working: `ensureScope` + `owner` unchanged.
-- Company features must call org RBAC gates before mutating memberships.
-- `tests/runtime/workspace-boundaries.integration.ts` proves against real
-  PostgreSQL that a copied workspace id grants nothing without a membership,
-  that a guest reaches only the granted workspace, that removal ends sessions,
-  jobs, grants, tasks and the shared Google connection for the removed member,
-  that a group principal cannot reach a personal space, and that an accepted
-  invitation cannot be answered again. `workspace-team.integration.ts` covers
-  revoked, expired and wrong-recipient invitations.
-- Schema tests / drizzle snapshot include org tables; no secrets in tree.
+`server/accounts/deletion.ts` blocks personal deletion by a sole company admin
+while the organization still has members or workspaces. The authenticated admin
+can transfer the role to an existing member. Closing company workspaces requires
+that no other organization member remains. These operations do not provide a
+full organization erasure or backup purge.
+
+## Design constraints and verification
+
+Keep product membership independent of an authentication plugin. A future SSO
+integration must use the same membership authority rather than introducing a
+second source of access. See [company invitations and SSO requirements](adr-c02-sso-audit-erasure.md).
+
+`tests/runtime/workspace-boundaries.integration.ts` covers cross-workspace denial,
+revoked authority and group isolation. `tests/runtime/workspace-team.integration.ts`
+covers invitation recipients, expiry, revocation and replay.
+`tests/runtime/account-deletion.integration.ts` covers the admin transfer and
+closure boundaries. Database constraints and these behavior tests must remain
+part of any authorization change.

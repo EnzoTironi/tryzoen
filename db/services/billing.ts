@@ -1,7 +1,6 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { billingEntitlements, db } from "@db";
-import { query } from "@db/queries";
 import {
   type BillingPlanId,
   quotaLimitsForPlan,
@@ -86,25 +85,6 @@ export async function readEntitlement(
     // Missing table or a transient query failure must not take down Account.
     return freeEntitlement();
   }
-}
-
-/** Protected admission uses the caller's transaction and never treats an SQL
- * failure as Free. A genuinely absent entitlement still has the catalog Free
- * limit. Existing entitlement updates wait until its SHARE fence is committed.
- */
-export async function readAdmissionEntitlement(
-  subject: Pick<
-    typeof billingEntitlements.$inferSelect,
-    "subjectType" | "subjectId"
-  >
-) {
-  const rows = await query<Parameters<typeof toResolved>[0]>(sql`
-    SELECT plan, status, seat_count AS "seatCount", stripe_customer_id AS "stripeCustomerId",
-      stripe_subscription_id AS "stripeSubscriptionId"
-    FROM billing_entitlements
-    WHERE subject_type = ${subject.subjectType} AND subject_id = ${subject.subjectId}
-    FOR SHARE`);
-  return rows[0] ? toResolved(rows[0]) : freeEntitlement();
 }
 
 export async function upsertEntitlement(input: {

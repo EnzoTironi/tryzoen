@@ -8,7 +8,7 @@ Planning baseline: 2026-09-28, current shared worktree after the message-history
 
 **Implemented** means owning code exists and the checkpoint records relevant checks; it does not qualify every platform. **Partial** means a working subset exists. **Missing** means the required journey has no complete implementation in the inspected owners. **Unverified** means evidence is insufficient; do not substitute assumptions for competitor or platform behavior.
 
-Sources: [reference screen inventory](interface-audit.md), [universal client and release gates](universal-client.md), [later social/editor/card checkpoints](tryzoen-social-matrix-handoff.md), and the concrete code owners below. The Muse inventory distinguishes observed, screenshot reference, reported and unverified behavior. It is not an exhaustive vendor feature guarantee.
+Sources: [reference screen inventory](interface-audit.md), [universal client and release gates](universal-client.md), [later social/editor/card checkpoints](https://github.com/EnzoTironi/tryzoen/blob/04cf0dfe4f0ce7de4e0652bc5ebacfbfcb696839/docs/muse/tryzoen-social-matrix-handoff.md), and the concrete code owners below. The Muse inventory distinguishes observed, screenshot reference, reported and unverified behavior. It is not an exhaustive vendor feature guarantee.
 
 Later evidence overrides stale inventory rows: attachment uploads and rich cards have subsequent browser verification; the old docked/resizable agent/conversation overlays were deliberately replaced by responsive sheets/modals. Keep the user's chosen navigation, not a literal copy of a vendor's tab count. Keep Discover outside the mobile bottom bar. Creator forms are transitional and must be replaced by the creator lane's conversational journey.
 

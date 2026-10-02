@@ -14,9 +14,7 @@ import type * as TraceDomainsModule from "@agent/subagents/browser-agent/lib/tra
 import type { harvestBrowserTraceDomains } from "@agent/subagents/browser-agent/lib/trace/domains";
 import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
 import { toolContextFor } from "@tests/helpers/tool-context";
-import manageBrowsers, {
-  kernelProfileNameForWorkspace,
-} from "../../../../../server/tools/browser/manage_browsers";
+import manageBrowsers from "@agent/subagents/browser-agent/tools/manage_browsers";
 
 const serviceMocks = vi.hoisted(() => ({
   createBrowserSession: vi.fn<typeof createBrowserSession>(),
@@ -259,16 +257,25 @@ describe("Kernel browser contract", () => {
     );
   });
 
-  it("derives opaque, stable, workspace-specific profile names", () => {
-    const workspace = "personal:+15555550123";
-    const profileName = kernelProfileNameForWorkspace(workspace);
-
-    expect(profileName).toBe(kernelProfileNameForWorkspace(workspace));
-    expect(profileName).toMatch(/^openinstinct-[a-f0-9]{40}$/);
-    expect(profileName).not.toContain("15555550123");
-    expect(profileName).not.toBe(
-      kernelProfileNameForWorkspace("personal:+15555550124")
+  it("reuses an opaque profile within one workspace and separates other workspaces", async () => {
+    for (const workspaceId of [
+      "personal:+15555550123",
+      "personal:+15555550123",
+      "personal:+15555550124",
+    ]) {
+      mocks.requireWorkerScope.mockResolvedValue({
+        userId: "user-1",
+        workspaceId,
+      });
+      await manageBrowsers.execute({ action: "create" }, workerContext);
+    }
+    const [first, repeated, other] = mocks.retrieveProfile.mock.calls.map(
+      ([name]) => name
     );
+    expect(first).toMatch(/^openinstinct-[a-f0-9]{40}$/);
+    expect(first).not.toContain("15555550123");
+    expect(first).toBe(repeated);
+    expect(first).not.toBe(other);
   });
 });
 

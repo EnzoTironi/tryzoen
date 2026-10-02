@@ -61,12 +61,9 @@ messenger from the account page. Group messages from unlinked senders are ignore
 without a database write. `login` challenges require an already linked identity
 and fail with `sender_unlinked` otherwise. New `channel_identity` rows are written
 only while a `link` challenge is consumed: `linkIdentity` inserts the confirmed
-address and deletes its pending row, and `archive-transfer.ts` re-points the
-addresses of an archived channel-first account.
+address and deletes its pending row.
 `tests/runtime/unlinked-sender.integration.ts` and the unlinked-sender cases in
-`tests/runtime/channel-webhook.integration.ts` are the integration proof. Accounts
-that a channel-first contact created before this rule can still be joined to a
-Google account only through the explicit archive path below.
+`tests/runtime/channel-webhook.integration.ts` are the integration proof.
 
 `device-link.integration.ts` exercises real PostgreSQL and Better Auth for the
 same-account path, purpose changes, two accounts, browser-session substitution,
@@ -110,10 +107,10 @@ supplies a user ID. Missing, expired or revoked credentials fail closed as
   company admin must transfer or close company workspaces first. See
   `docs/decisions/adr-account-deletion.md`.
 
-Org-scoped cascade of a company while members remain is **out of scope**.
-See `docs/decisions/adr-c02-sso-audit-erasure.md` and
-`shared/identity/org-erasure.ts` for fail-closed company erasure gates and
-append-only audit receipts.
+Company workspace closure uses `closeOrganizationForDeletion` in
+`server/accounts/deletion.ts` and rejects organizations with other members.
+Team invitations and member removal belong to `server/workspaces/team.ts`,
+which records append-only organization audit receipts.
 
 Full deletion proofs: `tests/runtime/account-deletion.integration.ts` and
 `tests/runtime/account-deletion-providers.integration.ts`.

@@ -251,19 +251,9 @@ test("SP05: removing a member ends every durable authority they held in the work
       sessions: 1,
     },
   ]);
-  const reachable = await Promise.try(async () =>
-    getWorkspaceGoogleToken(scope)
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!reachable.ok && reachable.error).toMatchObject({
+  await expect(
+    Promise.try(async () => getWorkspaceGoogleToken(scope))
+  ).rejects.toMatchObject({
     reason: "unavailable",
   });
   await removeWorkspaceMember(actor, guest.userId);
@@ -290,19 +280,9 @@ test("SP05: removing a member ends every durable authority they held in the work
       sessions: 0,
     },
   ]);
-  const unreachable = await Promise.try(async () =>
-    getWorkspaceGoogleToken(scope)
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!unreachable.ok && unreachable.error).toMatchObject({
+  await expect(
+    Promise.try(async () => getWorkspaceGoogleToken(scope))
+  ).rejects.toMatchObject({
     reason: "authorization_required",
   });
   expect((await requireWorkspaceAccess(guestPersonal)).role).toBe("owner");

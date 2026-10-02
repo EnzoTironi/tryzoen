@@ -256,6 +256,82 @@ async function captureClaims(
   });
 }
 
+async function verifyRestorableArchive(
+  actor: z.infer<typeof WorkspaceActorSchema>,
+  archive: z.infer<typeof PrivateMemoryArchiveSchema>
+) {
+  if (!actor.authSessionId || actor.channelIdentityId || actor.matrixIdentityId)
+    throw new WorkspaceAccessDenied();
+  const owner = await privateScope(actor);
+  if (
+    archive.scope.workspaceId !== owner.scope.workspaceId ||
+    archive.scope.userId !== owner.scope.userId ||
+    archive.namespaceId !== owner.namespace.id
+  )
+    throw new WorkspaceAccessDenied();
+  requirePrivateMemoryArchiveAuthentication(archive);
+  // A receipt can coexist with a namespace after coordinated DB recovery.
+  // Check its presence under the namespace lock before reading retained history.
+  const erasure =
+    await query(sql`SELECT namespace_id FROM workspace_memory_erasure
+      WHERE namespace_id = ${owner.namespace.id}`);
+  if (erasure.length) throw new PrivateMemoryError("conflict");
+  const current = await stored(owner.namespace.id, true);
+  const restored = await readPrivateMemoryGit({
+    scope: owner.scope,
+    head: archive.revision,
+    bundle: archive.bundle,
+    includeRetainedSources: true,
+  });
+  // Retained history may advance the lineage or rebuild a lost projection,
+  // but must never roll back a later correction/tombstone or diverge from it.
+  if (
+    current.head !== null &&
+    !restored.operations.some((entry) => entry.revision === current.head)
+  )
+    throw new PrivateMemoryError("conflict");
+  if (current.head === null && archive.revision !== null) {
+    // If both head and receipts are lost, only a coordinated installation
+    // backup can recover the authority needed to restore these facts.
+    const [latest] =
+      await query(sql`SELECT revision FROM private_memory_operation
+        WHERE namespace_id = ${owner.namespace.id} ORDER BY recorded_at DESC LIMIT 1`);
+    if (latest?.revision !== archive.revision)
+      throw new PrivateMemoryError("conflict");
+  }
+  await verifySources(
+    owner.actor,
+    restored.retainedSources.filter((source) => source.kind === "file"),
+    false
+  );
+  await verifySources(
+    owner.actor,
+    restored.snapshot.claims
+      .flatMap((claim) =>
+        claim.file.state.kind === "active" ? claim.file.state.body.sources : []
+      )
+      .filter((source) => source.kind === "file"),
+    true
+  );
+  // Archive metadata never reconstructs or resets the retained capture fence.
+  if (
+    archive.version === 3 &&
+    (archive.sources.length > owner.namespace.journalEventCount ||
+      (archive.capturedThrough !== null &&
+        (owner.namespace.journalHighWater === null ||
+          archive.capturedThrough > owner.namespace.journalHighWater)))
+  )
+    throw new PrivateMemoryError("conflict");
+  return {
+    owner,
+    current,
+    restored,
+    citations: restored.retainedSources.filter(
+      (source) => source.kind === "session"
+    ),
+  };
+}
+
 function restoreArchive(
   actor: z.infer<typeof WorkspaceActorSchema>,
   input: {
@@ -278,57 +354,8 @@ function restoreArchive(
   }
   return authorized(
     async () => {
-      if (
-        !actor.authSessionId ||
-        actor.channelIdentityId ||
-        actor.matrixIdentityId
-      )
-        throw new WorkspaceAccessDenied();
-      const owner = await privateScope(actor);
-      if (
-        archive.scope.workspaceId !== owner.scope.workspaceId ||
-        archive.scope.userId !== owner.scope.userId ||
-        archive.namespaceId !== owner.namespace.id
-      )
-        throw new WorkspaceAccessDenied();
-      requirePrivateMemoryArchiveAuthentication(archive);
-      // A receipt can coexist with a namespace after coordinated DB recovery.
-      // A presence read cannot wait behind a worker and miss its row after deletion.
-      // The namespace lock already fences ordinary deletion/enrollment.
-      const erasure =
-        await query(sql`SELECT namespace_id FROM workspace_memory_erasure
-        WHERE namespace_id = ${owner.namespace.id}`);
-      if (erasure.length) throw new PrivateMemoryError("conflict");
-      const current = await stored(owner.namespace.id, true);
-      const restored = await readPrivateMemoryGit({
-        scope: owner.scope,
-        head: archive.revision,
-        bundle: archive.bundle,
-        includeRetainedSources: true,
-      });
-      await verifySources(
-        owner.actor,
-        restored.retainedSources.filter((source) => source.kind === "file"),
-        false
-      );
-      // Restoring retained history can advance the current lineage or rebuild a
-      // lost projection. It cannot roll back a later correction/tombstone or
-      // import a divergent history. Explicit reversal remains a separate write.
-      if (
-        current.head !== null &&
-        !restored.operations.some((entry) => entry.revision === current.head)
-      )
-        throw new PrivateMemoryError("conflict");
-      await verifySources(
-        owner.actor,
-        restored.snapshot.claims
-          .map((claim) => claim.file)
-          .flatMap((file) =>
-            file.state.kind === "active" ? file.state.body.sources : []
-          )
-          .filter((source) => source.kind === "file"),
-        true
-      );
+      const { owner, current, restored, citations } =
+        await verifyRestorableArchive(actor, archive);
       await requireWorkspaceAccess(owner.actor);
       const identical =
         current.head === archive.revision &&
@@ -338,32 +365,9 @@ function restoreArchive(
             Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)));
       if (current.head !== archive.revision && current.head !== expected)
         throw new PrivateMemoryError("conflict");
-      if (current.head === null && archive.revision !== null) {
-        // A missing projection must not permit an older archive to bypass a later
-        // tombstone. Retained operational high-water mark is a denial fence, not
-        // the authority for facts. If both head and receipts are lost, recovery
-        // requires the coordinated installation backup, never a blind overwrite.
-        const latest = await query<{
-          revision: string;
-        }>(sql`SELECT revision FROM private_memory_operation
-          WHERE namespace_id = ${owner.namespace.id} ORDER BY recorded_at DESC LIMIT 1`);
-        if (latest[0]?.revision !== archive.revision)
-          throw new PrivateMemoryError("conflict");
-      }
       // Even an identical Git head may have lost immutable files/receipt indexes.
       // Full lineage/CAS/high-water/current file access is checked before writes.
-      const citations = restored.retainedSources.filter(
-        (source) => source.kind === "session"
-      );
       if (archive.version === 3) {
-        // Archive metadata never reconstructs or resets the retained capture fence.
-        if (
-          archive.sources.length > owner.namespace.journalEventCount ||
-          (archive.capturedThrough !== null &&
-            (owner.namespace.journalHighWater === null ||
-              archive.capturedThrough > owner.namespace.journalHighWater))
-        )
-          throw new PrivateMemoryError("conflict");
         await restoreCompleteSessionSources(
           owner.actor,
           owner.namespace.id,
@@ -414,67 +418,12 @@ export async function inspectPrivateMemoryArchive(
     throw error;
   }
   return authorized(async () => {
-    if (
-      !actor.authSessionId ||
-      actor.channelIdentityId ||
-      actor.matrixIdentityId
-    )
-      throw new WorkspaceAccessDenied();
-    const owner = await privateScope(actor);
-    if (
-      archive.namespaceId !== owner.namespace.id ||
-      archive.scope.userId !== owner.scope.userId ||
-      archive.scope.workspaceId !== owner.scope.workspaceId
-    )
-      throw new WorkspaceAccessDenied();
-    requirePrivateMemoryArchiveAuthentication(archive);
-    const current = await stored(owner.namespace.id, true);
-    const restored = await readPrivateMemoryGit({
-      scope: owner.scope,
-      head: archive.revision,
-      bundle: archive.bundle,
-      includeRetainedSources: true,
-    });
-    if (
-      current.head !== null &&
-      !restored.operations.some((entry) => entry.revision === current.head)
-    )
-      throw new PrivateMemoryError("conflict");
-    if (current.head === null && archive.revision !== null) {
-      const [latest] =
-        await query(sql`SELECT revision FROM private_memory_operation
-        WHERE namespace_id=${owner.namespace.id} ORDER BY recorded_at DESC LIMIT 1`);
-      if (latest?.revision !== archive.revision)
-        throw new PrivateMemoryError("conflict");
-    }
-    await verifySources(
-      owner.actor,
-      restored.retainedSources.filter((source) => source.kind === "file"),
-      false
-    );
-    await verifySources(
-      owner.actor,
-      restored.snapshot.claims
-        .flatMap((claim) =>
-          claim.file.state.kind === "active"
-            ? claim.file.state.body.sources
-            : []
-        )
-        .filter((source) => source.kind === "file"),
-      true
-    );
-    if (
-      archive.version === 3 &&
-      (archive.sources.length > owner.namespace.journalEventCount ||
-        (archive.capturedThrough !== null &&
-          (owner.namespace.journalHighWater === null ||
-            archive.capturedThrough > owner.namespace.journalHighWater)))
-    )
-      throw new PrivateMemoryError("conflict");
+    const { owner, current, restored, citations } =
+      await verifyRestorableArchive(actor, archive);
     await inspectSessionSourceArchive(
       owner.actor,
       owner.namespace.id,
-      restored.retainedSources.filter((source) => source.kind === "session"),
+      citations,
       archive.sources,
       archive.version === 2 ? "claims" : "complete-journal"
     );

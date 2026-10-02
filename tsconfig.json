@@ -31,7 +31,6 @@
       "@shared/environment": ["./shared/environment/env.ts"],
       "@shared/*": ["./shared/*"],
       "@tests/*": ["./tests/*"],
-      "@tools/*": ["./tools/*"],
       "@web/*": ["./web/*"]
     }
   },

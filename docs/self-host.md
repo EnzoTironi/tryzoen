@@ -197,7 +197,7 @@ Infrastructure-only (under `infrastructure/.env` / `infrastructure/ingress/.env`
 6. **Do not** point an existing production webhook at this host until ownership
    binding and durable ingress are wired for _this_ install. Credential
    `getMe` / `getWebhookInfo` checks are not e2e delivery evidence
-   ([local runtime setup](local-runtime-setup.md#credential-readiness)).
+   ([local runtime setup](local-runtime-setup.md#validation)).
 
 ### Google (self-hosted OAuth)
 
@@ -211,8 +211,8 @@ Infrastructure-only (under `infrastructure/.env` / `infrastructure/ingress/.env`
 4. Linking starts from Home or a native authorization challenge; Better Auth
    owns callback persistence and refresh. Focused DB check:
    `pnpm test:google-membership` (against `companion_runtime_test`).
-5. Details and known SDK limits:
-   [Self-hosted Google Workspace](local-runtime-setup.md#self-hosted-google-workspace).
+5. Qualify interactive OAuth separately from
+   [deterministic runtime tests](local-runtime-setup.md#validation).
 
 ### Kapso (WhatsApp)
 
@@ -243,7 +243,7 @@ Infrastructure-only (under `infrastructure/.env` / `infrastructure/ingress/.env`
 | **Fly compute** (H01 consumer always-on)      | Mac may sleep; off-Mac critical path   | Alchemy Docker (reachable via WireGuard / colocated Docker host) — **not** Fly MPG | Same `companion.tironi.xyz` tunnel; retarget origin to Fly |
 
 Full Fly cutover (secrets names, validate/deploy-dry, rollback):
-→ **[docs/ops/hosted-fly.md](ops/hosted-fly.md)**
+→ **[Alchemy deployment and recovery](../infrastructure/README.md)**
 
 ## 6. Durable public HTTPS ingress (not trycloudflare)
 
@@ -281,25 +281,25 @@ on the PostgreSQL clock **before** `force_unlock_workers`, so a SIGKILL'd worker
 cannot leave jobs locked for the old multi-hour Graphile default, and a stale
 SIGSTOP'd owner cannot complete/fail a job held by another worker.
 
-Companion SIGKILL second-reply recovery is recorded as **pass** (2026-09-09) in
-[local runtime setup — Graphile worker lease fencing](local-runtime-setup.md#graphile-worker-lease-fencing-2026-09-09):
-after lease expiry/restart, fencing unlocked the dead worker **without** manual
-`forceUnlockWorkers`, the dispatcher accepted the same input on attempt 2, and
-the second model reply was stored. Manual Graphile unlock is **not** part of the
-qualified path. Groups remain paused.
+Recovery qualification must show that a killed worker is reclaimed after lease
+expiry, the same input retries, and its reply persists without manual Graphile
+unlock. Run that proof against the pinned Workflow version in the
+[isolated runtime](local-runtime-setup.md#validation), recording the revision and
+workload. A package configuration alone is not recovery evidence.
 
 Defaults (package): `workerLease: { leaseMs: 30000, heartbeatMs: 10000, reclaimIntervalMs: 5000 }`.
 
-## 8. Quotas (Release-1 admission)
+## 8. Usage budgets and enforcement status
 
-Fail-closed minimum quotas live in `server/operations/quotas.ts`. Over-limit work
-must not proceed (`QuotaAdmissionError`). Full decision record and limit table:
+`shared/billing/plans.ts` declares plan budgets. Current turn and tool dispatch
+do not enforce these account or installation budgets; durable usage metering and
+admission remain required before claiming cost or capacity guarantees.
 
-→ **[ADR: Release-1 minimum quotas / admission](decisions/adr-quotas-admission-r1.md)**
+→ **[ADR: usage budgets and admission requirements](decisions/adr-quotas-admission-r1.md)**
 
 Hosted plan entitlements (Free / Pro / Org seats): **[consumer billing](consumer-billing.md)**.
 
-Summary (operators may raise later; unlimited usage is not claimed):
+Declared Free budgets, not currently enforced installation caps:
 
 | Scope        | Resource                     | Limit     |
 | ------------ | ---------------------------- | --------- |
@@ -313,9 +313,9 @@ Summary (operators may raise later; unlimited usage is not claimed):
 | installation | daily model tokens           | 5_000_000 |
 | installation | active users / day           | 100       |
 
-Media attachment byte caps remain in `server/channels/media/policy.ts`. Usage
-meter persistence / dispatch wiring may still be landing; the gate itself is
-tested.
+Media attachment byte caps remain enforced by `server/channels/media/policy.ts`.
+Published CSV analytics has its own bounded executor under
+`server/workspaces/semantic`; those processing limits do not enforce plan budgets.
 
 ## 9. Account export / delete limits
 
@@ -342,10 +342,18 @@ or user row.
 
 **Durable erasure** is `POST /api/account/erasure`. It erases the personal
 workspace, identities, grants, jobs and connections under Zoen control, keeps
-company workspaces, and writes a tombstone that a restore must replay. Live
-Mem0, Matrix, Vaultwarden, mautrix and backups stay `pending_external`. See
+company workspaces, and writes a tombstone that a restore must replay.
+Configured provider wipes run after commit; each obligation remains pending until
+its wipe succeeds. File-memory erasure remains pending until the worker removes
+the private corpus. Backups and historical Mem0 obligations remain pending. See
 [account deletion](decisions/adr-account-deletion.md). Do **not** claim backup
 erasure or third-party purge to users.
+
+Team invitations and membership changes use `server/workspaces/team.ts`.
+`server/accounts/deletion.ts` requires the last company admin to transfer the
+role or close an organization with no other members before personal deletion.
+Messenger linking requires the browser and messenger to belong to the same
+existing account.
 
 ## 10. Live qualification gaps (honest)
 
@@ -379,7 +387,7 @@ Index: [docs/ops/](ops/README.md). ADR:
 ## Related
 
 - [Customer-platform release map](decisions/adr-customer-platform-release.md)
-- [Hosted Fly cutover (H01)](ops/hosted-fly.md)
+- [Alchemy deployment and recovery](../infrastructure/README.md)
 - [Infrastructure / Alchemy README](../infrastructure/README.md)
 - [Durable ingress (named tunnel + webhooks)](../infrastructure/ingress/README.md)
 - [Local runtime setup & evidence](local-runtime-setup.md)

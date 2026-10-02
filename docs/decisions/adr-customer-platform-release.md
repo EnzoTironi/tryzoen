@@ -5,7 +5,7 @@ approval, Alchemy publication, or a live-provider pass.
 
 Date: 2026-09-15.
 
-Builds on: [launch validation](zoen-launch-validation.md),
+Builds on: [launch validation](https://github.com/EnzoTironi/tryzoen/blob/04cf0dfe4f0ce7de4e0652bc5ebacfbfcb696839/docs/decisions/zoen-launch-validation.md),
 [qualification ledger](adr-qualification-ledger.md),
 [Google identity](adr-google-identity-and-messengers.md),
 [skill proposals](adr-skill-proposals-and-dependencies.md),
@@ -21,25 +21,26 @@ is recorded. Fixture and CI evidence do not become live passes. This
 checkout is not “prod-ready”. REL03 columns below are installed,
 fixture-tested, live, and missing proof.
 
-| Surface                  | Installed         | Fixture / CI                              | Live                                                                      | Missing proof                                   |
-| ------------------------ | ----------------- | ----------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- |
-| Google sign-in           | Yes               | PostgreSQL + Better Auth                  | Existing-account round trip is on the deployed launch SHA, not this stack | New invitee, Gmail/Calendar consent             |
-| Google Workspace tools   | Yes               | Team connection tests                     | Blocked                                                                   | Interactive OAuth on this SHA                   |
-| Telegram bot             | Yes               | Webhook fixtures                          | Group isolation fixture, not actual delivery                              | Real group reply on this install                |
-| WhatsApp Kapso bot       | Yes               | Auth fixtures                             | Historical DM on launch SHA                                               | Ordinary groups; templates                      |
-| WhatsApp user bridge     | Envelope only     | Pairing tests                             | Blocked                                                                   | mautrix pair, real group, send                  |
-| Vaultwarden              | Envelope only     | Delegation tests                          | Blocked                                                                   | Live vault, TOTP site                           |
-| Matrix / A2A             | Yes               | Real Synapse; permission and replay tests | Two synthetic people/bots and browser proof                               | Hosted qualification; E2EE; company native eval |
-| Mem0                     | Yes               | Learned-memory tests                      | CI service, not a user journey                                            | Live forget/recall journey                      |
-| Executor skills          | Yes               | Publication + discovery                   | Blocked                                                                   | Use and revoke in three live scopes             |
-| Customer tool code       | Yes               | QuickJS + Git + local UI                  | Not a provider pass                                                       | Remote connectors and native evals              |
-| Account UI wipe          | Yes               | Honesty tests                             | Partial by design                                                         | Must not be sold as full deletion               |
-| Account erasure          | Yes               | PostgreSQL deletion tests                 | Pending Mem0/Matrix/Vaultwarden/mautrix/backups                           | Live provider purge                             |
-| Browser / Kernel         | Yes               | Launch eval listed                        | Blocked                                                                   | `eval:ci` / Kernel on this SHA                  |
-| Closed-beta load         | Envelope declared | Unmeasured                                | Blocked                                                                   | OP01–OP03                                       |
-| Alchemy deploy           | Workflow exists   | Not run here                              | Blocked                                                                   | REL02 images/digests/health                     |
-| Beeper Desktop           | No                | —                                         | Unavailable                                                               | Not installed                                   |
-| iMessage / paid checkout | No                | —                                         | Unavailable                                                               | Out of this stack                               |
+| Surface                | Installed         | Fixture / CI                              | Live                                                                      | Missing proof                                   |
+| ---------------------- | ----------------- | ----------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- |
+| Google sign-in         | Yes               | PostgreSQL + Better Auth                  | Existing-account round trip is on the deployed launch SHA, not this stack | New invitee, Gmail/Calendar consent             |
+| Google Workspace tools | Yes               | Team connection tests                     | Blocked                                                                   | Interactive OAuth on this SHA                   |
+| Telegram bot           | Yes               | Webhook fixtures                          | Group isolation fixture, not actual delivery                              | Real group reply on this install                |
+| WhatsApp Kapso bot     | Yes               | Auth fixtures                             | Historical DM on launch SHA                                               | Ordinary groups; templates                      |
+| WhatsApp user bridge   | Envelope only     | Pairing tests                             | Blocked                                                                   | mautrix pair, real group, send                  |
+| Vaultwarden            | Envelope only     | Delegation tests                          | Blocked                                                                   | Live vault, TOTP site                           |
+| Matrix / A2A           | Yes               | Real Synapse; permission and replay tests | Two synthetic people/bots and browser proof                               | Hosted qualification; E2EE; company native eval |
+| Mem0                   | Yes               | Learned-memory tests                      | CI service, not a user journey                                            | Live forget/recall journey                      |
+| Executor skills        | Yes               | Publication + discovery                   | Blocked                                                                   | Use and revoke in three live scopes             |
+| Customer tool code     | Yes               | QuickJS + Git + local UI                  | Not a provider pass                                                       | Remote connectors and native evals              |
+| Account UI wipe        | Yes               | Honesty tests                             | Partial by design                                                         | Must not be sold as full deletion               |
+| Account erasure        | Yes               | PostgreSQL deletion tests                 | Pending Mem0/Matrix/Vaultwarden/mautrix/backups                           | Live provider purge                             |
+| Browser / Kernel       | Yes               | Launch eval listed                        | Blocked                                                                   | `eval:ci` / Kernel on this SHA                  |
+| Closed-beta load       | Envelope declared | Unmeasured                                | Blocked                                                                   | OP01–OP03                                       |
+| Alchemy deploy         | Workflow exists   | Not run here                              | Blocked                                                                   | REL02 images/digests/health                     |
+| Beeper Desktop         | No                | —                                         | Unavailable                                                               | Not installed                                   |
+| iMessage               | No                | —                                         | Unavailable                                                               | Out of this stack                               |
+| Paid checkout          | Yes               | Checkout, portal and webhook fixtures     | Unqualified on this SHA                                                   | Live Stripe acceptance                          |
 
 ## Identity
 
@@ -47,12 +48,10 @@ Google creates the canonical Zoen user. An unknown Telegram or WhatsApp
 sender does not create a user or workspace; the webhook stores a pending
 address and asks for Google sign-in plus an Account link. Linking is a
 confirmed, single-use challenge bound to the authenticated browser
-session. A messenger already owned by someone else is a conflict, not a
-merge. Ordinary onboarding has no merge screen. Accounts that a
-channel-first contact created before this rule join a Google user only
-through the explicit archive path. That remaining split is not
-“future consolidation” of normal sign-in, and it is not a live pass
-for this SHA.
+session. A messenger already owned by another account returns a conflict;
+the user must sign in to that existing account to confirm the link. Team
+invitations and membership changes use `server/workspaces/team.ts`, with current
+workspace authorization and append-only organization audit receipts.
 
 ## Tool publication
 
@@ -73,9 +72,11 @@ partial personal-memory export and `partial_online_wipe`. They do not
 erase history, artifacts, identities, backups or the user row.
 `POST /api/account/erasure` is the durable Zoen-controlled deletion: suspend,
 revoke, erase the personal workspace, keep company workspaces, write a
-tombstone. Live Mem0, Matrix, Vaultwarden, mautrix and backups stay
-`pending_external`. The last company admin must transfer or close
-companies first. Diagnostics default to correlation without content.
+tombstone. Configured provider wipes run after commit, and file-memory erasure
+is completed by the erasure worker; each obligation remains pending until its
+wipe succeeds. Backups and historical Mem0 obligations remain pending. The last
+company admin must transfer the role or close a company with no other members
+first. Diagnostics default to correlation without content.
 [PRIVACY.md](../../PRIVACY.md) and [TERMS.md](../../TERMS.md) must keep
 that distinction.
 
@@ -95,7 +96,7 @@ pnpm eval:list
 `pnpm test:runtime` needs `companion_runtime_test` and must never use
 production. The local qualification environment now runs real Synapse and PostgreSQL.
 Matrix integration tests and native-model evidence are detailed in
-[network validation](zoen-network-validation.md).
+[network validation](https://github.com/EnzoTironi/tryzoen/blob/04cf0dfe4f0ce7de4e0652bc5ebacfbfcb696839/docs/decisions/zoen-network-validation.md).
 `pnpm eval:list` is `eve eval --list`. `pnpm eval:ci` runs
 `scripts/run-agent-evals.ts`, which defaults to `--suite launch`.
 `.github/workflows/zoen-agent-evals.yml` runs that suite on `main` with
@@ -119,9 +120,11 @@ Provider subscriptions, terms and quotas still apply. Fail-closed
 Ordinary WhatsApp groups are not enabled by the current Kapso Cloud API
 setup. Telegram group support is being qualified and is not a live
 delivery on this install. Closed-beta admission uses
-`ZOEN_REGISTRATION_MODE=closed` and `ZOEN_BETA_IDENTITIES`. Installation
-quotas in `server/operations/quotas.ts` are declared, not a measured
-load pass.
+`ZOEN_REGISTRATION_MODE=closed` and `ZOEN_BETA_IDENTITIES`.
+`shared/billing/plans.ts` declares plan budgets; production turn/tool dispatch
+does not enforce them. Stripe entitlements and Account billing remain active.
+Durable usage accounting, admission and load qualification are separate
+[requirements](adr-quotas-admission-r1.md).
 
 ## Dependabot
 

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { QueryProvider } from "@app/_providers/query-provider";
-import { TooltipProvider } from "@web/components/ui/tooltip";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import { applicationOrigin } from "@shared/environment/origin";
 import { getAuthSession } from "@db/services/auth/session";
@@ -34,9 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang={locale}>
       <body data-workspace-id={workspaceId}>
         <I18nProvider locale={locale} messages={messages}>
-          <QueryProvider>
-            <TooltipProvider>{children}</TooltipProvider>
-          </QueryProvider>
+          <QueryProvider>{children}</QueryProvider>
         </I18nProvider>
       </body>
     </html>

@@ -2,7 +2,7 @@
 
 Avaliação em 27/09/2026. Objetivo solicitado: **todas as funcionalidades do Muse original**. As etapas abaixo organizam a execução; não reduzem esse objetivo a um MVP.
 
-**Atualização após conhecer o Zoen:** a base recomendada passa a ser o projeto existente `EnzoTironi/tryzoen`. O OpenMuse fica como referência e possível fonte de componentes pontuais. A comparação atual está em [Zoen: capacidades existentes e lacunas para o Muse](ZOEN-MUSE-GAP.md). Este documento preserva a avaliação inicial do OpenMuse.
+**Referência histórica de 27/09/2026.** A avaliação inicial do OpenMuse abaixo explica a escolha do Zoen como base. O escopo e os critérios de paridade ficam no [plano de paridade](parity-roadmap.md); a implementação atual está em [arquitetura](../eve/architecture.md).
 
 ## Conclusão
 

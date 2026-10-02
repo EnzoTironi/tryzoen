@@ -31,7 +31,7 @@ If / when replacing the interim hostname:
 Details: [infrastructure/ingress/README.md](../../infrastructure/ingress/README.md).
 
 Off-Mac always-on compute (Fly + Alchemy unmanaged PG option C / Docker A/B, keep this hostname):
-[hosted-fly.md](hosted-fly.md) + `scripts/fly-alchemy-pg.sh`.
+[Alchemy deployment and recovery](../../infrastructure/README.md) + `scripts/fly-alchemy-pg.sh`.
 
 ## 2. Telegram — add `@ZoenOSBot` to group + mention (live G03)
 

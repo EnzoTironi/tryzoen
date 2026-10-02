@@ -198,11 +198,3 @@ function ToolOutput({
 }
 
 export { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput };
-export type {
-  ToolContentProps,
-  ToolHeaderProps,
-  ToolInputProps,
-  ToolOutputProps,
-  ToolProps,
-  ToolStatus,
-};

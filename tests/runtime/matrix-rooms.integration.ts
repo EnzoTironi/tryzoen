@@ -57,16 +57,9 @@ test(
         })
       ).id
     ).toBe(room.id);
-    expect(
-      !(
-        await Promise.try(async () =>
-          readMatrixMessages(personal, room.id)
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => readMatrixMessages(personal, room.id))
+    ).rejects.toBeInstanceOf(Error);
     await readMatrixMessages(actor, room.id);
     await sendMatrixMessage(actor, {
       id: room.id,
@@ -123,19 +116,14 @@ test(
     const external = await matrixDeliveryActor(eventId);
     expect(external.userId).toBe(guest.userId);
     expect(external.workspaceId).toBe(actor.workspaceId);
-    expect(
-      !(
-        await Promise.try(async () =>
-          requireWorkspaceAccess({
-            ...external,
-            workspaceId: personal.workspaceId,
-          })
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () =>
+        requireWorkspaceAccess({
+          ...external,
+          workspaceId: personal.workspaceId,
+        })
+      )
+    ).rejects.toBeInstanceOf(Error);
     const parent = await sendMatrixMessage(actor, {
       id: room.id,
       operationId: randomUUID(),
@@ -298,28 +286,18 @@ test(
     await query(
       sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
     );
-    expect(
-      !(
-        await Promise.try(async () => matrixDeliveryActor(eventId)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
-    expect(
-      !(
-        await Promise.try(async () =>
-          sendMatrixMessage(guest, {
-            id: room.id,
-            operationId: randomUUID(),
-            text: "Denied message",
-          })
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => matrixDeliveryActor(eventId))
+    ).rejects.toBeInstanceOf(Error);
+    await expect(
+      Promise.try(async () =>
+        sendMatrixMessage(guest, {
+          id: room.id,
+          operationId: randomUUID(),
+          text: "Denied message",
+        })
+      )
+    ).rejects.toBeInstanceOf(Error);
     await reconcileMatrixRooms(Date.now() + 30_000, 5);
     const departed = await query<{
       state: string;
@@ -347,14 +325,9 @@ test(
       )[0]?.state
     ).toBe("suppressed");
     await closeMatrixRoom(actor, room.id);
-    expect(
-      !(
-        await Promise.try(async () => readMatrixMessages(actor, room.id)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => readMatrixMessages(actor, room.id))
+    ).rejects.toBeInstanceOf(Error);
     await reconcileMatrixRooms(Date.now() + 30_000, 5);
   }
 );

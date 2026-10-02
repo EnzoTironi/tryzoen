@@ -81,67 +81,11 @@ export const organizationAuditReceipts = pgTable(
   ]
 );
 
-export const organizationInvites = pgTable(
-  "organization_invites",
-  {
-    id: text("id").primaryKey(),
-    organizationId: text("organization_id").notNull(),
-    email: text("email").notNull(),
-    role: text("role", { enum: ["admin", "member"] }).notNull(),
-    invitedByUserId: text("invited_by_user_id").notNull(),
-    status: text("status", {
-      enum: ["pending", "accepted", "revoked", "expired"],
-    }).notNull(),
-    acceptedUserId: text("accepted_user_id"),
-    expiresAt: timestamp("expires_at", {
-      mode: "date",
-      precision: 3,
-      withTimezone: true,
-    }).notNull(),
-    createdAt: timestamp("created_at", {
-      mode: "date",
-      precision: 3,
-      withTimezone: true,
-    })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    foreignKey({
-      name: "organization_invites_organization_id_fkey",
-      columns: [table.organizationId],
-      foreignColumns: [organizations.id],
-    }).onDelete("cascade"),
-    check(
-      "organization_invites_role_check",
-      sql`${table.role} IN ('admin', 'member')`
-    ),
-    check(
-      "organization_invites_status_check",
-      sql`${table.status} IN ('pending', 'accepted', 'revoked', 'expired')`
-    ),
-    index("organization_invites_org_email_idx").on(
-      table.organizationId,
-      table.email
-    ),
-  ]
-);
-
 export const organizationAuditReceiptsRelations = relations(
   organizationAuditReceipts,
   ({ one }) => ({
     organization: one(organizations, {
       fields: [organizationAuditReceipts.organizationId],
-      references: [organizations.id],
-    }),
-  })
-);
-
-export const organizationInvitesRelations = relations(
-  organizationInvites,
-  ({ one }) => ({
-    organization: one(organizations, {
-      fields: [organizationInvites.organizationId],
       references: [organizations.id],
     }),
   })

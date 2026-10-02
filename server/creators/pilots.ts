@@ -99,7 +99,6 @@ export function inviteCreatorPilot(
       JOIN workspaces w ON w.id = m.workspace_id
       JOIN organization_memberships o ON o.organization_id = w.organization_id AND o.user_id = m.user_id
       WHERE d.username = ${input.username} AND m.user_id <> ${actor.userId}
-      AND NOT EXISTS (SELECT 1 FROM account_archive a WHERE a.source_user_id = d.user_id)
       FOR SHARE OF m, o`);
     if (!target)
       throw new Error(

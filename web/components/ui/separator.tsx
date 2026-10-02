@@ -35,4 +35,4 @@ function Separator({
   );
 }
 
-export { Separator, separatorVariants };
+export { Separator };

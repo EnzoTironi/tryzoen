@@ -4,6 +4,7 @@ import { workspaceModel } from "@agent/lib/workspace-model";
 import { workspaceActorFromPrincipal } from "../../../server/workspaces/access";
 import { resolveModeValue } from "@agent/lib/mode";
 import { taskCompletionSchema } from "@agent/subagents/browser-agent/lib/completion";
+import { assertLiveWorkerAuthority } from "./lib/live-authority";
 
 export default defineAgent({
   description:
@@ -28,6 +29,7 @@ export default defineAgent({
         const caller =
           context.session.auth.current ?? context.session.auth.initiator;
         if (!caller) throw new Error("An authenticated user is required.");
+        await assertLiveWorkerAuthority(caller);
         return (
           (await Promise.try(async () =>
             workspaceActorFromPrincipal(caller)

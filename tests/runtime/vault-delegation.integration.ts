@@ -39,11 +39,9 @@ const login = (label: string, password: string) => ({
 });
 
 test("Vaultwarden stays unavailable without a live instance", async () => {
-  const result = await Promise.try(async () => requireVaultwarden()).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!result.ok && result.error).toBeInstanceOf(VaultwardenUnavailable);
+  await expect(
+    Promise.try(async () => requireVaultwarden())
+  ).rejects.toBeInstanceOf(VaultwardenUnavailable);
   return true;
 });
 

@@ -181,7 +181,7 @@ If Fly compute misbehaves and Mac must take traffic again:
 5. Do **not** destroy `companion-tironi`, `companion-pg-prod`, or the `pgdata`
    volume during rollback.
 
-Forward cutover (Mac → Fly) remains documented in [hosted-fly.md](hosted-fly.md).
+Forward cutover (Mac → Fly) remains documented in [Alchemy deployment and recovery](../../infrastructure/README.md).
 
 ## Remaining human gates (not worker-executable)
 
@@ -203,7 +203,7 @@ apply live webhook URL changes (dry-run only), or invent Stripe keys.
 
 ## Related
 
-- [Hosted Fly cutover (H01)](hosted-fly.md)
+- [Alchemy deployment and recovery](../../infrastructure/README.md)
 - [Enzo live blockers](enzo-live-actions.md)
 - [WhatsApp Meta activation (O02)](whatsapp-meta-activation.md)
 - [Credential rotation (F01 / O01)](credential-rotation.md)

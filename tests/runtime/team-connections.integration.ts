@@ -78,20 +78,9 @@ test.each([true, "true"])(
   "an explicit verified Google share (%s) enables team tools without moving personal credentials",
   async (verification) => {
     const { actor, guest } = await googleFixture(verification);
-    expect(
-      !(
-        await Promise.try(async () => shareGoogleConnection(guest)).then(
-          (value) => ({
-            ok: true as const,
-            value,
-          }),
-          (error: unknown) => ({
-            ok: false as const,
-            error,
-          })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => shareGoogleConnection(guest))
+    ).rejects.toBeInstanceOf(Error);
     await shareGoogleConnection(actor);
     expect((await readWorkspaceCapabilities(guest)).enabled).toContain(
       "google"
@@ -110,35 +99,13 @@ test.each([true, "true"])(
     await query(
       sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
     );
-    expect(
-      !(
-        await Promise.try(async () => getWorkspaceGoogleToken(guest)).then(
-          (value) => ({
-            ok: true as const,
-            value,
-          }),
-          (error: unknown) => ({
-            ok: false as const,
-            error,
-          })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => getWorkspaceGoogleToken(guest))
+    ).rejects.toBeInstanceOf(Error);
     await disconnectWorkspaceGoogle(actor);
-    expect(
-      !(
-        await Promise.try(async () => getWorkspaceGoogleToken(actor)).then(
-          (value) => ({
-            ok: true as const,
-            value,
-          }),
-          (error: unknown) => ({
-            ok: false as const,
-            error,
-          })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => getWorkspaceGoogleToken(actor))
+    ).rejects.toBeInstanceOf(Error);
     expect(
       await query(
         sql`SELECT id FROM account WHERE ('better-auth:' || "userId") = ${actor.userId}`
@@ -150,20 +117,9 @@ test.each([false, "false", "TRUE", "1", 1, null, ""])(
   "an unverified wire value (%s) cannot authorize sharing Google",
   async (verification) => {
     const { actor } = await googleFixture(verification);
-    expect(
-      !(
-        await Promise.try(async () => shareGoogleConnection(actor)).then(
-          (value) => ({
-            ok: true as const,
-            value,
-          }),
-          (error: unknown) => ({
-            ok: false as const,
-            error,
-          })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => shareGoogleConnection(actor))
+    ).rejects.toBeInstanceOf(Error);
     expect(
       await query(
         sql`SELECT workspace_id FROM workspace_connections WHERE workspace_id = ${actor.workspaceId}`
@@ -173,20 +129,9 @@ test.each([false, "false", "TRUE", "1", 1, null, ""])(
 );
 test("a verified token issued to another OAuth client cannot authorize team sharing", async () => {
   const { actor } = await googleFixture(true, "another-client");
-  expect(
-    !(
-      await Promise.try(async () => shareGoogleConnection(actor)).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => shareGoogleConnection(actor))
+  ).rejects.toBeInstanceOf(Error);
   expect(
     await query(
       sql`SELECT workspace_id FROM workspace_connections WHERE workspace_id = ${actor.workspaceId}`
@@ -203,20 +148,9 @@ test("an unverified provider identity cannot be published as a team connection",
     expiry_date: Date.now() + 3600_000,
     scopes: [],
   });
-  expect(
-    !(
-      await Promise.try(async () => shareGoogleConnection(actor)).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => shareGoogleConnection(actor))
+  ).rejects.toBeInstanceOf(Error);
   expect(
     await query(
       sql`SELECT workspace_id FROM workspace_connections WHERE workspace_id = ${actor.workspaceId}`
@@ -256,20 +190,9 @@ test("disconnect during token refresh cannot resurrect the shared credential", a
       res: null,
     };
   });
-  expect(
-    !(
-      await Promise.try(async () => getWorkspaceGoogleToken(actor)).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => getWorkspaceGoogleToken(actor))
+  ).rejects.toBeInstanceOf(Error);
   expect(
     await query(
       sql`SELECT workspace_id FROM workspace_connections WHERE workspace_id = ${actor.workspaceId}`

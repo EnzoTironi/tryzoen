@@ -113,19 +113,11 @@ test("deleted attachments cannot be redownloaded by intake, and a revoked source
     identityId: fixture.owner.id,
     artifactId: fixture.file.artifactId,
   });
-  const deleted = await Promise.try(async () =>
-    loadChannelContent(fixture.owner, fixture.payload, fixture.receipt.id)
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!deleted.ok).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      loadChannelContent(fixture.owner, fixture.payload, fixture.receipt.id)
+    )
+  ).rejects.toBeInstanceOf(Error);
   const rows = await query(
     sql`SELECT content, derived_text FROM private_artifact WHERE id = ${fixture.file.artifactId}`
   );
@@ -136,17 +128,9 @@ test("deleted attachments cannot be redownloaded by intake, and a revoked source
   await query(
     sql`UPDATE channel_identity SET revoked_at = clock_timestamp() WHERE id = ${fixture.owner.id}`
   );
-  const revoked = await Promise.try(async () =>
-    loadChannelContent(fixture.owner, fixture.payload, fixture.receipt.id)
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!revoked.ok).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      loadChannelContent(fixture.owner, fixture.payload, fixture.receipt.id)
+    )
+  ).rejects.toBeInstanceOf(Error);
 });

@@ -1,7 +1,6 @@
 import { reviewedCreatorVersion } from "../helpers/creator-release";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { query } from "@db/queries";
-import { getInstallationSecrets } from "@db/services/installation-secrets";
 import { sql } from "drizzle-orm";
 import { expect, test } from "vitest";
 import { workspaceFixture } from "./workspace-fixture";
@@ -23,12 +22,6 @@ import {
   readCreatorRelease,
 } from "../../server/creators/releases";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
-import {
-  AccountArchiveMissing,
-  readAccountArchive,
-  downloadAccountArchive,
-} from "../../server/accounts/archives";
-import { AccountControlError } from "../../server/accounts/controls";
 
 test("an approval freezes selected teaching and reviewed evaluations, survives edits and retries without publishing", async () => {
   await using workspace = await workspaceFixture();
@@ -187,62 +180,6 @@ test("stale review references are rejected and simultaneous response-loss retrie
   await expect(
     approveCreatorRelease(workspace.actor, { ...current, id: randomUUID() })
   ).rejects.toThrow("latest run");
-});
-
-test("approved versions remain individually exportable only through the authorized former-account archive", async () => {
-  await using workspace = await workspaceFixture();
-  const source = await reviewedCreatorVersion(workspace.personal);
-  const release = await approveCreatorRelease(workspace.personal, source.input);
-  const foreign = await reviewedCreatorVersion(workspace.guestPersonal);
-  const foreignRelease = await approveCreatorRelease(
-    workspace.guestPersonal,
-    foreign.input
-  );
-  const archiveId = randomUUID();
-  const { betterAuthSecret } = await getInstallationSecrets();
-  const signature = createHmac("sha256", betterAuthSecret)
-    .update(workspace.guest.authSessionId)
-    .digest("base64");
-  const headers = new Headers({
-    cookie: `better-auth.session_token=${encodeURIComponent(`${workspace.guest.authSessionId}.${signature}`)}`,
-  });
-  await query(sql`INSERT INTO account_archive (id, source_user_id, target_user_id, workspace_id, challenge_id)
-    VALUES (${archiveId}, ${workspace.personal.userId.slice("better-auth:".length)}, ${workspace.guest.userId.slice("better-auth:".length)}, ${workspace.personal.workspaceId}, ${randomUUID()})`);
-  try {
-    expect(
-      (await readAccountArchive(headers, archiveId)).creatorReleases.map(
-        (item) => item.id
-      )
-    ).toEqual([release.id]);
-    const response = await downloadAccountArchive(
-      headers,
-      archiveId,
-      "creator-release",
-      release.id
-    );
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.json()).toEqual({
-      format: "zoen-creator-release",
-      version: 1,
-      release,
-    });
-    await expect(
-      downloadAccountArchive(
-        headers,
-        archiveId,
-        "creator-release",
-        foreignRelease.id
-      )
-    ).rejects.toBeInstanceOf(AccountArchiveMissing);
-    await query(
-      sql`DELETE FROM public.session WHERE id = ${workspace.guest.authSessionId}`
-    );
-    await expect(
-      downloadAccountArchive(headers, archiveId, "creator-release", release.id)
-    ).rejects.toBeInstanceOf(AccountControlError);
-  } finally {
-    await query(sql`DELETE FROM account_archive WHERE id = ${archiveId}`);
-  }
 });
 
 test("approval storage is bounded and another owner's release identity cannot be overwritten", async () => {

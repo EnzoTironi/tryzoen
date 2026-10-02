@@ -35,7 +35,7 @@ send unsolicited messages to demonstrate a finding.
 - Preserve backups, recovery drills, release checks and dependency audits.
 
 These are required boundaries, not a claim of immunity from vulnerabilities.
-[Launch evidence](docs/decisions/zoen-launch-validation.md) records verification
+[Launch evidence](https://github.com/EnzoTironi/tryzoen/blob/04cf0dfe4f0ce7de4e0652bc5ebacfbfcb696839/docs/decisions/zoen-launch-validation.md) records verification
 and its limits. The
 [release map](docs/decisions/adr-customer-platform-release.md) keeps installed,
 fixture-tested and missing live proof separate. [PRIVACY.md](PRIVACY.md)

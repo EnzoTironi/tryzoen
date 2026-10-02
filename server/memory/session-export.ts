@@ -20,10 +20,6 @@ import {
 import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
 import { memoryNamespace, requireMemoryNamespaceAvailable } from "./namespace";
 import { operationSignal, withDeadline, withSignal } from "../operations/async";
-import {
-  archivedPrivateNamespace,
-  AccountMemoryArchiveUnavailable,
-} from "../accounts/archive-entitlement";
 
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -449,56 +445,6 @@ export async function backupCompleteSessionSources(
       if ((await archiveNamespace(actor, sessionId)) !== namespace)
         throw new WorkspaceAccessDenied();
     });
-  });
-}
-
-async function requireArchivedSession(
-  owner: Awaited<ReturnType<typeof archivedPrivateNamespace>>,
-  sessionId: string
-) {
-  if (!owner.namespace) throw new AccountMemoryArchiveUnavailable();
-  const [session] = await query(sql`SELECT session_id FROM agent_sessions
-    WHERE session_id=${sessionId} AND workspace_id=${owner.scope.workspaceId}
-      AND created_by_user_id=${owner.scope.userId} FOR SHARE`);
-  if (!session) throw new WorkspaceAccessDenied();
-}
-
-/** A target's archive entitlement is not an ordinary source actor credential. */
-export async function verifyArchivedSessionClaimSource(
-  headers: Headers,
-  archiveId: string,
-  raw: z.infer<typeof LearnedClaimSessionSourceSchema>
-) {
-  const citation = LearnedClaimSessionSourceSchema.parse(raw);
-  return transaction(async () => {
-    const owner = await archivedPrivateNamespace(headers, archiveId);
-    if (!owner.namespace || !env.ZOEN_SESSION_ARCHIVE_DIR)
-      throw new AccountMemoryArchiveUnavailable();
-    await requireArchivedSession(owner, citation.sessionId);
-    const directory = await sessionDirectory(
-      env.ZOEN_SESSION_ARCHIVE_DIR,
-      owner.namespace.id,
-      citation.sessionId
-    );
-    const file = await deliveredSource(
-      owner.namespace.id,
-      citation.sessionId,
-      join(directory, `${hash(citation.eventId)}.jsonl`)
-    );
-    return file !== null && sessionClaimMatches(file, citation);
-  });
-}
-
-export async function backupArchivedCompleteSessionSources(
-  headers: Headers,
-  archiveId: string
-) {
-  return transaction(async () => {
-    const owner = await archivedPrivateNamespace(headers, archiveId);
-    if (!owner.namespace) throw new AccountMemoryArchiveUnavailable();
-    return captureCompleteJournal(owner.namespace.id, (sessionId) =>
-      requireArchivedSession(owner, sessionId)
-    );
   });
 }
 

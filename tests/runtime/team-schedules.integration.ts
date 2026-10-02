@@ -31,54 +31,39 @@ test("team schedules are visible together, editable by owners/admins, and isolat
   expect(page.reminders.find((job) => job.id === ownerJob)?.mayManage).toBe(
     false
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        setReminderStatus(guest, {
-          id: ownerJob,
-          revision: 0,
-          status: "paused",
-        })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        setReminderStatus(actor, {
-          id: privateJob,
-          revision: 0,
-          status: "paused",
-        })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      setReminderStatus(guest, {
+        id: ownerJob,
+        revision: 0,
+        status: "paused",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () =>
+      setReminderStatus(actor, {
+        id: privateJob,
+        revision: 0,
+        status: "paused",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const paused = await setReminderStatus(actor, {
     id: memberJob,
     revision: 0,
     status: "paused",
   });
   expect(paused.status).toBe("paused");
-  expect(
-    !(
-      await Promise.try(async () =>
-        setReminderStatus(guest, {
-          id: memberJob,
-          revision: 0,
-          status: "active",
-        })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      setReminderStatus(guest, {
+        id: memberJob,
+        revision: 0,
+        status: "active",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   expect(
     (
       await setReminderStatus(guest, {
@@ -92,20 +77,15 @@ test("team schedules are visible together, editable by owners/admins, and isolat
     sql`DELETE FROM organization_memberships WHERE user_id = ${guest.userId}`
   );
   expect((await listReminders(guest)).reminders).toEqual([]);
-  expect(
-    !(
-      await Promise.try(async () =>
-        setReminderStatus(guest, {
-          id: memberJob,
-          revision: 2,
-          status: "paused",
-        })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      setReminderStatus(guest, {
+        id: memberJob,
+        revision: 2,
+        status: "paused",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
 });
 
 test("a materialized one-shot job runs with its live lease, while pause, lease expiry and removal deny tools", async () => {
@@ -129,40 +109,25 @@ test("a materialized one-shot job runs with its live lease, while pause, lease e
   await query(
     sql`UPDATE scheduled_agent_jobs SET status = 'paused' WHERE id = ${id}`
   );
-  expect(
-    !(
-      await Promise.try(async () => requireWorkspaceAccess(worker)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => requireWorkspaceAccess(worker))
+  ).rejects.toBeInstanceOf(Error);
   await query(
     sql`UPDATE scheduled_agent_jobs SET status = 'completed' WHERE id = ${id}`
   );
   await query(
     sql`UPDATE scheduled_agent_runs SET lease_expires_at = now() - interval '1 second' WHERE id = ${run}`
   );
-  expect(
-    !(
-      await Promise.try(async () => requireWorkspaceAccess(worker)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => requireWorkspaceAccess(worker))
+  ).rejects.toBeInstanceOf(Error);
   await query(
     sql`UPDATE scheduled_agent_runs SET lease_expires_at = now() + interval '5 minutes' WHERE id = ${run}`
   );
   await query(
     sql`DELETE FROM organization_memberships WHERE user_id = ${actor.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => requireWorkspaceAccess(worker)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => requireWorkspaceAccess(worker))
+  ).rejects.toBeInstanceOf(Error);
 });

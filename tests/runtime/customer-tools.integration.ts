@@ -102,25 +102,16 @@ test("TL: publish, discover, compose and revoke a versioned personal tool and it
     expectedRevision: skillPublished.revision,
     operationId: randomUUID(),
   });
-  const cachedCall = await Promise.try(async () => {
-    // SAFETY: this input matches objectSchema; exercise the retained descriptor after revoke.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema or pinned SDK contract establishes this boundary.
-    return await cached.execute({ text: "Denied" } as never, execution);
-  }).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!cachedCall.ok).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        callNativeTool(execution, id, { text: "Denied" })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => {
+      // SAFETY: this input matches objectSchema; exercise the retained descriptor after revoke.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema or pinned SDK contract establishes this boundary.
+      return await cached.execute({ text: "Denied" } as never, execution);
+    })
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () => callNativeTool(execution, id, { text: "Denied" }))
+  ).rejects.toBeInstanceOf(Error);
   expect(
     JSON.stringify(await readNativeSkill(execution, "skills/inbox.md"))
   ).toContain('"execution":"blocked"');
@@ -145,29 +136,25 @@ test("TL: team member proposes but cannot bypass validated publication", async (
     path: "proposals/tools/meeting.json",
     content: manifest(),
   });
-  const denied = await Promise.try(async () =>
-    publishCustomerTool(guest, {
-      slug: "meeting",
-      operationId: randomUUID(),
-      expectedRevision: draft.revision,
-    })
-  ).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!denied.ok && denied.error).toBeInstanceOf(WorkspaceAccessDenied);
-  const bypass = await Promise.try(async () =>
-    repository.write(actor, {
-      operationId: randomUUID(),
-      expectedRevision: draft.revision,
-      path: "tools/meeting.json",
-      content: manifest(),
-    })
-  ).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!bypass.ok && bypass.error).toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    Promise.try(async () =>
+      publishCustomerTool(guest, {
+        slug: "meeting",
+        operationId: randomUUID(),
+        expectedRevision: draft.revision,
+      })
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    Promise.try(async () =>
+      repository.write(actor, {
+        operationId: randomUUID(),
+        expectedRevision: draft.revision,
+        path: "tools/meeting.json",
+        content: manifest(),
+      })
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   await publishCustomerTool(actor, {
     slug: "meeting",
     operationId: randomUUID(),
@@ -195,16 +182,9 @@ test.each([
   async (code) => {
     await using workspace = await workspaceFixture();
     const { personal } = workspace;
-    expect(
-      !(
-        await Promise.try(async () =>
-          validateCustomerTool(personal, manifest(code))
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => validateCustomerTool(personal, manifest(code)))
+    ).rejects.toBeInstanceOf(Error);
   }
 );
 
@@ -231,20 +211,15 @@ test("TL: a bound group can propose and use a published tool, and removal revoke
     path: "proposals/tools/summary.json",
     content: manifest(),
   });
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishCustomerTool(group, {
-          slug: "summary",
-          operationId: randomUUID(),
-          expectedRevision: draft.revision,
-        })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      publishCustomerTool(group, {
+        slug: "summary",
+        operationId: randomUUID(),
+        expectedRevision: draft.revision,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   await publishCustomerTool(actor, {
     slug: "summary",
     operationId: randomUUID(),
@@ -276,14 +251,9 @@ test("TL: a bound group can propose and use a published tool, and removal revoke
   await query(
     sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${guest.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        callNativeTool(execution, id, { text: "Forbidden" })
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      callNativeTool(execution, id, { text: "Forbidden" })
+    )
+  ).rejects.toBeInstanceOf(Error);
 });

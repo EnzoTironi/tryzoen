@@ -84,26 +84,15 @@ test("ontology actions retain sources and history, replay once, and reject forei
     graph,
   });
   expect((await readOntology(guest)).graph.links).toEqual(graph.links);
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishOntology(guest, {
-          operationId: randomUUID(),
-          expectedRevision: saved.revision,
-          graph,
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      publishOntology(guest, {
+        operationId: randomUUID(),
+        expectedRevision: saved.revision,
+        graph,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const action = {
     operationId: randomUUID(),
     expectedRevision: saved.revision,
@@ -180,26 +169,15 @@ test("ontology actions retain sources and history, replay once, and reject forei
     sql`SELECT count(*)::int AS n FROM workspace_revision WHERE workspace_id = ${actor.workspaceId} AND operation_id = ${action.operationId}`
   );
   expect(history[0]?.n).toBe(1);
-  expect(
-    !(
-      await Promise.try(async () =>
-        applyOntologyAction(actor, {
-          ...action,
-          operationId: randomUUID(),
-          value: "overwritten",
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      applyOntologyAction(actor, {
+        ...action,
+        operationId: randomUUID(),
+        value: "overwritten",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const firstEntity = graph.entities[0];
   if (!firstEntity) throw new Error("Missing fixture entity");
   const foreign = {
@@ -218,79 +196,46 @@ test("ontology actions retain sources and history, replay once, and reject forei
       ...graph.entities.slice(1),
     ],
   };
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishOntology(actor, {
-          graph: foreign,
-          operationId: randomUUID(),
-          expectedRevision: changed.revision,
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishOntology(actor, {
-          graph: {
-            ...graph,
-            links: [
-              {
-                type: "part_of",
-                from: "project_one",
-                to: "task_one",
-                sources: [],
-                validTime: null,
-              },
-            ],
-          },
-          operationId: randomUUID(),
-          expectedRevision: changed.revision,
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      publishOntology(actor, {
+        graph: foreign,
+        operationId: randomUUID(),
+        expectedRevision: changed.revision,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () =>
+      publishOntology(actor, {
+        graph: {
+          ...graph,
+          links: [
+            {
+              type: "part_of",
+              from: "project_one",
+              to: "task_one",
+              sources: [],
+              validTime: null,
+            },
+          ],
+        },
+        operationId: randomUUID(),
+        expectedRevision: changed.revision,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   await query(
     sql`DELETE FROM organization_memberships WHERE user_id = ${actor.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        applyOntologyAction(actor, {
-          ...action,
-          expectedRevision: changed.revision,
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      applyOntologyAction(actor, {
+        ...action,
+        expectedRevision: changed.revision,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
 });
 
 test("property and relationship evidence validates exact scoped sources, supports two time coordinates and detects source edits", async () => {

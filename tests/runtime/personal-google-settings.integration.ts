@@ -106,26 +106,16 @@ test("personal Google activation rejects team targets, substituted sessions and 
     actor,
     { ...personal, authSessionId: guestPersonal.authSessionId },
   ]) {
-    expect(
-      !(
-        await Promise.try(async () => activatePersonalGoogle(invalid)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => activatePersonalGoogle(invalid))
+    ).rejects.toBeInstanceOf(Error);
   }
   await query(
     sql`DELETE FROM public.session WHERE id = ${personal.authSessionId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => activatePersonalGoogle(personal)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => activatePersonalGoogle(personal))
+  ).rejects.toBeInstanceOf(Error);
   expect((await readWorkspaceCapabilities(guestPersonal)).enabled).toEqual([
     "files",
     "memory",

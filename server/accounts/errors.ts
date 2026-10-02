@@ -7,9 +7,7 @@ export class ChannelAccountError extends Error {
     | "account_conflict"
     | "session_invalid"
     | "last_access"
-    | "sender_unlinked"
-    | "archive_requires_review"
-    | "account_busy";
+    | "sender_unlinked";
   constructor(input: {
     readonly reason:
       | "invalid_input"
@@ -18,9 +16,7 @@ export class ChannelAccountError extends Error {
       | "account_conflict"
       | "session_invalid"
       | "last_access"
-      | "sender_unlinked"
-      | "archive_requires_review"
-      | "account_busy";
+      | "sender_unlinked";
   }) {
     super("ChannelAccountError");
     this.name = "ChannelAccountError";

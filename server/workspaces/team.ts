@@ -72,8 +72,9 @@ export const inviteWorkspaceMember = async function (
     // Exact handles can receive invites. Directory search is separately opt-in.
     const targets = await query<{
       id: string;
-    }>(sql`SELECT user_id AS id FROM user_directory WHERE username = ${handle} AND user_id IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM account_archive WHERE source_user_id = user_directory.user_id)`);
+    }>(
+      sql`SELECT user_id AS id FROM user_directory WHERE username = ${handle} AND user_id IS NOT NULL`
+    );
     const target = targets[0];
     if (!target || `better-auth:${target.id}` === actor.userId)
       throw new WorkspaceAccessDenied();

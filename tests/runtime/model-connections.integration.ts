@@ -49,53 +49,27 @@ test("device authorization is bound to session and workspace, with encrypted cus
   vi.spyOn(oauth, "pollModelOAuth").mockReturnValue(
     Promise.resolve({ status: "connected", tokens })
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        startModelConnection(guest, "chatgpt")
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => startModelConnection(guest, "chatgpt"))
+  ).rejects.toBeInstanceOf(Error);
   const challenge = await startModelConnection(actor, "chatgpt");
-  expect(
-    !(
-      await Promise.try(async () =>
-        finishModelConnection(personal, challenge.id)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
+  await expect(
+    Promise.try(async () => finishModelConnection(personal, challenge.id))
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () =>
+      finishModelConnection(
+        { ...actor, authSessionId: "foreign-session" },
+        challenge.id
       )
-    ).ok
-  ).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        finishModelConnection(
-          { ...actor, authSessionId: "foreign-session" },
-          challenge.id
-        )
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+    )
+  ).rejects.toBeInstanceOf(Error);
   expect((await finishModelConnection(actor, challenge.id)).status).toBe(
     "connected"
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        finishModelConnection(actor, challenge.id)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => finishModelConnection(actor, challenge.id))
+  ).rejects.toBeInstanceOf(Error);
   expect((await modelCredentials(guest))?.tokens.accessToken).toBe(
     "synthetic-access"
   );
@@ -107,29 +81,15 @@ test("device authorization is bound to session and workspace, with encrypted cus
     sql`SELECT credentials FROM model_connections WHERE workspace_id = ${actor.workspaceId}`
   );
   expect(JSON.stringify(raw)).not.toContain("synthetic-refresh");
-  expect(
-    !(
-      await Promise.try(async () =>
-        selectWorkspaceModel(actor, "grok-4.6")
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => selectWorkspaceModel(actor, "grok-4.6"))
+  ).rejects.toBeInstanceOf(Error);
   const before = await modelCredentials(actor);
   await disconnectModel(actor);
   expect(await modelCredentials(actor)).toBeNull();
-  expect(
-    !(
-      await Promise.try(async () =>
-        modelCredentials(actor, before?.revision)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => modelCredentials(actor, before?.revision))
+  ).rejects.toBeInstanceOf(Error);
 });
 
 test("parallel workers refresh a rotating credential once; removed members lose inference access", async () => {
@@ -172,12 +132,7 @@ test("parallel workers refresh a rotating credential once; removed members lose 
   await query(
     sql`DELETE FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${guest.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => modelCredentials(guest)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => modelCredentials(guest))
+  ).rejects.toBeInstanceOf(Error);
 });

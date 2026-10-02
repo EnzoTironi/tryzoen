@@ -11,7 +11,6 @@ import {
   SlidersHorizontalIcon,
   UserRoundIcon,
   MonitorIcon,
-  ArchiveIcon,
   ActivityIcon,
 } from "lucide-react";
 import { getAuthSession } from "@db/services/auth/session";
@@ -50,7 +49,6 @@ const accountLinks = [
   },
   { href: "/space/memory", label: "Memória", icon: BrainIcon },
   { href: "/space/profile", label: "Seu username", icon: UserRoundIcon },
-  { href: "/account/archives", label: "Contas anteriores", icon: ArchiveIcon },
   {
     href: "/account?section=preferences",
     label: "Preferências",

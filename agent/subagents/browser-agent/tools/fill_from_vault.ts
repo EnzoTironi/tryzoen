@@ -1,18 +1,18 @@
-import { withSignal } from "../../operations/async";
-import { WorkspaceAccessDenied } from "../../workspaces/access";
+import { withSignal } from "../../../../server/operations/async";
+import { WorkspaceAccessDenied } from "../../../../server/workspaces/access";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { requireOwnedBrowserSession } from "@agent/subagents/browser-agent/lib/owned-browser";
-import { requireWorkerScope } from "@agent/subagents/browser-agent/lib/access";
+import { requireOwnedBrowserSession } from "../lib/owned-browser";
+import { requireWorkerScope } from "../lib/access";
 import { readVaultItem } from "@db/services/vault";
-import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
+import { getKernel } from "../lib/kernel";
 import {
   currentKernelPageOrigin,
   fillWithKernelNativeAutofill,
   nativeAutofillTokens,
-} from "../../../agent/subagents/browser-agent/lib/autofill/native";
-import { claimsFromVaultSecret } from "../../../agent/subagents/browser-agent/lib/autofill/provider";
-import { releaseDelegatedSecret } from "../../workspaces/vault";
+} from "../lib/autofill/native";
+import { claimsFromVaultSecret } from "../lib/autofill/provider";
+import { releaseDelegatedSecret } from "../../../../server/workspaces/vault";
 const inputSchema = z.object({
   browserSessionId: z.string().trim().min(1).max(500),
   candidateId: z.string().trim().min(1).max(500),

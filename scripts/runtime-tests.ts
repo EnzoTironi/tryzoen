@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -47,24 +49,33 @@ The reset command deletes only the zoen-runtime-tests Compose project's data.`);
 } else if (command === "down") {
   run("docker", [...compose, "down"]);
 } else if (command === "run") {
-  run(
-    "pnpm",
-    ["--filter", "@zoen/companion-ui", "build:ui"],
-    inheritedEnvironment
-  );
-  run("pnpm", ["build:semantic"], inheritedEnvironment);
-  run(
-    process.execPath,
-    [
-      "--env-file=tests/runtime/.env.example",
-      "node_modules/vitest/vitest.mjs",
-      "run",
-      "--config",
-      "vitest.runtime.config.ts",
-      ...process.argv.slice(3),
-    ],
-    inheritedEnvironment
-  );
+  const archiveRoot = mkdtempSync(join(tmpdir(), "zoen-k3-runtime-"));
+  const runtimeEnvironment = {
+    ...inheritedEnvironment,
+    ZOEN_SESSION_ARCHIVE_DIR: archiveRoot,
+  };
+  try {
+    run(
+      "pnpm",
+      ["--filter", "@zoen/companion-ui", "build:ui"],
+      runtimeEnvironment
+    );
+    run("pnpm", ["build:semantic"], runtimeEnvironment);
+    run(
+      process.execPath,
+      [
+        "--env-file=tests/runtime/.env.example",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        "vitest.runtime.config.ts",
+        ...process.argv.slice(3),
+      ],
+      runtimeEnvironment
+    );
+  } finally {
+    rmSync(archiveRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
 } else if (command === "up" || command === "reset") {
   if (command === "reset") run("docker", [...compose, "down", "--volumes"]);
   run("pnpm", ["--filter", "@zoen/companion-ui", "build:ui"]);

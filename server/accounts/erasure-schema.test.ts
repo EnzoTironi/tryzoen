@@ -105,21 +105,6 @@ it("requires an existing binding while retaining no account or identity foreign 
   expect(keys.rows).toEqual([{ target: "workspace_group_bindings" }]);
 });
 
-it("retains future-dated departures until exact acknowledgement", async () => {
-  await receipt();
-  await database.query(
-    "UPDATE matrix_erasure_departures SET native_retry_at=now()+interval '1 day'"
-  );
-  expect(
-    (
-      await database.query(
-        "SELECT 1 FROM matrix_erasure_departures WHERE binding_id=$1",
-        [bindingId]
-      )
-    ).rows
-  ).toHaveLength(1);
-});
-
 it("removes room receipts only when their owning binding is removed", async () => {
   await receipt();
   await database.query("DELETE FROM workspace_group_bindings WHERE id=$1", [

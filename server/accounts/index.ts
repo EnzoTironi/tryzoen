@@ -9,7 +9,6 @@ import {
 } from "../../shared/identity/channel-auth.ts";
 import { accessScopeForUser } from "../../shared/identity/access-scope.ts";
 import { ChannelAccountError } from "./errors";
-import { archiveChannelAccount } from "./archive-transfer";
 export { ChannelAccountError } from "./errors";
 const Identifier = z
   .string()
@@ -78,7 +77,6 @@ const ChallengeRow = z.object({
   channel: channelProviderSchema,
   installationId: Identifier,
   targetUserId: z.nullable(Identifier),
-  sourceUserId: z.nullable(Identifier),
   requestingSessionId: z.nullable(Identifier),
   identityId: z.nullable(Uuid),
   confirmedSenderId: z.nullable(Identifier),
@@ -324,7 +322,7 @@ const confirmChallenge = async function (
     const rows = await query<
       z.output<typeof ChallengeRow>
     >(sql`SELECT id, purpose, channel, installation_id AS "installationId",
-          target_user_id AS "targetUserId", source_user_id AS "sourceUserId", requesting_session_id AS "requestingSessionId", identity_id AS "identityId", confirmed_sender_id AS "confirmedSenderId"
+          target_user_id AS "targetUserId", requesting_session_id AS "requestingSessionId", identity_id AS "identityId", confirmed_sender_id AS "confirmedSenderId"
           FROM public.channel_auth_challenge WHERE token_hash = ${hash(request.token)}
           AND intended_identity_id IS NULL
           AND consumed_at IS NULL AND cancelled_at IS NULL
@@ -401,7 +399,7 @@ const consumeChallenge = async function (
     const rows = await query<
       z.output<typeof ChallengeRow>
     >(sql`SELECT id, purpose, channel, installation_id AS "installationId",
-          target_user_id AS "targetUserId", source_user_id AS "sourceUserId", requesting_session_id AS "requestingSessionId", identity_id AS "identityId", confirmed_sender_id AS "confirmedSenderId"
+          target_user_id AS "targetUserId", requesting_session_id AS "requestingSessionId", identity_id AS "identityId", confirmed_sender_id AS "confirmedSenderId"
           FROM public.channel_auth_challenge WHERE id = ${request.challengeId}
           AND browser_secret_hash = ${hash(request.browserSecret)} AND confirmed_at IS NOT NULL
           AND consumed_at IS NULL AND cancelled_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE`);
@@ -426,13 +424,6 @@ const consumeChallenge = async function (
             challenge.requestingSessionId,
             true
           );
-          if (challenge.sourceUserId)
-            await archiveChannelAccount({
-              sourceUserId: challenge.sourceUserId,
-              targetUserId: challenge.targetUserId,
-              challengeId: challenge.id,
-              sender,
-            });
           return await linkIdentity(sender, challenge.targetUserId);
         }
         case "login":
@@ -443,7 +434,7 @@ const consumeChallenge = async function (
         }
       }
     })();
-    await query(sql`UPDATE public.channel_auth_challenge SET identity_id = CASE WHEN source_user_id IS NULL THEN ${identity.id} ELSE intended_identity_id END,
+    await query(sql`UPDATE public.channel_auth_challenge SET identity_id = ${identity.id},
                 consumed_at = clock_timestamp() WHERE id = ${challenge.id}`);
     const principalId = `better-auth:${identity.userId}`;
     const scope = accessScopeForUser(principalId);

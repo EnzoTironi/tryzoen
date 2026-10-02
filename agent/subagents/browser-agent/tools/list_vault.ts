@@ -1,8 +1,8 @@
-import { withSignal } from "../../operations/async";
+import { withSignal } from "../../../../server/operations/async";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { requireWorkerScope } from "@agent/subagents/browser-agent/lib/access";
-import { listDelegatedVaultItems } from "../../workspaces/vault";
+import { requireWorkerScope } from "../lib/access";
+import { listDelegatedVaultItems } from "../../../../server/workspaces/vault";
 
 export default defineTool({
   description:

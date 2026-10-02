@@ -107,9 +107,6 @@ export const channelAuthChallenges = pgTable(
     targetUserId: text("target_user_id").references(() => user.id, {
       onDelete: "cascade",
     }),
-    sourceUserId: text("source_user_id").references(() => user.id, {
-      onDelete: "restrict",
-    }),
     requestingSessionId: text("requesting_session_id").references(
       () => session.id,
       { onDelete: "cascade" }
@@ -158,10 +155,6 @@ export const channelAuthChallenges = pgTable(
         channelIdentities.installationId,
       ],
     }).onDelete("cascade"),
-    check(
-      "channel_auth_challenge_archive_check",
-      sql`${table.sourceUserId} IS NULL OR (${table.purpose} = 'link' AND ${table.intendedIdentityId} IS NOT NULL AND ${table.browserBoundAt} IS NOT NULL AND ${table.sourceUserId} <> ${table.targetUserId})`
-    ),
     check(
       "channel_auth_challenge_channel_check",
       sql`${table.channel} IN ('telegram', 'kapso') AND length(trim(${table.installationId})) > 0`

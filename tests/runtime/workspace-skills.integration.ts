@@ -118,49 +118,29 @@ test("TL03: a member's proposal cannot execute until an admin publishes it", asy
       "Read the agenda."
     ),
   });
-  const skillWrite = await Promise.try(async () =>
-    repository.write(guest, {
-      operationId: randomUUID(),
-      expectedRevision: drafted.revision,
-      path: "skills/meeting.md",
-      content: procedure(
-        "Prepare the meeting",
-        ["workspace_files_list"],
-        "Read the agenda."
-      ),
-    })
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!skillWrite.ok && skillWrite.error).toBeInstanceOf(
-    WorkspaceAccessDenied
-  );
-  const memberPublish = await Promise.try(async () =>
-    publishSkillProposal(guest, {
-      operationId: randomUUID(),
-      expectedRevision: drafted.revision,
-      proposal: "proposals/skills/meeting.md",
-    })
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!memberPublish.ok && memberPublish.error).toBeInstanceOf(
-    WorkspaceAccessDenied
-  );
+  await expect(
+    Promise.try(async () =>
+      repository.write(guest, {
+        operationId: randomUUID(),
+        expectedRevision: drafted.revision,
+        path: "skills/meeting.md",
+        content: procedure(
+          "Prepare the meeting",
+          ["workspace_files_list"],
+          "Read the agenda."
+        ),
+      })
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    Promise.try(async () =>
+      publishSkillProposal(guest, {
+        operationId: randomUUID(),
+        expectedRevision: drafted.revision,
+        proposal: "proposals/skills/meeting.md",
+      })
+    )
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   expect(await readPublishedSkills(guest)).toEqual([]);
   await expect(
     readNativeSkill(workspaceExecutionFor(guest), "proposals/skills/meeting.md")
@@ -216,51 +196,29 @@ test("TL04: a bound group participant proposes without gaining manage", async ()
       "Read shared notes."
     ),
   });
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishSkillProposal(group, {
-          operationId: randomUUID(),
-          expectedRevision: drafted.revision,
-          proposal: "proposals/skills/summary.md",
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        repository.write(group, {
-          operationId: randomUUID(),
-          expectedRevision: drafted.revision,
-          path: "skills/summary.md",
-          content: procedure(
-            "Summarize this group",
-            ["workspace_files_list"],
-            "Read shared notes."
-          ),
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      publishSkillProposal(group, {
+        operationId: randomUUID(),
+        expectedRevision: drafted.revision,
+        proposal: "proposals/skills/summary.md",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () =>
+      repository.write(group, {
+        operationId: randomUUID(),
+        expectedRevision: drafted.revision,
+        path: "skills/summary.md",
+        content: procedure(
+          "Summarize this group",
+          ["workspace_files_list"],
+          "Read shared notes."
+        ),
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const published = await publishSkillProposal(actor, {
     operationId: randomUUID(),
     expectedRevision: drafted.revision,
@@ -402,27 +360,16 @@ test("TL11 and TL13: a malicious skill cannot escalate, and missing tools block 
       n: number;
     }>(sql`SELECT count(*)::int AS n FROM workspace_agent_grants`)
   ).toEqual(grantsBefore);
-  expect(
-    !(
-      await Promise.try(async () =>
-        repository.write(guest, {
-          operationId: randomUUID(),
-          expectedRevision: drafted.revision,
-          path: "plugins/workspace.json",
-          content: '{"version":1,"enabled":["files","google"]}',
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      repository.write(guest, {
+        operationId: randomUUID(),
+        expectedRevision: drafted.revision,
+        path: "plugins/workspace.json",
+        content: '{"version":1,"enabled":["files","google"]}',
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const missingDraft = await repository.write(actor, {
     operationId: randomUUID(),
     expectedRevision: (await repository.read(actor)).revision,
@@ -442,27 +389,16 @@ test("TL11 and TL13: a malicious skill cannot escalate, and missing tools block 
   expect(JSON.stringify(blocked)).toContain('"execution":"blocked"');
   expect(JSON.stringify(blocked)).toContain("invented.tool");
   expect(JSON.stringify(blocked)).not.toContain("Call it.");
-  expect(
-    !(
-      await Promise.try(async () =>
-        repository.write(actor, {
-          operationId: randomUUID(),
-          expectedRevision: (await repository.read(actor)).revision,
-          path: "proposals/skills/bad.md",
-          content: "---\ndescription: leaked\n---\n# Bad\n",
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      repository.write(actor, {
+        operationId: randomUUID(),
+        expectedRevision: (await repository.read(actor)).revision,
+        path: "proposals/skills/bad.md",
+        content: "---\ndescription: leaked\n---\n# Bad\n",
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
 });
 test("review #115: retrying a successful publication returns the original receipt", async () => {
   await using workspace = await workspaceFixture();
