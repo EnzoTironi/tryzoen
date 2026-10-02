@@ -8,19 +8,20 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build:desktop": "tsc -p tsconfig.json",
+    "build:desktop": "pnpm --filter @zoen/companion-ui build:ui && tsc -p tsconfig.json && esbuild src/main.ts --bundle --platform=node --format=esm --external:electron --external:@t3-oss/env-core --external:zod --outfile=dist/main.js",
     "dev": "pnpm run build:desktop && electron .",
     "package": "pnpm run build:desktop && electron-builder --dir --publish never",
     "dist": "pnpm run build:desktop && electron-builder"
   },
   "dependencies": {
     "@t3-oss/env-core": "0.13.11",
-    "zod": "4.5.4",
-    "@zoen/companion-ui": "workspace:*"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "electron": "44.4.5",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "@zoen/companion-ui": "workspace:*",
+    "esbuild": "0.28.2"
   },
   "build": {
     "appId": "com.tryzoen.desktop",

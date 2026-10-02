@@ -1,9 +1,13 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "globalPassThroughEnv": ["GITHUB_STEP_SUMMARY"],
+  "globalPassThroughEnv": [
+    "GITHUB_STEP_SUMMARY"
+  ],
   "tasks": {
     "//#build:app": {
-      "dependsOn": ["@zoen/companion-ui#build:ui"],
+      "dependsOn": [
+        "@zoen/companion-ui#build:ui"
+      ],
       "env": [
         "BETTER_AUTH_*",
         "BLOB_*",
@@ -17,10 +21,18 @@
         "SECRET_ENCRYPTION_KEY",
         "VERCEL_*"
       ],
-      "outputs": [".next/**", "!.next/cache/**", ".output/**", "next-env.d.ts"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".output/**",
+        "next-env.d.ts"
+      ]
     },
     "//#build:vercel": {
-      "dependsOn": ["//#db:migrate", "@zoen/companion-ui#build:ui"],
+      "dependsOn": [
+        "//#db:migrate",
+        "@zoen/companion-ui#build:ui"
+      ],
       "env": [
         "BETTER_AUTH_*",
         "BLOB_*",
@@ -32,12 +44,21 @@
         "SECRET_ENCRYPTION_KEY",
         "VERCEL_*"
       ],
-      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "next-env.d.ts"
+      ]
     },
     "//#db:migrate": {
       "cache": false,
-      "env": ["DATABASE_URL_UNPOOLED"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+      "env": [
+        "DATABASE_URL_UNPOOLED"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ]
     },
     "//#dev:app": {
       "cache": false,
@@ -71,7 +92,9 @@
     },
     "//#lint:app": {
       "outputs": [],
-      "dependsOn": ["//#types:generate"]
+      "dependsOn": [
+        "//#types:generate"
+      ]
     },
     "//#start:app": {
       "cache": false,
@@ -95,26 +118,46 @@
       "persistent": true
     },
     "//#test:app": {
-      "dependsOn": ["@zoen/companion-ui#build:ui"],
+      "dependsOn": [
+        "@zoen/companion-ui#build:ui"
+      ],
       "outputs": []
     },
     "//#types:generate": {
-      "outputs": [".next/types/**", "next-env.d.ts"],
-      "dependsOn": ["@zoen/companion-ui#build:ui"]
+      "outputs": [
+        ".next/types/**",
+        "next-env.d.ts"
+      ],
+      "dependsOn": [
+        "@zoen/companion-ui#build:ui"
+      ]
     },
     "//#types:check:app": {
-      "dependsOn": ["//#types:generate"],
-      "outputs": ["*.tsbuildinfo"]
+      "dependsOn": [
+        "//#types:generate"
+      ],
+      "outputs": [
+        "*.tsbuildinfo"
+      ]
     },
     "build:ui": {
-      "outputs": ["dist/**"]
+      "outputs": [
+        "dist/**"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build:ui"],
+      "dependsOn": [
+        "^build:ui"
+      ],
       "outputs": []
     },
     "build:desktop": {
-      "outputs": ["dist/**"]
+      "outputs": [
+        "dist/**"
+      ],
+      "dependsOn": [
+        "^build:ui"
+      ]
     }
   }
 }

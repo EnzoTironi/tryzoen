@@ -336,19 +336,22 @@ importers:
       '@t3-oss/env-core':
         specifier: 0.13.11
         version: 0.13.11(typescript@7.0.2)(zod@4.5.4)
-      '@zoen/companion-ui':
-        specifier: workspace:*
-        version: link:../../packages/companion-ui
       zod:
         specifier: 4.5.4
         version: 4.5.4
     devDependencies:
+      '@zoen/companion-ui':
+        specifier: workspace:*
+        version: link:../../packages/companion-ui
       electron:
         specifier: 44.4.5
         version: 44.4.5(supports-color@8.1.1)
       electron-builder:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@8.1.1)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
 
   apps/mobile:
     dependencies:
