@@ -173,8 +173,9 @@ Run: node --import tsx scripts/session-archive-capacity.ts --help`);
       }>(sql`
         SELECT journal_event_count::float8 AS count, journal_high_water::float8 AS "highWater"
         FROM workspace_memory_namespace WHERE namespace_id=${namespaceId}`);
-      assert.equal(checkpoint?.count, options.sources);
-      assert.equal(checkpoint?.highWater, Math.max(...sequences));
+      assert(checkpoint);
+      assert.equal(checkpoint.count, options.sources);
+      assert.equal(checkpoint.highWater, Math.max(...sequences));
     }
     assert.equal((await drainSessionSources()).stored, 0);
     dispatchMs.sort((a, b) => a - b);

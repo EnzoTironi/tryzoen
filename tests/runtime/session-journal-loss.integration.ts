@@ -17,6 +17,7 @@ import {
 import {
   exportSessionSources,
   rebuildSessionSourceReceipts,
+  SessionArchiveUnavailable,
 } from "../../server/memory/session-export";
 import { PrivateMemoryRepository } from "../../server/memory/repository";
 import { privateMemoryFixture } from "./private-memory-fixture";
@@ -108,7 +109,7 @@ test.each(["event", "namespace", "volume", "event-and-receipt"] as const)(
       ).rejects.toMatchObject({ reason: "unavailable" });
       await expect(
         exportSessionSources(actor, sessionId, new AbortController().signal)
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
       const next = sessionSource(
         {
           type: "message.received",
@@ -145,7 +146,7 @@ test.each(["event", "namespace", "volume", "event-and-receipt"] as const)(
       ).rejects.toMatchObject({ reason: "unavailable" });
       await expect(
         exportSessionSources(actor, sessionId, new AbortController().signal)
-      ).rejects.toThrow();
+      ).rejects.toBeInstanceOf(SessionArchiveUnavailable);
       const freshPaths = await Array.fromAsync(
         glob(join(fixture.root, namespace.id, "raw/eve/**/*.jsonl"))
       );
@@ -168,14 +169,13 @@ test.each(["event", "namespace", "volume", "event-and-receipt"] as const)(
         );
       }
     }
-    if (missing === "event-and-receipt")
-      expect(await rebuildSessionSourceReceipts(actor, sessionId)).toEqual({
-        restored: 1,
-        pending: 0,
-      });
+    expect(await rebuildSessionSourceReceipts(actor, sessionId)).toEqual({
+      restored: missing === "event-and-receipt" ? 1 : 0,
+      pending: 0,
+    });
     const complete = await PrivateMemoryRepository.backupCorpus(actor);
     expect(complete.sources).toHaveLength(2);
-    expect(complete.capturedThrough).toBe(appended?.captureSequence);
+    expect(complete.capturedThrough).toBe(appended.captureSequence);
     expect((await PrivateMemoryRepository.read(actor)).snapshot.revision).toBe(
       publication.receipt.revision
     );
