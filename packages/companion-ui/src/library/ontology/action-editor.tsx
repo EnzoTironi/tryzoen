@@ -1,33 +1,20 @@
-import { useState } from "react";
-import type { z } from "zod";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ActionButton } from "../../button";
 import { CompanionSheet } from "../../sheet";
 import { usePageStyles } from "../../page";
 import type { OntologyData } from "./collection";
-import type { OntologyReadResultSchema } from "./schema";
 import { OntologyEvidence } from "./evidence";
 import {
   ontologyActionInput,
   ontologyActionFailure,
   rebaseOntologyAction,
+  startOntologyAction,
+  discardOntologyAction,
+  ontologyPropertyClaim,
   type OntologyActionDraft,
+  type OntologyActionState,
 } from "./action-draft";
-
-type ActionState =
-  | { readonly kind: "editing"; readonly draft: OntologyActionDraft }
-  | {
-      readonly kind: "review" | "sending" | "uncertain" | "conflict";
-      readonly draft: OntologyActionDraft;
-      readonly input: ReturnType<typeof ontologyActionInput>;
-    }
-  | {
-      readonly kind: "comparison";
-      readonly draft: OntologyActionDraft;
-      readonly input: ReturnType<typeof ontologyActionInput>;
-      readonly current: z.output<typeof OntologyReadResultSchema>;
-    }
-  | { readonly kind: "denied" };
 
 /** Shared web/desktop/native review of one declared full-claim action. */
 export function OntologyActionEditor({
@@ -40,37 +27,76 @@ export function OntologyActionEditor({
   readonly onClose: () => void;
 }) {
   const page = usePageStyles();
-  const [state, setState] = useState<ActionState>({
+  const [state, setState] = useState<OntologyActionState>({
     kind: "editing",
     draft: initialDraft,
   });
+  const liveState = useRef(state);
+  const update = (next: OntologyActionState) => {
+    liveState.current = next;
+    setState(next);
+  };
   const [error, setError] = useState<string>();
   const [confirmed, setConfirmed] = useState(false);
+  const liveConfirmation = useRef<string | null>(null);
+  const clearConfirmation = () => {
+    liveConfirmation.current = null;
+    setConfirmed(false);
+  };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const liveDiscardPrompt = useRef(false);
+  const discardPrompt = (shown: boolean) => {
+    liveDiscardPrompt.current = shown;
+    setConfirmDiscard(shown);
+  };
   const [loadingCurrent, setLoadingCurrent] = useState(false);
+  const liveLoading = useRef(false);
   const close = () => {
-    if (state.kind === "sending" || loadingCurrent) return;
-    if (state.kind === "uncertain") {
+    const current = liveState.current;
+    if (current.kind === "sending" || liveLoading.current) return;
+    if (current.kind === "uncertain") {
       setError(
         "The result is still unknown. Retry this exact change to resolve it before starting another."
       );
       return;
     }
-    if (state.kind === "denied") {
+    if (current.kind === "denied") {
       onClose();
       return;
     }
     if (
-      state.kind !== "editing" ||
-      JSON.stringify(state.draft) !== JSON.stringify(initialDraft)
+      current.kind !== "editing" ||
+      JSON.stringify(current.draft) !== JSON.stringify(initialDraft)
     )
-      setConfirmDiscard(true);
+      discardPrompt(true);
     else onClose();
   };
-  const send = async () => {
-    if (state.kind !== "review" && state.kind !== "uncertain") return;
-    const attempt = state;
-    setState({ ...attempt, kind: "sending" });
+  const discard = () => {
+    if (!liveDiscardPrompt.current) return;
+    const next = discardOntologyAction(liveState.current, liveLoading.current);
+    discardPrompt(false);
+    if (next.kind === "closed") onClose();
+    else
+      setError(
+        "This attempt is still being resolved. Its frozen operation and draft remain open."
+      );
+  };
+  const send = async (operationId: string) => {
+    if (liveDiscardPrompt.current) return;
+    const current = liveState.current;
+    if (current.kind !== "review" && current.kind !== "uncertain") return;
+    if (current.input.operationId !== operationId) return;
+    if (
+      current.kind === "review" &&
+      (current.draft.metadata === "clear" ||
+        current.input.sources.length > 0) &&
+      liveConfirmation.current !== operationId
+    )
+      return;
+    const attempt = startOntologyAction(current);
+    if (attempt.kind !== "sending") return;
+    discardPrompt(false);
+    update(attempt);
     setError(undefined);
     try {
       await data.act(attempt.input);
@@ -78,23 +104,23 @@ export function OntologyActionEditor({
     } catch (cause) {
       switch (ontologyActionFailure(cause)) {
         case "conflict":
-          setState({ ...attempt, kind: "conflict" });
+          update({ ...attempt, kind: "conflict" });
           setError(
             "Knowledge changed or this attempt conflicts. Your draft and reviewed head are unchanged."
           );
           break;
         case "denied":
-          setState({ kind: "denied" });
+          update({ kind: "denied" });
           break;
         case "invalid":
-          setState({ kind: "editing", draft: attempt.draft });
-          setConfirmed(false);
+          update({ kind: "editing", draft: attempt.draft });
+          clearConfirmation();
           setError(
             "Check the value, dates and cited passages. Nothing was saved by this attempt."
           );
           break;
         case "uncertain":
-          setState({ ...attempt, kind: "uncertain" });
+          update({ ...attempt, kind: "uncertain" });
           setError(
             "The response was interrupted. This change may already have been saved. Retry uses the identical operation and reviewed head."
           );
@@ -102,26 +128,56 @@ export function OntologyActionEditor({
       }
     }
   };
-  const reviewCurrent = async () => {
-    if (state.kind !== "conflict" || loadingCurrent) return;
-    const attempt = state;
+  const reviewCurrent = async (operationId: string) => {
+    const current = liveState.current;
+    if (
+      current.kind !== "conflict" ||
+      liveLoading.current ||
+      liveDiscardPrompt.current
+    )
+      return;
+    if (current.input.operationId !== operationId) return;
+    const attempt = current;
+    liveLoading.current = true;
     setLoadingCurrent(true);
     setError(undefined);
     try {
-      const current = await data.read({});
-      if (!current.mayManage) setState({ kind: "denied" });
-      else setState({ ...attempt, kind: "comparison", current });
+      const latest = await data.read({});
+      if (!latest.mayManage) update({ kind: "denied" });
+      else update({ ...attempt, kind: "comparison", current: latest });
     } catch (cause) {
-      if (ontologyActionFailure(cause) === "denied")
-        setState({ kind: "denied" });
+      if (ontologyActionFailure(cause) === "denied") update({ kind: "denied" });
       else
         setError(
           "Current knowledge could not be loaded. Your draft is still here."
         );
     } finally {
+      liveLoading.current = false;
       setLoadingCurrent(false);
     }
   };
+  if (confirmDiscard)
+    return (
+      <CompanionSheet
+        title="Discard this draft?"
+        onClose={() => {
+          discardPrompt(false);
+        }}
+      >
+        <Text accessibilityRole="header" style={page.rowTitle}>
+          Discard this unsaved draft?
+        </Text>
+        <ActionButton
+          quiet
+          onPress={() => {
+            discardPrompt(false);
+          }}
+        >
+          Keep editing
+        </ActionButton>
+        <ActionButton onPress={discard}>Discard draft</ActionButton>
+      </CompanionSheet>
+    );
   if (state.kind === "denied")
     return (
       <CompanionSheet title="Knowledge action" onClose={close}>
@@ -134,19 +190,30 @@ export function OntologyActionEditor({
     );
   const { draft } = state;
   const edit = (next: OntologyActionDraft) => {
-    if (state.kind !== "editing") return;
-    setState({ kind: "editing", draft: next });
-    setConfirmed(false);
+    const current = liveState.current;
+    if (
+      current.kind !== "editing" ||
+      liveDiscardPrompt.current ||
+      current.draft.expectedRevision !== next.expectedRevision
+    )
+      return;
+    update({ kind: "editing", draft: next });
+    clearConfirmation();
     setError(undefined);
   };
-  const original = draft.record.graph.entities.find(
-    (entity) => entity.id === draft.entityId
-  )?.properties[draft.property.id];
+  const original = ontologyPropertyClaim(
+    draft.record.graph.entities.find((entity) => entity.id === draft.entityId)
+      ?.properties,
+    draft.property.id
+  );
   const currentClaim =
     state.kind === "comparison"
-      ? state.current.graph.entities.find(
-          (entity) => entity.id === draft.entityId
-        )?.properties[draft.property.id]
+      ? ontologyPropertyClaim(
+          state.current.graph.entities.find(
+            (entity) => entity.id === draft.entityId
+          )?.properties,
+          draft.property.id
+        )
       : undefined;
   const needsConfirmation =
     state.kind !== "editing" &&
@@ -168,22 +235,6 @@ export function OntologyActionEditor({
           <Text accessibilityRole="alert" style={page.copy}>
             {error}
           </Text>
-        )}
-        {confirmDiscard && (
-          <View style={styles.form}>
-            <Text accessibilityRole="header" style={page.rowTitle}>
-              Discard this unsaved draft?
-            </Text>
-            <ActionButton
-              quiet
-              onPress={() => {
-                setConfirmDiscard(false);
-              }}
-            >
-              Keep editing
-            </ActionButton>
-            <ActionButton onPress={onClose}>Discard draft</ActionButton>
-          </View>
         )}
         {state.kind === "editing" ? (
           <>
@@ -405,10 +456,16 @@ export function OntologyActionEditor({
             )}
             <ActionButton
               onPress={() => {
+                const current = liveState.current;
+                if (current.kind !== "editing" || liveDiscardPrompt.current)
+                  return;
                 try {
-                  const input = ontologyActionInput(draft, data.operationId());
-                  setState({ kind: "review", draft, input });
-                  setConfirmed(false);
+                  const input = ontologyActionInput(
+                    current.draft,
+                    data.operationId()
+                  );
+                  update({ kind: "review", draft: current.draft, input });
+                  clearConfirmation();
                   setError(undefined);
                 } catch {
                   setError(
@@ -462,7 +519,19 @@ export function OntologyActionEditor({
                     }
                     accessibilityState={{ checked: confirmed }}
                     onPress={() => {
-                      setConfirmed(!confirmed);
+                      const current = liveState.current;
+                      if (
+                        current.kind !== "review" ||
+                        current.input.operationId !== state.input.operationId ||
+                        liveDiscardPrompt.current
+                      )
+                        return;
+                      const next =
+                        liveConfirmation.current !== current.input.operationId;
+                      liveConfirmation.current = next
+                        ? current.input.operationId
+                        : null;
+                      setConfirmed(next);
                     }}
                     style={({ pressed }) => [
                       styles.choice,
@@ -477,7 +546,7 @@ export function OntologyActionEditor({
                 <ActionButton
                   disabled={needsConfirmation && !confirmed}
                   onPress={() => {
-                    void send();
+                    void send(state.input.operationId);
                   }}
                 >
                   Publish change
@@ -485,8 +554,15 @@ export function OntologyActionEditor({
                 <ActionButton
                   quiet
                   onPress={() => {
-                    setState({ kind: "editing", draft });
-                    setConfirmed(false);
+                    const current = liveState.current;
+                    if (
+                      current.kind !== "review" ||
+                      current.input.operationId !== state.input.operationId ||
+                      liveDiscardPrompt.current
+                    )
+                      return;
+                    update({ kind: "editing", draft: current.draft });
+                    clearConfirmation();
                   }}
                 >
                   Back to edit
@@ -501,7 +577,7 @@ export function OntologyActionEditor({
             {state.kind === "uncertain" && (
               <ActionButton
                 onPress={() => {
-                  void send();
+                  void send(state.input.operationId);
                 }}
               >
                 Retry this exact change
@@ -511,7 +587,7 @@ export function OntologyActionEditor({
               <ActionButton
                 disabled={loadingCurrent}
                 onPress={() => {
-                  void reviewCurrent();
+                  void reviewCurrent(state.input.operationId);
                 }}
               >
                 {loadingCurrent
@@ -540,15 +616,25 @@ export function OntologyActionEditor({
                 </Text>
                 <ActionButton
                   onPress={() => {
-                    const rebased = rebaseOntologyAction(draft, state.current);
+                    const current = liveState.current;
+                    if (
+                      current.kind !== "comparison" ||
+                      current.input.operationId !== state.input.operationId ||
+                      liveDiscardPrompt.current
+                    )
+                      return;
+                    const rebased = rebaseOntologyAction(
+                      current.draft,
+                      current.current
+                    );
                     if (!rebased) {
                       setError(
                         "This action or its property changed. Discard this draft and reopen the current record."
                       );
                       return;
                     }
-                    setState({ kind: "editing", draft: rebased });
-                    setConfirmed(false);
+                    update({ kind: "editing", draft: rebased });
+                    clearConfirmation();
                     setError(undefined);
                   }}
                 >

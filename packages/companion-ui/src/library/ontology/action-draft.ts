@@ -5,6 +5,19 @@ import {
   type OntologyClaimSchema,
 } from "./schema";
 
+export function ontologyPropertyClaim(
+  properties:
+    | z.output<
+        typeof OntologyReadResultSchema
+      >["graph"]["entities"][number]["properties"]
+    | undefined,
+  propertyId: string
+) {
+  return properties
+    ? new Map(Object.entries(properties)).get(propertyId)
+    : undefined;
+}
+
 /** One property correction, captured at the head the person actually reviewed. */
 export function beginOntologyAction(
   record: z.output<typeof OntologyReadResultSchema>,
@@ -29,9 +42,10 @@ export function beginOntologyAction(
     !property
   )
     return null;
-  const claim: z.output<typeof OntologyClaimSchema> = entity.properties[
+  const claim: z.output<typeof OntologyClaimSchema> = ontologyPropertyClaim(
+    entity.properties,
     property.id
-  ] ?? { value: null, sources: [], validTime: null };
+  ) ?? { value: null, sources: [], validTime: null };
   return {
     record,
     entityId,
@@ -55,15 +69,50 @@ export type OntologyActionDraft = NonNullable<
   ReturnType<typeof beginOntologyAction>
 >;
 
+export type OntologyActionState =
+  | { readonly kind: "editing"; readonly draft: OntologyActionDraft }
+  | {
+      readonly kind: "review" | "sending" | "uncertain" | "conflict";
+      readonly draft: OntologyActionDraft;
+      readonly input: ReturnType<typeof ontologyActionInput>;
+    }
+  | {
+      readonly kind: "comparison";
+      readonly draft: OntologyActionDraft;
+      readonly input: ReturnType<typeof ontologyActionInput>;
+      readonly current: z.output<typeof OntologyReadResultSchema>;
+    }
+  | { readonly kind: "denied" };
+
+export function startOntologyAction(
+  state: OntologyActionState
+): OntologyActionState {
+  return state.kind === "review" || state.kind === "uncertain"
+    ? { ...state, kind: "sending" }
+    : state;
+}
+
+/** A delayed discard must use the live phase, never the phase of its prompt. */
+export function discardOntologyAction(
+  state: OntologyActionState,
+  loadingCurrent: boolean
+): OntologyActionState | { readonly kind: "closed" } {
+  if (state.kind === "sending" || state.kind === "uncertain" || loadingCurrent)
+    return state;
+  return { kind: "closed" };
+}
+
 export function ontologyActionInput(
   draft: OntologyActionDraft,
   operationId: z.output<typeof OntologyActInputSchema>["operationId"]
 ) {
   if (draft.unknown && draft.property.required)
     throw new Error("This property requires a value.");
-  const captured = draft.record.graph.entities.find(
-    (entity) => entity.id === draft.entityId
-  )?.properties[draft.property.id] ?? {
+  const captured = ontologyPropertyClaim(
+    draft.record.graph.entities.find((entity) => entity.id === draft.entityId)
+      ?.properties,
+    draft.property.id
+  ) ?? {
     value: null,
     sources: [],
     validTime: null,

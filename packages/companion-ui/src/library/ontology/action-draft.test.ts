@@ -8,6 +8,9 @@ import {
   beginOntologyAction,
   ontologyActionInput,
   rebaseOntologyAction,
+  startOntologyAction,
+  discardOntologyAction,
+  type OntologyActionState,
 } from "./action-draft";
 
 const operationId = "81f12278-7f6e-4c3d-806b-64004c144836";
@@ -232,4 +235,67 @@ test("dates need evidence, intervals are exclusive, and typed values reject empt
       operationId
     )
   ).toThrow("Invalid ISO date");
+});
+
+test("a delayed discard retains sending and uncertain attempts with their frozen operation and draft", () => {
+  const held = draft();
+  const review: OntologyActionState = {
+    kind: "review",
+    draft: held,
+    input: ontologyActionInput(held, operationId),
+  };
+  expect(discardOntologyAction(review, false)).toEqual({ kind: "closed" });
+  const sending = startOntologyAction(review);
+  expect(sending.kind).toBe("sending");
+  if (sending.kind !== "sending") throw new Error("Missing sending transition");
+  expect(discardOntologyAction(sending, false)).toBe(sending);
+  expect(startOntologyAction(sending)).toBe(sending);
+  const uncertain: OntologyActionState = { ...sending, kind: "uncertain" };
+  expect(discardOntologyAction(uncertain, false)).toBe(uncertain);
+  const retry = startOntologyAction(uncertain);
+  expect(retry).toEqual(sending);
+  if (retry.kind !== "sending") throw new Error("Missing retry transition");
+  expect(retry.input).toBe(review.input);
+  expect(retry.draft).toBe(held);
+});
+
+test("current-state review blocks discard until loading ends and keeps the unsent draft intact", () => {
+  const held = draft();
+  const conflict: OntologyActionState = {
+    kind: "conflict",
+    draft: held,
+    input: ontologyActionInput(held, operationId),
+  };
+  expect(discardOntologyAction(conflict, true)).toBe(conflict);
+  expect(startOntologyAction(conflict)).toBe(conflict);
+  expect(discardOntologyAction(conflict, false)).toEqual({ kind: "closed" });
+  expect(conflict.input.operationId).toBe(operationId);
+  expect(conflict.draft).toBe(held);
+});
+
+test("a declared property without an own claim never reads an inherited JavaScript property", () => {
+  const input = record();
+  const type = input.graph.types.find((item) => item.id === "project");
+  const entity = input.graph.entities.find((item) => item.id === "one");
+  const action = input.graph.actions.find((item) => item.id === "status");
+  if (!type || !entity || !action)
+    throw new Error("Missing canonical fixture definition");
+  type.properties = [
+    { id: "constructor", name: "Constructor", type: "string", required: false },
+  ];
+  action.property = "constructor";
+  entity.properties = {};
+  const held = beginOntologyAction(
+    OntologyReadResultSchema.parse(input),
+    "one",
+    "status"
+  );
+  expect(held?.unknown).toBe(true);
+  if (!held) throw new Error("Missing declared optional-property action");
+  expect(
+    ontologyActionInput(
+      { ...held, unknown: false, value: "Human-authored" },
+      operationId
+    )
+  ).toMatchObject({ value: "Human-authored", sources: [], validTime: null });
 });
