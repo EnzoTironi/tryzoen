@@ -1,19 +1,101 @@
+/// <reference types="node" />
+/// <reference lib="es2023.array" />
 import { spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
+import { readAuditEnvironment } from "./env.mjs";
 
 const directory = fileURLToPath(new URL("../../", import.meta.url));
 const advisoryId = "GHSA-86w9-cpqp-85rv";
 const deadline = "2026-10-04T02:59:00Z";
-const severities = ["info", "low", "moderate", "high", "critical"];
+const severitySchema = z.enum(["info", "low", "moderate", "high", "critical"]);
+const severities = severitySchema.options;
+const reportSchema = z.strictObject({
+  advisories: z.record(
+    z.string(),
+    z.looseObject({
+      severity: severitySchema,
+      findings: z
+        .array(
+          z.looseObject({
+            version: z.string(),
+            paths: z.array(z.string().min(1)).min(1),
+          })
+        )
+        .min(1),
+      github_advisory_id: z.string(),
+      module_name: z.string(),
+      patched_versions: z.unknown().optional(),
+    })
+  ),
+  metadata: z.looseObject({
+    vulnerabilities: z.strictObject({
+      info: z.number().int(),
+      low: z.number().int(),
+      moderate: z.number().int(),
+      high: z.number().int(),
+      critical: z.number().int(),
+    }),
+  }),
+});
+const policySchema = z.looseObject({
+  schemaVersion: z.literal(1),
+  advisory: z.literal(advisoryId),
+  package: z.literal("node-forge"),
+  version: z.literal("1.4.0"),
+  expiresAt: z.literal(deadline),
+  classification: z.literal("accepted temporary risk"),
+  expoCli: z.literal("57.0.27"),
+  expoCertificates: z.literal("0.0.6"),
+  pathsSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  configurationSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+
+/** @param {import("node:crypto").BinaryLike} value */
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 
+// Match Array.prototype.sort's default UTF-16 code-unit order, independent of locale.
+/** @param {string} left @param {string} right */
+const comparePaths = (left, right) =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+/** @param {readonly string[]} paths */
 export function pathsHash(paths) {
-  return hash(JSON.stringify([...paths].sort()));
+  return hash(JSON.stringify(paths.toSorted(comparePaths)));
 }
 
+/** @param {string} json */
+export function readAuditReport(json) {
+  /** @type {unknown} */
+  const value = JSON.parse(json);
+  // Zod records ignore __proto__; reject that raw key before schema parsing.
+  if (
+    value &&
+    typeof value === "object" &&
+    "advisories" in value &&
+    value.advisories &&
+    typeof value.advisories === "object" &&
+    Object.hasOwn(value.advisories, "__proto__")
+  )
+    throw new Error("Unexpected advisory key.");
+  const report = reportSchema.parse(value);
+  const observed = { info: 0, low: 0, moderate: 0, high: 0, critical: 0 };
+  for (const item of Object.values(report.advisories))
+    observed[item.severity] += 1;
+  if (
+    severities.some(
+      (severity) =>
+        report.metadata.vulnerabilities[severity] !== observed[severity]
+    )
+  )
+    throw new Error("Inconsistent audit severity counts.");
+  return report;
+}
+
+/** @param {string} path */
 function guardedPath(path) {
   return (
     path.startsWith(".github/workflows/") ||
@@ -28,6 +110,7 @@ function guardedPath(path) {
 }
 
 // Include added/deleted configuration, not just edits to known files.
+/** @param {string} root */
 export function configurationHash(root) {
   const files = execFileSync(
     "git",
@@ -35,73 +118,44 @@ export function configurationHash(root) {
     { cwd: root, encoding: "utf8" }
   )
     .split("\0")
-    .filter((path) => path && guardedPath(path));
+    .filter((path) => path.length > 0 && guardedPath(path));
   return hash(
     JSON.stringify(
       [...new Set(files)]
-        .sort()
+        .toSorted(comparePaths)
         .map((path) => [path, hash(readFileSync(resolve(root, path)))])
     )
   );
 }
 
-export function evaluateAudit(result, policy, configuration, now, environment) {
-  const reject = (reason) => ({ ok: false, accepted: false, message: reason });
-  if (result.error || result.signal || ![0, 1].includes(result.status)) {
+/** @param {unknown} value */
+const auditOutput = (value) => (typeof value === "string" ? value : "");
+
+/** @param {string} reason */
+const reject = (reason) => ({ ok: false, accepted: false, message: reason });
+
+/**
+ * @param {{status: number | null, stdout: string, error?: unknown, signal?: string | null}} result
+ * @param {unknown} rawPolicy
+ * @param {string} configuration
+ * @param {number} now
+ * @param {readonly string[]} environmentNames
+ */
+export function evaluateAudit(
+  result,
+  rawPolicy,
+  configuration,
+  now,
+  environmentNames
+) {
+  if (result.error || result.signal || ![0, 1].includes(result.status ?? -1)) {
     return reject(
       "Audit transport/process failure; temporary risk was not accepted."
     );
   }
   let report;
   try {
-    report = JSON.parse(result.stdout);
-    if (
-      !report ||
-      Object.keys(report).sort().join(",") !== "advisories,metadata" ||
-      !report.advisories ||
-      Array.isArray(report.advisories) ||
-      typeof report.advisories !== "object" ||
-      !report.metadata
-    )
-      throw new Error();
-    const counts = report.metadata.vulnerabilities;
-    if (
-      !counts ||
-      Object.keys(counts).sort().join(",") !== [...severities].sort().join(",")
-    )
-      throw new Error();
-    const observed = Object.fromEntries(
-      severities.map((severity) => [severity, 0])
-    );
-    for (const item of Object.values(report.advisories)) {
-      if (
-        !item ||
-        !severities.includes(item.severity) ||
-        !Array.isArray(item.findings) ||
-        item.findings.length === 0 ||
-        typeof item.github_advisory_id !== "string" ||
-        typeof item.module_name !== "string"
-      )
-        throw new Error();
-      for (const finding of item.findings) {
-        if (
-          typeof finding.version !== "string" ||
-          !Array.isArray(finding.paths) ||
-          finding.paths.length === 0 ||
-          finding.paths.some((path) => typeof path !== "string" || !path)
-        )
-          throw new Error();
-      }
-      observed[item.severity] += 1;
-    }
-    if (
-      severities.some(
-        (severity) =>
-          !Number.isInteger(counts[severity]) ||
-          counts[severity] !== observed[severity]
-      )
-    )
-      throw new Error();
+    report = readAuditReport(result.stdout);
   } catch {
     return reject(
       "Malformed or inconsistent audit JSON; temporary risk was not accepted."
@@ -119,28 +173,17 @@ export function evaluateAudit(result, policy, configuration, now, environment) {
       message:
         "Audit completed at the existing low threshold; temporary exception was not applied.",
     };
-  if (blocking.length !== 1 || blocking[0].github_advisory_id !== advisoryId)
+  if (blocking.length !== 1 || blocking[0]?.github_advisory_id !== advisoryId)
     return reject("Other blocking advisory; temporary risk was not accepted.");
   const item = blocking[0];
-  if (
-    !policy ||
-    policy.schemaVersion !== 1 ||
-    policy.advisory !== advisoryId ||
-    policy.package !== "node-forge" ||
-    policy.version !== "1.4.0" ||
-    policy.expiresAt !== deadline ||
-    policy.classification !== "accepted temporary risk" ||
-    policy.expoCli !== "57.0.27" ||
-    policy.expoCertificates !== "0.0.6" ||
-    !/^[a-f0-9]{64}$/u.test(policy.pathsSha256) ||
-    !/^[a-f0-9]{64}$/u.test(policy.configurationSha256)
-  )
-    return reject("Invalid temporary risk policy.");
+  const parsedPolicy = policySchema.safeParse(rawPolicy);
+  if (!parsedPolicy.success) return reject("Invalid temporary risk policy.");
+  const policy = parsedPolicy.data;
   if (!Number.isFinite(now) || now >= Date.parse(deadline))
     return reject("Temporary risk acceptance expired.");
   if (
     configuration !== policy.configurationSha256 ||
-    Object.keys(environment).some((name) =>
+    environmentNames.some((name) =>
       /^(EXPO_|EAS_|CSC_|WIN_CSC_|APPLE_|npm_config_audit|NPM_CONFIG_AUDIT)/u.test(
         name
       )
@@ -149,13 +192,14 @@ export function evaluateAudit(result, policy, configuration, now, environment) {
     return reject(
       "Deployment, distribution, dependency or signing configuration changed."
     );
+  const finding = item.findings[0];
   if (
     item.module_name !== policy.package ||
     item.severity !== "high" ||
     item.patched_versions !== null ||
     item.findings.length !== 1 ||
-    item.findings[0].version !== policy.version ||
-    pathsHash(item.findings[0].paths) !== policy.pathsSha256
+    finding.version !== policy.version ||
+    pathsHash(finding.paths) !== policy.pathsSha256
   )
     return reject(
       "Advisory version, dependency paths or fix availability changed."
@@ -186,20 +230,24 @@ if (
     }
   );
   // Keep the current registry report intact, including the accepted advisory.
-  process.stdout.write(result.stdout || "");
-  process.stderr.write(result.stderr || "");
+  process.stdout.write(auditOutput(result.stdout));
+  process.stderr.write(auditOutput(result.stderr));
   let outcome;
   try {
+    /** @type {unknown} */
     const policy = JSON.parse(
       readFileSync(new URL("policy.json", import.meta.url), "utf8")
     );
+    const auditEnvironment = readAuditEnvironment();
     outcome = evaluateAudit(
       result,
       policy,
       configurationHash(directory),
       Date.now(),
-      process.env
+      auditEnvironment.names
     );
+    if (auditEnvironment.summaryPath)
+      appendFileSync(auditEnvironment.summaryPath, `\n${outcome.message}\n`);
   } catch {
     outcome = {
       ok: false,
@@ -210,7 +258,9 @@ if (
   console.log(
     outcome.accepted ? `::warning::${outcome.message}` : outcome.message
   );
-  if (process.env.GITHUB_STEP_SUMMARY)
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${outcome.message}\n`);
-  process.exitCode = outcome.ok ? 0 : result.status || 1;
+  process.exitCode = outcome.ok
+    ? 0
+    : result.status === null || result.status === 0
+      ? 1
+      : result.status;
 }

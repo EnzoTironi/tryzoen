@@ -1,5 +1,6 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
+  "globalPassThroughEnv": ["GITHUB_STEP_SUMMARY"],
   "tasks": {
     "//#build:app": {
       "dependsOn": ["@zoen/companion-ui#build:ui"],

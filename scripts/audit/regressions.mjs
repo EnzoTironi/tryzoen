@@ -1,29 +1,48 @@
+/// <reference types="node" />
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { configurationHash, evaluateAudit, pathsHash } from "./run.mjs";
+import {
+  configurationHash,
+  evaluateAudit,
+  pathsHash,
+  readAuditReport,
+} from "./run.mjs";
 
-const captured = JSON.parse(
+const captured = readAuditReport(
   readFileSync(new URL("registry-fixture.json", import.meta.url), "utf8")
 );
-const policy = JSON.parse(
-  readFileSync(new URL("policy.json", import.meta.url), "utf8")
-);
+import policy from "./policy.json" with { type: "json" };
 const beforeExpiry = Date.parse("2026-10-04T02:58:59Z");
-const finding = (report) => Object.values(report.advisories)[0];
+/** @param {ReturnType<typeof readAuditReport>} report */
+const finding = (report) => {
+  const item = Object.values(report.advisories)[0];
+  assert.ok(item);
+  return item;
+};
+/** @param {ReturnType<typeof finding>} item */
+const firstFinding = (item) => {
+  const entry = item.findings[0];
+  assert.ok(entry);
+  return entry;
+};
+/**
+ * @param {ReturnType<typeof readAuditReport>} [report]
+ * @param {{result?: Partial<Parameters<typeof evaluateAudit>[0]>, policy?: unknown, configuration?: string, now?: number, environment?: Record<string, unknown>}} [changes]
+ */
 const evaluate = (report = captured, changes = {}) =>
   evaluateAudit(
     { status: 1, stdout: JSON.stringify(report), ...changes.result },
-    changes.policy || policy,
-    changes.configuration || policy.configurationSha256,
+    changes.policy ?? policy,
+    changes.configuration ?? policy.configurationSha256,
     changes.now ?? beforeExpiry,
-    changes.environment || {}
+    Object.keys(changes.environment ?? {})
   );
 
-test("accepts the exact live registry advisory and keeps the residual risk explicit", () => {
+await test("accepts the exact live registry advisory and keeps the residual risk explicit", () => {
   assert.deepEqual(evaluate().ok, true);
   assert.equal(evaluate().accepted, true);
   assert.match(
@@ -31,12 +50,12 @@ test("accepts the exact live registry advisory and keeps the residual risk expli
     /accepted temporary risk.*Vulnerability remains unfixed/u
   );
   assert.equal(
-    pathsHash(finding(captured).findings[0].paths),
+    pathsHash(firstFinding(finding(captured)).paths),
     policy.pathsSha256
   );
 });
 
-test("expires at the exact deadline and remains closed afterward", () => {
+await test("expires at the exact deadline and remains closed afterward", () => {
   for (const now of [
     Date.parse(policy.expiresAt),
     Date.parse(policy.expiresAt) + 1,
@@ -46,7 +65,7 @@ test("expires at the exact deadline and remains closed afterward", () => {
   }
 });
 
-test("does not allow the policy to extend the deadline or add another advisory", () => {
+await test("does not allow the policy to extend the deadline or add another advisory", () => {
   for (const changed of [
     { expiresAt: "2026-10-05T02:59:00Z" },
     { advisory: "GHSA-aaaa-bbbb-cccc" },
@@ -58,7 +77,7 @@ test("does not allow the policy to extend the deadline or add another advisory",
   }
 });
 
-test("blocks a different or additional low-severity advisory", () => {
+await test("blocks a different or additional low-severity advisory", () => {
   const different = structuredClone(captured);
   finding(different).github_advisory_id = "GHSA-aaaa-bbbb-cccc";
   assert.equal(evaluate(different).ok, false);
@@ -68,19 +87,22 @@ test("blocks a different or additional low-severity advisory", () => {
   assert.equal(evaluate(additional).ok, false);
 });
 
-test("blocks wrong package, version, path, duplicated paths and newly available fix", () => {
+await test("blocks wrong package, version, path, duplicated paths and newly available fix", () => {
+  /** @type {((item: ReturnType<typeof finding>) => void)[]} */
   const mutations = [
     (item) => {
       item.module_name = "another-package";
     },
     (item) => {
-      item.findings[0].version = "1.3.1";
+      firstFinding(item).version = "1.3.1";
     },
     (item) => {
-      item.findings[0].paths[0] = ".>another-package>node-forge";
+      firstFinding(item).paths[0] = ".>another-package>node-forge";
     },
     (item) => {
-      item.findings[0].paths.push(item.findings[0].paths[0]);
+      const path = firstFinding(item).paths[0];
+      assert.ok(path);
+      firstFinding(item).paths.push(path);
     },
     (item) => {
       item.patched_versions = ">=1.4.1";
@@ -92,11 +114,11 @@ test("blocks wrong package, version, path, duplicated paths and newly available 
     assert.equal(evaluate(report).ok, false);
   }
   const reordered = structuredClone(captured);
-  finding(reordered).findings[0].paths.reverse();
+  firstFinding(finding(reordered)).paths.reverse();
   assert.equal(evaluate(reordered).ok, true);
 });
 
-test("fails transport/process errors, malformed JSON and inconsistent payloads", () => {
+await test("fails transport/process errors, malformed JSON and inconsistent payloads", () => {
   for (const result of [
     { status: 2 },
     { status: null, signal: "SIGTERM" },
@@ -105,6 +127,17 @@ test("fails transport/process errors, malformed JSON and inconsistent payloads",
     { stdout: JSON.stringify({ error: "registry unavailable" }) },
     { stdout: "{}" },
     { status: 0 },
+    {
+      status: 0,
+      stdout:
+        '{"advisories":{"__proto__":null},"metadata":{"vulnerabilities":{"info":0,"low":0,"moderate":0,"high":0,"critical":0}}}',
+    },
+    {
+      stdout: JSON.stringify(captured).replace(
+        '"advisories":{',
+        '"advisories":{"__proto__":null,'
+      ),
+    },
   ])
     assert.equal(evaluate(captured, { result }).ok, false);
   const report = structuredClone(captured);
@@ -112,7 +145,7 @@ test("fails transport/process errors, malformed JSON and inconsistent payloads",
   assert.equal(evaluate(report).ok, false);
 });
 
-test("blocks changed configuration and signing environment without reading secret values", () => {
+await test("blocks changed configuration and signing environment without reading secret values", () => {
   assert.equal(evaluate(captured, { configuration: "changed" }).ok, false);
   for (const name of [
     "EXPO_PROJECT_ID",
@@ -130,7 +163,7 @@ test("blocks changed configuration and signing environment without reading secre
   }
 });
 
-test("configuration guard detects real added/changed signing files and dependency locks", () => {
+await test("configuration guard detects real added/changed signing files and dependency locks", () => {
   const root = mkdtempSync(join(tmpdir(), "zoen-audit-"));
   try {
     execFileSync("git", ["init", "--quiet"], { cwd: root });
@@ -159,7 +192,7 @@ test("configuration guard detects real added/changed signing files and dependenc
   }
 });
 
-test("a successful audit with no blocking findings passes without applying an exception", () => {
+await test("a successful audit with no blocking findings passes without applying an exception", () => {
   const report = structuredClone(captured);
   report.advisories = {};
   report.metadata.vulnerabilities.high = 0;
