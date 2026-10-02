@@ -38,15 +38,16 @@ const databaseCheck = Effect.gen(function* () {
     (candidate) =>
       candidate.name === production.web.name && candidate.state === "started"
   );
-  const volume = yield* Config.string("ZOEN_FILE_MEMORY_VOLUME_ID");
   if (
     !web?.id ||
     !web.config?.mounts?.some(
-      (mount) => mount.path === "/var/lib/zoen" && mount.volume === volume
+      (mount) =>
+        mount.path === "/root/.eve/auth" &&
+        mount.volume === production.web.stateVolume
     )
   )
     return yield* Effect.fail(
-      new Error("File-memory volume placement is not verified")
+      new Error("Persistent web volume placement is not verified")
     );
   const matrix = yield* Machines.execMachine({
     app_name: production.database.app,
@@ -84,8 +85,18 @@ const databaseCheck = Effect.gen(function* () {
     return yield* Effect.fail(
       new Error("Application database role isolation failed")
     );
+  const semantic = yield* Machines.execMachine({
+    app_name: production.web.app,
+    machine_id: web.id,
+    command: ["node", "/app/infrastructure/semantic/probe.mjs"],
+    timeout: 60,
+  });
+  if (semantic.exit_code !== 0)
+    return yield* Effect.fail(
+      new Error("Semantic execution from the production web machine failed")
+    );
   return yield* Effect.log(
-    "PostgreSQL roles, backup status and private-memory volume placement verified."
+    "PostgreSQL roles, backups, persistent web volume and semantic execution verified."
   );
 });
 

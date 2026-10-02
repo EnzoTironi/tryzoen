@@ -15,9 +15,10 @@ export const production = {
   },
   web: {
     app: "companion-tironi",
-    legacyMachine: "683d14eefe9778",
+    machine: "784ed425b5d148",
+    legacyMachines: ["683d14eefe9778", "d891e675b54358", "28654d62a13328"],
     name: "zoen-web",
-    authVolume: "vol_40o00zpwel2plln4",
+    stateVolume: "vol_40o00zpwel2plln4",
   },
   memory: {
     app: "zoen-memory-tironi",
@@ -25,6 +26,7 @@ export const production = {
     name: "little-meadow-4451",
   },
   matrix: { app: "zoen-matrix-tironi" },
+  semantic: { app: "zoen-semantic-tironi" },
   whatsapp: { app: "zoen-whatsapp-tironi" },
   vaultwarden: { app: "zoen-vault-tironi", hostname: "vault.zoen.tironi.xyz" },
 } as const;

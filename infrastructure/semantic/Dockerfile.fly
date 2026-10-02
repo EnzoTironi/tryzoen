@@ -1,0 +1,8 @@
+FROM node:24.21.0-bookworm-slim
+WORKDIR /semantic
+COPY .output/server/semantic/ ./
+COPY infrastructure/semantic/probe.mjs ./
+COPY --chmod=0555 infrastructure/semantic/fly-entrypoint.sh /usr/local/bin/zoen-semantic
+EXPOSE 18130
+ENTRYPOINT ["/usr/local/bin/zoen-semantic"]
+CMD ["node", "--max-old-space-size=128", "service.mjs"]

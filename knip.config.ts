@@ -82,6 +82,7 @@ export default {
         "alchemy.run.ts",
         "alchemy.fly-postgres.run.ts",
         "recovery.run.ts",
+        "semantic/probe.mjs",
         "tests/*.test.ts",
       ],
       // POSIX shell builtin used to protect local Alchemy state.

@@ -78,11 +78,18 @@ jobs:
       - name: Check the exact source before deployment
         if: env.OPERATION == 'deploy'
         run: |
+          node scripts/audit/run.mjs
+          pnpm --dir infrastructure audit --audit-level=low
           pnpm check --concurrency=1
           pnpm --dir infrastructure types:check
           pnpm --dir infrastructure test:providers
           docker build -t zoen-postgres-proof:pg17-backup infrastructure/postgres
           bash infrastructure/postgres/test-recovery.sh
+      - name: Build the isolated semantic executor
+        if: env.OPERATION != 'recovery'
+        run: |
+          pnpm --filter @zoen/companion-ui build:ui
+          pnpm build:semantic
       - name: Plan infrastructure
         if: env.OPERATION != 'recovery'
         working-directory: infrastructure
