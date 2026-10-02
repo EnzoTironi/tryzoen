@@ -296,7 +296,11 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       env: environment,
       encoding: "utf8",
     });
-    assert.equal(success.status, 0, success.stderr);
+    assert.equal(
+      success.status,
+      0,
+      `stdout:\n${success.stdout}\nstderr:\n${success.stderr}`
+    );
     assert.equal(readFileSync(marker, "utf8"), "invoked");
     assert.equal(
       readFileSync(argumentsPath, "utf8"),
