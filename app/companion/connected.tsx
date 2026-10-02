@@ -63,7 +63,9 @@ export function ConnectedCompanion({
     sessionId ?? roomId ?? token ?? params.get("compose")
   );
   const [draftError, setDraftError] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(
+    params.get("view") === "settings"
+  );
   const navigate = (path: string) => {
     const href = workspaceHref(path, workspaceId);
     if (
@@ -74,9 +76,7 @@ export function ConnectedCompanion({
     else router.push(href, { scroll: false });
   };
   const openConversation = (id?: string) => {
-    navigate(
-      id ? `/companion/${encodeURIComponent(id)}` : "/companion?compose=1"
-    );
+    navigate(id ? `/companion/${encodeURIComponent(id)}` : "/?compose=1");
   };
   const navigateSection = (next: CompanionSection) => {
     if (next === "settings") setSettingsOpen(true);
@@ -97,7 +97,7 @@ export function ConnectedCompanion({
         files: [],
       });
       setDraftError(false);
-      navigate(`/companion?draft=${draftToken}`);
+      navigate(`/?draft=${draftToken}`);
     } catch {
       setDraftError(true);
     }
@@ -133,7 +133,7 @@ export function ConnectedCompanion({
                 contentVisible={!settingsOpen}
                 conversationOpen={conversationOpen}
                 onShowInbox={() => {
-                  navigate("/companion");
+                  navigate("/");
                 }}
                 hideConversationHeader={Boolean(roomId)}
                 title={title ?? "Zoen"}
@@ -167,10 +167,10 @@ export function ConnectedCompanion({
                       openConversation();
                     }}
                     onOpenRoom={(id) => {
-                      navigate(`/companion?room=${encodeURIComponent(id)}`);
+                      navigate(`/?room=${encodeURIComponent(id)}`);
                     }}
                     onDiscover={() => {
-                      navigate("/companion?view=discover");
+                      navigate("/?view=discover");
                     }}
                   />
                 )}
@@ -200,11 +200,11 @@ export function ConnectedCompanion({
                     key={`${draftScope}:${roomId}`}
                     roomId={roomId}
                     onOpenRoom={(id) => {
-                      navigate(`/companion?room=${encodeURIComponent(id)}`);
+                      navigate(`/?room=${encodeURIComponent(id)}`);
                     }}
                     cacheScope={draftScope}
                     onBack={() => {
-                      navigate("/companion");
+                      navigate("/");
                     }}
                   />
                 ) : (

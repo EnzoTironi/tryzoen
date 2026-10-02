@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { z } from "zod";
 import { WorkspacePathSchema, sourceBindingPathSchema } from "./files-schema";
 
 test.each([
@@ -35,4 +36,19 @@ test.each([
   "proposals/tools/inbox.json",
 ])("preserves existing file contracts: %s", (path) => {
   expect(WorkspacePathSchema.parse(path)).toBe(path);
+});
+
+test.each([
+  "knowledge/../private.md",
+  "knowledge/nested/.hidden.md",
+  "knowledge/nested//plan.md",
+  "knowledge/a..b.md",
+])("rejects unsafe document paths: %s", (path) => {
+  expect(WorkspacePathSchema.safeParse(path).success).toBe(false);
+});
+
+test("exports workspace paths without provider-incompatible regex lookaround", () => {
+  expect(JSON.stringify(z.toJSONSchema(WorkspacePathSchema))).not.toMatch(
+    /\(\?[=!]|\(\?<[=!]/u
+  );
 });

@@ -1,6 +1,7 @@
 import { jsonString } from "@shared/validation";
 import { z } from "zod";
-import { generateText } from "ai";
+import { generateText, type JSONSchema7 } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 async function models(configuration: Record<string, string | undefined>) {
   for (const name of [
@@ -15,7 +16,11 @@ async function models(configuration: Record<string, string | undefined>) {
   vi.resetModules();
   return import("../installation-model");
 }
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  vi.doUnmock("eve/models/openai");
+});
 const selectModel = async (configuration: Record<string, string>) =>
   (await models(configuration)).installationModel();
 describe("installation model configuration", () => {
@@ -64,6 +69,46 @@ describe("installation model configuration", () => {
         },
       },
     });
+  });
+  it("preserves optional Codex tool inputs and explicitly requested strict schemas", async () => {
+    const upstream = new MockLanguageModelV4({
+      doStream: async () => ({
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      }),
+    });
+    vi.doMock("eve/models/openai", () => ({ chatgpt: () => upstream }));
+    const configuration = await models({
+      COMPANION_MODEL_PROVIDER: "codex-local",
+    });
+    const selected = await configuration.installationModel();
+    if (!selected || typeof selected.model === "string")
+      throw new Error("Expected a Codex model");
+    const inputSchema = {
+      type: "object",
+      properties: { revision: { type: "string" } },
+      additionalProperties: false,
+    } satisfies JSONSchema7;
+    await selected.model.doStream({
+      prompt: [],
+      tools: [
+        { type: "function", name: "recorded_view", inputSchema },
+        {
+          type: "function",
+          name: "explicit_strict",
+          inputSchema,
+          strict: true,
+        },
+      ],
+    });
+    expect(upstream.doStreamCalls[0]?.tools).toEqual([
+      { type: "function", name: "recorded_view", inputSchema, strict: false },
+      { type: "function", name: "explicit_strict", inputSchema, strict: true },
+    ]);
   });
   it("rejects missing, empty, whitespace-only and padded OpenRouter keys", async () => {
     const configuration = {

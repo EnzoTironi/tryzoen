@@ -39,6 +39,11 @@ function cutoverApi(legacy: Machine, replacement = ready) {
     }
     if (path.endsWith("/wait")) return Response.json({});
     assert.ok(path.endsWith("/old-web"));
+    if (body && typeof body === "object" && "config" in body) {
+      const config = body.config;
+      assert.ok(config && typeof config === "object");
+      legacy.config = Object.assign({}, legacy.config, config);
+    }
     return Response.json(legacy);
   };
   return {

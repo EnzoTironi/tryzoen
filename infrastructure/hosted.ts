@@ -18,7 +18,7 @@ import {
   deployWhatsAppBridge,
 } from "./whatsapp-bridge.ts";
 import { ReconcileChannelWebhooks } from "./webhooks.ts";
-import { RetireLegacyWeb } from "./web-cutover.ts";
+import { RetireLegacyWeb, StartMigratedWeb } from "./web-cutover.ts";
 import { provisionErasureJournal } from "./erasure-journal.ts";
 import { provisionVaultwarden, deployVaultwarden } from "./vaultwarden.ts";
 import { deploySemantic } from "./semantic.ts";
@@ -217,6 +217,15 @@ export const hosted = Effect.gen(function* () {
     database: policy.database,
     image: webImage,
     prepared: databases,
+    web: {
+      app: webName,
+      retained: prod
+        ? {
+            machine: production.web.machine,
+            volume: production.web.stateVolume,
+          }
+        : undefined,
+    },
   });
   const web = yield* Fly.Machine("WebPersistent", {
     app: webApp,
@@ -230,6 +239,7 @@ export const hosted = Effect.gen(function* () {
         }
       : undefined,
     image: webImage,
+    skipLaunch: true,
     guest: { cpuKind: "shared", cpus: 2, memoryMb: 2048 },
     env: {
       NODE_ENV: "production",
@@ -310,11 +320,24 @@ export const hosted = Effect.gen(function* () {
       ).pipe(Output.map((digests) => JSON.stringify(digests))),
     },
   }).pipe(retain(true));
+  const readyWeb = yield* StartMigratedWeb({
+    app: webName,
+    machine: web.machineId,
+    release: migrations.image,
+    volume: web.mounts.pipe(
+      Output.map((mounts) =>
+        prod
+          ? production.web.stateVolume
+          : (mounts.find(({ path }) => path === "/root/.eve/auth")?.volumeId ??
+            "")
+      )
+    ),
+  });
   if (prod) {
     for (const legacy of production.web.legacyMachines) {
       yield* RetireLegacyWeb(`RetireWeb-${legacy}`, {
         app: webName,
-        replacement: web.machineId,
+        replacement: readyWeb.machine,
         legacy,
         release: webImage,
         volume: production.web.stateVolume,
@@ -351,7 +374,7 @@ export const hosted = Effect.gen(function* () {
     yield* ReconcileChannelWebhooks({
       baseUrl: appOrigin,
       legacyBaseUrl: `https://${hostname}`,
-      machine: web.machineId,
+      machine: readyWeb.machine,
       release: webImage,
       credentialVersion: webSecrets,
     });
@@ -366,6 +389,6 @@ export const hosted = Effect.gen(function* () {
     matrix: matrix.machineId,
     whatsapp: whatsapp.machineId,
     vaultwarden: vaultwarden.machineId,
-    web: web.machineId,
+    web: readyWeb.machine,
   };
 }).pipe(Effect.provide(CompanionStagePolicy.layer));

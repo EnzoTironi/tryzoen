@@ -3,18 +3,21 @@ import * as Machines from "@distilled.cloud/fly-io/machines";
 import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import { Effect, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
+import { quiesceWebForMigration, type WebMigration } from "./web-cutover.ts";
+
+interface ApplicationMigration {
+  app: string;
+  primary: string;
+  region: string;
+  database: string;
+  image: string;
+  prepared: { host: string; release: string; credentialVersion: string };
+  web: WebMigration;
+}
 
 /** The migration credential stays in the database app's vault, never in the web app. */
-export const MigrateApplication = Action(
-  "Zoen.MigrateApplication",
-  (input: {
-    app: string;
-    primary: string;
-    region: string;
-    database: string;
-    image: string;
-    prepared: { host: string; release: string; credentialVersion: string };
-  }) =>
+export const migrateApplication = Effect.fn("migrateApplication")(
+  (input: ApplicationMigration) =>
     Effect.gen(function* () {
       const backup = yield* Machines.execMachine({
         app_name: input.app,
@@ -28,6 +31,7 @@ export const MigrateApplication = Action(
             "Pre-migration backup failed; keeping the existing web release."
           )
         );
+      yield* quiesceWebForMigration(input.web);
       const machine = yield* Effect.acquireRelease(
         Machines.createMachine({
           app_name: input.app,
@@ -93,7 +97,7 @@ export const MigrateApplication = Action(
           if (status.stdout?.trim() !== "0")
             return yield* Effect.fail(
               new Error(
-                "Database migration failed; keeping the existing web release. Inspect the migration journal before retrying."
+                "Database migration failed; web remains stopped. Inspect the migration journal before retrying."
               )
             );
           verified = true;
@@ -104,7 +108,7 @@ export const MigrateApplication = Action(
       if (!verified)
         return yield* Effect.fail(
           new Error(
-            "Database migration timed out; keeping the existing web release."
+            "Database migration timed out; web remains stopped. Inspect the migration journal before retrying."
           )
         );
       const grants = yield* Machines.execMachine({
@@ -115,13 +119,16 @@ export const MigrateApplication = Action(
       });
       if (grants.exit_code !== 0)
         return yield* Effect.fail(
-          new Error(
-            "Runtime grant verification failed; keeping the existing web release."
-          )
+          new Error("Runtime grant verification failed; web remains stopped.")
         );
       return { image: input.image, verified: true };
-    }).pipe(
-      Effect.scoped,
+    }).pipe(Effect.scoped)
+);
+
+export const MigrateApplication = Action(
+  "Zoen.MigrateApplication",
+  (input: ApplicationMigration) =>
+    migrateApplication(input).pipe(
       Effect.provide(CredentialsFromEnv),
       Effect.provide(FetchHttpClient.layer)
     )

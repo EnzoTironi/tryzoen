@@ -123,6 +123,11 @@ export const workspaceModel = async function (
         return {
           ...params,
           maxOutputTokens: undefined,
+          tools: params.tools?.map((tool) =>
+            tool.type === "function"
+              ? { ...tool, strict: tool.strict ?? false }
+              : tool
+          ),
           prompt: params.prompt.filter((message) => message.role !== "system"),
           providerOptions: {
             ...params.providerOptions,

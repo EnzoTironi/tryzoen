@@ -32,7 +32,7 @@ export function ConnectedSettings({
     mutationFn: async () => {
       const result = await authClient.signOut();
       if (result.error) throw new Error(result.error.message);
-      window.location.assign("/sign-in?callbackUrl=%2Fcompanion");
+      window.location.assign("/sign-in?callbackUrl=%2F");
     },
   });
   return (

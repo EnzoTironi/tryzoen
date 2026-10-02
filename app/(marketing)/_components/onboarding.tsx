@@ -4,7 +4,7 @@ import { useI18n } from "@web/i18n/context";
 
 import { createContext, useContext, type ReactNode } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { companionAppOrigin } from "../public-origin";
 import { MessageCircleIcon } from "lucide-react";
 
 import type { conversationDestinations } from "../../../server/channels/destination";
@@ -33,13 +33,6 @@ function ChannelIcon({
       <MessageCircleIcon aria-hidden="true" />
     </span>
   );
-}
-
-function conversationStartHref(
-  destinations: ReturnType<typeof conversationDestinations> | null
-) {
-  if (destinations?.imessage) return destinations.imessage;
-  return "/get-started";
 }
 
 export function ConversationIcons({
@@ -77,19 +70,11 @@ export function OnboardingTrigger({
   ...props
 }: Omit<ButtonProps, "render" | "nativeButton">) {
   const { t } = useI18n();
-  const destinations = useContext(OnboardingContext);
-  const href = conversationStartHref(destinations);
   return (
     <Button
       {...props}
       nativeButton={false}
-      render={
-        href === "/get-started" ? (
-          <Link href={href} />
-        ) : (
-          <a aria-label={t("Começar")} href={href} />
-        )
-      }
+      render={<a href={`${companionAppOrigin}/`} aria-label={t("Começar")} />}
     >
       {children}
     </Button>
