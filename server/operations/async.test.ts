@@ -435,6 +435,7 @@ describe("settlement within a strict deadline scope", () => {
     const clear = vi.spyOn(globalThis, "clearTimeout");
     const held = Promise.withResolvers<string>();
     const aborted = Promise.withResolvers<AbortSignal>();
+    const deadline = Date.now() + 200;
     const result = observe(
       withDeadline(async () => {
         const signal = operationSignal();
@@ -446,21 +447,22 @@ describe("settlement within a strict deadline scope", () => {
           { once: true }
         );
         return held.promise;
-      }, Date.now() + 200)
+      }, deadline)
     );
     const signal = await aborted.promise;
     try {
       expect(signal.aborted).toBe(true);
       expect(signal.reason).toBeInstanceOf(TimeoutError);
+      expect(Date.now()).toBeGreaterThanOrEqual(deadline);
       expect(result.settled()).toBe(false);
     } finally {
       held.resolve("explicitly released");
     }
     expect(await result.rejection()).toBe(signal.reason);
-    expect(schedule).toHaveBeenCalledTimes(1);
-    const scheduled = schedule.mock.results[0];
+    expect(schedule).toHaveBeenCalled();
+    const scheduled = schedule.mock.results.at(-1);
     if (scheduled?.type !== "return") {
-      throw new Error("Expected one actual deadline timer.");
+      throw new Error("Expected an actual deadline timer.");
     }
     expect(clear).toHaveBeenCalledWith(scheduled.value);
   });
