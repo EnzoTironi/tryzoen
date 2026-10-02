@@ -37,7 +37,7 @@ import {
 import type { ConversationDraft } from "./session/input";
 import { IconButton } from "./icon-button";
 import type { MessageReply } from "./session/reply";
-import { systemFont, useColors } from "./theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "./theme";
 
 export function Composer({
   onSend,
@@ -79,11 +79,20 @@ export function Composer({
   readonly onDraftChange?: (draft: ConversationDraft) => void;
 }) {
   const colors = useColors();
+  const preferences = useAccessibilityPreferences();
+  const increasedContrast =
+    preferences.increasedContrast || preferences.forcedColors;
+  const opaque =
+    preferences.reduceTransparency ||
+    increasedContrast ||
+    Platform.OS !== "web" ||
+    typeof CSS === "undefined" ||
+    !CSS.supports("backdrop-filter", "blur(1px)");
   const width = useWindowDimensions().width;
   const compact = width < 720;
   const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
+    () => createStyles(colors, compact, opaque, increasedContrast),
+    [colors, compact, opaque, increasedContrast]
   );
   const [localDraft, setDraft] = useState(initialDraft?.text ?? "");
   const draft = value ?? localDraft;
@@ -308,7 +317,9 @@ export function Composer({
             <TextInput
               accessibilityLabel={label}
               placeholder={placeholder}
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={
+                increasedContrast || !opaque ? colors.ink : colors.muted
+              }
               value={draft}
               ref={(instance) => {
                 input.current = instance;
@@ -488,7 +499,12 @@ function ReplyPreview({
   );
 }
 
-const createStyles = (palette: ReturnType<typeof useColors>, compact = true) =>
+const createStyles = (
+  palette: ReturnType<typeof useColors>,
+  compact = true,
+  opaque = true,
+  increasedContrast = false
+) =>
   StyleSheet.create({
     attachments: { gap: 8 },
     attachment: {
@@ -537,26 +553,37 @@ const createStyles = (palette: ReturnType<typeof useColors>, compact = true) =>
       justifyContent: "center",
       borderRadius: 22,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${palette.line}70`,
-      backgroundColor: `${palette.surface}b8`,
+      borderColor: increasedContrast
+        ? palette.ink
+        : opaque
+          ? palette.line
+          : `${palette.line}70`,
+      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
     },
-    pressed: { opacity: 0.6 },
+    pressed: { opacity: increasedContrast ? 1 : 0.6 },
     field: {
       flex: 1,
       minWidth: 0,
       minHeight: compact ? 44 : 32,
-      backgroundColor: `${palette.surface}b8`,
+      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? {
+            color: palette.ink,
+            backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)",
+          }
         : {}),
       flexDirection: "row",
       alignItems: "flex-end",
       gap: 6,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${palette.line}70`,
+      borderColor: increasedContrast
+        ? palette.ink
+        : opaque
+          ? palette.line
+          : `${palette.line}70`,
       borderRadius: compact ? 22 : 18,
       paddingLeft: 12,
       paddingRight: 5,

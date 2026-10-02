@@ -10,7 +10,7 @@ import { Input } from "@web/components/ui/input";
 import styles from "../space.module.css";
 
 type Graph = z.output<typeof OntologySchema>;
-export function OntologyValueField({
+function OntologyValueField({
   property,
   name = "value",
 }: {

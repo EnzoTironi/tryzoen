@@ -52,7 +52,7 @@ test(
       operationId: randomUUID(),
       text: "Group preview",
     });
-    await reconcileMatrixActivity();
+    await reconcileMatrixActivity(Date.now() + 30_000, 5);
     const sessionIds = Array.from({ length: 34 }, () => randomUUID());
     for (const [index, id] of sessionIds.entries()) {
       await query(

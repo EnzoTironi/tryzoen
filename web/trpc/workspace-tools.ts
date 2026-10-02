@@ -37,6 +37,7 @@ const selectionDefinition = async function (
     input.connectionId,
     input.revision
   );
+  if (connection.kind === "postgres") throw new WorkspaceAccessDenied();
   const operation = connection.operations.find(
     (entry) => entry.id === input.operation
   );

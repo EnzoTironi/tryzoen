@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { MemoryCard } from "../cards/memory";
 import { usePageStyles } from "../page";
-import type { LearnedNotesData } from "./notes";
+import { LearnedClaimSearchInputSchema } from "./schema";
+import { LearnedClaimProvenance } from "./provenance";
+import type { LearnedNotesData } from "./data";
 
 function localInstant(date: string, time: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}(:\d{2})?$/.test(time))
@@ -27,30 +29,102 @@ function localInstant(date: string, time: string) {
 }
 
 export function MemoryHistory({
-  load,
+  data,
+  claimId,
+  cacheScope,
   onClose,
 }: {
-  readonly load: LearnedNotesData["history"];
+  readonly data: Pick<LearnedNotesData, "search" | "history">;
+  readonly claimId?: string;
+  readonly cacheScope: string;
   readonly onClose: () => void;
 }) {
   const pageStyles = usePageStyles();
   const [query, setQuery] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const search = useMutation({ mutationFn: load });
+  const [validOn, setValidOn] = useState("");
+  const [validation, setValidation] = useState<string>();
+  const [versionLimit, setVersionLimit] = useState(20);
+  const search = useMutation({ mutationFn: data.search });
+  const versions = useQuery({
+    queryKey: ["companion-claim-history", cacheScope, claimId],
+    enabled: Boolean(claimId),
+    queryFn: () => {
+      if (!claimId)
+        throw new Error("Select a memory to inspect its recorded versions.");
+      return data.history({ claimId });
+    },
+  });
   const asOf = localInstant(date, time);
   const timezone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
   const visible =
     search.isSuccess &&
     search.variables.query === query.trim() &&
-    search.variables.asOf === asOf;
+    search.variables.view?.asOf === asOf &&
+    search.variables.validOn === (validOn || undefined);
+  if (claimId)
+    return (
+      <CompanionSheet title="Recorded memory versions" onClose={onClose}>
+        <Text style={pageStyles.copy}>
+          These are recorded versions, including corrections and removal. They
+          do not replace current automatic recall.
+        </Text>
+        {versions.isPending && (
+          <Text style={pageStyles.copy}>Loading recorded versions…</Text>
+        )}
+        {versions.isError && (
+          <Text accessibilityRole="alert" style={pageStyles.copy}>
+            Recorded versions are unavailable under your current access.
+          </Text>
+        )}
+        {!versions.isError &&
+          versions.data?.versions.slice(0, versionLimit).map((claim) => (
+            <MemoryCard
+              key={`${claim.file.id}:${claim.revision}`}
+              document={{
+                title:
+                  claim.file.state.kind === "tombstone"
+                    ? "Removed memory"
+                    : "Recorded memory",
+                text:
+                  claim.file.state.kind === "active"
+                    ? claim.file.state.body.text
+                    : "Removed from automatic recall.",
+                updated: "",
+              }}
+            >
+              <LearnedClaimProvenance claim={claim} />
+            </MemoryCard>
+          ))}
+        {!versions.isError &&
+          versions.data &&
+          !versions.data.versions.length && (
+            <Text style={pageStyles.copy}>
+              No recorded versions are available.
+            </Text>
+          )}
+        {!versions.isError &&
+          versions.data &&
+          versions.data.versions.length > versionLimit && (
+            <ActionButton
+              quiet
+              onPress={() => {
+                setVersionLimit(versionLimit + 20);
+              }}
+            >
+              Show 20 more versions
+            </ActionButton>
+          )}
+      </CompanionSheet>
+    );
   return (
     <CompanionSheet title="Memory history" onClose={onClose}>
       <Text style={pageStyles.copy}>
-        Find what your learned notes said at a past moment. Dates describe when
-        Zoen recorded a version, not when a fact happened in the world.
+        Find what claims said at a recorded moment. Recorded time and
+        world-valid dates are separate. A previously removed fact can appear in
+        an earlier audit snapshot.
       </Text>
-      <Text style={pageStyles.rowTitle}>Search your notes</Text>
       <TextInput
         accessibilityLabel="Search memory history"
         value={query}
@@ -61,9 +135,9 @@ export function MemoryHistory({
       />
       <View style={styles.row}>
         <View style={styles.field}>
-          <Text style={pageStyles.rowTitle}>Date</Text>
+          <Text style={pageStyles.rowTitle}>Recorded date</Text>
           <TextInput
-            accessibilityLabel="Memory history date"
+            accessibilityLabel="Memory recorded date"
             value={date}
             onChangeText={setDate}
             placeholder="YYYY-MM-DD"
@@ -73,9 +147,9 @@ export function MemoryHistory({
           />
         </View>
         <View style={styles.field}>
-          <Text style={pageStyles.rowTitle}>Time</Text>
+          <Text style={pageStyles.rowTitle}>Recorded time</Text>
           <TextInput
-            accessibilityLabel="Memory history time"
+            accessibilityLabel="Memory recorded time"
             value={time}
             onChangeText={setTime}
             placeholder="14:30"
@@ -85,54 +159,106 @@ export function MemoryHistory({
           />
         </View>
       </View>
-      <Text style={pageStyles.copy}>Your local time · {timezone}</Text>
+      <Text style={pageStyles.copy}>Your local recorded time · {timezone}</Text>
+      <TextInput
+        accessibilityLabel="Optional world-valid date"
+        value={validOn}
+        onChangeText={setValidOn}
+        placeholder="World-valid date, optional · YYYY-MM-DD"
+        maxLength={10}
+        autoCapitalize="none"
+        style={pageStyles.field}
+      />
       {Boolean(date && time) && !asOf && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          Enter a valid date and time, for example 2026-09-28 and 14:30.
+          Enter a valid recorded date and time.
         </Text>
       )}
       <ActionButton
         disabled={!query.trim() || !asOf || search.isPending}
         onPress={() => {
-          if (asOf) search.mutate({ query: query.trim(), asOf });
+          if (!asOf) return;
+          const parsed = LearnedClaimSearchInputSchema.safeParse({
+            query: query.trim(),
+            view: { asOf },
+            ...(validOn ? { validOn } : {}),
+          });
+          if (!parsed.success) {
+            setValidation(
+              parsed.error.issues[0]?.message ?? "Review your query and dates."
+            );
+            return;
+          }
+          setValidation(undefined);
+          search.mutate(parsed.data);
         }}
       >
-        {search.isPending ? "Searching…" : "Search this moment"}
+        {search.isPending ? "Searching…" : "Search this recorded moment"}
       </ActionButton>
+      {validation && (
+        <Text accessibilityRole="alert" style={pageStyles.copy}>
+          {validation}
+        </Text>
+      )}
       {search.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          History is unavailable. Check that memory is active and any unfinished
-          update has been reviewed, then try again.
+          History is unavailable under current access. Personal pause does not
+          prevent authorized historical review.
         </Text>
       )}
       {visible && (
         <View style={styles.results}>
           <Text accessibilityRole="header" style={pageStyles.heading}>
-            Memory at {new Date(search.data.asOf).toLocaleString()}
+            Memory recorded by{" "}
+            {asOf ? new Date(asOf).toLocaleString() : "the selected moment"}
           </Text>
-          {search.data.hits.length === 0 && (
+          <Text selectable style={pageStyles.copy}>
+            Snapshot revision: {search.data.revision ?? "empty memory"}
+          </Text>
+          {!search.data.matches.length && (
             <Text style={pageStyles.copy}>
-              No matching notes were recorded at this moment.
+              No matching claims were recorded at this moment.
             </Text>
           )}
-          {search.data.hits.map((hit) => (
+          {search.data.matches.map(({ claim, validity }) => (
             <MemoryCard
-              key={hit.versionId}
-              document={{ title: hit.title, text: hit.excerpt, updated: "" }}
+              key={`${claim.file.id}:${claim.revision}`}
+              document={{
+                title: "Historical memory",
+                text:
+                  claim.file.state.kind === "active"
+                    ? claim.file.state.body.text
+                    : "Removed from automatic recall.",
+                updated: "",
+              }}
             >
-              <Text style={pageStyles.copy}>Historical excerpt</Text>
+              <Text style={pageStyles.copy}>
+                World-valid filter:{" "}
+                {validity === "unknown"
+                  ? "unknown dates"
+                  : validity === "in-range"
+                    ? "in range"
+                    : "not applied"}
+              </Text>
+              <LearnedClaimProvenance claim={claim} />
             </MemoryCard>
           ))}
+          {search.data.hasMore && (
+            <Text style={pageStyles.copy}>
+              More matching claims exist. Refine the query; each result is
+              bounded to eight matches.
+            </Text>
+          )}
           <Text style={pageStyles.copy}>
-            These are matching excerpts from saved versions. They do not replace
-            your current notes. Removed notes are excluded.
+            This is an audit view, including retained prior facts where
+            applicable. It does not restore removed memories or change current
+            recall.
           </Text>
         </View>
       )}
     </CompanionSheet>
   );
 }
-
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 16 },
   field: { flex: 1, gap: 8 },

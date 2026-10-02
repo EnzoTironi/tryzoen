@@ -2,24 +2,6 @@
 # Alchemy Docker Postgres stays outside this image (see docs/ops/hosted-fly.md).
 # syntax=docker/dockerfile:1
 
-FROM debian:bookworm-slim AS memory-engine
-ARG TARGETARCH
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git \
-  && rm -rf /var/lib/apt/lists/*
-WORKDIR /tmp/ai-memory
-RUN case "$TARGETARCH" in \
-      amd64) release=x86_64; checksum=15cafdc48eabc0305c164ccc8e884b260275f5a88b4f26e8456c2e42156375e4 ;; \
-      arm64) release=aarch64; checksum=f5fbe2ba7f21469cb473c6cdfc74d62c01eaaaea1b792e3a0251953169589bfd ;; \
-      *) exit 1 ;; \
-    esac \
-  && curl -fsSL "https://github.com/akitaonrails/ai-memory/releases/download/v2.4.1/ai-memory-linux-${release}.tar.gz" -o release.tar.gz \
-  && printf '%s  release.tar.gz\n' "$checksum" | sha256sum -c - \
-  && tar xzf release.tar.gz \
-  && install -m 755 ai-memory /usr/local/bin/ai-memory \
-  && install -Dm 644 LICENSE /usr/local/share/licenses/ai-memory/LICENSE \
-  && /usr/local/bin/ai-memory --version
-
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
@@ -65,8 +47,6 @@ RUN corepack enable && corepack prepare pnpm@11.24.0 --activate \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg git util-linux \
   && rm -rf /var/lib/apt/lists/*
 RUN npm install --global @openai/codex@0.155.1 && codex --version
-COPY --from=memory-engine /usr/local/bin/ai-memory /usr/local/bin/ai-memory
-COPY --from=memory-engine /usr/local/share/licenses/ai-memory /usr/local/share/licenses/ai-memory
 COPY --from=build /app /app
 RUN chmod +x /app/scripts/fly-entrypoint.sh \
   && node -e "require.resolve('just-bash'); require.resolve('@firecrawl/anydoc/cli.js'); require.resolve('quickjs-emscripten')" \

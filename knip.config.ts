@@ -10,7 +10,11 @@ export default {
   workspaces: {
     ".": {
       vitest: {
-        config: ["vitest.config.ts", "vitest.runtime.config.ts"],
+        config: [
+          "vitest.config.ts",
+          "vitest.runtime.config.ts",
+          "tests/runtime/matrix-security.config.ts",
+        ],
       },
       entry: [
         "agent/channels/**/*.ts",

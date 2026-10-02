@@ -149,10 +149,6 @@ export const env = createEnv({
     BLOB_READ_WRITE_TOKEN: requiredValue.optional(),
     BLOB_STORE_ID: requiredValue.optional(),
     ZOEN_EVAL_REPORT: requiredValue.optional(),
-    ZOEN_AI_MEMORY_BINARY: z
-      .string()
-      .regex(/^(?:\/|[A-Za-z]:[\\/])/)
-      .optional(),
     ZOEN_SESSION_ARCHIVE_DIR: z
       .string()
       .regex(/^(?:\/|[A-Za-z]:[\\/])/)

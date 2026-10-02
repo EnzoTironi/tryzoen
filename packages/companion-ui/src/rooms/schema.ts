@@ -14,6 +14,16 @@ export const roomSchema = z.object({
   avatarUri: z.string().nullable().optional(),
   avatarRevision: z.uuid().nullable().optional(),
 });
+export const roomParticipationSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("joined"), room: roomSchema }).strict(),
+  z
+    .object({
+      status: z.literal("pending"),
+      id: roomSchema.shape.id,
+      retryAfterMs: z.number().int().min(100).max(30000),
+    })
+    .strict(),
+]);
 export const directPersonSchema = z.object({
   name: z.string(),
   username: z.string(),
@@ -329,6 +339,10 @@ export const roomSearchPageSchema = z.object({
 export const roomUnreadSchema = z.object({ id: z.uuid(), unread: z.boolean() });
 
 export interface RoomData {
+  participate: (
+    input: Pick<z.infer<typeof roomReadSchema>, "id">,
+    signal?: AbortSignal
+  ) => Promise<z.infer<typeof roomParticipationSchema>>;
   readReceiptPreference: (
     input: { id: string },
     signal?: AbortSignal

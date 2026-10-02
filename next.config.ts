@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 import { openInstinctLowMemBuild } from "@shared/environment/env/low-mem-build";
 
 const nextConfig: NextConfig = {
+  skipProxyUrlNormalize: true,
   transpilePackages: ["@zoen/companion-ui", "react-native-svg"],
   turbopack: {
     resolveExtensions: [

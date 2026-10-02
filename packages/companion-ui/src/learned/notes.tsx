@@ -1,52 +1,25 @@
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { CompanionPage, usePageStyles } from "../page";
-import { ActionButton } from "../button";
-import { DocumentEditor } from "../document-editor";
-import { CompanionSheet } from "../sheet";
-import type { MemoryDocumentView } from "../personal-memory";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
 import type {
-  learnedMemoryHistoryInputSchema,
-  learnedMemoryHistorySchema,
-  learnedMemoryRelationEditSchema,
-  LearnedMemoryItemSchema,
+  LearnedClaimChangeSchema,
+  LearnedClaimSetEnabledInputSchema,
 } from "./schema";
+import { CompanionPage, usePageStyles } from "../page";
+import { ActionButton } from "../button";
+import { CompanionSheet } from "../sheet";
 import { MemoryHistory } from "./history";
 import { MemoryRelations } from "./relations";
 import { MemoryCard } from "../cards/memory";
 import { IconButton } from "../icon-button";
 import { MemoryBackup } from "./backup";
-
-export interface LearnedNotesData {
-  backup: () => Promise<void>;
-  relate: (
-    input: z.infer<typeof learnedMemoryRelationEditSchema>,
-    operationId: string
-  ) => Promise<void>;
-  history: (
-    input: z.infer<typeof learnedMemoryHistoryInputSchema>
-  ) => Promise<z.infer<typeof learnedMemoryHistorySchema>>;
-  read: () => Promise<{
-    documents: readonly (MemoryDocumentView &
-      Pick<z.infer<typeof LearnedMemoryItemSchema>, "relations">)[];
-    enabled: boolean;
-    workspaceEnabled: boolean;
-    needsAttention: boolean;
-  }>;
-  save: (
-    id: string | undefined,
-    text: string,
-    operationId: string
-  ) => Promise<void>;
-  remove: (id: string, operationId: string) => Promise<void>;
-  clear: (operationId: string) => Promise<void>;
-  setEnabled: (enabled: boolean) => Promise<void>;
-  recover: () => Promise<void>;
-  newOperationId: () => string;
-}
+import { LearnedClaimEditor } from "./editor";
+import { LearnedClaimProvenance } from "./provenance";
+import { createLearnedClaimEdit, type LearnedClaimEdit } from "./draft";
+import { isLearnedMemoryConflict, type LearnedNotesData } from "./data";
+export type { LearnedNotesData } from "./data";
 
 export function LearnedNotes({
   data,
@@ -56,41 +29,57 @@ export function LearnedNotes({
   readonly cacheScope: string;
 }) {
   const pageStyles = usePageStyles();
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [relating, setRelating] = useState<string>();
   const memory = useQuery({
     queryKey: ["companion-learned-memory", cacheScope],
-    queryFn: data.read,
+    queryFn: () => data.read(),
   });
-  const [editing, setEditing] = useState<{
-    id?: string;
-    text: string;
-    operationId: string;
-  }>();
-  const [removing, setRemoving] = useState<{
-    id?: string;
-    operationId: string;
-  }>();
+  const cache = useQueryClient();
+  const refresh = async () => {
+    await Promise.all([
+      cache.invalidateQueries({
+        queryKey: ["companion-learned-memory", cacheScope],
+      }),
+      cache.invalidateQueries({
+        queryKey: ["companion-claim-history", cacheScope],
+      }),
+    ]);
+  };
+  const [history, setHistory] = useState<{ claimId?: string }>();
+  const [relating, setRelating] = useState<string>();
+  const [editing, setEditing] = useState<LearnedClaimEdit>();
+  const [removing, setRemoving] =
+    useState<
+      Extract<
+        z.output<typeof LearnedClaimChangeSchema>,
+        { action: "clear" | "tombstone" }
+      >
+    >();
+  const [preference, setPreference] =
+    useState<z.output<typeof LearnedClaimSetEnabledInputSchema>>();
   const mutation = useMutation({
     mutationFn: (action: () => Promise<void>) => action(),
-    onSettled: async () => {
-      await memory.refetch();
-    },
+    onSettled: refresh,
   });
   const actionsDisabled =
-    mutation.isPending || memory.isFetching || memory.isError;
-  const edit = (id?: string, text = "") => {
-    setEditing({ id, text, operationId: data.newOperationId() });
-  };
+    mutation.isPending || memory.isFetching || memory.isError || !memory.data;
+  const claims = memory.isError
+    ? []
+    : (memory.data?.snapshot.claims.flatMap((claim) =>
+        claim.file.state.kind === "active"
+          ? [{ claim, body: claim.file.state.body }]
+          : []
+      ) ?? []);
   return (
     <CompanionPage
       title="Learned memories"
       loading={memory.isPending}
       error={
         memory.error
-          ? "Your saved memories couldn’t be loaded. Try again when access is restored."
+          ? "Your saved memories couldn’t be loaded. Access must be restored before viewing or editing them."
           : mutation.error
-            ? "Your change couldn’t be confirmed. Review the saved notes before trying again."
+            ? isLearnedMemoryConflict(mutation.error)
+              ? "Memory changed. Your request is retained; review the current revision before retrying."
+              : "Your change couldn’t be confirmed. Review the saved memory before retrying."
             : undefined
       }
       onRetry={() => {
@@ -104,125 +93,161 @@ export function LearnedNotes({
       <View style={styles.actions}>
         <ActionButton
           quiet
-          disabled={
-            !memory.data?.enabled ||
-            memory.data.needsAttention ||
-            actionsDisabled
-          }
+          disabled={actionsDisabled}
           onPress={() => {
-            setHistoryOpen(true);
+            setHistory({});
           }}
         >
           Search memory history
         </ActionButton>
         <ActionButton
-          disabled={
-            !memory.data?.enabled ||
-            actionsDisabled ||
-            memory.data.needsAttention
-          }
+          disabled={actionsDisabled || !memory.data.automaticEnabled}
           onPress={() => {
-            edit();
+            if (memory.data)
+              setEditing(
+                createLearnedClaimEdit(memory.data, data.newOperationId)
+              );
           }}
         >
           Remember something
         </ActionButton>
         <ActionButton
           quiet
-          disabled={!memory.data?.workspaceEnabled || actionsDisabled}
+          disabled={actionsDisabled}
           onPress={() => {
-            mutation.mutate(() => data.setEnabled(!memory.data?.enabled));
+            if (!memory.data) return;
+            const command = preference ?? {
+              enabled: !memory.data.enabled,
+              expectedPreferenceRevision: memory.data.preferenceRevision,
+              operationId: data.newOperationId(),
+            };
+            setPreference(command);
+            mutation.mutate(async () => {
+              await data.setEnabled(command);
+              setPreference(undefined);
+            });
           }}
         >
-          {memory.data?.enabled === false ? "Resume memory" : "Pause memory"}
+          {preference
+            ? "Retry preference change"
+            : memory.data?.enabled === false
+              ? "Resume memory"
+              : "Pause memory"}
         </ActionButton>
       </View>
-      {memory.data?.enabled === false && (
-        <Text style={pageStyles.copy}>
-          Learning and recall are paused. You can still review or remove saved
-          notes.
-        </Text>
-      )}
-      {memory.data?.needsAttention && (
+      {preference && mutation.error && (
         <View style={pageStyles.section}>
           <Text accessibilityRole="alert" style={pageStyles.copy}>
-            An update did not finish. Review the saved notes before resuming
-            memory.
+            The preference change was not confirmed. Your current personal
+            preference is {memory.data?.enabled ? "active" : "paused"}.
+            Workspace enablement is separate.
           </Text>
           <ActionButton
             quiet
             disabled={actionsDisabled}
             onPress={() => {
-              mutation.mutate(data.recover);
+              setPreference(undefined);
+              mutation.reset();
             }}
           >
-            Resume with these notes
+            Use the current reviewed preference
           </ActionButton>
         </View>
       )}
-      {memory.isError && !!memory.data?.documents.length && (
+      {memory.data?.enabled === false && (
         <Text style={pageStyles.copy}>
-          Showing the last loaded notes. Editing will resume after access is
-          restored.
+          Learning and recall are paused. Review, correction and removal remain
+          available.
         </Text>
       )}
-      {memory.data?.documents.map((note) => (
+      {memory.data?.workspaceEnabled === false && (
+        <Text style={pageStyles.copy}>
+          Automatic memory is disabled in this workspace. Your personal
+          preference is unchanged; review, correction and removal remain
+          available.
+        </Text>
+      )}
+      {claims.map(({ claim, body }) => (
         <MemoryCard
-          key={note.id}
-          document={note}
+          key={claim.file.id}
+          document={{ title: "Learned memory", text: body.text, updated: "" }}
           action={
             <IconButton
               label="Edit note"
               icon={Pencil}
-              disabled={actionsDisabled || memory.data.needsAttention}
+              disabled={actionsDisabled}
               onPress={() => {
-                edit(note.id, note.text);
+                if (memory.data)
+                  setEditing(
+                    createLearnedClaimEdit(
+                      memory.data,
+                      data.newOperationId,
+                      claim
+                    )
+                  );
               }}
             />
           }
         >
+          <LearnedClaimProvenance claim={claim} />
           <View style={styles.noteActions}>
             <ActionButton
               quiet
-              disabled={actionsDisabled || memory.data.needsAttention}
+              disabled={actionsDisabled}
               onPress={() => {
-                setRelating(note.id);
+                setRelating(claim.file.id);
+              }}
+            >{`Relationships (${body.relations.length})`}</ActionButton>
+            <ActionButton
+              quiet
+              disabled={actionsDisabled}
+              onPress={() => {
+                setHistory({ claimId: claim.file.id });
               }}
             >
-              {`Relationships (${note.relations.length})`}
+              Recorded versions
             </ActionButton>
             <IconButton
               label="Remove note"
               icon={Trash2}
               disabled={actionsDisabled}
               onPress={() => {
-                setRemoving({
-                  id: note.id,
-                  operationId: data.newOperationId(),
-                });
+                if (memory.data)
+                  setRemoving({
+                    action: "tombstone",
+                    claimId: claim.file.id,
+                    operationId: data.newOperationId(),
+                    expectedRevision: memory.data.snapshot.revision,
+                  });
               }}
             />
           </View>
         </MemoryCard>
       ))}
-      {!memory.isError && memory.data?.documents.length === 0 && (
+      {!memory.isError && memory.data && !claims.length && (
         <Text style={pageStyles.copy}>
           Things you ask Zoen to remember will appear here.
         </Text>
       )}
-      {memory.data && (
+      {!memory.isPending && (
         <MemoryBackup
-          disabled={actionsDisabled || memory.data.needsAttention}
-          onBackup={data.backup}
+          disabled={mutation.isPending || memory.isFetching}
+          data={data.archives}
+          onRestored={refresh}
         />
       )}
-      {!!memory.data?.documents.length && (
+      {!!claims.length && (
         <View style={pageStyles.section}>
           <ActionButton
             quiet
             disabled={actionsDisabled}
             onPress={() => {
-              setRemoving({ operationId: data.newOperationId() });
+              if (memory.data)
+                setRemoving({
+                  action: "clear",
+                  expectedRevision: memory.data.snapshot.revision,
+                  operationId: data.newOperationId(),
+                });
             }}
           >
             Remove all learned notes
@@ -230,46 +255,38 @@ export function LearnedNotes({
         </View>
       )}
       <Text style={[pageStyles.copy, pageStyles.section]}>
-        Removing a note stops learned-memory recall of it. Earlier
-        conversations, saved files, local version history and backups remain
-        separate.
+        Removal stops automatic recall. Earlier recorded claim versions and
+        immutable conversation journals remain available through their separate
+        review and archive actions.
       </Text>
       {editing && (
-        <DocumentEditor
-          markdown
-          title="Learned memory.md"
-          label="Learned memory"
-          description="A fact or preference for Zoen to remember in this workspace."
-          initialText={editing.text}
-          maxLength={8000}
+        <LearnedClaimEditor
+          key={editing.claimId}
+          initialDraft={editing}
+          data={data}
+          onSaved={refresh}
           onClose={() => {
             setEditing(undefined);
           }}
-          onSave={async (text) => {
-            if (!text.trim()) throw new Error("Write a note before saving.");
-            await mutation.mutateAsync(() =>
-              data.save(editing.id, text, editing.operationId)
-            );
-          }}
         />
       )}
-      {historyOpen && (
+      {history && (
         <MemoryHistory
-          load={data.history}
+          data={data}
+          cacheScope={cacheScope}
+          claimId={history.claimId}
           onClose={() => {
-            setHistoryOpen(false);
+            setHistory(undefined);
           }}
         />
       )}
       {relating && memory.data && (
         <MemoryRelations
           key={relating}
-          noteId={relating}
-          documents={memory.data.documents}
+          claimId={relating}
+          memory={memory.data}
           data={data}
-          onSaved={async () => {
-            await memory.refetch();
-          }}
+          onSaved={refresh}
           onClose={() => {
             setRelating(undefined);
           }}
@@ -282,44 +299,75 @@ export function LearnedNotes({
             if (!mutation.isPending) setRemoving(undefined);
           }}
         >
-          <View>
-            <Text accessibilityRole="header" style={pageStyles.heading}>
-              {removing.id ? "Remove this note?" : "Remove all learned notes?"}
-            </Text>
-            {mutation.error && (
+          <Text accessibilityRole="header" style={pageStyles.heading}>
+            {removing.action === "tombstone"
+              ? "Remove this note?"
+              : "Remove all current learned notes?"}
+          </Text>
+          <Text style={pageStyles.copy}>
+            Zoen will stop recalling these claims. Recorded history and
+            immutable journals are retained. No archive or erasure authority is
+            reset.
+          </Text>
+          {mutation.error && (
+            <>
               <Text accessibilityRole="alert" style={pageStyles.copy}>
-                The removal could not be completed. Try again.
+                The removal was not confirmed. Your request is retained. Review
+                the current memory before retrying.
               </Text>
-            )}
-            <Text style={pageStyles.copy}>
-              Zoen will stop recalling{" "}
-              {removing.id ? "this note" : "these notes"}. This does not erase
-              earlier conversations, files, version history or backups.
-            </Text>
-            <View style={styles.actions}>
+              <Text selectable style={pageStyles.copy}>
+                Current head: {memory.data?.snapshot.revision ?? "empty memory"}
+              </Text>
+              {claims
+                .filter(
+                  ({ claim }) =>
+                    removing.action === "clear" ||
+                    claim.file.id === removing.claimId
+                )
+                .map(({ claim, body }) => (
+                  <Text selectable key={claim.file.id} style={pageStyles.copy}>
+                    {body.text}
+                  </Text>
+                ))}
               <ActionButton
                 quiet
-                disabled={mutation.isPending}
-                onPress={() => {
-                  setRemoving(undefined);
-                }}
-              >
-                Keep notes
-              </ActionButton>
-              <ActionButton
                 disabled={actionsDisabled}
                 onPress={() => {
-                  mutation.mutate(async () => {
-                    if (removing.id)
-                      await data.remove(removing.id, removing.operationId);
-                    else await data.clear(removing.operationId);
-                    setRemoving(undefined);
-                  });
+                  if (memory.data) {
+                    setRemoving({
+                      ...removing,
+                      expectedRevision: memory.data.snapshot.revision,
+                      operationId: data.newOperationId(),
+                    });
+                    mutation.reset();
+                  }
                 }}
               >
-                {mutation.isPending ? "Removing…" : "Remove"}
+                Use this reviewed revision
               </ActionButton>
-            </View>
+            </>
+          )}
+          <View style={styles.actions}>
+            <ActionButton
+              quiet
+              disabled={mutation.isPending}
+              onPress={() => {
+                setRemoving(undefined);
+              }}
+            >
+              Keep notes
+            </ActionButton>
+            <ActionButton
+              disabled={actionsDisabled}
+              onPress={() => {
+                mutation.mutate(async () => {
+                  await data.change(removing);
+                  setRemoving(undefined);
+                });
+              }}
+            >
+              {mutation.isPending ? "Removing…" : "Remove"}
+            </ActionButton>
           </View>
         </CompanionSheet>
       )}
@@ -329,6 +377,7 @@ export function LearnedNotes({
 const styles = StyleSheet.create({
   noteActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,

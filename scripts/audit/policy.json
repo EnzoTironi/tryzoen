@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "classification": "accepted temporary risk",
+  "advisory": "GHSA-86w9-cpqp-85rv",
+  "package": "node-forge",
+  "version": "1.4.0",
+  "expoCli": "57.0.27",
+  "expoCertificates": "0.0.6",
+  "expiresAt": "2026-10-04T02:59:00Z",
+  "pathsSha256": "6f251b7dbe4daa56f99c2e27147920624d6e77231aaf7edd32c8d7648b3379bb",
+  "configurationSha256": "7c5f36de11d7a6e2acadca8a52da4023d9a8b7bf1fc925223d887ae22bd3eafe"
+}

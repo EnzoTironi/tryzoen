@@ -1,12 +1,15 @@
-import { query, transaction } from "@db/queries";
+import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
-import { mapAsync } from "../operations/async";
 import { z } from "zod";
 import {
   creatorDraftSchema,
   creatorReleaseSchema,
 } from "@zoen/companion-ui/creators";
-import { FileMemory } from "../memory/ai-memory/learned";
+import {
+  readArchivedPrivateMemory,
+  backupArchivedPrivateMemory,
+} from "../memory/account-archive";
+import { privateMemoryArchiveResponse } from "../memory/archive-http";
 import { requireControlSession } from "./controls";
 
 const Id = z.uuid();
@@ -113,6 +116,7 @@ export const downloadAccountArchive = async function (
   id: string,
   section:
     | "memory"
+    | "private-memory"
     | "files"
     | "attachment"
     | "source"
@@ -123,6 +127,10 @@ export const downloadAccountArchive = async function (
   const archive = (await ownedArchives(headers, id))[0];
   if (!archive) throw new AccountArchiveMissing();
 
+  if (section === "private-memory")
+    return privateMemoryArchiveResponse(
+      await backupArchivedPrivateMemory(headers, archive.id)
+    );
   const responseHeaders = {
     "cache-control": "private, no-store",
     "x-content-type-options": "nosniff",
@@ -188,22 +196,12 @@ export const downloadAccountArchive = async function (
   const documents =
     await query(sql`SELECT d.content, d.updated_at FROM memory_document d
     JOIN personal_memory_binding b ON b.key = d.key WHERE b.workspace_id = ${archive.workspaceId}`);
-  const learned = await transaction(async () => {
-    const namespaces = await query<{
-      id: string;
-    }>(sql`SELECT namespace_id AS id FROM workspace_memory_namespace
-      WHERE workspace_id = ${archive.workspaceId} AND user_id = ${`better-auth:${archive.sourceUserId}`} FOR UPDATE`);
-    return mapAsync(
-      namespaces,
-      (namespace) => FileMemory.read(namespace.id),
-      1
-    );
-  });
+  const privateMemory = await readArchivedPrivateMemory(headers, archive.id);
   return Response.json(
     {
       profile: profile[0] ?? null,
       documents,
-      learned: learned.flatMap((page) => page.results),
+      privateMemory,
     },
     { headers: responseHeaders }
   );

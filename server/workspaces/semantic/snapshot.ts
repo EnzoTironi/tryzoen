@@ -3,6 +3,7 @@ import {
   SemanticArgumentsSchema,
   SemanticIdentifierSchema,
   SemanticNumberSchema,
+  SemanticColumnSchema,
 } from "@zoen/companion-ui/semantic-query";
 
 export const semanticLimits = {
@@ -13,10 +14,7 @@ export const semanticLimits = {
   concurrent: 2,
   memoryBytes: 1_610_612_736,
 } as const;
-export const SemanticColumnSchema = z.strictObject({
-  name: SemanticIdentifierSchema,
-  type: z.enum(["text", "numeric", "boolean", "date"]),
-});
+
 const columns = z
   .array(SemanticColumnSchema)
   .min(1)

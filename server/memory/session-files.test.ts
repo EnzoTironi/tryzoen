@@ -6,11 +6,12 @@ import {
   rm,
   stat,
   symlink,
+  truncate,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { HookEvent } from "eve/hooks";
 import type { MemoryTurnCompletedContext } from "eve/memory";
 import {
@@ -21,6 +22,15 @@ import {
   sessionSourceSchema,
   writeSessionSource,
 } from "./session-files";
+
+// Observe the filesystem boundary while preserving actual private-file I/O.
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: vi.fn<typeof actual.readFile>(actual.readFile),
+  };
+});
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -255,4 +265,46 @@ test("segments the full redacted transcript without splitting Unicode or secrets
       .join("")
   ).toBe(source.text);
   expect(lines).toHaveLength(segments.length);
+});
+
+test("immutable replay rejects an oversized existing source before any whole-file read", async () => {
+  const root = await temporary();
+  const source = sessionSource(
+    message("Original small source"),
+    "session_bound"
+  );
+  if (!source) throw new Error("Expected source");
+  const namespace = randomUUID();
+  const path = await writeSessionSource(root, namespace, source, 7);
+  await truncate(path, 16 * 1024 * 1024);
+  vi.mocked(readFile).mockClear();
+  await expect(writeSessionSource(root, namespace, source, 7)).rejects.toThrow(
+    "conflicts with the stored source"
+  );
+  expect(readFile).not.toHaveBeenCalled();
+  expect((await stat(path)).size).toBe(16 * 1024 * 1024);
+  expect(await readdir(dirname(path))).toEqual([path.split("/").at(-1)]);
+});
+
+test("immutable replay compares exact bytes and refuses a source-file symlink without touching its target", async () => {
+  const root = await temporary();
+  const source = sessionSource(message("Original source"), "session_exact");
+  if (!source) throw new Error("Expected source");
+  const namespace = randomUUID();
+  const path = await writeSessionSource(root, namespace, source, 8);
+  const bytes = await readFile(path);
+  await expect(writeSessionSource(root, namespace, source, 8)).resolves.toBe(
+    path
+  );
+  const outside = join(await temporary(), "private-source.jsonl");
+  await writeFile(outside, bytes, { mode: 0o600 });
+  await rm(path);
+  await symlink(outside, path);
+  vi.mocked(readFile).mockClear();
+  await expect(writeSessionSource(root, namespace, source, 8)).rejects.toThrow(
+    "conflicts with the stored source"
+  );
+  expect(readFile).not.toHaveBeenCalled();
+  expect(await readFile(outside)).toEqual(bytes);
+  expect(await readdir(dirname(path))).toEqual([path.split("/").at(-1)]);
 });

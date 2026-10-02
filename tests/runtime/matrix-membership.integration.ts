@@ -203,7 +203,7 @@ test(
     await query(
       sql`UPDATE matrix_room_members SET native_retry_at = now() WHERE binding_id = ${room.id} AND user_id = ${fixture.guest.userId}`
     );
-    await reconcileGroupDepartures();
+    await reconcileGroupDepartures(Date.now() + 30_000, 10);
     expect(await readNativeGroupMembership(room.roomId, guest.matrixId)).toBe(
       "leave"
     );

@@ -14,10 +14,25 @@ function bearer(incoming: IncomingMessage) {
   return incoming.headers.authorization ?? "";
 }
 
+function deactivationHold() {
+  const entered = Promise.withResolvers<void>();
+  const released = Promise.withResolvers<void>();
+  return {
+    entered: entered.promise,
+    markEntered: entered.resolve,
+    waiting: released.promise,
+    release: released.resolve,
+  };
+}
+
 export async function accountDeletionProvidersFixture() {
   const logouts: string[] = [];
   const vaultUsers: string[] = [];
   const deactivated: string[] = [];
+  const matrixAttempts: string[] = [];
+  const matrixFailures = new Set<string>();
+  const nextHolds = new Map<string, ReturnType<typeof deactivationHold>>();
+  const allHolds = new Set<ReturnType<typeof deactivationHold>>();
 
   const server = createServer((incoming, outgoing) => {
     const receive = async () => {
@@ -92,8 +107,35 @@ export async function accountDeletionProvidersFixture() {
             writeJson(outgoing, 401, "{}");
             return;
           }
-          deactivated.push(decodeURIComponent(deactivate[1] ?? ""));
-          writeJson(outgoing, 200, "{}");
+          const matrixId = decodeURIComponent(deactivate[1] ?? "");
+          matrixAttempts.push(matrixId);
+          const status = matrixFailures.has(matrixId) ? 503 : 200;
+          const hold = nextHolds.get(matrixId);
+          if (hold) {
+            nextHolds.delete(matrixId);
+            hold.markEntered();
+            await hold.waiting;
+          }
+          if (status === 200) deactivated.push(matrixId);
+          writeJson(outgoing, status, "{}");
+          return;
+        }
+        const user = /^\/_synapse\/admin\/v2\/users\/(.+)$/.exec(path);
+        if (user && incoming.method === "GET") {
+          if (
+            bearer(incoming) !==
+            "Bearer synthetic-deletion-matrix-appservice-32bx"
+          ) {
+            writeJson(outgoing, 401, "{}");
+            return;
+          }
+          const matrixId = decodeURIComponent(user[1] ?? "");
+          const erased = deactivated.includes(matrixId);
+          writeJson(
+            outgoing,
+            200,
+            JSON.stringify({ name: matrixId, deactivated: erased, erased })
+          );
           return;
         }
         writeJson(outgoing, 404, JSON.stringify({ errcode: "M_UNRECOGNIZED" }));
@@ -109,10 +151,24 @@ export async function accountDeletionProvidersFixture() {
   });
   return {
     deactivated,
+    matrixAttempts,
+    setMatrixFailure(id: string, failing: boolean) {
+      if (failing) matrixFailures.add(id);
+      else matrixFailures.delete(id);
+    },
+    holdNextMatrixDeactivation(id: string) {
+      if (nextHolds.has(id))
+        throw new Error("A Matrix deactivation is already held.");
+      const hold = deactivationHold();
+      nextHolds.set(id, hold);
+      allHolds.add(hold);
+      return { entered: hold.entered, release: hold.release };
+    },
     logouts,
     vaultUsers,
     close: () =>
       new Promise<void>((resolve) => {
+        for (const hold of allHolds) hold.release();
         server.close(() => {
           resolve();
         });

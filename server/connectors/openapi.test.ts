@@ -103,6 +103,7 @@ test("schema validation rejects executable extensions after import, before publi
     endpoint: "https://example.com",
     connected_by: "owner",
     operations,
+    postgres_config: null,
     share: "owner" as const,
   };
   const definition = remoteToolDefinition(connection, operation);

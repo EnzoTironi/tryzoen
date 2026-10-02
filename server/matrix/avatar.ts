@@ -7,6 +7,7 @@ import { roomAvatarWriteSchema } from "@zoen/companion-ui/rooms";
 import type { WorkspaceActorSchema } from "../workspaces/access";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 import { requireMatrixRoom } from "./rooms";
+import { lockMatrixAdmission } from "./authority";
 import { uploadMatrixMedia } from "./media/upload";
 import { MatrixError, matrixConfiguration, matrixRequest } from "./client";
 
@@ -62,9 +63,7 @@ export async function setMatrixRoomAvatar(
     .update(image?.url ?? "")
     .digest("hex");
   return transaction(async () => {
-    await query(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.id}, 5))`
-    );
+    await lockMatrixAdmission([actor.workspaceId], [input.id]);
     const room = await requireMatrixRoom(actor, input.id, true);
     if (room.avatarRevision === input.operationId)
       return { status: "saved" as const, room };

@@ -1,5 +1,7 @@
 # Knowledge and ontology — implementation contract
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 Reviewed 29 September 2026 against the current code and the supplied v2.2 ontology specification. The user identified TextQL as the primary ontology reference and questioned retaining two knowledge systems. The target below supersedes the earlier decision to retain Akita as a permanent owner. The pre-launch preference permits direct removal of obsolete interfaces and atomic caller updates. Data-destructive resets and migration-baseline consolidation require specific coordinated authorization. The current repository policy is greenfield and supersedes the 19 September persistent-rollout assumption. This plan does not authorize destructive migration, deletion of hosted records, credential use or deployment. This does not reopen creator marketplace work.
 
 ## Decisions
@@ -642,3 +644,153 @@ audit fact, not the service principal's OAuth or private-memory authority. Ident
 registration inhibits Matrix login and is not external runtime connectivity. The
 integration owner retains grant/resolver/migration/offboarding changes; new member
 schema/service and roster projections require coordinated ownership before edits.
+
+### Private claim recovery archive v2 — 2026-10-01
+
+The private repository backup now authenticates the Git bundle and the exact
+canonical JSONL bytes of every session event cited anywhere in its retained
+lineage, including claims corrected or cleared later. The envelope binds the
+private namespace/scope, Git revision, session/event coordinates, capture sequence
+and byte hashes with the installation key. Version 1 is deliberately rejected;
+old artifacts are not deleted or silently upgraded. This internal format does not
+yet replace the active Akita ZIP download or its callers.
+
+Restore first checks current private app/session ownership, the erasure receipt,
+Git ancestry/CAS, historical and current file-source permissions, exact citation
+coverage, all existing paths/files and all delivery receipts. A pending delivery,
+conflicting immutable file, sequence collision, missing native allocator high-water
+or archive sequence ahead of that high-water blocks recovery. The same native
+allocator fence protects explicit source-index rebuilds. Default capture and
+repair both hold the namespace then the same allocation mutex; recovery cannot
+overlook a still-uncommitted allocation after a counter restore. Recovery retains
+that mutex through bounded filesystem repair. A nonpartial capture-sequence index
+covers collision checks for delivered receipts as well as pending deliveries.
+This adds serialized SQL allocation admission, not a new allocator/queue. Maximum
+restore contention remains unqualified. No `setval` or reconstructed permissions
+are used.
+
+Only after the entire preflight passes are missing immutable files fsynced and
+missing stored-receipt indexes inserted. Existing pending receipts are never
+acknowledged. SQL rollback can leave authenticated immutable files without indexes;
+exact replay repairs those indexes without overwriting/deleting bytes. Identical
+Git heads still run source repair; `applied` continues to describe Git publication,
+not whether a missing source/index was recovered. Recorded source dates and Git
+publication history remain unchanged; operational receipt rebuild time is separate.
+
+Processing limits are 10,000 cited events, 8 MiB per canonical file and 128 MiB
+source bytes per archive, in addition to the existing Git bundle bound. These are
+explicit refusal limits, not total conversation retention or production capacity
+claims. Timestamp metadata is bounded before ISO validation and segmentation;
+serialized chunks are bounded before final allocation. Source tests exercise
+native temporary Git/files and mocked SQL. Isolated PostgreSQL journeys cover
+personal/team recovery, allocation commit ordering and retained cross-namespace
+collision denial. A populated temporary-table plan verifies the additive index;
+it does not measure application throughput or maximum restore contention. Private archives cannot reconstruct lost session authority or prove
+completed erasure safety after a database rewind; installation recovery must retain
+the allocator, ownership and the non-restored erasure journal. Full K3 still requires
+active-consumer/recall/creator cutover and recovery/erasure qualification.
+
+The private repository now checks the exact namespace's pending erasure before
+read, recall, change, history or index rebuild, including claims without citations.
+The namespace lock fences ordinary deletion; the receipt presence read adds no
+worker lock or due-time filter. Backup/restore retain their explicit checks. This
+withholds a recovered namespace while its erasure marker remains. Before filesystem
+work, the erasure worker locks any restored exact namespace generation with
+`FOR UPDATE NOWAIT` and requires its known receipt owner to match. Contention or
+unproven ownership retains the obligation without filesystem effects. After file
+erasure, it retires only that generation; existing foreign-key cascades remove its
+private Git bundle, operation receipts, recalls and pending source outbox before
+acknowledging the erasure. A new generation for the same workspace/user is not a
+delete target, and an archive from the retired generation cannot restore into it.
+Synthetic tests verify the SQL, owner checks and savepoint retry ordering; real
+PostgreSQL cascade/concurrency and restore acceptance still require qualification.
+This does not establish safety after completed erasure followed by a whole-database
+rewind that loses the retained deletion journal. Coordinated recovery must preserve
+that non-restored journal before the active-consumer cutover can be qualified.
+
+## PostgreSQL registry boundary — 1 October 2026
+
+The existing connector registry now has an exclusive PostgreSQL configuration
+branch using the canonical file-source endpoint contract. PostgreSQL rows keep
+HTTP endpoint/operations SQL-null; HTTP rows keep PostgreSQL configuration
+SQL-null. Migration 0103 adds this invariant without changing the existing
+workspace/organization owner constraints. Registration requires the current
+authenticated app session and management access. Personal and organization
+workspaces share this contract; private channel, group, external-agent and
+scheduled contexts do not receive PostgreSQL registry entries.
+
+Credentials use one strict encrypted envelope bound to workspace, connection,
+revision and connector kind. This replaces the old untyped prelaunch envelope
+directly: existing connections with that envelope require a new registration.
+There is no dual reader, automatic reseal or data deletion. Secrets are absent
+from metadata, ontology files and remote discovery. PostgreSQL is rejected before
+remote credential selection/decryption and cannot become an HTTP operation.
+
+This is a registry foundation, not enabled live analytics. The current setup
+form remains HTTP-only, and PostgreSQL metadata reports live reads unavailable.
+Trusted payer resolution, durable once-only admission/settlement, bounded TLS
+transport and post-read authorization/provenance remain required before any
+live warehouse read. Synthetic schema/crypto/mocked-boundary tests and local
+PGlite CHECK tests do not qualify that remaining journey or native platforms.
+
+The workspace billing subject resolver reuses the existing app session and
+workspace/organization authorization inside the public database transaction.
+Personal subjects retain the exact raw authenticated user ID; company subjects
+use the verified organization, including a member actor, with no member/issuer
+fallback. This resolves identity only. Entitlements, physical installation
+limits and durable once-only reservation/settlement remain separate required
+admission gates; the billing UI's Free-on-query-error behavior is not suitable
+for protected live reads.
+
+Local registry qualification covers 83 synthetic schema/crypto/caller tests and
+17 authorization-SQL payer tests. An initial eleven-case serial run on isolated PostgreSQL
+15443 covers personal/team registry and payer behavior plus existing MCP/OpenAPI
+import/dispatch/revocation regressions. The existing migration owner verified
+the source prefix and applied additive 0102/0103 (104 app, 20 workflow entries).
+No warehouse connection, model turn, charge or global erasure drain was used.
+The subsequent static cleanup moves the private-channel assertions into a
+separate test, without changing production code; that final twelve-case runtime
+layout awaits a fresh exclusive lease. These checks do not establish live
+analytics, durable quota enforcement or aggregate/native approval qualification.
+
+## Durable source-read accounting foundation — 1 October 2026
+
+The operations owner now reserves exactly one daily tool call for the current
+app actor using the verified payer's current per-user entitlement. Usage follows
+that actor across personal/company workspaces and payers. The existing plan
+catalog defines 200 calls for Free and 1,000 for active Pro/Org; this slice does
+not invent a pooled organization budget, license-seat admission or a physical
+PostgreSQL execution cap, and does not count a source read as another agent turn.
+Other tool/model/storage usage remains outside this narrow accounting boundary.
+
+A supported Eve `sessionId/callId` must be supplied out of band, with the exact
+currently owned session, workspace authority, PostgreSQL connection revision,
+current published source file and canonical parameter ordering. One true outer
+transaction commits its unique allocation before any warehouse work. An
+identical replay returns the existing allocation without another dispatch permit;
+changed operation-bound input fails closed. Billing SQL failure propagates rather
+than becoming the account UI's availability-oriented Free fallback.
+
+Allocations are separate from provider results and contain keyed opaque actor,
+payer, native-operation and request identities plus their original UTC window and
+counts. Connector/account cascades cannot refund them. A singleton nonsecret key
+fingerprint and composite RESTRICT foreign key make replacing the installation
+key fail closed instead of presenting all identities as fresh. Restore requires
+the coherent accounting ledger and its existing installation key. No key rotation,
+ledger rewind reconciliation or irreversible cleanup is implemented here.
+
+Settlement serializes the exact accounting scope and allocation once. Confirmed
+zero/one consumption updates only that original window; duplicate matching
+settlement is inert, conflicting final claims fail, and crash/timeout/unknown
+work retains its hold. Observed work can be recorded after auth revocation using
+the exact internal receipt; clients/models receive no settlement endpoint.
+
+This foundation has no productive live source-tool caller. A new budget allocation
+proves authorization/accounting, not executable parameter validation or a transport
+grant. The owning fixed-read builder must validate exact filter arity/types before
+credential decryption, DNS or socket I/O. Live PostgreSQL execution remains
+disabled until physical/account policy, bounded TLS/cancellation, post-read
+permission/provenance and actual runtime qualification pass. Local PGlite tests
+exercise real authorization/accounting SQL and the additive 0104 constraints on
+one connection; they do not prove PostgreSQL multi-connection lock schedules,
+provider billing, whole-installation enforcement or full TextQL/K3 parity.

@@ -506,7 +506,7 @@ test("relations require scoped targets and retain an existing dangling link duri
   const destination = apply(empty(), assertChange(2), 1);
   const linkedBody = {
     ...body(),
-    relations: [{ kind: "contradicts" as const, memoryId: id(2) }],
+    relations: [{ kind: "contradicts" as const, claimId: id(2) }],
   };
   const linked = apply(
     destination.snapshot,
@@ -555,7 +555,7 @@ test("relations require scoped targets and retain an existing dangling link duri
         expectedRevision: revision(3),
         body: {
           ...linkedBody,
-          relations: [{ kind: "causes", memoryId: id(2) }],
+          relations: [{ kind: "causes", claimId: id(2) }],
         },
       },
       4
@@ -566,7 +566,7 @@ test("relations require scoped targets and retain an existing dangling link duri
       linked.snapshot,
       assertChange(3, linked.snapshot, {
         ...body(),
-        relations: [{ kind: "causes", memoryId: id(3) }],
+        relations: [{ kind: "causes", claimId: id(3) }],
       }),
       3
     )
@@ -576,7 +576,7 @@ test("relations require scoped targets and retain an existing dangling link duri
       linked.snapshot,
       assertChange(3, linked.snapshot, {
         ...body(),
-        relations: [{ kind: "causes", memoryId: id(999) }],
+        relations: [{ kind: "causes", claimId: id(999) }],
       }),
       3
     )

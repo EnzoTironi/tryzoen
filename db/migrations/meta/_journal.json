@@ -708,6 +708,41 @@
       "when": 1790788416124,
       "tag": "0100_agent-members",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1790801856154,
+      "tag": "0101_matrix-erasure",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1790833960707,
+      "tag": "0102_session-source-lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1790840792626,
+      "tag": "0103_postgres-connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1790846830395,
+      "tag": "0104_tool-call-allocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1790895768110,
+      "tag": "0105_private-memory-live",
+      "breakpoints": true
     }
   ]
 }

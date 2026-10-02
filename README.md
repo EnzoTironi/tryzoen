@@ -21,7 +21,8 @@ Revisit this policy before the first production deployment.
   execution. Application behavior uses plain async TypeScript and Zod.
 - PostgreSQL and Drizzle own identity, membership, product records, transactional
   writes and provider delivery receipts. Git owns versioned workspace content;
-  Akita ai-memory provides private Markdown/Git learned memory on a persistent volume.
+  canonical private Git claims retain corrections and cited evidence. Immutable session
+  journals and approved creator manifests use a private persistent volume.
 - Published customer tools run in a bounded QuickJS sandbox. This sandbox only
   executes customer-authored code; it does not orchestrate the agent.
 - Treg is an optional native Eve MCP connection. Connect a workspace's account

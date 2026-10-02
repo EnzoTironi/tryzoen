@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { privateMemoryArchiveDownloads } from "@zoen/companion-ui/memory";
 
 const native = vi.hoisted(() => ({
   available: vi.fn<typeof import("expo-sharing").isAvailableAsync>(),
@@ -8,6 +9,11 @@ const native = vi.hoisted(() => ({
   remove: vi.fn<() => void>(),
 }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "synthetic-download" }));
+vi.mock("expo-document-picker", () => ({
+  getDocumentAsync:
+    vi.fn<typeof import("expo-document-picker").getDocumentAsync>(),
+}));
+vi.mock("expo/fetch", () => ({ fetch: globalThis.fetch }));
 vi.mock("../src/environment", () => ({ apiOrigin: "https://example.test" }));
 vi.mock("../src/auth", () => ({
   accountHeaders: () => ({ Cookie: "synthetic-session" }),
@@ -72,16 +78,18 @@ it("does not download private content when native sharing is unavailable", async
   expect(native.download).not.toHaveBeenCalled();
 });
 
-it("downloads the private learned-memory archive with account credentials", async () => {
+it("downloads the complete canonical private-memory archive with account credentials", async () => {
   await exportMemory();
   expect(native.download).toHaveBeenCalledWith(
-    "https://example.test/api/workspaces/memory/backup",
+    "https://example.test/api/workspaces/memory/backup?coverage=complete-journal",
     expect.any(File),
     { headers: { Cookie: "synthetic-session" } }
   );
   expect(native.share).toHaveBeenCalledWith(
     expect.any(String),
-    expect.objectContaining({ mimeType: "application/zip" })
+    expect.objectContaining({
+      mimeType: privateMemoryArchiveDownloads["complete-journal"].contentType,
+    })
   );
   expect(native.remove).toHaveBeenCalledOnce();
 });

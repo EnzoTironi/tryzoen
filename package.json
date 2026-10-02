@@ -52,7 +52,6 @@
     "drizzle-orm": "^0.45.2",
     "eve": "0.63.0",
     "evlog": "2.27.1",
-    "fflate": "0.8.3",
     "hash-wasm": "4.12.0",
     "htmlparser2": "12.0.0",
     "idb": "^8.0.3",
@@ -172,9 +171,6 @@
     "package:desktop": "pnpm --filter @zoen/desktop package",
     "dev:mobile": "pnpm --filter @zoen/mobile start",
     "preview:companion": "next dev",
-    "test:memory:upstream": "tsx scripts/ai-memory-acceptance.ts",
-    "test:memory:lifecycle": "tsx scripts/ai-memory-lifecycle-acceptance.ts",
-    "test:memory:dream": "tsx scripts/ai-memory-dream/acceptance.ts",
     "build:semantic": "node --import tsx server/workspaces/semantic/build.ts"
   },
   "version": "0.0.0",

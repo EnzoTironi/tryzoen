@@ -1,5 +1,7 @@
 # Zoen’s universal companion
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 The product target is the complete Muse experience: its interaction model and visual detail, together with real, durable behavior. Zoen remains the product and backend. Electron is the desktop host; Expo is the mobile host. React Native components render through React Native Web on desktop and web.
 
 The client now connects the main Muse-style surfaces to durable Zoen data. It is **not full Muse feature parity**. It must remain an opt-in route until the acceptance work below is complete.

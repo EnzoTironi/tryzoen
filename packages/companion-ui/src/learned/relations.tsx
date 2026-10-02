@@ -1,65 +1,87 @@
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
+import type { z } from "zod";
+import type { LearnedClaimReadSchema } from "./schema";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
 import { usePageStyles } from "../page";
-import type { LearnedNotesData } from "./notes";
+import { isLearnedMemoryConflict, type LearnedNotesData } from "./data";
+import { createLearnedClaimEdit } from "./draft";
+import { LearnedClaimConflictReview } from "./editor";
 
 const labels = {
   causes: "Causes",
   fixes: "Fixes",
   contradicts: "Contradicts",
 } as const;
-
-const noteSummary = (text: string) => text.replace(/\s+/gu, " ").trim();
+const summary = (text: string) => text.replace(/\s+/gu, " ").trim();
 
 export function MemoryRelations({
-  noteId,
-  documents,
+  claimId,
+  memory,
   data,
   onSaved,
   onClose,
 }: {
-  readonly noteId: string;
-  readonly documents: readonly Pick<
-    Awaited<ReturnType<LearnedNotesData["read"]>>["documents"][number],
-    "id" | "text" | "relations"
-  >[];
-  readonly data: Pick<LearnedNotesData, "relate" | "newOperationId">;
+  readonly claimId: string;
+  readonly memory: z.output<typeof LearnedClaimReadSchema>;
+  readonly data: Pick<LearnedNotesData, "change" | "read" | "newOperationId">;
   readonly onSaved: () => Promise<void>;
   readonly onClose: () => void;
 }) {
   const pageStyles = usePageStyles();
-  const note = documents.find((item) => item.id === noteId);
-  const [expected] = useState(note?.relations ?? []);
-  const [draft, setDraft] = useState({
-    relations: expected,
-    operationId: data.newOperationId(),
-  });
+  const claim = memory.snapshot.claims.find((item) => item.file.id === claimId);
+  const [draft, setDraft] = useState(() =>
+    claim?.file.state.kind === "active"
+      ? createLearnedClaimEdit(memory, data.newOperationId, claim)
+      : undefined
+  );
+  const [review, setReview] =
+    useState<z.output<typeof LearnedClaimReadSchema>>();
   const [kind, setKind] = useState<keyof typeof labels>("contradicts");
   const [query, setQuery] = useState("");
   const save = useMutation({
-    mutationFn: () =>
-      data.relate(
-        {
-          memoryId: noteId,
-          relations: draft.relations,
-          expectedRelations: expected,
-        },
-        draft.operationId
-      ),
+    mutationFn: async () => {
+      if (!draft) throw new Error("This memory is no longer available.");
+      await data.change(draft);
+    },
     onSuccess: async () => {
       await onSaved();
       onClose();
     },
-    onError: onSaved,
+    onError: async (error) => {
+      if (isLearnedMemoryConflict(error)) setReview(await data.read());
+      await onSaved();
+    },
   });
+  const documents = memory.snapshot.claims.flatMap((item) =>
+    item.file.state.kind === "active"
+      ? [{ id: item.file.id, body: item.file.state.body }]
+      : []
+  );
   const matches = documents.filter(
     (item) =>
-      item.id !== noteId &&
-      item.text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+      item.id !== claimId &&
+      item.body.text.toLowerCase().includes(query.trim().toLowerCase())
   );
+  if (review && draft)
+    return (
+      <LearnedClaimConflictReview
+        draft={draft}
+        current={review}
+        edited="relations"
+        newId={data.newOperationId}
+        onReviewed={(next) => {
+          setDraft(next);
+          setReview(undefined);
+          save.reset();
+        }}
+        onBack={() => {
+          setReview(undefined);
+        }}
+      />
+    );
   return (
     <CompanionSheet
       title="Memory relationships"
@@ -68,27 +90,29 @@ export function MemoryRelations({
       }}
     >
       <Text style={pageStyles.copy}>
-        Private to you in this workspace. Connect notes without changing either
-        claim.
+        Private to you in this workspace. Relationship edits create a recorded
+        version and preserve the reviewed text, evidence and world-valid dates.
       </Text>
       <Text selectable style={pageStyles.rowTitle}>
-        {note ? noteSummary(note.text) : "This note is no longer available."}
+        {draft
+          ? summary(draft.body.text)
+          : "This memory is no longer available."}
       </Text>
       <View style={styles.group}>
         <Text style={pageStyles.rowTitle}>This note…</Text>
-        {draft.relations.length === 0 && (
+        {!draft?.body.relations.length && (
           <Text style={pageStyles.copy}>No relationships yet.</Text>
         )}
-        {draft.relations.map((relation) => (
+        {draft?.body.relations.map((relation) => (
           <View
-            key={`${relation.kind}:${relation.memoryId}`}
+            key={`${relation.kind}:${relation.claimId}`}
             style={styles.relation}
           >
             <Text style={pageStyles.copy}>
               {labels[relation.kind]}:{" "}
-              {noteSummary(
-                documents.find((item) => item.id === relation.memoryId)?.text ??
-                  "Removed note"
+              {summary(
+                documents.find((item) => item.id === relation.claimId)?.body
+                  .text ?? "Removed note"
               )}
             </Text>
             <ActionButton
@@ -96,10 +120,14 @@ export function MemoryRelations({
               disabled={save.isPending}
               onPress={() => {
                 setDraft({
-                  relations: draft.relations.filter(
-                    (item) => item !== relation
-                  ),
+                  ...draft,
                   operationId: data.newOperationId(),
+                  body: {
+                    ...draft.body,
+                    relations: draft.body.relations.filter(
+                      (item) => item !== relation
+                    ),
+                  },
                 });
               }}
             >
@@ -113,7 +141,7 @@ export function MemoryRelations({
           <ActionButton
             key={value}
             quiet={kind !== value}
-            disabled={save.isPending}
+            disabled={!draft || save.isPending}
             onPress={() => {
               setKind(value);
             }}
@@ -136,22 +164,31 @@ export function MemoryRelations({
       {matches.slice(0, 20).map((target) => (
         <View key={target.id} style={styles.relation}>
           <Text numberOfLines={3} style={pageStyles.copy}>
-            {noteSummary(target.text)}
+            {summary(target.body.text)}
           </Text>
           <ActionButton
             quiet
             disabled={
+              !draft ||
               save.isPending ||
-              draft.relations.length >= 20 ||
-              draft.relations.some(
-                (item) => item.kind === kind && item.memoryId === target.id
+              draft.body.relations.length >= 20 ||
+              draft.body.relations.some(
+                (item) => item.kind === kind && item.claimId === target.id
               )
             }
             onPress={() => {
-              setDraft({
-                relations: [...draft.relations, { kind, memoryId: target.id }],
-                operationId: data.newOperationId(),
-              });
+              if (draft)
+                setDraft({
+                  ...draft,
+                  operationId: data.newOperationId(),
+                  body: {
+                    ...draft.body,
+                    relations: [
+                      ...draft.body.relations,
+                      { kind, claimId: target.id },
+                    ],
+                  },
+                });
             }}
           >
             Connect note
@@ -163,19 +200,19 @@ export function MemoryRelations({
           Showing the first 20 matches. Refine your search to find another note.
         </Text>
       )}
-      {matches.length === 0 && (
+      {!matches.length && (
         <Text style={pageStyles.copy}>No other matching memories.</Text>
       )}
       {save.isError && (
         <Text accessibilityRole="alert" style={pageStyles.copy}>
-          The relationships could not be saved. Your draft is retained. Close
-          this panel to review the current notes and any unfinished update
-          before retrying.
+          The relationships could not be saved. Your full draft and original
+          revision are retained. Review a newer revision explicitly before
+          retrying a conflict.
         </Text>
       )}
       <View style={styles.actions}>
         <ActionButton
-          disabled={!note || save.isPending}
+          disabled={!draft || save.isPending}
           onPress={() => {
             save.mutate();
           }}
@@ -183,19 +220,14 @@ export function MemoryRelations({
           {save.isPending ? "Saving…" : "Save relationships"}
         </ActionButton>
         <ActionButton quiet disabled={save.isPending} onPress={onClose}>
-          Cancel
+          Discard relationship draft
         </ActionButton>
       </View>
     </CompanionSheet>
   );
 }
-
 const styles = StyleSheet.create({
   group: { gap: 8 },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   relation: { gap: 6, paddingVertical: 12 },
 });

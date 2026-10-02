@@ -18,3 +18,8 @@
   --primary-foreground: #fff;
   --ring: #0a84ff;
 }
+
+/* Filled buttons need a darker blue than accent-colored links. */
+[data-slot="button"][data-variant="default"] {
+  --primary: #0071eb;
+}

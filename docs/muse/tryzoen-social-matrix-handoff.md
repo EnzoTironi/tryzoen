@@ -1,5 +1,7 @@
 # Social/Matrix implementation handoff
 
+> Historical checkpoint. The K3 cutover on 2026-10-01 uses canonical private Git claims, PostgreSQL consent and immutable session journals. See [current architecture](../eve/architecture.md). The dated results below qualify only their original source checkpoint; current real runtime and UI acceptance remain separate gates.
+
 The current cross-product backlog and execution order live in
 [the parity roadmap](parity-roadmap.md). This document retains the decisions and
 historical verification checkpoints behind that plan; later evidence supersedes

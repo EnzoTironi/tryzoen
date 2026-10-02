@@ -8,6 +8,7 @@ import { ConnectionStatus } from "../conversation/connection";
 import { PresenceIndicator } from "./presence";
 import { useRoomLifecycle } from "./lifecycle";
 import { useRoomSync } from "./sync";
+import { useRoomParticipation } from "./participation";
 import { RoomTypingIndicator } from "./typing-indicator";
 import { useMemo, useContext, useState, type ComponentProps } from "react";
 import { CompanionVisibility } from "../visibility";
@@ -36,7 +37,7 @@ import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
 import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "../chats/avatar";
-import { systemFont, useColors } from "../theme";
+import { systemFont, useAccessibilityPreferences, useColors } from "../theme";
 import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
@@ -72,13 +73,9 @@ export function RoomConversation({
   readonly avatarUri?: string;
   readonly onCopyText?: (text: string) => Promise<void>;
 }) {
-  const colors = useColors();
   const width = useWindowDimensions().width;
   const compact = width < 720;
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { colors, styles } = useRoomStyles(compact);
   const [headerHeight, setHeaderHeight] = useState(compact ? 104 : 80);
   const [threadHeaderHeight, setThreadHeaderHeight] = useState(
     compact ? 104 : 80
@@ -102,8 +99,10 @@ export function RoomConversation({
     !options &&
     !selectedMessage;
   const active = useRoomLifecycle(cacheScope, roomId, exposed);
+  const participation = useRoomParticipation(data, cacheScope, roomId, active);
+  const ready = active && participation.ready;
   const wide = width >= 1100;
-  const timelineVisible = visible && (!root || wide);
+  const timelineVisible = ready && visible && (!root || wide);
   const reactions = useRoomReactions(
     data,
     cacheScope,
@@ -113,14 +112,16 @@ export function RoomConversation({
   const messages = useInfiniteQuery({
     queryKey: ["matrix-messages", cacheScope, roomId],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) =>
-      data.messages({ id: roomId, from: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) => {
+      participation.requireJoined();
+      return data.messages({ id: roomId, from: pageParam }, signal);
+    },
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
         : undefined,
     staleTime: Infinity,
-    enabled: active && exposed,
+    enabled: ready && exposed,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
@@ -141,7 +142,8 @@ export function RoomConversation({
     cacheScope,
     roomId,
     // Keep the authorized, backed-off sync alive so a failed history read can recover.
-    exposed && (!!room || messages.isError)
+    ready && exposed && (!!room || messages.isError),
+    participation
   );
   const showProfile = () => {
     if (room?.kind === "direct")
@@ -165,7 +167,7 @@ export function RoomConversation({
     timeline,
     !messages.isError && timelineVisible && !unread.isPending
   );
-  if (typing.accessDenied)
+  if (participation.status === "denied" || typing.accessDenied)
     return (
       <View style={styles.unavailable}>
         <Text accessibilityRole="header" style={styles.title}>
@@ -182,8 +184,13 @@ export function RoomConversation({
     <View style={styles.layout}>
       <ConnectionStatus top={headerHeight} reconnecting={typing.reconnecting} />
       <View
+        pointerEvents={ready ? "auto" : "none"}
+        aria-hidden={!ready}
+        accessibilityElementsHidden={!ready}
+        importantForAccessibility={ready ? "auto" : "no-hide-descendants"}
         style={[
           styles.main,
+          !ready && styles.paused,
           root && !wide && !messages.isError && styles.hidden,
         ]}
       >
@@ -218,7 +225,7 @@ export function RoomConversation({
               receipt.threadId === null || receipt.threadId === "main"
           )}
           onUnread={
-            unread.isPending
+            !ready || unread.isPending
               ? undefined
               : () => {
                   unread.mutate();
@@ -249,7 +256,7 @@ export function RoomConversation({
           loading={messages.isPending}
           error={Boolean(messages.error)}
           onRetry={() => {
-            void messages.refetch();
+            if (ready) void messages.refetch();
           }}
           hasMore={messages.hasNextPage}
           loadingMore={messages.isFetchingNextPage}
@@ -287,7 +294,17 @@ export function RoomConversation({
         </View>
       </View>
       {root && !messages.isError && (
-        <View style={[styles.thread, !wide && styles.fullThread]}>
+        <View
+          pointerEvents={ready ? "auto" : "none"}
+          aria-hidden={!ready}
+          accessibilityElementsHidden={!ready}
+          importantForAccessibility={ready ? "auto" : "no-hide-descendants"}
+          style={[
+            styles.thread,
+            !wide && styles.fullThread,
+            !ready && styles.paused,
+          ]}
+        >
           <View
             testID="thread-header"
             pointerEvents="box-none"
@@ -316,7 +333,7 @@ export function RoomConversation({
                 <Text numberOfLines={1} style={styles.title}>
                   {room?.label ?? "Thread"}
                 </Text>
-                <ChevronRight size={12} color={colors.muted} />
+                <ChevronRight size={12} color={colors.ink} />
               </View>
             </Pressable>
             <View style={styles.headerSide}>
@@ -349,13 +366,14 @@ export function RoomConversation({
             onCopyText={onCopyText}
             messageLink={messageLink}
             onProfile={setProfile}
-            visible={visible}
-            active={active}
+            visible={ready && visible}
+            active={ready}
+            requireJoined={participation.requireJoined}
             typing={typing}
           />
         </View>
       )}
-      {options && (
+      {ready && options && (
         <CompanionSheet
           title="Conversa"
           onClose={() => {
@@ -407,7 +425,7 @@ export function RoomConversation({
           </View>
         </CompanionSheet>
       )}
-      {details && room?.kind === "group" && current?.pages[0] && (
+      {ready && details && room?.kind === "group" && current?.pages[0] && (
         <RoomDetails
           presence={typing.presence}
           onLeft={onBack}
@@ -429,7 +447,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {selectedMessage && onCloseMessage && (
+      {ready && selectedMessage && onCloseMessage && (
         <RoomMessageContext
           key={selectedMessage}
           data={data}
@@ -442,7 +460,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {pins && room && (
+      {ready && pins && room && (
         <RoomPins
           data={data}
           cacheScope={cacheScope}
@@ -456,7 +474,7 @@ export function RoomConversation({
           }}
         />
       )}
-      {searching && room && (
+      {ready && searching && room && (
         <RoomSearch
           key={`${cacheScope}:${roomId}`}
           data={data}
@@ -474,7 +492,7 @@ export function RoomConversation({
           }
         />
       )}
-      {profile && room && (
+      {ready && profile && room && (
         <ParticipantProfile
           person={profile}
           presence={
@@ -496,6 +514,31 @@ export function RoomConversation({
             setRoot(undefined);
           }}
         />
+      )}
+      {!ready && (
+        <View style={styles.participation}>
+          <Text
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            style={styles.caption}
+          >
+            {participation.status === "error"
+              ? "Não foi possível conectar à conversa."
+              : participation.status === "cancelled"
+                ? "Conexão pausada."
+                : "Conectando à conversa…"}
+          </Text>
+          {participation.status === "pending" ? (
+            <ActionButton onPress={participation.cancel}>
+              Cancelar conexão
+            </ActionButton>
+          ) : (
+            <ActionButton onPress={participation.retry}>
+              Tentar novamente
+            </ActionButton>
+          )}
+          <ActionButton onPress={onBack}>Voltar às conversas</ActionButton>
+        </View>
       )}
     </View>
   );
@@ -520,11 +563,7 @@ function RoomHeader({
   readonly onSearch: () => void;
   readonly onOptions: () => void;
 }) {
-  const colors = useColors();
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { colors, styles } = useRoomStyles(compact);
   return (
     <View
       testID="conversation-header"
@@ -573,7 +612,7 @@ function RoomHeader({
           >
             {room?.label ?? "Conversa"}
           </Text>
-          <ChevronRight size={12} color={colors.muted} />
+          <ChevronRight size={12} color={colors.ink} />
         </Pressable>
         {presence && presence !== "offline" && (
           <PresenceIndicator state={presence} />
@@ -604,6 +643,7 @@ function RoomThread({
   onProfile,
   visible,
   active,
+  requireJoined,
   typing,
   onUnread,
 }: Pick<
@@ -617,14 +657,13 @@ function RoomThread({
   readonly onProfile: (person: z.infer<typeof roomMemberSchema>) => void;
   readonly visible: boolean;
   readonly active: boolean;
+  readonly requireJoined: ReturnType<
+    typeof useRoomParticipation
+  >["requireJoined"];
   readonly typing: ReturnType<typeof useRoomSync>;
 }) {
-  const colors = useColors();
   const compact = useWindowDimensions().width < 720;
-  const styles = useMemo(
-    () => createStyles(colors, compact),
-    [colors, compact]
-  );
+  const { styles } = useRoomStyles(compact);
   const [composerHeight, setComposerHeight] = useState(compact ? 62 : 50);
   const [subscriptionHeight, setSubscriptionHeight] = useState(44);
   const draft = useRoomDraft(data, cacheScope, roomId, root.id);
@@ -637,8 +676,13 @@ function RoomThread({
   const result = useInfiniteQuery({
     queryKey: ["matrix-thread", cacheScope, roomId, root.id],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) =>
-      data.thread({ id: roomId, rootId: root.id, from: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) => {
+      requireJoined();
+      return data.thread(
+        { id: roomId, rootId: root.id, from: pageParam },
+        signal
+      );
+    },
     getNextPageParam: (last, _pages, _cursor, cursors) =>
       last.nextCursor && !cursors.includes(last.nextCursor)
         ? last.nextCursor
@@ -719,13 +763,19 @@ function RoomThread({
         loading={result.isPending}
         error={Boolean(result.error)}
         onRetry={() => {
-          void result.refetch();
+          if (active && visible) void result.refetch();
         }}
         hasMore={result.hasNextPage}
         loadingMore={result.isFetchingNextPage}
         fetching={result.isFetching}
         onMore={() => {
-          if (result.hasNextPage && !result.isFetching && !result.isError)
+          if (
+            active &&
+            visible &&
+            result.hasNextPage &&
+            !result.isFetching &&
+            !result.isError
+          )
             void result.fetchNextPage({ cancelRefetch: false });
         }}
       />
@@ -754,7 +804,30 @@ function RoomThread({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
+function useRoomStyles(compact: boolean) {
+  const colors = useColors();
+  const preferences = useAccessibilityPreferences();
+  const increasedContrast =
+    preferences.increasedContrast || preferences.forcedColors;
+  const opaque =
+    preferences.reduceTransparency ||
+    increasedContrast ||
+    Platform.OS !== "web" ||
+    typeof CSS === "undefined" ||
+    !CSS.supports("backdrop-filter", "blur(1px)");
+  const styles = useMemo(
+    () => createStyles(colors, compact, opaque, increasedContrast),
+    [colors, compact, opaque, increasedContrast]
+  );
+  return { colors, styles };
+}
+
+function createStyles(
+  colors: ReturnType<typeof useColors>,
+  compact: boolean,
+  opaque: boolean,
+  increasedContrast: boolean
+) {
   return StyleSheet.create({
     unavailable: {
       flex: 1,
@@ -770,6 +843,20 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       backgroundColor: colors.canvas,
     },
     main: { flex: 1, minWidth: 0, minHeight: 0 },
+    paused: { opacity: 0 },
+    participation: {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 50,
+      padding: 32,
+      gap: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.canvas,
+    },
     composer: {
       position: "absolute",
       bottom: 0,
@@ -783,10 +870,8 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       zIndex: 20,
       maxWidth: "100%",
       borderRadius: 22,
-      backgroundColor: `${colors.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
-        : {}),
+      // Secondary status captions need a solid surface over busy media.
+      backgroundColor: colors.surface,
     },
     hidden: { display: "none" },
     header: {
@@ -806,10 +891,14 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
     headerControl: {
       borderRadius: 22,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.line}70`,
-      backgroundColor: `${colors.surface}b8`,
+      borderColor: increasedContrast
+        ? colors.ink
+        : opaque
+          ? colors.line
+          : `${colors.line}70`,
+      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
       boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
     },
@@ -824,10 +913,14 @@ function createStyles(colors: ReturnType<typeof useColors>, compact: boolean) {
       paddingVertical: 3,
       borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.line}70`,
-      backgroundColor: `${colors.surface}b8`,
+      borderColor: increasedContrast
+        ? colors.ink
+        : opaque
+          ? colors.line
+          : `${colors.line}70`,
+      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
       ...(Platform.OS === "web"
-        ? { backdropFilter: "blur(20px) saturate(180%)" }
+        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
         : {}),
     },
     options: { gap: 2 },

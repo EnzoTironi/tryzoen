@@ -21,6 +21,7 @@ export function DocumentEditor({
   saveLabel,
   readOnly = false,
   allowUnchanged = false,
+  initiallyDirty = false,
   markdown = false,
   history,
   onSave,
@@ -34,6 +35,8 @@ export function DocumentEditor({
   readonly saveLabel?: string;
   readonly readOnly?: boolean;
   readonly allowUnchanged?: boolean;
+  /** A retained draft reopened after conflict is still unsaved. */
+  readonly initiallyDirty?: boolean;
   readonly markdown?: boolean;
   readonly history?: DocumentHistoryData;
   readonly onSave: (text: string) => Promise<void>;
@@ -67,7 +70,7 @@ export function DocumentEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const dirty = unreadChanges || text !== initialText;
+  const dirty = initiallyDirty || unreadChanges || text !== initialText;
   const close = () => {
     if (saving) return;
     if (dirty) setConfirmDiscard(true);

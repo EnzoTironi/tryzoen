@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { query } from "@db/queries";
 import { forwardMatrixMessage, listForwardDestinations } from "./forward";
 import { MatrixEventSchema, type matrixRequest } from "./client";
 import { WorkspaceAccessDenied } from "../workspaces/access";
@@ -9,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn<typeof matrixRequest>(),
   access: vi.fn<(id: string) => Promise<void>>(),
   project: vi.fn<() => Promise<void>>(),
-  query: vi.fn<() => Promise<Record<string, unknown>[]>>(),
+  query: vi.fn<typeof query>(),
 }));
 vi.mock("@db/queries", () => ({
   transaction: (fn: () => Promise<unknown>) => fn(),
@@ -31,6 +33,8 @@ vi.mock("./client", async (original) => ({
   matrixRequest: mocks.request,
   matrixConfiguration: async () => ({ serverName: "test", botId: "@bot:test" }),
 }));
+const dialect = new PgDialect();
+const admissionOrder: string[] = [];
 const actor = {
   userId: "viewer",
   workspaceId: "team",
@@ -67,11 +71,45 @@ let published = MatrixEventSchema.parse({
   sender: "@viewer:test",
   content: {},
 });
+function admissionRows(statement: Parameters<typeof query>[0]) {
+  const { sql: raw, params } = dialect.sqlToQuery(statement);
+  const text = raw.replace(/\s+/gu, " ").trim();
+  if (text.startsWith('SELECT w.id AS "workspaceId"')) {
+    expect(params).toEqual([
+      actor.workspaceId,
+      ...[input.id, input.destinationId].toSorted(),
+    ]);
+    admissionOrder.push("locate");
+    return [{ workspaceId: actor.workspaceId, organizationId: "organization" }];
+  }
+  if (text.startsWith("SELECT id FROM organizations")) {
+    expect(params).toEqual(["organization"]);
+    expect(text).toContain("FOR SHARE");
+    admissionOrder.push("organization");
+    return [{ id: "organization" }];
+  }
+  if (
+    text.startsWith("SELECT pg_advisory_xact_lock") &&
+    text.includes(", 5)")
+  ) {
+    const id = params[0];
+    if (typeof id !== "string")
+      throw new Error("A room fence must have a binding ID.");
+    admissionOrder.push(`room:${id}`);
+    return [];
+  }
+  if (text.startsWith("SELECT pg_advisory_xact_lock") && text.includes(", 10)"))
+    return [];
+  throw new Error(`Unexpected forward admission SQL: ${text}`);
+}
 beforeEach(() => {
   source = MatrixEventSchema.parse(original);
   mocks.access.mockReset().mockResolvedValue(undefined);
   mocks.project.mockReset().mockResolvedValue(undefined);
-  mocks.query.mockReset().mockResolvedValue([]);
+  admissionOrder.length = 0;
+  mocks.query
+    .mockReset()
+    .mockImplementation(async (statement) => admissionRows(statement));
   mocks.request.mockReset().mockImplementation(async (method, path, body) => {
     if (method === "PUT") {
       published = MatrixEventSchema.parse({
@@ -225,3 +263,29 @@ it("cannot enumerate destinations when source access has been revoked", async ()
   ).rejects.toThrow(WorkspaceAccessDenied);
   expect(mocks.query).not.toHaveBeenCalled();
 });
+
+it.each(["source-first", "destination-first"])(
+  "acquires the complete sorted room set before the first join for %s forwarding",
+  async (direction) => {
+    const opposed =
+      direction === "source-first"
+        ? input
+        : { ...input, id: input.destinationId, destinationId: input.id };
+    mocks.access.mockImplementation(async (id) => {
+      admissionOrder.push(`join:${id}`);
+      throw new WorkspaceAccessDenied();
+    });
+    await expect(forwardMatrixMessage(actor, opposed)).rejects.toThrow(
+      WorkspaceAccessDenied
+    );
+    expect(admissionOrder).toEqual([
+      "locate",
+      "organization",
+      ...[input.id, input.destinationId].toSorted().map((id) => `room:${id}`),
+      "locate",
+      `join:${opposed.id}`,
+    ]);
+    expect(mocks.request).not.toHaveBeenCalled();
+    expect(mocks.project).not.toHaveBeenCalled();
+  }
+);

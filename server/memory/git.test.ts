@@ -8,7 +8,11 @@ import {
   readPrivateMemoryGit,
   privateMemoryGitLimits,
 } from "./git";
-import { planLearnedClaim } from "./claims";
+import {
+  planLearnedClaim,
+  bindLearnedClaimPublication,
+  validateLearnedClaimSnapshot,
+} from "./claims";
 import { projectLearnedClaims, searchLearnedClaims } from "./retrieval";
 
 const scope = { workspaceId: "private-team", userId: "alice" };
@@ -521,3 +525,423 @@ test("a clear receipt cannot omit an active parent claim or conceal additional f
     GitBundleError
   );
 });
+
+test("retained recovery evidence spans more than fifty corrections and survives clear without truncating source history", async () => {
+  const claimId = randomUUID();
+  let head: string | null = null;
+  let bundle: Uint8Array | null = null;
+  const revisions: string[] = [];
+  const sources = Array.from({ length: 55 }, (_, index) => ({
+    kind: "session" as const,
+    sessionId: "synthetic-retained-history",
+    eventId: `synthetic-source-${index}`,
+    sha256: index.toString(16).padStart(64, "0"),
+    excerpt: `Retained source ${index}`,
+  }));
+  for (const [index, source] of sources.entries()) {
+    const published = await publishPrivateMemoryGit({
+      scope,
+      bundle,
+      head,
+      change: {
+        action: index === 0 ? "assert" : "correct",
+        claimId,
+        operationId: randomUUID(),
+        expectedRevision: head,
+        body: { ...body(`Revision ${index}`), sources: [source] },
+      },
+      publication: async () => publication(index + 1),
+    });
+    if (!published.applied || !("claim" in published))
+      throw new Error("Expected a real historical publication");
+    head = published.receipt.revision;
+    bundle = published.bundle;
+    revisions.push(head);
+  }
+  const cleared = await publishPrivateMemoryGit({
+    scope,
+    bundle,
+    head,
+    change: {
+      action: "clear",
+      operationId: randomUUID(),
+      expectedRevision: head,
+    },
+    publication: async () => publication(56),
+  });
+  if (!cleared.applied) throw new Error("Expected real clear publication");
+  const captured = await readPrivateMemoryGit({
+    scope,
+    head: cleared.receipt.revision,
+    bundle: cleared.bundle,
+    historyClaimId: claimId,
+    includeRetainedSources: true,
+  });
+  expect(captured.snapshot.claims[0]?.file.state).toEqual({
+    kind: "tombstone",
+  });
+  expect(captured.operations).toHaveLength(56);
+  expect(captured.history).toHaveLength(56);
+  expect(captured.history.map((version) => version.revision)).toEqual([
+    cleared.receipt.revision,
+    ...revisions.toReversed(),
+  ]);
+  expect(captured.history[0]?.file.state).toEqual({ kind: "tombstone" });
+  expect(captured.history.at(-1)?.file.state).toEqual({
+    kind: "active",
+    body: { ...body("Revision 0"), sources: [sources[0]] },
+  });
+  expect(captured.retainedSources).toHaveLength(55);
+  expect(captured.retainedSources).toEqual(sources.toReversed());
+  expect(captured.retainedSources).toContainEqual(sources[0]);
+  // This pure Git reader does not authenticate the fictional citations.
+  await expect(
+    readPrivateMemoryGit({
+      scope: { ...scope, userId: "another-owner" },
+      head: cleared.receipt.revision,
+      bundle: cleared.bundle,
+      includeRetainedSources: true,
+    })
+  ).rejects.toThrow("GitBundleError");
+}, 20_000);
+
+test("recovery evidence deduplicates exact citations without loading it into ordinary reads", async () => {
+  const source = {
+    kind: "session" as const,
+    sessionId: "synthetic-deduplicated-history",
+    eventId: "synthetic-deduplicated-source",
+    sha256: "a".repeat(64),
+    excerpt: "One retained source",
+  };
+  const claimId = randomUUID();
+  const first = await publishPrivateMemoryGit({
+    scope,
+    bundle: null,
+    head: null,
+    change: {
+      action: "assert",
+      claimId,
+      operationId: randomUUID(),
+      expectedRevision: null,
+      body: { ...body("Original"), sources: [source] },
+    },
+    publication: async () => publication(1),
+  });
+  if (!first.applied) throw new Error("Expected first source publication");
+  const changed = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "correct",
+      claimId,
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: { ...body("Corrected"), sources: [source] },
+    },
+    publication: async () => publication(2),
+  });
+  if (!changed.applied) throw new Error("Expected correction");
+  const input = {
+    scope,
+    head: changed.receipt.revision,
+    bundle: changed.bundle,
+  };
+  expect((await readPrivateMemoryGit(input)).retainedSources).toEqual([]);
+  expect(
+    (await readPrivateMemoryGit({ ...input, includeRetainedSources: true }))
+      .retainedSources
+  ).toEqual([source]);
+});
+
+test("a later correction cannot conceal an unrecorded historical claim mutation inside recovery bundles", async () => {
+  const { first, change } = await firstClaim();
+  const second = await publishPrivateMemoryGit({
+    scope,
+    bundle: first.bundle,
+    head: first.receipt.revision,
+    change: {
+      action: "assert",
+      operationId: randomUUID(),
+      claimId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+      body: body("Second recorded claim"),
+    },
+    publication: async () => publication(2),
+  });
+  if (!second.applied || !("claim" in second))
+    throw new Error("Expected second recorded publication");
+  const forged = await withGitBundle(
+    { bundle: second.bundle, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      await git(["read-tree", second.receipt.revision]);
+      const path = `${directory}/hidden.json`;
+      await writeFile(
+        path,
+        JSON.stringify({
+          ...first.claim.file,
+          state: {
+            kind: "active",
+            body: {
+              ...body("Hidden unrecorded historical claim"),
+              sources: [
+                {
+                  kind: "file",
+                  path: "knowledge/unrecorded.md",
+                  revision: "f".repeat(40),
+                  excerpt: "Unrecorded source which must never be exported",
+                },
+              ],
+            },
+          },
+        }) + "\n"
+      );
+      const hiddenBlob = (await git(["hash-object", "-w", "--", path])).trim();
+      await git([
+        "update-index",
+        "--cacheinfo",
+        `100644,${hiddenBlob},claims/${change.claimId}.json`,
+      ]);
+      const hiddenTree = (await git(["write-tree"])).trim();
+      const hiddenHead = (
+        await git([
+          "commit-tree",
+          hiddenTree,
+          "-p",
+          first.receipt.revision,
+          "-m",
+          JSON.stringify(second.operation),
+        ])
+      ).trim();
+      const restoration = planLearnedClaim({
+        scope,
+        current: { ...second.snapshot, revision: hiddenHead },
+        change: {
+          action: "correct",
+          operationId: randomUUID(),
+          claimId: change.claimId,
+          expectedRevision: hiddenHead,
+          body: body("First claim restored through a recorded correction"),
+        },
+        publication: publication(3),
+      });
+      if (!restoration.applied) throw new Error("Expected correction plan");
+      await git(["read-tree", hiddenHead]);
+      await writeFile(path, JSON.stringify(restoration.file) + "\n");
+      const repairedBlob = (
+        await git(["hash-object", "-w", "--", path])
+      ).trim();
+      await git([
+        "update-index",
+        "--cacheinfo",
+        `100644,${repairedBlob},claims/${change.claimId}.json`,
+      ]);
+      const repairedTree = (await git(["write-tree"])).trim();
+      const head = (
+        await git([
+          "commit-tree",
+          repairedTree,
+          "-p",
+          hiddenHead,
+          "-m",
+          JSON.stringify(restoration.operation),
+        ])
+      ).trim();
+      await git(["update-ref", "refs/heads/main", head]);
+      const bundlePath = `${directory}/hidden-history.bundle`;
+      await git(["bundle", "create", bundlePath, "--all"]);
+      return { head, bundle: await readFile(bundlePath) };
+    }
+  );
+  await expect(
+    readPrivateMemoryGit({ scope, ...forged, includeRetainedSources: true })
+  ).rejects.toThrow(GitBundleError);
+  await expect(readPrivateMemoryGit({ scope, ...forged })).rejects.toThrow(
+    GitBundleError
+  );
+});
+
+test("a later recorded reversal cannot hide an active payload forged into an older clear commit", async () => {
+  const { first, change } = await firstClaim();
+  const cleared = await publishPrivateMemoryGit({
+    scope,
+    head: first.receipt.revision,
+    bundle: first.bundle,
+    change: {
+      action: "clear",
+      operationId: randomUUID(),
+      expectedRevision: first.receipt.revision,
+    },
+    publication: async () => publication(2),
+  });
+  if (!cleared.applied) throw new Error("Expected canonical clear");
+  const forged = await withGitBundle(
+    { bundle: cleared.bundle, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      await git(["read-tree", cleared.receipt.revision]);
+      const path = `${directory}/hidden-clear.json`;
+      await writeFile(
+        path,
+        JSON.stringify({
+          ...first.claim.file,
+          predecessor: first.receipt.revision,
+          state: {
+            kind: "active",
+            body: {
+              ...body("Clear must not retain an unrecorded active payload"),
+              sources: [
+                {
+                  kind: "file",
+                  path: "knowledge/hidden-clear.md",
+                  revision: "f".repeat(40),
+                  excerpt: "Unrecorded historical clear source",
+                },
+              ],
+            },
+          },
+        }) + "\n"
+      );
+      const blob = (await git(["hash-object", "-w", "--", path])).trim();
+      await git([
+        "update-index",
+        "--cacheinfo",
+        `100644,${blob},claims/${change.claimId}.json`,
+      ]);
+      const tree = (await git(["write-tree"])).trim();
+      const hiddenClear = (
+        await git([
+          "commit-tree",
+          tree,
+          "-p",
+          first.receipt.revision,
+          "-m",
+          JSON.stringify(cleared.operation),
+        ])
+      ).trim();
+      const reversal = planLearnedClaim({
+        scope,
+        current: { ...cleared.snapshot, revision: hiddenClear },
+        change: {
+          action: "reverse",
+          claimId: change.claimId,
+          operationId: randomUUID(),
+          expectedRevision: hiddenClear,
+          targetRevision: first.receipt.revision,
+        },
+        publication: publication(3),
+        reversalTarget: first.claim,
+      });
+      if (!reversal.applied) throw new Error("Expected recorded reversal");
+      await git(["read-tree", hiddenClear]);
+      await writeFile(path, JSON.stringify(reversal.file) + "\n");
+      const repaired = (await git(["hash-object", "-w", "--", path])).trim();
+      await git([
+        "update-index",
+        "--cacheinfo",
+        `100644,${repaired},claims/${change.claimId}.json`,
+      ]);
+      const repairedTree = (await git(["write-tree"])).trim();
+      const head = (
+        await git([
+          "commit-tree",
+          repairedTree,
+          "-p",
+          hiddenClear,
+          "-m",
+          JSON.stringify(reversal.operation),
+        ])
+      ).trim();
+      await git(["update-ref", "refs/heads/main", head]);
+      const bundle = `${directory}/hidden-clear.bundle`;
+      await git(["bundle", "create", bundle, "--all"]);
+      return { head, bundle: await readFile(bundle) };
+    }
+  );
+  await expect(
+    readPrivateMemoryGit({ scope, ...forged, includeRetainedSources: true })
+  ).rejects.toThrow(GitBundleError);
+  await expect(readPrivateMemoryGit({ scope, ...forged })).rejects.toThrow(
+    GitBundleError
+  );
+});
+
+test("complete history fails at its UTF-8 byte budget instead of returning a partial prefix", async () => {
+  const claimId = randomUUID();
+  const fixture = await withGitBundle(
+    { bundle: null, limits: privateMemoryGitLimits },
+    async ({ directory, git }) => {
+      let current = validateLearnedClaimSnapshot(scope, {
+        scope,
+        revision: null,
+        recordedAt: null,
+        claims: [],
+      });
+      let historyBytes = 2;
+      const sources = Array.from({ length: 10 }, (_, index) => ({
+        kind: "session" as const,
+        sessionId: "synthetic-large-history",
+        eventId: `synthetic-event-${index}`,
+        sha256: "a".repeat(64),
+        excerpt: "é".repeat(2000),
+      }));
+      // Construct valid native commits once rather than repeatedly importing
+      // a growing bundle. Each file fits; the complete historical response does not.
+      for (let index = 0; index < 150; index++) {
+        const plan = planLearnedClaim({
+          scope,
+          current,
+          change: {
+            action: index === 0 ? "assert" : "correct",
+            claimId,
+            operationId: randomUUID(),
+            expectedRevision: current.revision,
+            body: { ...body(`Version ${index} ${"é".repeat(7800)}`), sources },
+          },
+          publication: publication(index + 1),
+        });
+        if (!plan.applied) throw new Error("Expected a new historical version");
+        const encoded = JSON.stringify(plan.file) + "\n";
+        expect(Buffer.byteLength(encoded)).toBeLessThanOrEqual(
+          privateMemoryGitLimits.fileBytes
+        );
+        const path = `${directory}/claim.json`;
+        await writeFile(path, encoded, { mode: 0o600 });
+        const blob = (await git(["hash-object", "-w", "--", path])).trim();
+        await git([
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          `100644,${blob},claims/${claimId}.json`,
+        ]);
+        const tree = (await git(["write-tree"])).trim();
+        const revision = (
+          await git([
+            "commit-tree",
+            tree,
+            ...(current.revision ? ["-p", current.revision] : []),
+            "-m",
+            JSON.stringify(plan.operation),
+          ])
+        ).trim();
+        const bound = bindLearnedClaimPublication({ plan, current, revision });
+        current = bound.snapshot;
+        historyBytes +=
+          Buffer.byteLength(JSON.stringify(bound.claim)) + (index ? 1 : 0);
+      }
+      const head = current.revision;
+      if (!head) throw new Error("Missing native Git history");
+      expect(historyBytes).toBeGreaterThan(privateMemoryGitLimits.outputBytes);
+      await git(["update-ref", "refs/heads/main", head]);
+      const path = `${directory}/large-history.bundle`;
+      await git(["bundle", "create", path, "--all"]);
+      return { head, bundle: await readFile(path) };
+    }
+  );
+  const ordinary = await readPrivateMemoryGit({ scope, ...fixture });
+  expect(ordinary.operations).toHaveLength(150);
+  expect(ordinary.history).toEqual([]);
+  expect(ordinary.snapshot.claims).toHaveLength(1);
+  await expect(
+    readPrivateMemoryGit({ scope, ...fixture, historyClaimId: claimId })
+  ).rejects.toMatchObject({ reason: "too_large" });
+}, 20_000);

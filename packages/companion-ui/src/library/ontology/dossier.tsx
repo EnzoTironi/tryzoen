@@ -8,6 +8,7 @@ import { OntologyEvidence } from "./evidence";
 import { CompanionSheet } from "../../sheet";
 import { usePageStyles } from "../../page";
 import { useColors } from "../../theme";
+import { ActionButton } from "../../button";
 
 export function OntologyDossier({
   entity,
@@ -15,6 +16,7 @@ export function OntologyDossier({
   data,
   onSelect,
   onClose,
+  onAction,
 }: {
   readonly entity: z.output<
     typeof OntologyReadResultSchema
@@ -23,6 +25,7 @@ export function OntologyDossier({
   readonly data: OntologyData;
   readonly onSelect: (id: string) => void;
   readonly onClose: () => void;
+  readonly onAction: (actionId: string) => void;
 }) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -70,6 +73,22 @@ export function OntologyDossier({
             <OntologyEvidence claim={claim} record={record} data={data} />
           </View>
         ))}
+        {record.mayManage &&
+          record.asOf === null &&
+          record.validOn === null &&
+          record.graph.actions
+            .filter((action) => action.entityType === entity.type)
+            .map((action) => (
+              <ActionButton
+                key={action.id}
+                quiet
+                onPress={() => {
+                  onAction(action.id);
+                }}
+              >
+                {action.name}
+              </ActionButton>
+            ))}
         {links.length > 0 && (
           <Text accessibilityRole="header" style={pageStyles.heading}>
             Connections

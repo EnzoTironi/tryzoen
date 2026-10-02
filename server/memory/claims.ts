@@ -201,19 +201,19 @@ export function planLearnedClaim(input: {
         : [];
     for (const relation of state.body.relations) {
       const destination = current.claims.find(
-        (claim) => claim.file.id === relation.memoryId
+        (claim) => claim.file.id === relation.claimId
       );
       const retained =
         change.action === "correct" &&
         previousRelations.some(
           (previous) =>
             previous.kind === relation.kind &&
-            previous.memoryId === relation.memoryId
+            previous.claimId === relation.claimId
         );
       // A correction may retain a known dangling link after its target was
       // tombstoned. Adding a link cannot grant access or reactivate that target.
       if (
-        relation.memoryId === change.claimId ||
+        relation.claimId === change.claimId ||
         !destination ||
         (destination.file.state.kind !== "active" && !retained)
       )
