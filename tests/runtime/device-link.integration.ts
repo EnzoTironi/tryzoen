@@ -734,11 +734,15 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
       "memory"
     );
     assert.equal(exported.headers.get("cache-control"), "private, no-store");
-    assert.deepEqual(await exported.json(), {
+    const exportedMemory = z
+      .record(z.string(), z.unknown())
+      .parse(await exported.json());
+    assert.deepEqual(exportedMemory, {
       profile: null,
       documents: [],
-      learned: [],
+      privateMemory: null,
     });
+    assert.equal(Object.hasOwn(exportedMemory, "learned"), false);
     await assert.rejects(
       downloadAccountArchive(
         archiveHeaders,
