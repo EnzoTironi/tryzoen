@@ -65,8 +65,9 @@ const lookupDirectoryUser = async function (username: string) {
 
   const rows = await query<{
     id: string;
-  }>(sql`SELECT user_id AS id FROM user_directory WHERE username = ${handle} AND user_id IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM account_archive WHERE source_user_id = user_directory.user_id)`);
+  }>(
+    sql`SELECT user_id AS id FROM user_directory WHERE username = ${handle} AND user_id IS NOT NULL`
+  );
   const target = rows[0];
   if (!target) throw new WorkspaceAccessDenied();
   return { handle, userId: `better-auth:${target.id}` };

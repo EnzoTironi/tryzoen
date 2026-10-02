@@ -150,41 +150,20 @@ test.each(["mcp", "mcp-sse", "openapi"] as const)(
           };
     const lostKey = randomUUID();
     for (let attempt = 0; attempt < 2; attempt++) {
-      const outcome = await Promise.try(async () =>
-        invokeRemoteTool(personal, definition, lost, lostKey)
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      );
-      expect(!outcome.ok && outcome.error).toMatchObject({
+      await expect(
+        Promise.try(async () =>
+          invokeRemoteTool(personal, definition, lost, lostKey)
+        )
+      ).rejects.toMatchObject({
         reason: "uncertain",
       });
     }
     expect(fixture.writes.length).toBe(before + 2);
     await revokeToolConnection(personal, connection.id);
     expect(await resolveCustomerTools(nativeContext(execution))).toEqual({});
-    expect(
-      !(
-        await Promise.try(async () =>
-          invokeRemoteTool(personal, definition, args, key)
-        ).then(
-          (value) => ({
-            ok: true as const,
-            value,
-          }),
-          (error: unknown) => ({
-            ok: false as const,
-            error,
-          })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => invokeRemoteTool(personal, definition, args, key))
+    ).rejects.toBeInstanceOf(Error);
     const revoked = await query(
       sql`SELECT credentials FROM tool_connections WHERE id = ${connection.id}`
     );
@@ -281,30 +260,19 @@ test("TL remote: personal credentials never leak to company members or groups; w
     document: connectorDocument,
   });
   expect(await listToolConnections(guest)).toEqual([]);
-  expect(
-    !(
-      await Promise.try(async () =>
-        connectTools(guest, {
-          id: randomUUID(),
-          kind: "openapi",
-          name: "No grant",
-          endpoint: "https://connector.zoen.test/api",
-          credential: "nope",
-          share: "workspace",
-          document: connectorDocument,
-        })
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      connectTools(guest, {
+        id: randomUUID(),
+        kind: "openapi",
+        name: "No grant",
+        endpoint: "https://connector.zoen.test/api",
+        credential: "nope",
+        share: "workspace",
+        document: connectorDocument,
+      })
+    )
+  ).rejects.toBeInstanceOf(Error);
   const installationId = `connectors-${randomUUID()}`;
   const identity = await linkedIdentity(
     {
@@ -359,22 +327,9 @@ test("TL remote: personal credentials never leak to company members or groups; w
     expectedRevision: draft.revision,
     operationId: randomUUID(),
   };
-  expect(
-    !(
-      await Promise.try(async () =>
-        publishCustomerTool(group, publication)
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => publishCustomerTool(group, publication))
+  ).rejects.toBeInstanceOf(Error);
   const published = await publishCustomerTool(actor, publication);
   const id = customerToolId("group-notes", content);
   const skill = await repository.write(group, {
@@ -440,39 +395,17 @@ test("TL remote: personal credentials never leak to company members or groups; w
   await query(
     sql`UPDATE tool_connections SET credentials = (SELECT credentials FROM tool_connections WHERE id = ${connection.id}) WHERE id = ${shared.id}`
   );
-  expect(
-    !(
-      await Promise.try(async () =>
-        toolConnectionCredentials(actor, shared.id, shared.revision)
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () =>
+      toolConnectionCredentials(actor, shared.id, shared.revision)
+    )
+  ).rejects.toBeInstanceOf(Error);
   await query(
     sql`DELETE FROM organization_memberships WHERE organization_id = (SELECT organization_id FROM workspaces WHERE id = ${actor.workspaceId}) AND user_id = ${guest.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => listToolConnections(guest)).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => listToolConnections(guest))
+  ).rejects.toBeInstanceOf(Error);
 });
 test("TL remote: competing delivery and changed arguments do not cause another write", async () => {
   await using workspace = await workspaceFixture();
@@ -596,29 +529,18 @@ test("TL remote: removing the credential owner erases the connection and receipt
     sql`INSERT INTO organization_memberships(organization_id, user_id, role) SELECT organization_id, ${actor.userId}, 'admin' FROM workspaces WHERE id = ${actor.workspaceId}`
   );
   expect(await listToolConnections(guest)).toEqual([]);
-  expect(
-    !(
-      await Promise.try(async () =>
-        invokeRemoteTool(
-          guest,
-          definition,
-          {
-            body: {
-              text: "after rejoin",
-            },
+  await expect(
+    Promise.try(async () =>
+      invokeRemoteTool(
+        guest,
+        definition,
+        {
+          body: {
+            text: "after rejoin",
           },
-          randomUUID()
-        )
-      ).then(
-        (value) => ({
-          ok: true as const,
-          value,
-        }),
-        (error: unknown) => ({
-          ok: false as const,
-          error,
-        })
+        },
+        randomUUID()
       )
-    ).ok
-  ).toBe(true);
+    )
+  ).rejects.toBeInstanceOf(Error);
 });

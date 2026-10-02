@@ -33,7 +33,7 @@ export default defineConfig({
           new URL("shared/environment/env.ts", import.meta.url)
         ),
       },
-      ...["agent", "app", "db", "evals", "shared", "tests", "tools", "web"].map(
+      ...["agent", "app", "db", "evals", "shared", "tests", "web"].map(
         (owner) => ({
           find: new RegExp(`^@${owner}/(.*)$`, "u"),
           replacement: fileURLToPath(new URL(`${owner}/$1`, import.meta.url)),

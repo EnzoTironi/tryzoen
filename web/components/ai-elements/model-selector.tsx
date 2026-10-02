@@ -102,15 +102,3 @@ export function ModelSelectorLogo({
     />
   );
 }
-
-export function ModelSelectorName({
-  className,
-  ...props
-}: ComponentProps<"span">) {
-  return (
-    <span
-      className={cn("min-w-0 flex-1 truncate text-left", className)}
-      {...props}
-    />
-  );
-}

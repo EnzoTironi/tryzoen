@@ -1,5 +1,4 @@
 export default {
-  ignorePatterns: ["tools/oxlint/anti-slop/**"],
   printWidth: 80,
   semi: true,
   singleQuote: false,

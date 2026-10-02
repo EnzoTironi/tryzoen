@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 
-export interface QuestionValue {
+interface QuestionValue {
   selectedValues: readonly string[];
   text: string;
 }
@@ -54,7 +54,7 @@ const useQuestion = () => {
   return context;
 };
 
-export type QuestionProps = Omit<
+type QuestionProps = Omit<
   ComponentProps<"form">,
   "defaultValue" | "onSubmit" | "value"
 > & {
@@ -185,7 +185,7 @@ export const Question = ({
   );
 };
 
-export type QuestionPromptProps = HTMLAttributes<HTMLParagraphElement>;
+type QuestionPromptProps = HTMLAttributes<HTMLParagraphElement>;
 
 export const QuestionPrompt = ({
   className,
@@ -194,7 +194,7 @@ export const QuestionPrompt = ({
   <p className={cn("font-medium text-sm", className)} {...props} />
 );
 
-export type QuestionDescriptionProps = HTMLAttributes<HTMLParagraphElement>;
+type QuestionDescriptionProps = HTMLAttributes<HTMLParagraphElement>;
 
 export const QuestionDescription = ({
   className,
@@ -203,7 +203,7 @@ export const QuestionDescription = ({
   <p className={cn("text-muted-foreground text-sm", className)} {...props} />
 );
 
-export type QuestionOptionsProps = HTMLAttributes<HTMLDivElement>;
+type QuestionOptionsProps = HTMLAttributes<HTMLDivElement>;
 
 export const QuestionOptions = ({
   className,
@@ -220,10 +220,7 @@ export const QuestionOptions = ({
   );
 };
 
-export type QuestionOptionProps = Omit<
-  ComponentProps<typeof Button>,
-  "value"
-> & {
+type QuestionOptionProps = Omit<ComponentProps<typeof Button>, "value"> & {
   value: string;
 };
 
@@ -263,7 +260,7 @@ export const QuestionOption = ({
   );
 };
 
-export type QuestionInputProps = Omit<
+type QuestionInputProps = Omit<
   ComponentProps<typeof Textarea>,
   "defaultValue" | "value"
 >;
@@ -294,7 +291,7 @@ export const QuestionInput = ({
   );
 };
 
-export type QuestionActionsProps = HTMLAttributes<HTMLDivElement>;
+type QuestionActionsProps = HTMLAttributes<HTMLDivElement>;
 
 export const QuestionActions = ({
   className,
@@ -306,7 +303,7 @@ export const QuestionActions = ({
   />
 );
 
-export type QuestionSubmitProps = ComponentProps<typeof Button> & {
+type QuestionSubmitProps = ComponentProps<typeof Button> & {
   children?: ReactNode;
 };
 

@@ -97,7 +97,6 @@ export const deviceRequestSchema = z.object({
 export const deviceBindingSchema = z.object({
   ...deviceRequestSchema.shape,
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
-  archivePreviousAccount: z.optional(z.literal(true)),
 });
 export const deviceBoundSchema = z.object({
   ...deviceRequestSchema.shape,

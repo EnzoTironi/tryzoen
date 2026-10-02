@@ -8,6 +8,8 @@ describe("beta diagnostics", () => {
         message: "The calendar action failed",
         result: {
           status: 403,
+          password: "canary-password-value",
+          cookie: "canary-cookie",
           refresh_token: "canary-private",
           Authorization: "Bearer private-canary",
         },

@@ -24,4 +24,3 @@ function Logo({ className, ...props }: LogoProps) {
 }
 
 export { Logo };
-export type { LogoProps };

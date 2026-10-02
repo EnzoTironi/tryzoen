@@ -27,19 +27,16 @@ async function nativeSource(context: Pick<ToolContext, "session">) {
 
 const deviceAuthStart = defineTool({
   description:
-    "Create a short-lived request for this private messenger identity: login signs in a browser; link verifies its association with the account recently signed in to that browser. Choose the user’s explicit purpose; never substitute login for link. If accounts differ, the browser offers explicit recovery for an eligible channel-only account. Give the link to the user, ask them to bind their browser and return to this chat. Opening the link cannot authorize sign-in. Do not confirm until the user returns and device-auth-status shows a bound browser.",
+    "Create a short-lived request for this private messenger identity: login signs in a browser; link verifies its association with the same account recently signed in to that browser. Choose the user’s explicit purpose; never substitute login for link. Give the link to the user, ask them to bind their browser and return to this chat. Opening the link cannot authorize sign-in. Do not confirm until the user returns and device-auth-status shows a bound browser.",
   inputSchema: z.object({ purpose: z.enum(["login", "link"]) }),
   async execute(input, context) {
     const source = await nativeSource(context);
     const origin = applicationOrigin();
-    const issued = await (async function () {
-      const devices = NativeDeviceAuth;
-      return await devices.issue({
-        ...source,
-        callId: context.callId,
-        purpose: input.purpose,
-      });
-    })();
+    const issued = await NativeDeviceAuth.issue({
+      ...source,
+      callId: context.callId,
+      purpose: input.purpose,
+    });
     return {
       ...issued.challenge,
       browserUrl: issued.entryToken
@@ -55,40 +52,28 @@ export const deviceAuthStatus = defineTool({
   inputSchema: z.object({}),
   async execute(_input, context) {
     const source = await nativeSource(context);
-    {
-      const devices = NativeDeviceAuth;
-      return { requests: await devices.pending(source) };
-    }
+    return { requests: await NativeDeviceAuth.pending(source) };
   },
 });
 
 const deviceAuthConfirm = defineTool({
   approval: { request: always(), response: authorizeApprovalResponse },
   description:
-    "Confirm the exact login or account-link request. Requires explicit user approval. Copy challengeId, purpose and exact browserBoundAt from device-auth-status. If archivePreviousAccount is true, also pass it as true and explain in approvalMessage that messengers will use the browser account for new conversations, previous personal data stays in an accessible archive, and previous sign-ins and routines stop. Otherwise omit that flag. Describe the purpose and binding time so the user can recognize this browser. Never treat opening a link or a previous request as approval.",
+    "Confirm the exact login or account-link request. Requires explicit user approval. Copy challengeId, purpose and exact browserBoundAt from device-auth-status. Describe the purpose and binding time in approvalMessage so the user can recognize this browser. Never treat opening a link or a previous request as approval.",
   inputSchema: z.object({
     challengeId: z.uuid(),
     purpose: z.enum(["login", "link"]),
     browserBoundAt: z.iso.datetime(),
-    archivePreviousAccount: z.literal(true).optional(),
     approvalMessage: approvalMessageSchema,
   }),
   async execute(input, context) {
     const source = await nativeSource(context);
-    {
-      const devices = NativeDeviceAuth;
-      const confirmation = {
-        ...source,
-        challengeId: input.challengeId,
-        purpose: input.purpose,
-        browserBoundAt: input.browserBoundAt,
-      };
-      if (input.archivePreviousAccount)
-        Object.assign(confirmation, {
-          archivePreviousAccount: input.archivePreviousAccount,
-        });
-      return await devices.confirm(confirmation);
-    }
+    return await NativeDeviceAuth.confirm({
+      ...source,
+      challengeId: input.challengeId,
+      purpose: input.purpose,
+      browserBoundAt: input.browserBoundAt,
+    });
   },
 });
 

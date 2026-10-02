@@ -2,7 +2,7 @@ import { searchMatrixMessages } from "../../server/matrix/search";
 import { readMatrixContext } from "../../server/matrix/context";
 import { WorkspaceAccessDenied } from "../../server/workspaces/access";
 import { randomUUID } from "node:crypto";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { workspaceFixture } from "./workspace-fixture";
 import { matrixReceiver } from "./matrix-fixture";
@@ -21,6 +21,37 @@ const nativeResults = z.object({
   }),
 });
 
+async function waitForInitialMembership(
+  receiver: Awaited<ReturnType<typeof matrixReceiver>>,
+  roomId: string
+) {
+  const members = z
+    .array(MatrixEventSchema)
+    .parse(
+      await matrixRequest("GET", `rooms/${encodeURIComponent(roomId)}/state`)
+    )
+    .filter(
+      (event) =>
+        event.type === "m.room.member" && event.content.membership === "join"
+    )
+    .map((event) => z.string().min(1).parse(event.event_id));
+  expect(members.length).toBeGreaterThan(0);
+  await vi.waitFor(
+    () => {
+      const committed = new Set(
+        receiver.receipts.flatMap(({ body }) =>
+          z
+            .object({ events: z.array(MatrixEventSchema) })
+            .parse(JSON.parse(body))
+            .events.map((event) => event.event_id)
+        )
+      );
+      for (const eventId of members) expect(committed).toContain(eventId);
+    },
+    { timeout: 10_000, interval: 25 }
+  );
+}
+
 test(
   "native search indexes replacements and removes redacted content",
   { timeout: 60000 },
@@ -33,6 +64,7 @@ test(
         name: "Synthetic search protocol",
       });
       const joined = await joinMatrixRoom(fixture.actor, room.id);
+      await waitForInitialMembership(receiver, room.roomId);
       const search = async (term: string) =>
         nativeResults.parse(
           await matrixRequest(
@@ -148,6 +180,7 @@ test(
           operationId: randomUUID(),
           text: `searchnebula ${index}`,
         });
+      await waitForInitialMembership(receiver, room.roomId);
       const input = { id: room.id, query: "searchnebula" };
       const first = await searchMatrixMessages(fixture.actor, input);
       expect(first.items).toHaveLength(20);

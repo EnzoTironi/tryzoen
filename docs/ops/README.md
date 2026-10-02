@@ -9,7 +9,7 @@ docs and scripts only — never secret values in git, PRs, logs, or chat.
 | O01 | [Credential rotation (F01)](credential-rotation.md) — names, order, verify; **SECRET_ENCRYPTION_KEY plan (docs only)** | Enzo (secrets)    |
 | O02 | [WhatsApp Meta + Kapso activation](whatsapp-meta-activation.md)                                                        | Enzo (Meta/Kapso) |
 | —   | [Enzo live blockers](enzo-live-actions.md) (DNS + G03 Telegram group)                                                  | Enzo only         |
-| H01 | [Hosted Fly cutover](hosted-fly.md) — Alchemy Docker PG + Fly compute                                                  | Enzo (deploy/DNS) |
+| H01 | [Alchemy deployment and recovery](../../infrastructure/README.md) — Alchemy Docker PG + Fly compute                    | Enzo (deploy/DNS) |
 | —   | [tryzoen.com domain split](tryzoen-domain.md) — apex marketing, `app.tryzoen.com`, legacy 308s                         | Enzo (DNS/certs)  |
 | —   | [Prod uptime + backup](prod-uptime-checklist.md) — **push alert** + health, pg_dump, rollback                          | Ops / Enzo        |
 
@@ -27,7 +27,7 @@ Related:
 
 - [Customer-platform release map](../decisions/adr-customer-platform-release.md)
   (REL01 gates, REL02 Alchemy publication blocked on later SHAs)
-- [Hosted Fly cutover (H01)](hosted-fly.md)
+- [Alchemy deployment and recovery](../../infrastructure/README.md)
 - [Prod uptime + backup](prod-uptime-checklist.md) (external probe + push alert)
 - [Self-host / ops](../self-host.md)
 - [Durable ingress (D01)](../../infrastructure/ingress/README.md)

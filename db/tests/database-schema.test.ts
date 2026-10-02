@@ -21,7 +21,6 @@ import {
   vaultItems,
   verification,
   organizationAuditReceipts,
-  organizationInvites,
   organizationMemberships,
   organizations,
   workspaceMemberships,
@@ -37,7 +36,6 @@ describe("database schema", () => {
         organizations,
         organizationMemberships,
         organizationAuditReceipts,
-        organizationInvites,
         vaultItems,
         settings,
         agentSessions,
@@ -61,7 +59,6 @@ describe("database schema", () => {
       "organizations",
       "organization_memberships",
       "organization_audit_receipts",
-      "organization_invites",
       "vault_items",
       "settings",
       "agent_sessions",
@@ -173,21 +170,15 @@ describe("database schema", () => {
   });
 });
 
-it("owns C02 organization invite and append-only audit receipt tables", () => {
+it("owns the organization audit receipt table", () => {
   expect(getTableConfig(organizationAuditReceipts).name).toBe(
     "organization_audit_receipts"
   );
-  expect(getTableConfig(organizationInvites).name).toBe("organization_invites");
   expect(
     getTableConfig(organizationAuditReceipts).foreignKeys.map((foreignKey) =>
       foreignKey.getName()
     )
   ).toContain("organization_audit_receipts_organization_id_fkey");
-  expect(
-    getTableConfig(organizationInvites).foreignKeys.map((foreignKey) =>
-      foreignKey.getName()
-    )
-  ).toContain("organization_invites_organization_id_fkey");
 });
 
 describe("migration deployment policy", () => {

@@ -92,17 +92,13 @@ const connect = async function (
 };
 
 test("WhatsApp user bridge stays unavailable without a paired mautrix session", async () => {
-  const result = await Promise.try(async () => requireWhatsAppBridge()).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!result.ok && result.error).toBeInstanceOf(WhatsAppBridgeUnavailable);
+  await expect(
+    Promise.try(async () => requireWhatsAppBridge())
+  ).rejects.toBeInstanceOf(WhatsAppBridgeUnavailable);
   fixture.setReady(false);
-  const down = await Promise.try(async () => requireWhatsAppBridge()).then(
-    (value) => ({ ok: true as const, value }),
-    (error: unknown) => ({ ok: false as const, error })
-  );
-  expect(!down.ok && down.error).toBeInstanceOf(WhatsAppBridgeUnavailable);
+  await expect(
+    Promise.try(async () => requireWhatsAppBridge())
+  ).rejects.toBeInstanceOf(WhatsAppBridgeUnavailable);
   fixture.setReady(true);
   return true;
 });

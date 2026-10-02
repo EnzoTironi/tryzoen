@@ -1,23 +1,18 @@
-# Qualification ledger
+# Qualification evidence
 
-Status: fixture and CI contracts for P08. Live Google, Telegram,
-WhatsApp, Vaultwarden, Synapse, Kernel, Spark and closed-beta load remain
-blocked. This ledger is not launch approval.
+Status: accepted. Updated 2026-10-02 to remove the unused static qualification
+ledger. This decision does not authorize a launch or establish live-provider
+qualification.
 
-Date: 2026-09-15.
-
-Builds on: [launch validation](zoen-launch-validation.md),
-[Executor discovery](adr-skill-proposals-and-dependencies.md),
-[Vaultwarden](adr-vaultwarden-delegation.md),
-[WhatsApp bridge](adr-whatsapp-user-bridge.md),
-[account deletion](adr-account-deletion.md),
-[customer-platform release](adr-customer-platform-release.md).
+Builds on [skill discovery](adr-skill-proposals-and-dependencies.md),
+[account deletion](adr-account-deletion.md) and the current
+[runtime architecture](../eve/architecture.md).
 
 ## Decision
 
-Generate the advertised-tool inventory from the Executor catalog names
-and join each row to a fixture proof. Discovery after publishing a skill
-must return that skill. Fixture passes never become live passes.
+Exercise the actual Eve capability catalog and product behavior. Discovery after
+publishing a skill must return that skill. A static list of claims and a test
+that repeats those claims provide no execution evidence.
 
 Three evidence kinds stay distinct: deterministic contract tests,
 PostgreSQL integration, and live journeys with a user, model and provider.
@@ -25,28 +20,20 @@ PostgreSQL integration, and live journeys with a user, model and provider.
 Launch receipts count unique scenarios separately from executions and keep
 `liveDeliveries` at zero for synthetic traces.
 
-The closed-beta envelope (25 active users, five concurrent agent tasks,
-burst of ten, 30-minute load, 24-hour soak, API p95 1 s, queue p95 10 s)
-is declared and unmeasured. Insufficient quota is not a pass.
-
-Live Mem0, Matrix, Vaultwarden and mautrix stay fail-closed. Observability
-keeps enterprise dashboards in-workspace, redacts credentials including
-TOTP seeds, and scans exports for planted canaries. No onboarding
-collection step is added. A controlled production alert was not fired.
-
-Spark versus Luna was not compared: this environment has no authorized
-Codex Spark connection. Luna remains the baseline.
+Capacity claims require measurements. Missing provider configuration and
+insufficient quota are not passes. Observability must redact credentials and
+TOTP seeds, and diagnostic reads must enforce workspace access.
 
 ## Alternatives rejected
 
-- Copying fixture passes onto OP01–OP08 live rows.
-- Adding launch evals that would run against missing models or Kernel and
-  fail CI.
+- Treating fixed status rows or synthetic fixture passes as live evidence.
+- Keeping a production inventory whose only consumer is its own test.
 - A second agent loop or evaluator beside Eve.
 
 ## Evidence
 
-`server/qualification/inventory.ts` is the joined ledger.
-`tests/qualification-inventory.test.ts` and
-`tests/runtime/qualification.integration.ts` prove completeness, no live
-passes, skill rediscovery and fail-closed providers.
+`tests/runtime/qualification.integration.ts` checks real capability discovery,
+published-skill rediscovery, missing-provider failures, diagnostic redaction and
+cross-workspace denial in the isolated runtime installation.
+`shared/observability/redaction.test.ts` checks password, cookie and TOTP canaries.
+See [local setup](../local-runtime-setup.md) for reproducible commands.

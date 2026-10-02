@@ -262,7 +262,7 @@ if (
         [
           "audit",
           `--dir=${directory}`,
-          `--lockfile-dir=${directory}`,
+          `--config.lockfile-dir=${directory}`,
           // pnpm normalizes these falsey selectors to include both prod and dev.
           "--only=null",
           "--production=false",

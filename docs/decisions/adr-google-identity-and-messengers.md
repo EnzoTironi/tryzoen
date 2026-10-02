@@ -58,11 +58,11 @@ installation. A first message from an unlinked messenger no longer creates an
 account. The webhook records the address in `channel_pending_sender` and answers,
 at most once per 24 hours, with the instruction to sign in with Google and link
 the messenger. Group messages from unlinked senders are ignored without a write.
-Accounts that a channel-first contact created before this rule can be joined to a
-Google account only through the explicit archive path, which requires proof of
-both sides and the existing eligibility checks; it is never an email or phone
-guess or a database wipe. The generic website entry starts at Google sign-in
-before directing the person to Connections.
+All new accounts require a verified Google identity. Messenger linking preserves
+that owner: a messenger already linked to another account returns a conflict.
+The generic website entry starts at Google sign-in before directing the person
+to Connections. Prelaunch channel-only account transfer and former-account
+archives have been removed; the current account model has no such state.
 
 ## Evidence
 
@@ -89,7 +89,7 @@ before directing the person to Connections.
 
 These are integration proofs, not a new customer's complete live journey.
 Existing-account Google and WhatsApp sign-in have subsequently been verified in
-production; see the [current launch ledger](zoen-launch-validation.md). The owner
+production; see the [recorded launch evidence](https://github.com/EnzoTironi/tryzoen/blob/04cf0dfe4f0ce7de4e0652bc5ebacfbfcb696839/docs/decisions/zoen-launch-validation.md). The owner
 cancelled the recording requirement. Functional real-provider qualification is
 still required. Ordinary WhatsApp groups remain unavailable with the current
 provider configuration; they must not be advertised as enabled.

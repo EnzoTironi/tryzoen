@@ -72,26 +72,12 @@ test("diagnostics isolate members, redact secrets, encrypt content and deduplica
   const rows = await readDiagnosticSession(actor, sessionId);
   expect(rows.events[0]?.payload).toContain("synthetic useful context");
   expect(rows.events[0]?.payload).not.toContain("must-not-persist");
-  expect(
-    !(
-      await Promise.try(async () =>
-        readDiagnosticSession(guest, sessionId)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
-  expect(
-    !(
-      await Promise.try(async () =>
-        readDiagnosticSession(guestPersonal, sessionId)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => readDiagnosticSession(guest, sessionId))
+  ).rejects.toBeInstanceOf(Error);
+  await expect(
+    Promise.try(async () => readDiagnosticSession(guestPersonal, sessionId))
+  ).rejects.toBeInstanceOf(Error);
   expect((await readInsights(actor)).summary?.input_tokens).toBe(12);
   expect((await readInsights(guest)).summary?.input_tokens).toBe(0);
   await updateTelemetryPolicy(actor, false, 7);
@@ -113,28 +99,16 @@ test("platform access requires an allowlisted verified identity and produces aud
     status: "failed",
     payload: { message: "synthetic failure" },
   });
-  expect(
-    !(
-      await Promise.try(async () =>
-        readDiagnosticSession(actor, sessionId, true)
-      ).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => readDiagnosticSession(actor, sessionId, true))
+  ).rejects.toBeInstanceOf(Error);
   operators.push("operator@example.invalid");
   await query(
     sql`UPDATE public.user SET email = 'operator@example.invalid', "emailVerified" = false WHERE ('better-auth:' || id) = ${actor.userId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => readInsights(actor, true)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => readInsights(actor, true))
+  ).rejects.toBeInstanceOf(Error);
   await query(
     sql`UPDATE public.user SET "emailVerified" = true WHERE ('better-auth:' || id) = ${actor.userId}`
   );
@@ -149,14 +123,9 @@ test("platform access requires an allowlisted verified identity and produces aud
   await query(
     sql`DELETE FROM public.session WHERE id = ${actor.authSessionId}`
   );
-  expect(
-    !(
-      await Promise.try(async () => readInsights(actor, true)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => readInsights(actor, true))
+  ).rejects.toBeInstanceOf(Error);
 });
 
 test("client ingest cannot attach diagnostics to another member's agent session", async () => {
@@ -174,14 +143,9 @@ test("client ingest cannot attach diagnostics to another member's agent session"
     route: "/chat/:session",
     data: JSON.stringify({ rating: "down" }),
   };
-  expect(
-    !(
-      await Promise.try(async () => ingestClientTelemetry(guest, batch)).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error })
-      )
-    ).ok
-  ).toBe(true);
+  await expect(
+    Promise.try(async () => ingestClientTelemetry(guest, batch))
+  ).rejects.toBeInstanceOf(Error);
   await ingestClientTelemetry(actor, batch);
   expect((await readDiagnosticSession(actor, sessionId)).events).toHaveLength(
     1

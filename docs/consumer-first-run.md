@@ -2,7 +2,7 @@
 
 Short path for a person using the hosted Companion — not an operator self-host
 guide. Operators stay on [self-host](self-host.md) and
-[hosted Fly (H01)](ops/hosted-fly.md).
+[Alchemy deployment and recovery](../infrastructure/README.md).
 
 ## Flow — updated 2026-09-15
 

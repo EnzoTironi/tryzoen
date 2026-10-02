@@ -609,23 +609,15 @@ test("bot-to-bot chains stop at eight rounds and a pending company invite cannot
     expect(last.task.round).toBe(round);
     expect(last.task.correlationId).toBe(first);
   }
-  const ninth = await Promise.try(async () =>
-    contactNetworkBot(personal, {
-      destUsername: brunoBot.username,
-      originTaskId: last.task.id,
-      message: prompt("Round 9"),
-    })
-  ).then(
-    (value) => ({
-      ok: true as const,
-      value,
-    }),
-    (error: unknown) => ({
-      ok: false as const,
-      error,
-    })
-  );
-  expect(!ninth.ok && ninth.error).toBeInstanceOf(A2AError);
+  await expect(
+    Promise.try(async () =>
+      contactNetworkBot(personal, {
+        destUsername: brunoBot.username,
+        originTaskId: last.task.id,
+        message: prompt("Round 9"),
+      })
+    )
+  ).rejects.toBeInstanceOf(A2AError);
 });
 test("review #116: organization membership allows contact without granting project files", async () => {
   await using workspace = await workspaceFixture();
@@ -696,18 +688,10 @@ test("review #116: organization membership allows contact without granting proje
   });
   if (!contact.ok) throw contact.error;
   {
-    const file = await Promise.try(async () =>
-      repository.read(contact.value.destActor, "knowledge/private.md")
-    ).then(
-      (value) => ({
-        ok: true as const,
-        value,
-      }),
-      (error: unknown) => ({
-        ok: false as const,
-        error,
-      })
-    );
-    expect(!file.ok).toBe(true);
+    await expect(
+      Promise.try(async () =>
+        repository.read(contact.value.destActor, "knowledge/private.md")
+      )
+    ).rejects.toBeInstanceOf(Error);
   }
 });

@@ -31,7 +31,7 @@ Revisit this policy before the first production deployment.
 - Alchemy remains isolated under `infrastructure/` for the existing Fly/private
   service deployment. Its Effect dependency does not enter the application.
 
-See [architecture](docs/eve/architecture.md), [product direction](docs/product-direction.md)
+See the [documentation index](docs/README.md), [architecture](docs/eve/architecture.md)
 and [rewrite validation](docs/eve/rebuild.md). External services need their own
 credentials and qualification; catalog research is not an activated integration.
 

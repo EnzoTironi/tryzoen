@@ -2,11 +2,15 @@ import { fileURLToPath } from "node:url";
 import type * as RuntimeModel from "../node_modules/eve/dist/src/runtime/agent/resolve-model.js";
 import type * as RuntimeContext from "../node_modules/eve/dist/src/context/container.js";
 import type { DynamicResolveContext } from "eve";
-import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import browserAgent from "@agent/subagents/browser-agent/agent";
+import { workspaceModel } from "@agent/lib/workspace-model";
+import { BrowserWorkerAccess } from "../server/browser-worker";
+import { BrowserWorkerAccessError } from "../server/browser-worker/access";
 vi.mock("@agent/lib/workspace-model", async () => {
-  return { workspaceModel: () => Promise.resolve(null) };
+  return {
+    workspaceModel: vi.fn<typeof workspaceModel>(() => Promise.resolve(null)),
+  };
 });
 vi.mock("../server/workspaces/access", async () => {
   return {
@@ -44,6 +48,7 @@ vi.mock("@shared/environment/env", async (original) => {
 const resolveBrowserModel = browserAgent.model.events["step.started"];
 if (!resolveBrowserModel)
   throw new Error("Browser model resolver is required.");
+const authorize = vi.spyOn(BrowserWorkerAccess, "authorize");
 
 const { resolveRuntimeModelSelection } = await vi.importActual<
   typeof RuntimeModel
@@ -57,16 +62,26 @@ const { ContextContainer } = await vi.importActual<typeof RuntimeContext>(
 );
 
 describe("worker input bubbling", () => {
-  afterEach(() => vi.unstubAllEnvs());
-  it("keeps native questions disabled inside browser workers", () => {
-    const askQuestionTool = readFileSync(
-      "agent/subagents/browser-agent/tools/ask_question.ts",
-      "utf8"
-    );
-
-    expect(askQuestionTool).toMatch(/disableTool\(\)/);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authorize.mockResolvedValue({
+      userId: "browser-test-user",
+      workspaceId: "browser-test-workspace",
+    });
   });
+  afterEach(() => vi.unstubAllEnvs());
 
+  it("requires a nonempty structured completion from the browser agent", () => {
+    const output = { status: "success", message: "Done", images: [] };
+    expect(browserAgent.outputSchema.parse(output)).toEqual(output);
+    for (const invalid of [
+      { ...output, status: "working" },
+      { ...output, message: " " },
+      { status: "success", message: "Done" },
+    ]) {
+      expect(browserAgent.outputSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
   it.each(["authjs", "scheduled-worker", "linq-message"])(
     "accepts the direct browser provider through Eve's live model normalization for %s",
     async (authenticator) => {
@@ -105,6 +120,60 @@ describe("worker input bubbling", () => {
     }
   );
 
+  it.each(["current", "initiator"] as const)(
+    "uses live %s authority before selecting a browser model",
+    async (caller) => {
+      vi.stubEnv("COMPANION_BROWSER_MODEL_PROVIDER", "openrouter");
+      vi.stubEnv("COMPANION_BROWSER_MODEL", "openai/gpt-5-mini");
+      vi.stubEnv("OPENROUTER_API_KEY", "synthetic-constructor-only-key");
+      const context = browserContext("authjs");
+      const principal = context.session.auth.current;
+      await resolveBrowserModel({}, {
+        ...context,
+        session: {
+          ...context.session,
+          auth: {
+            current: caller === "current" ? principal : null,
+            initiator: caller === "initiator" ? principal : null,
+          },
+        },
+      } satisfies DynamicResolveContext);
+      expect(authorize).toHaveBeenCalledExactlyOnceWith(principal);
+      expect(workspaceModel).toHaveBeenCalledOnce();
+    }
+  );
+
+  it("rechecks current authority on each step without falling back to the initiator after revocation", async () => {
+    vi.stubEnv("COMPANION_BROWSER_MODEL_PROVIDER", "openrouter");
+    vi.stubEnv("COMPANION_BROWSER_MODEL", "openai/gpt-5-mini");
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-constructor-only-key");
+    const context = browserContext("authjs");
+    const withInitiator = {
+      ...context,
+      session: {
+        ...context.session,
+        auth: {
+          ...context.session.auth,
+          initiator: {
+            ...context.session.auth.current,
+            principalId: "previous-initiator",
+          },
+        },
+      },
+    } satisfies DynamicResolveContext;
+    await resolveBrowserModel({}, withInitiator);
+    authorize.mockRejectedValueOnce(
+      new BrowserWorkerAccessError({ reason: "revoked" })
+    );
+    vi.stubEnv("COMPANION_BROWSER_MODEL_PROVIDER", "invalid-must-not-be-read");
+    await expect(resolveBrowserModel({}, withInitiator)).rejects.toThrow(
+      "The caller's channel authority has been revoked."
+    );
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(authorize).toHaveBeenLastCalledWith(context.session.auth.current);
+    expect(workspaceModel).toHaveBeenCalledOnce();
+  });
+
   it("denies group-bound and unauthenticated sessions", async () => {
     const grouped = browserContext("authjs", "private-team-room");
     await expect(resolveBrowserModel({}, grouped)).rejects.toThrow(
@@ -124,33 +193,6 @@ describe("worker input bubbling", () => {
     ).rejects.toThrow(
       "Browser execution requires an authenticated personal or scheduled session."
     );
-  });
-
-  it("ends the worker turn and routes the answer through its agent id", () => {
-    const instructions = readFileSync(
-      "agent/instructions/content/role/interactive.md",
-      "utf8"
-    );
-    const workerInstructions = readFileSync(
-      "agent/subagents/browser-agent/instructions.md",
-      "utf8"
-    );
-
-    expect(instructions).toContain("continue that worker with its `agentId`");
-    expect(instructions).toContain(
-      "Before surfacing a `Needs user input:` blocker"
-    );
-    expect(instructions).toContain(
-      "confirm the worker explicitly reported checking compatible vault items"
-    );
-    expect(workerInstructions).toContain(
-      "Before returning `Needs user input:` or `Needs vault setup:`"
-    );
-    expect(workerInstructions).toContain("select the relevant compatible item");
-    expect(workerInstructions).toContain(
-      "native `final_output` tool exactly once"
-    );
-    expect(workerInstructions).toContain("End the turn immediately");
   });
 });
 

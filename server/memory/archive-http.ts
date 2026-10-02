@@ -13,7 +13,6 @@ import {
 import { PrivateMemoryError } from "./repository";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 import { MemoryNamespaceError } from "./namespace";
-import { AccountMemoryArchiveUnavailable } from "../accounts/archive-entitlement";
 import { SessionArchiveUnavailable } from "./session-export";
 import { operationSignal, TimeoutError } from "../operations/async";
 
@@ -131,7 +130,6 @@ export function memoryArchiveFailureResponse(error: unknown): Response {
           ? 503
           : 409;
   else if (
-    error instanceof AccountMemoryArchiveUnavailable ||
     error instanceof SessionArchiveUnavailable ||
     error instanceof AuthUnavailable ||
     error instanceof SqlError

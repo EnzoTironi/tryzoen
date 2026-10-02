@@ -102,16 +102,9 @@ test(
     expect((await openMatrixConversation(personal, brunoBot.username)).id).toBe(
       room.id
     );
-    expect(
-      !(
-        await Promise.try(async () =>
-          readMatrixConversation(guestPersonal, room.id)
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => readMatrixConversation(guestPersonal, room.id))
+    ).rejects.toBeInstanceOf(Error);
     const input = {
       id: room.id,
       operationId: randomUUID(),
@@ -119,19 +112,14 @@ test(
     };
     const event = await sendMatrixConversation(personal, input);
     expect(await sendMatrixConversation(personal, input)).toEqual(event);
-    expect(
-      !(
-        await Promise.try(async () =>
-          sendMatrixConversation(personal, {
-            ...input,
-            text: "Changed payload",
-          })
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () =>
+        sendMatrixConversation(personal, {
+          ...input,
+          text: "Changed payload",
+        })
+      )
+    ).rejects.toBeInstanceOf(Error);
     const { taskId, destActor } = await receivedTask(event.event_id);
     const captured = receiver.receipts.find((r) =>
       r.body.includes(event.event_id)
@@ -199,16 +187,9 @@ test(
     expect((await telemetryScope(principal, nativeSession)).workspaceId).toBe(
       destActor.workspaceId
     );
-    expect(
-      !(
-        await Promise.try(async () =>
-          telemetryScope(principal, "other-native-session")
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => telemetryScope(principal, "other-native-session"))
+    ).rejects.toBeInstanceOf(Error);
     const view = await readMatrixConversation(personal, room.id);
     expect(view.messages.map((m) => [m.fromBot, m.text])).toEqual([
       [false, input.text],
@@ -217,16 +198,11 @@ test(
     expect(
       (await readMatrixResult(personal, room.id, event.event_id)).text
     ).toBe("Resposta de transporte do Bruno.");
-    expect(
-      !(
-        await Promise.try(async () =>
-          readMatrixResult(guestPersonal, room.id, event.event_id)
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () =>
+        readMatrixResult(guestPersonal, room.id, event.event_id)
+      )
+    ).rejects.toBeInstanceOf(Error);
     expect(room.senderId).not.toBe(room.botId);
     const history = await matrixRequest(
       "GET",
@@ -327,53 +303,31 @@ test(
     });
     const { taskId, destActor } = await receivedTask(event.event_id);
     await blockPersonalTrust(guestPersonal, { username: ana });
-    expect(
-      !(
-        await Promise.try(async () =>
-          readMatrixConversation(personal, room.id)
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
+    await expect(
+      Promise.try(async () => readMatrixConversation(personal, room.id))
+    ).rejects.toBeInstanceOf(Error);
+    await expect(
+      Promise.try(async () =>
+        sendMatrixConversation(personal, {
+          id: room.id,
+          operationId: randomUUID(),
+          text: "After revoke",
+        })
+      )
+    ).rejects.toBeInstanceOf(Error);
+    await expect(
+      Promise.try(async () =>
+        finishProtocolTask(
+          destActor,
+          taskId,
+          "TASK_STATE_COMPLETED",
+          "Do not deliver"
         )
-      ).ok
-    ).toBe(true);
-    expect(
-      !(
-        await Promise.try(async () =>
-          sendMatrixConversation(personal, {
-            id: room.id,
-            operationId: randomUUID(),
-            text: "After revoke",
-          })
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
-    expect(
-      !(
-        await Promise.try(async () =>
-          finishProtocolTask(
-            destActor,
-            taskId,
-            "TASK_STATE_COMPLETED",
-            "Do not deliver"
-          )
-        ).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
-    expect(
-      !(
-        await Promise.try(async () => publishMatrixProtocolAnswer(taskId)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+      )
+    ).rejects.toBeInstanceOf(Error);
+    await expect(
+      Promise.try(async () => publishMatrixProtocolAnswer(taskId))
+    ).rejects.toBeInstanceOf(Error);
   }
 );
 
@@ -417,13 +371,8 @@ test(
         sql`SELECT 1 FROM workspace_agent_grants WHERE id = ${room.grantId}`
       )
     ).toHaveLength(0);
-    expect(
-      !(
-        await Promise.try(async () => readProtocolTask(destActor, taskId)).then(
-          (value) => ({ ok: true as const, value }),
-          (error: unknown) => ({ ok: false as const, error })
-        )
-      ).ok
-    ).toBe(true);
+    await expect(
+      Promise.try(async () => readProtocolTask(destActor, taskId))
+    ).rejects.toBeInstanceOf(Error);
   }
 );

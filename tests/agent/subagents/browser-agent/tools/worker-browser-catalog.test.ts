@@ -34,7 +34,7 @@ beforeEach(() => {
   authorize.mockResolvedValue(scope);
 });
 
-describe("browser tool discovery", () => {
+describe("Browser Loop tool discovery", () => {
   it.each(["current", "initiator"] as const)(
     "uses live %s authority with the public parentless dynamic context",
     async (caller) => {
@@ -49,7 +49,6 @@ describe("browser tool discovery", () => {
         },
       } satisfies DynamicResolveContext);
 
-      expect(tools).toHaveProperty("manage_browsers");
       expect(tools).toHaveProperty("browser_snapshot");
       expect(tools).toHaveProperty("playwright_execute");
       expect(authorize).toHaveBeenCalledExactlyOnceWith(principal);

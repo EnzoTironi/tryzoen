@@ -18,8 +18,8 @@ export const linkedIdentity = async function (
   const userId = options?.userId ?? randomUUID();
   const scope = accessScopeForUser(`better-auth:${userId}`);
   if (!options?.userId) {
-    await query(sql`INSERT INTO public.user (id, name, email) VALUES
-      (${userId}, 'Synthetic linked user', ${`${userId}@example.invalid`})`);
+    await query(sql`INSERT INTO public.user (id, name, email, "emailVerified") VALUES
+      (${userId}, 'Synthetic linked user', ${`${userId}@example.invalid`}, true)`);
   }
   await query(
     sql`INSERT INTO workspaces (id) VALUES (${scope.workspaceId}) ON CONFLICT (id) DO NOTHING`

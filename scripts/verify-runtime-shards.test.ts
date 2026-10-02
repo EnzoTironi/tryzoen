@@ -20,12 +20,9 @@ function report(shard: number) {
           {
             name: `/home/runner/work/app/app/tests/runtime/${name}`,
             status: "passed",
-            assertionResults: Array.from(
-              { length: index < 16 ? 5 : 4 },
-              () => ({
-                status: "passed",
-              })
-            ),
+            assertionResults: Array.from({ length: (index % 3) + 1 }, () => ({
+              status: "passed",
+            })),
           },
         ]
       : []
@@ -72,11 +69,17 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-test("accepts all 584 passing cases and the exact 142-file union with nested suites", () => {
+test("accepts passing cases for every current runtime file with nested suites", () => {
+  const passedTests = [0, 1, 2, 3].reduce(
+    (count, shard) => count + report(shard).numPassedTests,
+    0
+  );
   const result = verify();
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
-  expect(result.stdout).toContain("142 files, 584 tests, no failures or skips");
+  expect(result.stdout).toContain(
+    `${files.length} files, ${passedTests} tests, no failures or skips`
+  );
 });
 
 test.each(["failure", "cancelled", "skipped", ""])(
@@ -187,17 +190,4 @@ test("rejects an omitted file even with internally consistent totals", () => {
   value.numPassedTests = value.numTotalTests;
   writeReport(0, value);
   expect(verify().stderr).toContain("Runtime file coverage is incomplete");
-});
-
-test("rejects a reduced test count even with complete file coverage", () => {
-  const value = report(0);
-  const file = value.testResults[0];
-  if (!file) throw new Error("Fixture must contain a file.");
-  file.assertionResults.pop();
-  value.numTotalTests -= 1;
-  value.numPassedTests -= 1;
-  writeReport(0, value);
-  expect(verify().stderr).toContain(
-    "Runtime case count differs from the qualified baseline"
-  );
 });

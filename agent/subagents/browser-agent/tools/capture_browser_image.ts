@@ -2,9 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { del, put } from "@vercel/blob";
 import { defineTool, toolOutput } from "eve/tools";
 import { z } from "zod";
-import { requireWorkerScope } from "@agent/subagents/browser-agent/lib/access";
-import { requireOwnedBrowserSession } from "@agent/subagents/browser-agent/lib/owned-browser";
-import { withVaultScreenshotMask } from "@agent/subagents/browser-agent/lib/vault-screenshot-mask";
+import { requireWorkerScope } from "../lib/access";
+import { requireOwnedBrowserSession } from "../lib/owned-browser";
+import { withVaultScreenshotMask } from "../lib/vault-screenshot-mask";
 import {
   finalizeBrowserImageArtifact,
   reserveBrowserImageArtifact,
@@ -16,7 +16,7 @@ import {
   sniffBrowserImageMediaType,
 } from "@shared/browser/artifact";
 import { env } from "@shared/environment";
-import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
+import { getKernel } from "../lib/kernel";
 const regionSchema = z.object({
   height: z.number().int().positive(),
   width: z.number().int().positive(),

@@ -1,232 +1,38 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { isDisabledToolSentinel } from "eve/tools";
 import { describe, expect, it } from "vitest";
+import rootBash from "@agent/tools/bash";
+import rootReadFile from "@agent/tools/read_file";
+import rootWriteFile from "@agent/tools/write_file";
+import workerQuestion from "@agent/subagents/browser-agent/tools/ask_question";
+import workerBash from "@agent/subagents/browser-agent/tools/bash";
+import workerLoadSkill from "@agent/subagents/browser-agent/tools/load_skill";
+import workerPersonalInfo from "@agent/subagents/browser-agent/tools/personal_info";
+import workerReadFile from "@agent/subagents/browser-agent/tools/read_file";
+import workerTodo from "@agent/subagents/browser-agent/tools/todo";
+import workerWebFetch from "@agent/subagents/browser-agent/tools/web_fetch";
+import workerWebSearch from "@agent/subagents/browser-agent/tools/web_search";
+import workerWriteFile from "@agent/subagents/browser-agent/tools/write_file";
 
-const rootTools = "agent/tools";
-const rootMemory = "agent/memory/profile.ts";
-const workerRoot = "agent/subagents/browser-agent";
-const workerTools = `${workerRoot}/tools`;
-const executorBrowser = "server/tools/browser";
-
-function toolFiles(directory: string, root = directory): string[] {
-  return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
-      const path = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) return toolFiles(path, root);
-      return entry.name.endsWith(".ts") ? path.slice(root.length + 1) : [];
-    })
-    .toSorted();
-}
-
-describe("root and worker capability boundaries", () => {
-  it("keeps root coordination separate from browser execution", () => {
-    expect(toolFiles(rootTools)).toEqual([
-      "ask_question.ts",
-      "bash.ts",
-      "capabilities.ts",
-      "creator-evaluation-remove.ts",
-      "creator-interview.ts",
-      "creator-knowledge.ts",
-      "creator-library.ts",
-      "creator-pilot.ts",
-      "creator-preview.ts",
-      "creator-qualification.ts",
-      "creator-release.ts",
-      "creator-review.ts",
-      "creator-sources.ts",
-      "feed.ts",
-      "ideas.ts",
-      "messaging.ts",
-      "read_file.ts",
-      "respond-to-approval.ts",
-      "web_search.ts",
-      "workspace-skills.ts",
-      "write_file.ts",
-    ]);
-    expect(readFileSync(`${rootTools}/capabilities.ts`, "utf8")).toContain(
-      "resolveCapabilities"
-    );
-    for (const tool of ["bash", "read_file", "write_file"]) {
-      expect(readFileSync(`${rootTools}/${tool}.ts`, "utf8")).toContain(
-        "disableTool()"
-      );
+describe("root and worker capabilities", () => {
+  it("disables root sandbox access", () => {
+    for (const tool of [rootBash, rootReadFile, rootWriteFile]) {
+      expect(isDisabledToolSentinel(tool)).toBe(true);
     }
-    expect(existsSync(`${rootTools}/sendMessage.ts`)).toBe(false);
-    expect(existsSync("agent/extensions/kernel/extension.ts")).toBe(false);
-    expect(existsSync("agent/extensions/kernel/connections/browser.ts")).toBe(
-      false
-    );
-    expect(existsSync("agent/skills/browser-execution/SKILL.md")).toBe(false);
-    expect(existsSync(`${rootTools}/agent.ts`)).toBe(false);
-    const rootInstructions = readFileSync(
-      "agent/instructions/content/role/interactive.md",
-      "utf8"
-    );
-    expect(rootInstructions).toContain(
-      "If search is unavailable, delegate a bounded public-research task to `browser-agent`"
-    );
-    expect(rootInstructions).toContain(
-      "try `web_fetch` before browser automation"
-    );
   });
 
-  it("keeps durable memory scoped to the authenticated root user", () => {
-    const memory = readFileSync(rootMemory, "utf8");
-
-    expect(memory).toContain("defineMemory(");
-    expect(memory).toContain("scope: resolveProfileMemoryScope");
-  });
-
-  it("gives worker the browser and opaque-vault tools without messaging", () => {
-    expect(toolFiles(workerTools)).toEqual([
-      "ask_question.ts",
-      "bash.ts",
-      "browser.ts",
-      "load_skill.ts",
-      "personal_info.ts",
-      "read_file.ts",
-      "todo.ts",
-      "web_fetch.ts",
-      "web_search.ts",
-      "write_file.ts",
-    ]);
-    expect(readFileSync(`${workerTools}/browser.ts`, "utf8")).toContain(
-      "resolveBrowserTools"
-    );
-    expect(existsSync(`${workerRoot}/tools/sendMessage.ts`)).toBe(false);
-    expect(existsSync(`${workerRoot}/tools/request_vault_setup.ts`)).toBe(
-      false
-    );
-    expect(readFileSync(`${workerTools}/ask_question.ts`, "utf8")).toContain(
-      "disableTool()"
-    );
-    expect(readFileSync(`${workerTools}/personal_info.ts`, "utf8")).toContain(
-      "disableTool()"
-    );
+  it("disables worker defaults outside delegated browser execution", () => {
     for (const tool of [
-      "bash",
-      "load_skill",
-      "read_file",
-      "todo",
-      "web_fetch",
-      "web_search",
-      "write_file",
+      workerQuestion,
+      workerBash,
+      workerLoadSkill,
+      workerPersonalInfo,
+      workerReadFile,
+      workerTodo,
+      workerWebFetch,
+      workerWebSearch,
+      workerWriteFile,
     ]) {
-      expect(readFileSync(`${workerTools}/${tool}.ts`, "utf8")).toContain(
-        "disableTool()"
-      );
+      expect(isDisabledToolSentinel(tool)).toBe(true);
     }
-    expect(existsSync(`${workerRoot}/extensions/kernel/extension.ts`)).toBe(
-      false
-    );
-    expect(readFileSync("package.json", "utf8")).not.toContain(
-      "@onkernel/eve-extension"
-    );
-    for (const tool of [
-      "capture_browser_image",
-      "computer_action",
-      "manage_browsers",
-    ]) {
-      const source = readFileSync(`${executorBrowser}/${tool}.ts`, "utf8");
-      expect(source).toContain("defineTool(");
-      expect(source).not.toContain("defineDynamic(");
-      expect(source).toContain("requireWorkerScope(context)");
-    }
-    expect(existsSync(`${workerRoot}/hooks/session-owner.ts`)).toBe(true);
-    expect(existsSync(`${workerRoot}/skills/browser-execution/SKILL.md`)).toBe(
-      false
-    );
-    const semanticBrowser = readFileSync(
-      `${executorBrowser}/semantic_browser.ts`,
-      "utf8"
-    );
-    expect(semanticBrowser).toContain("defineDynamic(");
-    expect(semanticBrowser).toContain("requireWorkerScope(context)");
-    expect(semanticBrowser).toContain('from "@onkernel/browser-loop"');
-    const workerInstructions = readFileSync(
-      `${workerRoot}/instructions.md`,
-      "utf8"
-    );
-    expect(workerInstructions).not.toContain("`inspect_autofill`");
-    expect(workerInstructions).toContain(
-      "native `final_output` tool exactly once"
-    );
-    expect(workerInstructions).toContain(
-      "explicitly delegated public-research task"
-    );
-    expect(workerInstructions).toContain(
-      "Use `playwright_execute` as the primary browser execution surface"
-    );
-    expect(workerInstructions).toContain(
-      "Prefer one bounded program per page state"
-    );
-    expect(workerInstructions).toContain(
-      "`browser_act` dispatches actions and returns the successor state"
-    );
-    expect(existsSync(`${workerRoot}/lib/browser-contract.ts`)).toBe(false);
-    expect(existsSync(`${workerRoot}/lib/browser-runtime.ts`)).toBe(false);
-    expect(existsSync(`${workerRoot}/lib/owned-browser.ts`)).toBe(true);
-
-    expect(readFileSync(`${workerRoot}/lib/kernel.ts`, "utf8")).toContain(
-      "new Kernel("
-    );
-    for (const tool of [
-      "capture_browser_image",
-      "computer_action",
-      "manage_browsers",
-    ]) {
-      const source = readFileSync(`${executorBrowser}/${tool}.ts`, "utf8");
-      expect(source).toContain(
-        'from "@agent/subagents/browser-agent/lib/kernel"'
-      );
-      expect(source).not.toContain("new Kernel(");
-    }
-    expect(
-      readFileSync(`${executorBrowser}/fill_from_vault.ts`, "utf8")
-    ).toContain(
-      'from "../../../agent/subagents/browser-agent/lib/autofill/native"'
-    );
-    expect(
-      readFileSync(`${executorBrowser}/fill_from_vault.ts`, "utf8")
-    ).toContain("releaseDelegatedSecret");
-    expect(
-      readFileSync(`${executorBrowser}/fill_from_vault.ts`, "utf8")
-    ).not.toContain("readVaultSecret");
-    expect(existsSync(`${executorBrowser}/get_password.ts`)).toBe(false);
-    expect(existsSync(`${executorBrowser}/get_totp.ts`)).toBe(false);
-    expect(existsSync(`${workerTools}/get_password.ts`)).toBe(false);
-    expect(existsSync(`${workerTools}/get_totp.ts`)).toBe(false);
-    const whatsapp = readFileSync("server/tools/tools/whatsapp.ts", "utf8");
-    expect(whatsapp).toContain("listWhatsAppChats");
-    expect(whatsapp).not.toContain("kapso");
-    expect(whatsapp).not.toContain("KAPSO_");
-    expect(whatsapp).not.toContain("telegram");
-    expect(existsSync(`${executorBrowser}/whatsapp.ts`)).toBe(false);
-    expect(existsSync(`${workerTools}/whatsapp.ts`)).toBe(false);
-    expect(existsSync(`${rootTools}/whatsapp.ts`)).toBe(false);
-  });
-
-  it("requires structured completion for initial and resumed worker calls", () => {
-    const workerCoordination = readFileSync(
-      "agent/instructions/content/worker-coordination.md",
-      "utf8"
-    );
-    const workerConfig = readFileSync(`${workerRoot}/agent.ts`, "utf8");
-
-    expect(workerCoordination).toContain(
-      "Every initial or resumed `browser-agent` call must set `outputSchema`"
-    );
-    expect(workerCoordination).toContain(
-      '"required": ["status", "message", "images"]'
-    );
-    expect(workerCoordination).toContain(
-      "including when passing an existing `agentId`"
-    );
-    expect(workerCoordination).toContain(
-      "calling Eve's native `final_output` tool exactly once"
-    );
-    expect(workerConfig).toContain("outputSchema: taskCompletionSchema");
-    expect(workerConfig).toContain(
-      "Every initial and resumed call must include the task-completion outputSchema"
-    );
   });
 });

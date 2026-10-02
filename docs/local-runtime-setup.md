@@ -15,13 +15,15 @@ The checked-in `tests/runtime/compose.yaml` creates only the
 `zoen-runtime-tests` project: PostgreSQL 18 on loopback port 15432 and Synapse on 18008. Images are pinned by digest. `tests/runtime/.env.example` contains synthetic
 credentials for this environment. The app role and migration role are distinct.
 Synapse uses its own PostgreSQL database and role with C collation; its durable
-transaction sequence remains unique across restarts. If upgrading an older
-SQLite-backed fixture, run the coordinated reset below once. Both services and
-their disposable data must move to the new baseline together.
+transaction sequence remains unique across restarts.
 
 Setup applies the Drizzle migration chain, installs the public Workflow PostgreSQL
 schema and reapplies role permissions. Run setup again to verify idempotence.
 Tests are serial by file and require the isolated database name and loopback host.
+The runner creates a private temporary journal directory and removes it after
+the run. Before repeating the full suite, use `pnpm test:runtime:reset`: the
+creator-corpus erasure proof requires an installation without unrelated erasure
+receipts from an earlier run.
 The compiled Eve fixture cleans its own workflow queues to avoid abandoned test
 sessions affecting later runs. The restore test performs a real database dump and
 restore; its independent erasure journal is an in-memory fixture, not a live S3

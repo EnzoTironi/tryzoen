@@ -14,14 +14,14 @@ import {
   withBrowserProfileWriteLock,
 } from "@db/services/browsers";
 import { recordBrowserTraceDomains } from "@db/services/browser-traces";
-import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
-import { requireWorkerScope } from "@agent/subagents/browser-agent/lib/access";
-import { disposeBrowserLoopSession } from "../../../agent/subagents/browser-agent/lib/semantic-loop";
-import { requireOwnedBrowserSession } from "@agent/subagents/browser-agent/lib/owned-browser";
+import { getKernel } from "../lib/kernel";
+import { requireWorkerScope } from "../lib/access";
+import { disposeBrowserLoopSession } from "../lib/semantic-loop";
+import { requireOwnedBrowserSession } from "../lib/owned-browser";
 import {
   domainFromUrl,
   harvestBrowserTraceDomains,
-} from "@agent/subagents/browser-agent/lib/trace/domains";
+} from "../lib/trace/domains";
 
 const browserTimeoutFloorSeconds = 15 * 60;
 
@@ -260,18 +260,14 @@ function lifecycleResult(browser: KernelBrowser) {
   };
 }
 
-export function kernelProfileNameForWorkspace(workspaceId: string) {
-  return `openinstinct-${createHash("sha256")
-    .update(`kernel-profile\0${workspaceId}`)
-    .digest("hex")
-    .slice(0, 40)}`;
-}
-
 async function ensureWorkspaceProfile(
   workspaceId: string,
   signal?: AbortSignal
 ) {
-  const name = kernelProfileNameForWorkspace(workspaceId);
+  const name = `openinstinct-${createHash("sha256")
+    .update(`kernel-profile\0${workspaceId}`)
+    .digest("hex")
+    .slice(0, 40)}`;
   try {
     return await getKernel().profiles.retrieve(name, { signal });
   } catch (error) {

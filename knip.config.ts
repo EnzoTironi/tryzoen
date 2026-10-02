@@ -1,12 +1,6 @@
 import type { KnipConfig } from "knip";
 
 export default {
-  ignoreIssues: {
-    // Eve AI Elements and shadcn registry primitives intentionally expose
-    // a reusable component surface wider than this minimal chat consumes.
-    "web/components/ai-elements/**/*.tsx": ["exports", "files", "types"],
-    "web/components/ui/**/*.tsx": ["exports", "files", "types"],
-  },
   workspaces: {
     ".": {
       vitest: {
@@ -17,19 +11,15 @@ export default {
         ],
       },
       entry: [
-        "agent/channels/**/*.ts",
-        "agent/instrumentation/**/*.ts",
-        "tests/fixtures/eve-*/agent/**/*.ts",
-        "agent/hooks/**/*.ts",
-        "agent/instructions/**/*.ts",
-        "agent/memory/**/*.ts",
-        "agent/skills/**/*.ts",
-        "agent/subagents/**/*.ts",
-        "agent/schedules/**/*.ts",
-        "agent/tools/**/*.ts",
+        // Supplement filesystem slots missing from Knip's built-in Eve plugin.
+        "agent/{instructions,instrumentation,memory}{.ts,/**/*.ts}!",
+        "agent/subagents/**/{instructions,memory}{.ts,/**/*.ts}!",
+        "tests/fixtures/eve-*/agent/agent.ts",
+        "tests/fixtures/eve-*/agent/{channels,hooks,memory,tools}/**/*.ts",
+        "tests/fixtures/eve-*/agent/subagents/**/{agent.ts,hooks/**/*.ts}",
         "db/drizzle.config.ts",
         // Drizzle consumes every table and relation exported by this schema barrel.
-        "db/schema/index.ts",
+        "db/schema/index.ts!",
         "evals/**/*.eval.ts",
         "evals/evals.config.ts",
         "taze.config.ts",
@@ -37,24 +27,18 @@ export default {
         "server/google-workspace/membership.integration.ts",
         // Live TG group mention e2e (manual /env.local); fixture harness is CI proof.
         "scripts/groups-live-e2e.ts",
-        // Launched in a separate process before web/worker traffic is admitted.
-        "scripts/reconcile-account-erasures.ts",
+        // Process roots not fully retained by package-script discovery in production.
+        "scripts/{start,reconcile-account-erasures,migrate-hosted}.ts!",
         // Dedicated execution capsule and standalone synthetic performance runner.
-        "server/workspaces/semantic/worker.ts",
-        "server/workspaces/semantic/service.ts",
+        "server/workspaces/semantic/worker.ts!",
+        "server/workspaces/semantic/service.ts!",
         "benchmarks/performance/run.ts",
         // Read-only platform prerequisite inventory, invoked independently of native builds.
         "scripts/native-readiness.ts",
-        // Standalone private demo commands invoked directly through Node.
-        "scripts/demo/app.ts",
-        "scripts/demo/seed.ts",
-        "scripts/demo/stack.ts",
         // Manual CDP regression against the isolated shared conversation UI.
         "tests/companion/composer-hit-targets.ts",
       ],
       ignoreDependencies: [
-        // Next resolves React Native imports to this web renderer.
-        "react-native-web",
         "react-native-svg",
         // Eve evaluates shared reaction schemas from root-authored module bundles.
         "unicode-emoji-json",
@@ -62,29 +46,32 @@ export default {
         "credit-card-type",
         // The import worker invokes the native CLI in an isolated Node process.
         "@firecrawl/anydoc",
-        // Imported through the owning Tailwind stylesheet rather than TypeScript.
-        "shadcn",
-        "tailwindcss",
         // Loaded as jsPlugins from .oxlintrc.jsonc rather than TypeScript.
         "eslint-plugin-react-hooks",
         "eslint-plugin-turbo",
         "oxlint-tailwindcss",
       ],
-      project: ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}", "!infrastructure/**"],
+      project: [
+        "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,css}!",
+        "!infrastructure/**",
+        // Runtime suites compile disposable copies of the authored fixtures here.
+        "!tests/fixtures/.eve-*/**",
+        // These directories stay in normal analysis, outside the product graph.
+        "!tests/**!",
+        "!evals/**!",
+        "!benchmarks/**!",
+      ],
     },
-    "apps/mobile": {
-      entry: ["index.ts", "metro.config.mjs"],
-    },
-    "apps/desktop": { entry: ["src/main.ts"] },
-    "packages/companion-ui": { entry: ["src/index.ts"] },
+    "apps/mobile": {},
+    "apps/desktop": {},
+    "packages/companion-ui": {},
     infrastructure: {
       entry: [
-        "alchemy.run.ts",
-        "alchemy.fly-postgres.run.ts",
-        "recovery.run.ts",
-        "semantic/probe.mjs",
+        "{alchemy.run,alchemy.fly-postgres.run,recovery.run,operations}.ts!",
+        "semantic/probe.mjs!",
         "tests/*.test.ts",
       ],
+      project: ["**/*.{ts,mjs}!", "!tests/**!"],
       // POSIX shell builtin used to protect local Alchemy state.
       ignoreBinaries: ["umask"],
     },

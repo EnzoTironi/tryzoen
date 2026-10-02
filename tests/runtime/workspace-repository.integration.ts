@@ -119,13 +119,11 @@ test("isolates personal and team repositories, preserves history and rejects for
     expect((await repository.read(personal)).files).toEqual([
       "knowledge/private.md",
     ]);
-    const foreign = await Promise.try(async () =>
-      repository.read(guest, "knowledge/private.md", personalWrite.revision)
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!foreign.ok && foreign.error).toMatchObject({
+    await expect(
+      Promise.try(async () =>
+        repository.read(guest, "knowledge/private.md", personalWrite.revision)
+      )
+    ).rejects.toMatchObject({
       reason: "not_found",
     });
     const update = await repository.write(guest, {
@@ -145,13 +143,11 @@ test("isolates personal and team repositories, preserves history and rejects for
     expect((await repository.export(actor))?.bundle.length).toBeGreaterThan(
       100
     );
-    const changedReplay = await Promise.try(async () =>
-      repository.write(actor, { ...write, content: "Altered retry" })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!changedReplay.ok && changedReplay.error).toMatchObject({
+    await expect(
+      Promise.try(async () =>
+        repository.write(actor, { ...write, content: "Altered retry" })
+      )
+    ).rejects.toMatchObject({
       reason: "conflict",
     });
   }));
@@ -194,18 +190,16 @@ test("members cannot alter agent instructions; removal blocks current files, his
       path: "agent/SOUL.md",
       content: "Be helpful.",
     });
-    const denied = await Promise.try(async () =>
-      repository.write(guest, {
-        operationId: randomUUID(),
-        expectedRevision: first.revision,
-        path: "agent/SOUL.md",
-        content: "Override",
-      })
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!denied.ok && denied.error).toBeInstanceOf(WorkspaceAccessDenied);
+    await expect(
+      Promise.try(async () =>
+        repository.write(guest, {
+          operationId: randomUUID(),
+          expectedRevision: first.revision,
+          path: "agent/SOUL.md",
+          content: "Override",
+        })
+      )
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
     expect(
       await repository.selection(guest, ["agent/SOUL.md", "agent/IDENTITY.md"])
     ).toEqual({
@@ -228,13 +222,7 @@ test("members cannot alter agent instructions; removal blocks current files, his
     await query(
       sql`DELETE FROM public.session WHERE id = ${actor.authSessionId}`
     );
-    const signedOut = await Promise.try(async () =>
-      repository.read(actor)
-    ).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-    expect(!signedOut.ok && signedOut.error).toBeInstanceOf(
-      WorkspaceAccessDenied
-    );
+    await expect(
+      Promise.try(async () => repository.read(actor))
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   }));

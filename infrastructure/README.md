@@ -52,6 +52,20 @@ requires recovery, and an image update can cause a brief restart. Production
 operation here means measured recovery, monitored backups and controlled changes;
 it does not imply zero downtime or guaranteed zero data loss.
 
+## Companion entry and legacy isolation
+
+`app.tryzoen.com/` opens Companion. Signed-out visitors stay on the app host for
+sign-in. An account without a saved `agent/IDENTITY.md` goes to `/onboarding` to
+name its Companion and optionally connect Google, messengers or its vault.
+Finishing setup opens a new conversation. Connection consent returns to that
+same setup step; services can also be added later in Companion settings.
+
+The previous workspace interface remains in the `(authenticated)` route group
+and its saved shell. Its home is `/legacy`; the group returns 404 by default.
+`ZOEN_LEGACY_APP_ENABLED` is a validated server flag, defaulting to false. Keep
+it unset or false for Companion production. Enabling it is a deliberate future
+reactivation of the preserved interface, not part of current onboarding.
+
 ## Deployment
 
 Use Node 24 and the pinned pnpm version, then install both packages:
@@ -91,12 +105,18 @@ sequence. Their scripts update shared PostgreSQL catalogs and database permissio
 so independent parallel actions can conflict. Migrations and service updates depend
 on the completed preparation, including all four credential versions.
 
-Before switching the web image, the stack takes an incremental backup and runs
+Before switching the web image, the stack takes an incremental backup, removes
+public services and automatic restart from every existing web machine, and waits
+for all of them to stop. It verifies the retained production web volume before
+changing traffic. Only then does it run
 `scripts/migrate-hosted.ts` in a temporary machine with no public services, DNS
 registration or persistent volume. It checks the ordered migration hashes and
 timestamps before and after applying application and native workflow migrations.
 A mismatch fails the release instead of repairing the journal. The temporary
 machine is removed on success or failure; grants are reconciled before web startup.
+A backup failure leaves web traffic unchanged. A later failure leaves web stopped;
+inspect the migration journal and deploy the corrected release. Do not restart an
+old image against a schema it no longer supports.
 
 ```sh
 cd infrastructure
@@ -113,11 +133,12 @@ or `destroy` as a way to clear an adoption error.
 
 The web service uses `WebPersistent` and the retained encrypted `model_auth`
 volume. Alchemy adopts the exact existing `zoen-web` machine and volume, grows
-the volume to 10 GB, and updates the image. After the image, mount and `alive`
-readiness check pass, it removes public services from the three recorded obsolete
-web machines and stops them. Repeated deployments update the same persistent
-machine. A failed readiness check prevents retirement of the other serving
-web machine. Updating the persistent machine can cause a brief restart.
+the volume to 10 GB, and updates the image after migration completes. The startup
+action checks the actual image, migration marker and retained mount, starts the
+updated machine if necessary, and waits for its `alive` readiness check. Public
+services can auto-start this new image only after the migration dependency resolves.
+The obsolete web machines stay stopped. Repeated deployments update the same
+persistent machine. This ordered transition causes a brief maintenance interval.
 
 The semantic executor runs in a dedicated Fly VM. Its entrypoint moves the
 service into a cgroup v2 with 1.5 GiB of memory, no swap and a 64-process limit,

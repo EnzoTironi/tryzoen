@@ -16,7 +16,7 @@ vi.mock("@shared/environment/env", async (original) => {
   };
 });
 import { env } from "@shared/environment/env";
-import { query, transaction as withDatabaseTransaction } from "@db/queries";
+import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import assert from "node:assert/strict";
@@ -26,18 +26,11 @@ import { Pool } from "pg";
 import { test, vi } from "vitest";
 import { readAuthSession } from "../../db/services/auth/session";
 import { AuthUnavailable } from "../../db/services/auth";
-import {
-  readAccountArchive,
-  readAccountArchives,
-  downloadAccountArchive,
-} from "../../server/accounts/archives";
-import { requireWorkspaceAccess } from "../../server/workspaces/access";
 vi.mock("../../db/services/auth/session", () => ({
   readAuthSession: vi.fn<typeof readAuthSession>(),
 }));
 import { NativeDeviceAuth } from "../../server/accounts/device";
 import { ChannelAccounts } from "../../server/accounts";
-import { Messaging } from "../../server/messaging";
 import { channelAuthPlugin } from "../../server/channel-auth";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import {
@@ -58,7 +51,7 @@ const BrowserSession = z.object({
     id: z.string(),
   }),
 });
-test("native linking and archive recovery pin both proofs, preserve data and reject replay", async () => {
+test("native linking pins both proofs, rejects account transfers and prevents replay", async () => {
   const databaseUrl = env.DATABASE_URL;
   const pool = new Pool({
     connectionString: databaseUrl,
@@ -130,7 +123,6 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
   };
   const owner = await createIdentity();
   const other = await createIdentity();
-  const outsider = await createIdentity();
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- The default source parameter captures this test’s owner identity.
   const issue = async (
     purpose: "login" | "link",
@@ -153,8 +145,7 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
     id: string,
     boundAt: string,
     purpose: "login" | "link" = "link",
-    source = owner.source,
-    archivePreviousAccount?: true
+    source = owner.source
   ) => {
     const devices = NativeDeviceAuth;
     const confirmation = {
@@ -163,10 +154,6 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
       browserBoundAt: boundAt,
       purpose,
     };
-    if (archivePreviousAccount)
-      Object.assign(confirmation, {
-        archivePreviousAccount,
-      });
     return await devices.confirm(confirmation);
   };
   const signIn = async (source = owner.source) => {
@@ -204,7 +191,6 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
     };
   };
   try {
-    const outsiderBrowser = await signIn(outsider.source);
     const browser = await signIn();
     const wrongBrowser = await signIn();
     const foreignBrowser = await signIn(other.source);
@@ -352,7 +338,7 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
     );
     assert.deepEqual(
       owners.rows,
-      [owner.identity, other.identity, outsider.identity]
+      [owner.identity, other.identity]
         .map(({ id, userId }) => ({
           id,
           userId,
@@ -449,327 +435,58 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
       400
     );
 
-    // Recovery preserves the source account instead of merging its access or native sessions.
-    const recovery = await issue("link", randomUUID(), other.source);
-    assert.ok(recovery.entryToken);
-    const recoveryInput = {
-      id: recovery.challenge.id,
-      token: recovery.entryToken,
+    const crossAccount = await issue("link", randomUUID(), other.source);
+    assert.ok(crossAccount.entryToken);
+    const crossAccountInput = {
+      id: crossAccount.challenge.id,
+      token: crossAccount.entryToken,
       purpose: "link",
     };
     assert.equal(
-      (await request("device-bind", fresh.cookie, recoveryInput)).status,
+      (await request("device-bind", fresh.cookie, crossAccountInput)).status,
       409
     );
-    await pool.query(
-      'UPDATE public.user SET "emailVerified" = true WHERE id = $1',
-      [other.identity.userId]
-    );
-    assert.equal(
-      (
-        await request("device-bind", fresh.cookie, {
-          ...recoveryInput,
-          archivePreviousAccount: true,
-        })
-      ).status,
-      412
-    );
-    await pool.query(
-      'UPDATE public.user SET "emailVerified" = false WHERE id = $1',
-      [other.identity.userId]
-    );
-    const messaging = Messaging;
-    const event = {
-      identityId: other.identity.id,
-      eventId: randomUUID(),
-      sourceMessageId: randomUUID(),
-      payload: {
-        text: "Archived conversation",
-        attachments: [],
-      },
-    };
-    const original = await messaging.accept(event);
-    const lease = await messaging.claimInbox({
-      identityId: other.identity.id,
-      leaseSeconds: 60,
-    });
-    assert.ok(lease);
-    assert.equal(
-      (
-        await request("device-bind", fresh.cookie, {
-          ...recoveryInput,
-          archivePreviousAccount: true,
-        })
-      ).status,
-      423
-    );
-    await messaging.markAccepted({
-      lease: {
-        id: lease.id,
-        identityId: lease.identityId,
-        leaseToken: lease.leaseToken,
-      },
-      receipt: {
-        status: "accepted",
-        sessionId: other.source.sessionId,
-      },
-    });
-    const recoveryBinding = await request("device-bind", fresh.cookie, {
-      ...recoveryInput,
-      archivePreviousAccount: true,
-    });
-    assert.equal(recoveryBinding.status, 200);
-    const recoveryCookie = `${fresh.cookie}; ${cookieHeader(recoveryBinding)}`;
-    const recoveryBound = await (async function () {
-      const devices = NativeDeviceAuth;
-      return (await devices.pending(other.source)).find(
-        (item) => item.id === recovery.challenge.id
-      );
-    })();
-    assert.ok(recoveryBound?.browserBoundAt);
-    assert.equal(recoveryBound.archivePreviousAccount, true);
-    await assert.rejects(
-      confirm(
-        recoveryBound.id,
-        recoveryBound.browserBoundAt,
-        "link",
-        other.source
-      )
-    );
-    await confirm(
-      recoveryBound.id,
-      recoveryBound.browserBoundAt,
-      "link",
-      other.source,
-      true
-    );
-    // Eligibility is checked again at consumption, not just when the browser opens.
-    await pool.query(
-      'UPDATE public.user SET "emailVerified" = true WHERE id = $1',
-      [other.identity.userId]
-    );
-    assert.equal(
-      (
-        await request("complete", recoveryCookie, {
-          id: recoveryBound.id,
-        })
-      ).status,
-      412
-    );
-    assert.equal(
-      (
-        await pool.query<{
-          count: number;
-        }>(
-          "SELECT count(*)::int AS count FROM account_archive WHERE source_user_id = $1",
-          [other.identity.userId]
-        )
-      ).rows[0]?.count,
-      0
-    );
-    await pool.query(
-      'UPDATE public.user SET "emailVerified" = false WHERE id = $1',
-      [other.identity.userId]
-    );
-    const completions = await Promise.all([
-      request("complete", recoveryCookie, {
-        id: recoveryBound.id,
-      }),
-      request("complete", recoveryCookie, {
-        id: recoveryBound.id,
-      }),
-    ]);
+    assert.deepEqual(await NativeDeviceAuth.pending(other.source), []);
     assert.deepEqual(
-      completions.map((result) => result.status).toSorted((a, b) => a - b),
-      [200, 400]
-    );
-    const archived = (
-      await pool.query<{
-        target_user_id: string;
-        workspace_id: string;
-      }>(
-        "SELECT target_user_id, workspace_id FROM account_archive WHERE source_user_id = $1",
-        [other.identity.userId]
-      )
-    ).rows[0];
-    assert.ok(archived);
-    assert.equal(archived.target_user_id, owner.identity.userId);
-    assert.equal(archived.workspace_id, other.scope.workspaceId);
-    assert.equal(
-      (
-        await pool.query<{
-          count: number;
-        }>(
-          'SELECT count(*)::int AS count FROM public.session WHERE "userId" = $1',
-          [other.identity.userId]
-        )
-      ).rows[0]?.count,
-      0
-    );
-    const current = await (async function () {
-      const accounts = ChannelAccounts;
-      return await accounts.getActiveIdentity({
+      await ChannelAccounts.getActiveIdentity({
         channel: other.identity.channel,
         installationId: other.identity.installationId,
         senderId: other.identity.senderId,
-      });
-    })();
-    assert.equal(current.userId, owner.identity.userId);
-    assert.notEqual(current.id, other.identity.id);
-    await assert.rejects(issue("login", randomUUID(), other.source));
-    await assert.rejects(
-      messaging.accept({
-        ...event,
-        eventId: randomUUID(),
-      })
+      }),
+      other.identity
     );
-    const replay = await messaging.accept({
-      ...event,
-      identityId: current.id,
-    });
-    assert.equal(replay.id, original.id);
-    await assert.rejects(
-      messaging.accept({
-        ...event,
-        identityId: current.id,
-        payload: {
-          text: "Tampered replay",
-          attachments: [],
-        },
-      })
+    const ownBinding = await request(
+      "device-bind",
+      foreignBrowser.cookie,
+      crossAccountInput
     );
-    await messaging.accept({
-      ...event,
-      identityId: current.id,
-      eventId: randomUUID(),
-    });
-    const newLease = await messaging.claimInbox({
-      identityId: current.id,
-      leaseSeconds: 60,
-    });
-    assert.ok(newLease);
-    assert.equal(newLease.nativeInput?.principalId, owner.scope.userId);
-    assert.equal(newLease.nativeInput.address, current.id);
-    await messaging.markAccepted({
-      lease: {
-        id: newLease.id,
-        identityId: newLease.identityId,
-        leaseToken: newLease.leaseToken,
-      },
-      receipt: {
-        status: "accepted",
-        sessionId: randomUUID(),
-      },
-    });
+    assert.equal(ownBinding.status, 200);
+    const ownBound = (await NativeDeviceAuth.pending(other.source)).find(
+      (item) => item.id === crossAccount.challenge.id
+    );
+    assert.ok(ownBound?.browserBoundAt);
+    await confirm(ownBound.id, ownBound.browserBoundAt, "link", other.source);
     assert.equal(
       (
-        await pool.query<{
-          count: number;
-        }>(
-          "SELECT count(*)::int AS count FROM channel_inbox WHERE identity_id = $1",
-          [other.identity.id]
+        await request(
+          "complete",
+          `${foreignBrowser.cookie}; ${cookieHeader(ownBinding)}`,
+          { id: ownBound.id }
         )
-      ).rows[0]?.count,
-      1
+      ).status,
+      200
     );
     assert.equal(
       (
-        await pool.query<{
-          count: number;
-        }>(
-          "SELECT count(*)::int AS count FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
-          [other.scope.workspaceId, other.scope.userId]
-        )
-      ).rows[0]?.count,
-      1
-    );
-    await assert.rejects(
-      (async function () {
-        return await withDatabaseTransaction(async () =>
-          requireWorkspaceAccess({
-            ...other.scope,
-            channelIdentityId: other.identity.id,
-          })
-        );
-      })()
-    );
-    const archiveHeaders = new Headers({
-      cookie: fresh.cookie,
-    });
-    const archives = await readAccountArchives(archiveHeaders);
-    assert.equal(archives.length, 1);
-    assert.ok(archives[0]);
-    const archiveId = archives[0].id;
-    const history = await readAccountArchive(archiveHeaders, archiveId);
-    assert.equal(history.messages[0]?.text, "Archived conversation");
-    assert.equal(history.messages.length, 1);
-    assert.deepEqual(
-      await readAccountArchives(
-        new Headers({
-          cookie: outsiderBrowser.cookie,
+        await ChannelAccounts.getActiveIdentity({
+          channel: other.identity.channel,
+          installationId: other.identity.installationId,
+          senderId: other.identity.senderId,
         })
-      ),
-      []
+      ).userId,
+      other.identity.userId
     );
-    await assert.rejects(
-      readAccountArchive(
-        new Headers({
-          cookie: outsiderBrowser.cookie,
-        }),
-        archiveId
-      )
-    );
-    await assert.rejects(
-      readAccountArchive(
-        new Headers({
-          cookie: foreignBrowser.cookie,
-        }),
-        archiveId
-      )
-    );
-    await assert.rejects(readAccountArchive(archiveHeaders, archiveId, "-1"));
-    const exported = await downloadAccountArchive(
-      archiveHeaders,
-      archiveId,
-      "memory"
-    );
-    assert.equal(exported.headers.get("cache-control"), "private, no-store");
-    const exportedMemory = z
-      .record(z.string(), z.unknown())
-      .parse(await exported.json());
-    assert.deepEqual(exportedMemory, {
-      profile: null,
-      documents: [],
-      privateMemory: null,
-    });
-    assert.equal(Object.hasOwn(exportedMemory, "learned"), false);
-    await assert.rejects(
-      downloadAccountArchive(
-        archiveHeaders,
-        archiveId,
-        "attachment",
-        randomUUID()
-      )
-    );
-    await pool.query("DELETE FROM public.session WHERE id = $1", [
-      fresh.session.id,
-    ]);
-    // The archive survives removal of its initiating session, but a revoked cookie cannot read it.
-    assert.equal(
-      (
-        await pool.query<{
-          count: number;
-        }>("SELECT count(*)::int AS count FROM account_archive WHERE id = $1", [
-          archiveId,
-        ])
-      ).rows[0]?.count,
-      1
-    );
-    await assert.rejects(readAccountArchive(archiveHeaders, archiveId));
   } finally {
-    await pool.query("DELETE FROM account_archive WHERE source_user_id = $1", [
-      other.identity.userId,
-    ]);
     await pool.query(
       "DELETE FROM channel_auth_challenge WHERE installation_id = $1",
       [installationId]
@@ -779,14 +496,10 @@ test("native linking and archive recovery pin both proofs, preserve data and rej
       [installationId]
     );
     await pool.query("DELETE FROM workspaces WHERE id = ANY($1)", [
-      [
-        owner.scope.workspaceId,
-        other.scope.workspaceId,
-        outsider.scope.workspaceId,
-      ],
+      [owner.scope.workspaceId, other.scope.workspaceId],
     ]);
     await pool.query('DELETE FROM public."user" WHERE id = ANY($1)', [
-      [owner.identity.userId, other.identity.userId, outsider.identity.userId],
+      [owner.identity.userId, other.identity.userId],
     ]);
     vi.resetAllMocks();
     await pool.end();

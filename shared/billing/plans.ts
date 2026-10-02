@@ -6,7 +6,7 @@
 const billingPlanIds = ["free", "pro", "org"] as const;
 export type BillingPlanId = (typeof billingPlanIds)[number];
 
-/** Mirrors `Release1QuotaLimits` so UI + admission share one catalog. */
+/** Plan limits shared by entitlement resolution and account billing. */
 export interface PlanQuotaLimits {
   user: {
     concurrentTurns: number;

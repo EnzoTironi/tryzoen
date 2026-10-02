@@ -27,7 +27,7 @@ export class AccountControlError extends Error {
     Object.assign(this, input);
   }
 }
-export const requireControlSession = async function (headers: Headers) {
+const requireControlSession = async function (headers: Headers) {
   const session = await readAuthSession(headers);
   if (!session)
     throw new AccountControlError({

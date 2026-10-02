@@ -72,3 +72,45 @@ still ends at **2026-10-04T02:59:00Z**.
 
 The deployment workflow reruns both dependency audits immediately before applying
 infrastructure, so an earlier CI success cannot carry this exception past expiry.
+
+The 2026-10-02 cleanup review compared all 111 guarded files with `ca60406e`.
+Only the root manifest and lock changed: the unused direct `yaml@2.9.1` importer
+was removed, and pnpm renamed the `@vercel/connect@2.0.0` peer-context key without
+changing its dependency snapshot. The node-forge, Expo CLI and certificate
+snapshots and the signing, deployment and distribution configuration are
+unchanged. An independent review of the fresh official-registry audit confirmed
+the same advisory, version and 100 dependency paths; the infrastructure audit
+reported zero findings. The reviewed configuration fingerprint is
+`c7c8307728af9f47aeef36a3a28e67f34169172244e981f16d74b37514a68b6e`.
+Acceptance still ends at **2026-10-04T02:59:00Z**. The audit wrapper now passes
+the pinned lockfile directory through pnpm's supported `--config.lockfile-dir`
+option; the previous `--lockfile-dir` option was rejected by pnpm 11.24.0.
+
+The 2026-10-02 schema-cutover review compared `e2e96b5a` with the original
+cleanup head `55f1ba8f`. Six guarded files changed: the infrastructure runbook,
+hosted definition, migration and web-cutover implementations, and two provider
+test files. The changes stop every old web replica after backup and before
+schema cleanup, then start and verify the migrated mounted image. Independent
+review found no added node-forge import, certificate processing or signature
+verification path. Dependency manifests and locks, Expo/signing configuration,
+workflows, image construction and Fly TLS termination remain unchanged.
+
+A fresh official-registry report contains the same one high-severity advisory,
+node-forge 1.4.0, no published patched version, and the exact 100 pinned paths.
+The separate infrastructure audit has zero findings. The reviewed configuration
+fingerprint is `44210143e2fc69cd3933d0ea09663adcb19ea9371f1106e60a30efd868585b0c`.
+The advisory remains unfixed; its version/path constraints and
+**2026-10-04T02:59:00Z** expiry remain unchanged. This review does not grant
+deployment authority. Recompute and review the final combined configuration
+after other branches are integrated.
+
+After localization merged as `725f04b2`, independent review rechecked the final
+combined configuration and regenerated root lockfile. Against that main, the lock
+delta removes only the root's unused direct yaml 2.9.1 importer. Mobile, desktop,
+signing, workflow, Docker, Next and infrastructure dependency settings remain
+unchanged. The six infrastructure changes retain the reviewed migration-cutover
+scope. The fresh registry report still contains the same high advisory, affected
+version, no patched version and exact 100 paths. The final reviewed fingerprint
+is `e416be64fb05f4929d7ffb49a87b78d6de57e881d448c2924b726db50d9605bc`.
+The vulnerability remains unfixed, the acceptance expires at the same
+**2026-10-04T02:59:00Z**, and deployment requires separate user authorization.

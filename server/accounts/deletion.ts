@@ -441,9 +441,6 @@ const eraseZoenControlledData = async function (
   );
   await query(sql`DELETE FROM matrix_identities WHERE user_id = ${userId}`);
   await query(sql`DELETE FROM telemetry_events WHERE user_id = ${userId}`);
-  await query(
-    sql`DELETE FROM account_archive WHERE source_user_id = ${raw} OR target_user_id = ${raw}`
-  );
   const company = await query<{
     id: string;
   }>(sql`SELECT w.id FROM workspaces w JOIN workspace_memberships m ON m.workspace_id = w.id

@@ -21,21 +21,21 @@ load every catalog into an agent's context. The existing
 
 ## Inventory files
 
-Each inventory has equivalent JSON and CSV forms. JSON is convenient for agents;
-CSV is convenient for review. Every row carries a source URL. Repository
-revisions and extraction counts are in [sources.json](sources.json).
+JSON is the single source for each inventory. Every row carries a source URL.
+Repository revisions and extraction counts are in [sources.json](sources.json).
+Generate a CSV from the selected JSON when needed; do not commit duplicate exports.
 
-| Inventory                                                                                       | What a row means                                                   |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Sim families](sim-families.json) / [CSV](sim-families.csv)                                     | Import family, including utilities and protocols                   |
-| [Sim tools](sim-tools.json) / [CSV](sim-tools.csv)                                              | Registered tool ID; versions and internal tools remain distinct    |
-| [Sim knowledge connectors](sim-knowledge-connectors.json) / [CSV](sim-knowledge-connectors.csv) | Knowledge ingestion registry entry                                 |
-| [Treg providers](treg-providers.json) / [CSV](treg-providers.csv)                               | Provider with catalog endpoints                                    |
-| [Treg endpoints](treg-endpoints.json) / [CSV](treg-endpoints.csv)                               | Curated or extended catalog ID, not live verification              |
-| [n8n families](n8n-node-families.json) / [CSV](n8n-node-families.csv)                           | Source folder, including utility and AI categories                 |
-| [n8n node sources](n8n-node-sources.json) / [CSV](n8n-node-sources.csv)                         | Node source file, including version implementations                |
-| [Public directories](public-integrations.json) / [CSV](public-integrations.csv)                 | Public Poke, Town, Lindy and Instinct evidence, with entry kind    |
-| [Recipe inventory](recipes.json) / [CSV](recipes.csv)                                           | Publicly observed recipe or routine; implementation is unqualified |
+| Inventory                                                 | What a row means                                                   |
+| --------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Sim families](sim-families.json)                         | Import family, including utilities and protocols                   |
+| [Sim tools](sim-tools.json)                               | Registered tool ID; versions and internal tools remain distinct    |
+| [Sim knowledge connectors](sim-knowledge-connectors.json) | Knowledge ingestion registry entry                                 |
+| [Treg providers](treg-providers.json)                     | Provider with catalog endpoints                                    |
+| [Treg endpoints](treg-endpoints.json)                     | Curated or extended catalog ID, not live verification              |
+| [n8n families](n8n-node-families.json)                    | Source folder, including utility and AI categories                 |
+| [n8n node sources](n8n-node-sources.json)                 | Node source file, including version implementations                |
+| [Public directories](public-integrations.json)            | Public Poke, Town, Lindy and Instinct evidence, with entry kind    |
+| [Recipe inventory](recipes.json)                          | Publicly observed recipe or routine; implementation is unqualified |
 
 ## Working instructions for the next agent
 

@@ -78,7 +78,6 @@
     "unicode-emoji-json": "0.9.0",
     "use-stick-to-bottom": "1.1.6",
     "uuid": "14.0.2",
-    "yaml": "2.9.1",
     "zod": "4.5.4"
   },
   "devDependencies": {

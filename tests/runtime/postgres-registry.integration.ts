@@ -9,7 +9,6 @@ import {
   revokeToolConnection,
   toolConnectionCredentials,
 } from "../../server/connectors/connections";
-import { resolveWorkspaceBillingSubject } from "../../server/workspaces/billing";
 import { workspaceFixture } from "./workspace-fixture";
 import { linkedIdentity } from "./identity-fixture";
 
@@ -61,22 +60,6 @@ for (const scope of ["personal", "company"] as const) {
     await expect(
       toolConnectionCredentials(actor, connection.id, connection.revision)
     ).rejects.toMatchObject({ reason: "denied" });
-    const payer = await resolveWorkspaceBillingSubject(actor);
-    expect(payer).toEqual(
-      scope === "personal"
-        ? {
-            subjectType: "user",
-            subjectId: actor.userId.slice("better-auth:".length),
-          }
-        : {
-            subjectType: "organization",
-            subjectId: (
-              await query<{ organization_id: string }>(
-                sql`SELECT organization_id FROM workspaces WHERE id=${actor.workspaceId}`
-              )
-            )[0]?.organization_id,
-          }
-    );
     await revokeToolConnection(actor, connection.id);
     expect(await listToolConnections(actor)).toEqual([]);
     const [revoked] = await query<{
@@ -121,12 +104,9 @@ test("team sharing does not grant registration, and owner offboarding removes it
   expect(
     await query(sql`SELECT id FROM tool_connections WHERE id=${connection.id}`)
   ).toEqual([]);
-  await expect(resolveWorkspaceBillingSubject(fixture.actor)).rejects.toThrow(
-    "WorkspaceAccessDenied"
-  );
 });
 
-test("a verified private channel cannot receive PostgreSQL metadata or a source payer", async () => {
+test("a verified private channel cannot receive PostgreSQL metadata", async () => {
   await using fixture = await workspaceFixture();
   const actor = fixture.personal;
   await connectTools(actor, {
@@ -159,7 +139,4 @@ test("a verified private channel cannot receive PostgreSQL metadata or a source 
     channelIdentityId: linked.id,
   };
   expect(await listToolConnections(channelActor)).toEqual([]);
-  await expect(resolveWorkspaceBillingSubject(channelActor)).rejects.toThrow(
-    "WorkspaceAccessDenied"
-  );
 });

@@ -1,36 +1,36 @@
-# ADR: Release-1 minimum quotas / admission (U10)
+# ADR: usage budgets and admission requirements
 
-- **Status:** Accepted
-- **Date:** 2026-09-09 (America/Sao_Paulo)
-- **Decision:** Ship self-host **minimum quotas** that fail closed with a typed
-  typed error before expensive work; document limits in this ADR and
-  `server/operations/quotas.ts`.
-- **Worker:** U10 — Release-1 minimum quotas / admission
+- **Status:** Requirements accepted; production enforcement pending.
+- **Decision:** Enforce account and installation budgets before expensive work,
+  with durable metering, concurrency control and clear refusal states.
 
-## Context
+## Current behavior
 
-P11 (`docs/eve/architecture.md`) requires per-user and installation budgets
-for model tokens, tools, sandbox time, storage and proactive work, plus
-concurrency/fairness so one user cannot starve the service. Real-user admission
-must not bypass operations gates (`docs/product-direction.md`).
+`shared/billing/plans.ts` defines Free, Pro and Org budgets.
+`db/services/billing.ts` resolves persisted Stripe entitlements for Account and
+billing operations. Current turn/tool dispatch does not enforce those budgets.
 
-No admission/quota module existed on `origin/main` @ bc139c1. Media
-attachment byte caps already live in `server/channels/media/policy.ts` and stay
-there.
+The unused quota gates, source-read reservation/settlement module and accounting
+ledger were removed because they had no product caller. Their isolated tests did
+not establish runtime enforcement. Existing media attachment limits remain owned
+by `server/channels/media/policy.ts`; the published CSV executor under
+`server/workspaces/semantic` retains its processing bounds.
 
-## Decision
+## Required enforcement
 
-Add `server/operations/quotas.ts`:
+- Resolve the authenticated actor and payer from current account and workspace
+  membership. A client-selected subject or an entitlement lookup failure must
+  not grant paid usage.
+- Reserve usage durably before model, tool or other expensive execution, bound
+  to the native operation identity. Replay must not allocate or dispatch twice.
+- Settle the original reservation once. Unknown, interrupted or timed-out work
+  retains its reservation until reconciled; revocation alone cannot refund it.
+- Bound concurrency and usage per actor and installation, including model tokens,
+  tools, storage, sandbox time and proactive work. One user must not starve others.
+- Preserve accounting across recovery and test concurrency, cancellation,
+  revocation and failure behavior through the real dispatch boundary.
 
-1. Named Release-1 limits (`release1QuotaLimits`).
-2. `admitQuota(usage, demand)` — pure admission gate; over-limit →
-   `QuotaAdmissionError` with `reason: "exceeded"` (fail closed).
-3. `reserveQuota` / `settleConcurrentTurns` — reserve before expensive work,
-   settle concurrent turns after completion.
-4. Callers supply observed usage (Postgres/metering ownership can land later);
-   this slice proves enforcement without inventing dual-write billing.
-
-### Limits chosen (self-host first)
+## Declared Free budgets
 
 | Scope        | Resource                     | Limit        | Rationale                                        |
 | ------------ | ---------------------------- | ------------ | ------------------------------------------------ |
@@ -44,12 +44,12 @@ Add `server/operations/quotas.ts`:
 | installation | daily model tokens           | 5_000_000    | Installation-wide spend ceiling                  |
 | installation | active users / day           | 100          | Soft pilot scale before load proof               |
 
-Operators may raise limits later; unlimited usage is not claimed.
+These values come from `shared/billing/plans.ts`. Paid plans declare higher budgets;
+the values do not establish enforced account or installation limits.
 
-## Consequences
+## Qualification
 
-- Over-limit work must not proceed; surfaces `QuotaAdmissionError` /
-  `quotaFailureMessage`.
-- Persistence of usage counters and dispatch wiring are follow-ups; tests prove
-  the gate itself.
-- Hosted billing/entitlements remain a separate capability (blueprint P11/P14).
+Billing webhooks establish entitlements, not runtime budget enforcement. Cost,
+capacity and fairness claims require measured workloads and operational evidence
+from the completed admission path. Keep [consumer billing](../consumer-billing.md)
+and [self-hosting](../self-host.md) explicit about that distinction.

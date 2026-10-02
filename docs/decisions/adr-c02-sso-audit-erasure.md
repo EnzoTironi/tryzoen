@@ -1,70 +1,67 @@
-# ADR: C02 Google Workspace SSO invite path + org audit + erasure gates
+# ADR: Company invitations, audit and SSO requirements (C02)
 
-- **Status:** Accepted (minimum viable)
-- **Date:** 2026-09-10 (America/Sao_Paulo)
-- **Decision:** Keep Better Auth Google as the **identity** provider; keep C01
-  `organizations` / `organization_memberships` as the **company membership**
-  source of truth. Ship an invite acceptance path usable for org members,
-  append-only audit receipts for sensitive org admin actions, and authorized
-  **fail-closed** org erasure/retention gates beyond personal online wipe.
-- **Worker:** C02-SSO — SSO/invite + audit receipts + erasure policy gates
+- **Status:** Workspace invitations and audit receipts are implemented.
+  Domain-based SSO enrollment and full organization erasure remain pending.
+- **Decision:** Keep Better Auth Google as an identity provider and PostgreSQL
+  organization/workspace membership as the access authority. Integration OAuth
+  cannot grant company membership.
 
-## Inventory (verified on `origin/main` @ a30730b after C01 merge)
+## Current behavior
 
-| Surface                                                                         | Behavior before C02                                                                                                                                                | Gap                                                                                    |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Better Auth (`db/services/auth/index.ts`)                                       | Google social provider when `GOOGLE_CLIENT_*` set; `disableSignUp: true`; many public email/social sign-in paths disabled; channel-auth plugin for messenger login | Not an org IdP suite; no Better Auth organization plugin                               |
-| Google Workspace connect (`server/google-workspace`, `shared/google-workspace`) | OAuth for Gmail/Calendar/Contacts scopes on a personal connection                                                                                                  | Product OAuth ≠ company SSO membership                                                 |
-| C01 org RBAC (`shared/identity/org-rbac.ts`, `db/services/organizations.ts`)    | Org + company workspace roles; `setOrganizationMemberRole`                                                                                                         | No invite email path; no remove+receipt; no audit table                                |
-| Personal privacy (`server/accounts/privacy.ts`)                                 | Online personal-memory wipe + browser session invalidation; documented exclusions                                                                                  | Explicitly does **not** erase org memberships, company workspaces, invites, or backups |
+`db/services/auth/index.ts` permits canonical user creation through verified
+Google identity, subject to the registration policy. It does not install an
+organization SSO plugin. Connecting Gmail, Calendar or Contacts grants access to
+those APIs; it does not enroll the person into a company.
 
-## Decision
+`server/workspaces/team.ts` implements invitations to existing users by exact
+username using `workspace_invites`. An administrator needs current management
+access and an app session to invite a user. Only the intended authenticated
+recipient may accept a pending, unexpired invitation. Acceptance adds organization
+and workspace membership; revocation and prior acceptance prevent replay.
+Authorization remains in `server/workspaces/access.ts`, as described in
+[company workspace authorization](adr-c01-org-workspace-rbac.md).
 
-1. **SSO / invite path (product-owned):**
-   - Org admin creates `organization_invites` rows (email + `admin`\|`member`).
-   - Accept requires a Better Auth user with **verified email matching the invite**
-     and a **linked Google account** (`hasGoogleAccount`). Optional hosted-domain
-     allowlist fails closed when configured (`assertEmailDomainAllowed`).
-   - Helpers live in `shared/identity/org-sso.ts`; persistence in
-     `db/services/organization-invites.ts`.
-2. **Audit receipts (append-only):**
-   - Table `organization_audit_receipts` + `appendOrganizationAuditReceipt`.
-   - Actions covered: invite create/accept/revoke, member role change/remove,
-     org erasure request/denial.
-   - Application code **INSERT only** — never UPDATE/DELETE receipts. FK to
-     organizations uses `ON DELETE restrict` so receipts outlive casual org
-     row deletion attempts.
-3. **Erasure / retention beyond personal wipe:**
-   - Documented in `shared/identity/org-erasure.ts` + this ADR.
-   - `requestOrganizationErasure` always **denies cascade** today
-     (`cascade_unimplemented` or `retention_hold` / `not_admin`) and writes
-     request + denial receipts. No claim of full org delete.
-   - Personal wipe remains limited to personal memory + sessions (C01/privacy).
-4. **Migration** `0030_org-sso-audit-erasure` adds invite + audit tables with
-   `NOT VALID` + `VALIDATE` checks (authorized adoption).
+Hosted-domain enrollment, invite-email delivery, SCIM provisioning and SAML
+authentication remain pending.
 
-## Alternatives considered
+## Audit receipts
 
-- **Adopt Better Auth organization plugin as SoT:** deferred — would couple
-  product RBAC/migrations to Auth plugin and risk personal-path churn (same
-  rejection as C01). Revisit only if IdP suite requirements force it.
-- **Treat Google Workspace OAuth connect as SSO membership:** rejected —
-  that flow is a personal integration connection with Gmail scopes, not an
-  org control-plane grant.
-- **Implement full org cascade delete now:** rejected for min viable — too
-  easy to over-claim; fail-closed stub + ADR is the honest gate.
+`server/workspaces/team.ts` inserts `organization_audit_receipts` for invitation
+creation, acceptance, revocation and member removal. The member-removal receipt
+also records the sessions, jobs, reports, grants and tasks affected by revocation.
+The table is owned by `db/schema/organization-audit.ts`.
 
-## Out of scope (follow-ups)
+Receipts are append-only: application mutations insert receipts and must not
+update or delete prior ones. The organization foreign key restricts deletion
+while receipts remain. Additional sensitive admin actions, including any future
+SSO enrollment or organization erasure, require their own audited production
+path; an allowed schema action name does not establish that path.
 
-- Invite email delivery / magic links UI.
-- Last-admin resignation locks (C01 reserved reason).
-- Full multi-table org cascade wipe + backup reconciliation.
-- Better Auth organization plugin / SCIM / SAML IdP suite.
-- G03 channel/group files (do not collide).
+## Account deletion and organization erasure
 
-## Consequences
+`server/accounts/privacy.ts` owns partial personal-memory export and online wipe.
+`server/accounts/deletion.ts` owns durable personal-account deletion, retained
+tombstones and provider/file erasure obligations. It preserves company property
+and blocks a sole admin from leaving an organization with remaining members or
+workspaces. Admin transfer and closure of company workspaces with no other
+members are explicit operations under the same owner.
 
-- Company invites are usable once a Google-linked identity matches the invite.
-- Sensitive org admin mutations can leave durable receipts for review/export.
-- Callers must not advertise complete org erasure; gates fail closed.
-- No secrets in tree; Google client credentials stay env-only.
+There is no full organization cascade-erasure endpoint. Future organization
+erasure must check current admin authority and retention obligations, record its
+request and outcome, and reconcile every affected data surface and backup.
+Until that complete path is qualified, do not advertise full company deletion.
+Personal account deletion and workspace closure do not establish backup erasure.
+See [account deletion](adr-account-deletion.md) for the active contract.
+
+## Pending SSO requirements
+
+An email/domain invitation flow must bind acceptance to a verified email matching
+the invitation and the intended linked identity provider. A configured domain
+allowlist must reject mismatches. A domain or Google Workspace OAuth grant alone
+cannot establish membership or an admin role.
+
+Any implementation must preserve current recipient, expiry, replay, revocation
+and management checks and append audit receipts at its real mutation boundary.
+Invite delivery, enrollment UI, SCIM and SAML require complete product paths and
+runtime qualification. Reconsider an identity-provider plugin only if it can
+preserve the existing organization/workspace authority and personal isolation.

@@ -5,7 +5,6 @@ import { expect, test } from "vitest";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { env } from "@shared/environment/env";
-import { workspaceFileView } from "../../agent/lib/files/view";
 import {
   invokeWorkspaceTool,
   readWorkspaceToolCatalog,
@@ -203,16 +202,24 @@ test.each(
   }
 );
 
-test("stable native personal/company reads, captured principal, history and empty workspace", async () => {
+test("native personal/company reads preserve account isolation, history and empty workspace", async () => {
   await using workspace = await workspaceFixture();
   const { actor, personal, guestPersonal, repository } = workspace;
-  const empty = workspaceFileView(workspaceExecutionFor(personal));
-  expect(await empty.list()).toEqual({
+  const execution = workspaceExecutionFor(personal);
+  expect(
+    await callNativeTool(execution, "workspace_files_list", {})
+  ).toMatchObject({
     revision: null,
-    entries: [],
+    files: [],
+  });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", { path })
+  ).toMatchObject({
+    revision: null,
+    exists: false,
+    content: "",
     nextOffset: null,
   });
-  await expect(empty.read(`/workspace/${path}`)).rejects.toThrow("not found");
   for (const owner of [actor, personal, guestPersonal]) {
     await repository.write(owner, {
       operationId: randomUUID(),
@@ -220,21 +227,19 @@ test("stable native personal/company reads, captured principal, history and empt
       path,
       content: owner.workspaceId,
     });
+    expect(
+      await callNativeTool(
+        workspaceExecutionFor(owner),
+        "workspace_files_read",
+        {
+          path,
+        }
+      )
+    ).toMatchObject({ content: owner.workspaceId });
   }
-  const execution = workspaceExecutionFor(personal);
-  const view = workspaceFileView(execution);
-  execution.session.auth.current.attributes.workspaceId = actor.workspaceId;
-  expect((await view.read(`/workspace/${path}`)).content).toBe(
-    personal.workspaceId
-  );
-  expect(
-    await callNativeTool(workspaceExecutionFor(actor), "workspace_files_read", {
-      path,
-    })
-  ).toMatchObject({ content: actor.workspaceId });
   const forged = { ...personal, workspaceId: guestPersonal.workspaceId };
   await expect(
-    workspaceFileView(workspaceExecutionFor(forged)).list()
+    callNativeTool(workspaceExecutionFor(forged), "workspace_files_list", {})
   ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
   const old = await repository.read(actor);
   const current = await repository.publish(actor, {
@@ -470,7 +475,7 @@ test.each(
   }
 );
 
-test("real UTF-16 pagination, UTF-8 byte limit, canonical paths and retained-view drift", async () => {
+test("native file pages preserve UTF-16 content, UTF-8 byte limits and canonical paths", async () => {
   await using workspace = await workspaceFixture();
   const { actor, repository } = workspace;
   const content = "x".repeat(11_999) + "😀end";
@@ -480,19 +485,38 @@ test("real UTF-16 pagination, UTF-8 byte limit, canonical paths and retained-vie
     path,
     content,
   });
-  const view = workspaceFileView(workspaceExecutionFor(actor));
-  expect((await view.read(`/workspace/${path}`)).content).toBe(content);
+  const execution = workspaceExecutionFor(actor);
+  expect(
+    await callNativeTool(execution, "workspace_files_read", { path })
+  ).toMatchObject({
+    revision: a.revision,
+    content: content.slice(0, 12_000),
+    nextOffset: 12_000,
+  });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", {
+      path,
+      revision: a.revision,
+      offset: 12_000,
+    })
+  ).toMatchObject({
+    revision: a.revision,
+    content: content.slice(12_000),
+    nextOffset: null,
+  });
   for (const invalid of [
     "/etc/passwd",
-    "/workspace/../secret",
-    "/workspace/knowledge/../race.md",
-    "/workspace/knowledge//race.md",
-    "/workspace/knowledge/%2e%2e/race.md",
-    "/workspace/knowledge/./race.md",
-    "/workspace/knowledge\\race.md",
-    "/workspace/knowledge/race.md\0",
+    "../secret",
+    "knowledge/../race.md",
+    "knowledge//race.md",
+    "knowledge/%2e%2e/race.md",
+    "knowledge/./race.md",
+    "knowledge\\race.md",
+    "knowledge/race.md\0",
   ])
-    await expect(view.read(invalid)).rejects.toThrow(Error);
+    await expect(
+      callNativeTool(execution, "workspace_files_read", { path: invalid })
+    ).rejects.toThrow(z.ZodError);
   await expect(
     repository.write(actor, {
       operationId: randomUUID(),
@@ -513,24 +537,24 @@ test("real UTF-16 pagination, UTF-8 byte limit, canonical paths and retained-vie
     })
   ).rejects.toThrow(z.ZodError);
   const exact = "界".repeat(87_381) + "x";
-  await repository.write(actor, {
+  const current = await repository.write(actor, {
     operationId: randomUUID(),
     expectedRevision: a.revision,
     path,
     content: exact,
   });
-  await expect(view.read(`/workspace/${path}`)).rejects.toThrow(
-    "revision changed"
-  );
+  expect((await repository.read(actor, path)).content).toBe(exact);
   expect(
-    Buffer.byteLength(
-      (
-        await workspaceFileView(workspaceExecutionFor(actor)).read(
-          `/workspace/${path}`
-        )
-      ).content
-    )
-  ).toBe(262_144);
+    await callNativeTool(execution, "workspace_files_read", {
+      path,
+      revision: current.revision,
+      offset: 84_000,
+    })
+  ).toMatchObject({
+    revision: current.revision,
+    content: exact.slice(84_000),
+    nextOffset: null,
+  });
 });
 
 test.each(
@@ -651,17 +675,24 @@ test("real verified group excludes private paths, history and revoked bindings",
       chatKind: "group",
     },
   };
-  const view = workspaceFileView({
+  const groupExecution = {
+    ...execution,
     session: {
       ...execution.session,
       auth: { current: principal, initiator: principal },
     },
-  });
-  expect((await view.list()).entries).toEqual([`/workspace/${path}`]);
-  expect((await view.read(`/workspace/${path}`)).content).toBe("shared");
-  await expect(view.read("/workspace/agent/USER.md")).rejects.toMatchObject({
-    _tag: "WorkspaceAccessDenied",
-  });
+  };
+  expect(
+    await callNativeTool(groupExecution, "workspace_files_list", {})
+  ).toMatchObject({ files: [path] });
+  expect(
+    await callNativeTool(groupExecution, "workspace_files_read", { path })
+  ).toMatchObject({ content: "shared" });
+  await expect(
+    callNativeTool(groupExecution, "workspace_files_read", {
+      path: "agent/USER.md",
+    })
+  ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
   const group = {
     userId: guest.userId,
     workspaceId: actor.workspaceId,
@@ -680,39 +711,16 @@ test("real verified group excludes private paths, history and revoked bindings",
   await query(
     sql`UPDATE workspace_group_bindings SET revoked_at = now() WHERE id = ${binding}`
   );
-  await expect(view.read(`/workspace/${path}`)).rejects.toMatchObject({
-    _tag: "WorkspaceAccessDenied",
-  });
+  await expect(
+    callNativeTool(groupExecution, "workspace_files_read", { path })
+  ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
 });
 
-test("real bounded list pagination and invalid cursors", async () => {
+test("native file listing respects the repository tree limit", async () => {
   await using workspace = await workspaceFixture();
   const { actor, repository } = workspace;
   let revision: string | null = null;
-  for (let offset = 0; offset < 101; offset += 24) {
-    const published = await repository.publish(actor, {
-      operationId: randomUUID(),
-      expectedRevision: revision,
-      changes: Array.from({ length: Math.min(24, 101 - offset) }, (_, i) => ({
-        path: `knowledge/n${String(offset + i).padStart(3, "0")}.md`,
-        content: "entry",
-      })),
-    });
-    revision = published.revision;
-  }
-  const view = workspaceFileView(workspaceExecutionFor(actor));
-  const first = await view.list();
-  expect(first.entries).toHaveLength(100);
-  expect(first.nextOffset).toBe(100);
-  expect(await view.list(100)).toEqual({
-    revision,
-    entries: ["/workspace/knowledge/n100.md"],
-    nextOffset: null,
-  });
-  for (const offset of [-1, 0.5, 1001, NaN])
-    await expect(view.list(offset)).rejects.toThrow(Error);
-  // The real Git owner caps trees at 200, before the view's defensive 1,000 cap.
-  for (let offset = 101; offset < 200; offset += 24) {
+  for (let offset = 0; offset < 200; offset += 24) {
     const published = await repository.publish(actor, {
       operationId: randomUUID(),
       expectedRevision: revision,
@@ -723,6 +731,19 @@ test("real bounded list pagination and invalid cursors", async () => {
     });
     revision = published.revision;
   }
+  expect(
+    await callNativeTool(
+      workspaceExecutionFor(actor),
+      "workspace_files_list",
+      {}
+    )
+  ).toMatchObject({
+    revision,
+    files: Array.from(
+      { length: 200 },
+      (_, i) => `knowledge/n${String(i).padStart(3, "0")}.md`
+    ),
+  });
   await expect(
     repository.write(actor, {
       operationId: randomUUID(),
@@ -760,87 +781,54 @@ test("real catalog exposes private memory review with configured journal storage
   }
 });
 
-test.each(["publication", "session"])(
-  "a real %s change between file pages never returns partial content",
-  async (change) => {
-    await using workspace = await workspaceFixture();
-    const { actor, repository } = workspace;
-    const writer = await writerSession(actor);
-    const a = await repository.write(actor, {
-      operationId: randomUUID(),
-      expectedRevision: null,
+test("native file pages pin published history and recheck session authority", async () => {
+  await using workspace = await workspaceFixture();
+  const { actor, repository } = workspace;
+  const first = await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: null,
+    path,
+    content: "A".repeat(12_001),
+  });
+  const execution = workspaceExecutionFor(actor);
+  expect(
+    await callNativeTool(execution, "workspace_files_read", { path })
+  ).toMatchObject({
+    revision: first.revision,
+    content: "A".repeat(12_000),
+    nextOffset: 12_000,
+  });
+  const current = await repository.write(actor, {
+    operationId: randomUUID(),
+    expectedRevision: first.revision,
+    path,
+    content: "B".repeat(12_001),
+  });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", {
       path,
-      content: "A".repeat(12_001),
-    });
-    await using table = await connection();
-    await using first = await connection();
-    await using next = await connection();
-    await using monitor = await connection("zoen_app");
-    await using barrierMonitor = await connection();
-    await table.client.query("BEGIN");
-    await table.client.query(
-      "LOCK workspace_revision IN ACCESS EXCLUSIVE MODE"
-    );
-    const reading = outcome(
-      workspaceFileView(workspaceExecutionFor(actor)).read(`/workspace/${path}`)
-    );
-    let firstLock: Promise<unknown> | undefined;
-    let nextLock: Promise<unknown> | undefined;
-    try {
-      const dataReader = await blocked(
-        monitor.client,
-        table.pid,
-        "SELECT revision FROM workspace_revision"
-      );
-      await first.client.query("BEGIN");
-      firstLock = first.client.query(
-        "SELECT id FROM public.session WHERE id = $1 FOR UPDATE",
-        [actor.authSessionId]
-      );
-      await blocked(barrierMonitor.client, dataReader, "FOR UPDATE");
-      await table.client.query("COMMIT");
-      await firstLock;
-      const finalCatalog = await blocked(
-        monitor.client,
-        first.pid,
-        "public.session"
-      );
-      await next.client.query("BEGIN");
-      nextLock = next.client.query(
-        "SELECT id FROM public.session WHERE id = $1 FOR UPDATE",
-        [actor.authSessionId]
-      );
-      // The next holder must queue behind the final catalog's tuple waiter.
-      await blocked(barrierMonitor.client, finalCatalog, "FOR UPDATE");
-      await first.client.query("COMMIT");
-      await nextLock;
-      await blocked(monitor.client, next.pid, "public.session");
-      if (change === "publication") {
-        await repository.write(writer, {
-          operationId: randomUUID(),
-          expectedRevision: a.revision,
-          path,
-          content: "B".repeat(12_001),
-        });
-      } else {
-        await next.client.query(
-          "UPDATE public.session SET \"expiresAt\" = now() - interval '1 second' WHERE id = $1",
-          [actor.authSessionId]
-        );
-      }
-      await next.client.query("COMMIT");
-      const expected =
-        change === "publication"
-          ? { message: "Workspace revision changed; reopen the view" }
-          : { _tag: "WorkspaceAccessDenied" };
-      expect(await reading).toMatchObject({ ok: false, error: expected });
-    } finally {
-      await table.client.query("ROLLBACK");
-      await first.client.query("ROLLBACK");
-      await next.client.query("ROLLBACK");
-      await firstLock;
-      await nextLock;
-      await reading;
-    }
-  }
-);
+      revision: first.revision,
+      offset: 12_000,
+    })
+  ).toMatchObject({ revision: first.revision, content: "A", nextOffset: null });
+  expect(
+    await callNativeTool(execution, "workspace_files_read", {
+      path,
+      offset: 12_000,
+    })
+  ).toMatchObject({
+    revision: current.revision,
+    content: "B",
+    nextOffset: null,
+  });
+  await query(
+    sql`UPDATE public.session SET "expiresAt" = now() - interval '1 second' WHERE id = ${actor.authSessionId}`
+  );
+  await expect(
+    callNativeTool(execution, "workspace_files_read", {
+      path,
+      revision: first.revision,
+      offset: 12_000,
+    })
+  ).rejects.toMatchObject({ _tag: "WorkspaceAccessDenied" });
+});

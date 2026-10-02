@@ -70,6 +70,16 @@ it("revalidates access after hydration and returns no content after revocation",
   ).rejects.toThrow(WorkspaceAccessDenied);
   expect(mocks.event).toHaveBeenCalledTimes(1);
 });
+it("returns no content when membership changes during hydration", async () => {
+  mocks.event.mockImplementation(async () => {
+    mocks.access.mockResolvedValue({ ...room, epoch: "changed-epoch" });
+    return event;
+  });
+  await expect(
+    searchMatrixMessages(actor, { id: room.id, query: "current" })
+  ).rejects.toThrow(WorkspaceAccessDenied);
+  expect(mocks.event).toHaveBeenCalledTimes(1);
+});
 it("rejects cross-room native hits before hydrating them", async () => {
   mocks.request.mockResolvedValue({
     search_categories: {

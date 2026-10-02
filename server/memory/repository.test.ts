@@ -12,7 +12,9 @@ import {
   PrivateMemoryError,
   PrivateMemoryRepository,
   PrivateMemoryBackupSchema,
+  inspectPrivateMemoryArchive,
 } from "./repository";
+import { encodePrivateMemoryArchive } from "./archive-codec";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 
 const owners = vi.hoisted(() => ({
@@ -415,7 +417,7 @@ for (const denied of [
   });
 }
 
-test("same-head restore reauthorizes historical evidence even when every current claim is cleared", async () => {
+test("archive inspection and same-head restore reauthorize historical evidence even when every current claim is cleared", async () => {
   const archive = await PrivateMemoryRepository.backup(actor);
   owners.selection.mockRejectedValueOnce(new WorkspaceAccessDenied());
   await expect(
@@ -423,6 +425,10 @@ test("same-head restore reauthorizes historical evidence even when every current
       expectedRevision: retained.head,
       archive,
     })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  owners.selection.mockRejectedValueOnce(new WorkspaceAccessDenied());
+  await expect(
+    inspectPrivateMemoryArchive(actor, encodePrivateMemoryArchive(archive))
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
 });
 
@@ -469,7 +475,7 @@ test("restore requests a real outermost boundary before authorization, queries o
   expect(owners.selection).not.toHaveBeenCalled();
 });
 
-test("same-head restore refuses an outstanding exact-namespace erasure before reading retained history", async () => {
+test("archive inspection and same-head restore refuse an outstanding exact-namespace erasure before reading retained history", async () => {
   const archive = await PrivateMemoryRepository.backup(actor);
   vi.clearAllMocks();
   owners.query.mockImplementation(async (statement) => {
@@ -488,6 +494,10 @@ test("same-head restore refuses an outstanding exact-namespace erasure before re
     })
   ).rejects.toMatchObject({ reason: "conflict" });
   expect(owners.query).toHaveBeenCalledTimes(1);
+  await expect(
+    inspectPrivateMemoryArchive(actor, encodePrivateMemoryArchive(archive))
+  ).rejects.toMatchObject({ reason: "conflict" });
+  expect(owners.restore).not.toHaveBeenCalled();
   expect(owners.session).not.toHaveBeenCalled();
   expect(owners.selection).not.toHaveBeenCalled();
 });
@@ -623,7 +633,7 @@ test("v2 source count and total bytes are rejected before parsing individual arc
   expect(parsed).not.toHaveBeenCalled();
 });
 
-test("an authenticated archive from a retired namespace cannot restore into a fresh generation of the same owner and workspace", async () => {
+test("an authenticated archive from a retired namespace cannot be inspected or restored into a fresh generation of the same owner and workspace", async () => {
   const archive = await PrivateMemoryRepository.backup(actor);
   const current = await owners.namespace(actor);
   owners.namespace.mockResolvedValue({
@@ -636,6 +646,9 @@ test("an authenticated archive from a retired namespace cannot restore into a fr
       expectedRevision: null,
       archive,
     })
+  ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  await expect(
+    inspectPrivateMemoryArchive(actor, encodePrivateMemoryArchive(archive))
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
   expect(owners.restore).not.toHaveBeenCalled();
   expect(owners.selection).not.toHaveBeenCalled();

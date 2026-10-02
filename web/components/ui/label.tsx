@@ -34,4 +34,4 @@ function Label({
   );
 }
 
-export { Label, labelVariants };
+export { Label };

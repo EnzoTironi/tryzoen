@@ -1,10 +1,10 @@
 import { defineTool, toolOutput, toolOutputPart } from "eve/tools";
 import type { ComputerBatchParams } from "@onkernel/sdk/resources/browsers/computer";
 import { z } from "zod";
-import { getKernel } from "@agent/subagents/browser-agent/lib/kernel";
-import { requireWorkerScope } from "@agent/subagents/browser-agent/lib/access";
-import { requireOwnedBrowserSession } from "@agent/subagents/browser-agent/lib/owned-browser";
-import { withVaultScreenshotMask } from "@agent/subagents/browser-agent/lib/vault-screenshot-mask";
+import { getKernel } from "../lib/kernel";
+import { requireWorkerScope } from "../lib/access";
+import { requireOwnedBrowserSession } from "../lib/owned-browser";
+import { withVaultScreenshotMask } from "../lib/vault-screenshot-mask";
 const actionSchema = z.object({
   type: z.enum([
     "click_mouse",
