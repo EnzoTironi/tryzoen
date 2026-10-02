@@ -46,3 +46,14 @@ one high finding; the isolated infrastructure audit exited 0 with zero findings.
 Run `node --test scripts/audit/regressions.mjs` for pure regressions and
 `node scripts/audit/run.mjs` for the current registry audit. A successful check
 using acceptance still contains this vulnerability.
+
+On 2026-10-02, independent review of CI sharding commit
+`bef0be8efcf5b34a0ba6c025b8e751796dd13aaa` checked all 106 guarded files.
+Only `.github/workflows/checks.yml` and `package.json` changed in that set;
+the runtime command now routes through `scripts/runtime-tests.ts`. Four isolated
+copies of the existing runtime fixture and JSON report transfers add no new
+node-forge consumer. Dependency versions and locks, signing settings, and
+deployment and distribution commands remain unchanged. The reviewed configuration
+fingerprint is `fd686230109caeae94737d9da39a856be98db47f38c31679ffe29e360bea3b59`.
+The accepted advisory, versions and dependency paths remain unchanged, and the
+acceptance still expires at **2026-10-04T02:59:00Z**.

@@ -20,9 +20,10 @@ const fixture = parseEnv(
     "utf8"
   )
 );
-// Child tools inherit PATH; connection values always come from the checked-in synthetic fixture.
 // oxlint-disable-next-line eslint/no-restricted-properties
-const environment = { ...process.env, ...fixture };
+const inheritedEnvironment = { ...process.env };
+// Setup tools inherit PATH; connection values always come from the synthetic fixture.
+const environment = { ...inheritedEnvironment, ...fixture };
 
 function run(program: string, args: string[], env = environment) {
   const result = spawnSync(program, args, { cwd: root, env, stdio: "inherit" });
@@ -36,6 +37,8 @@ if (["--help", "-h", "help"].includes(command)) {
 
   pnpm test:runtime:setup     Start services and apply both migration chains
   pnpm test:runtime           Run the complete runtime suite, including backup restore
+  pnpm test:runtime --shard=1/4 --reporter=default --reporter=json --outputFile=report.json
+                             Forward Vitest options for an isolated CI shard
   pnpm test:runtime:reset     Delete this test project's volumes and recreate them
   pnpm test:runtime:down      Stop this test project, retaining its disposable volumes
 
@@ -43,6 +46,25 @@ Requires Docker Compose and Node 24. Uses loopback ports 15432, 18008, 18130 and
 The reset command deletes only the zoen-runtime-tests Compose project's data.`);
 } else if (command === "down") {
   run("docker", [...compose, "down"]);
+} else if (command === "run") {
+  run(
+    "pnpm",
+    ["--filter", "@zoen/companion-ui", "build:ui"],
+    inheritedEnvironment
+  );
+  run("pnpm", ["build:semantic"], inheritedEnvironment);
+  run(
+    process.execPath,
+    [
+      "--env-file=tests/runtime/.env.example",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.runtime.config.ts",
+      ...process.argv.slice(3),
+    ],
+    inheritedEnvironment
+  );
 } else if (command === "up" || command === "reset") {
   if (command === "reset") run("docker", [...compose, "down", "--volumes"]);
   run("pnpm", ["--filter", "@zoen/companion-ui", "build:ui"]);

@@ -86,10 +86,14 @@ jobs:
       - name: Build an unsigned desktop package without publishing
         run: pnpm package:desktop
 
-  runtime-storage:
-    name: Runtime storage and build
+  runtime-shards:
+    name: Runtime tests (${{ matrix.shard }}/4)
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -119,16 +123,22 @@ jobs:
           pnpm test:runtime:setup
           pnpm test:runtime:setup
       - name: Verify canonical claims, journal archives, PostgreSQL, Matrix and compiled Eve restart
-        run: pnpm test:runtime
+        run: >-
+          pnpm test:runtime --shard=${{ matrix.shard }}/4
+          --reporter=default --reporter=json
+          --outputFile=.eve/runtime-reports/shard-${{ matrix.shard }}.json
       - name: Measure the bounded real journal fixture
+        if: matrix.shard == 1
         run: pnpm test:memory:capacity --accounts 4 --sources 10 --workers 2
       - name: Build web app and agent
+        if: matrix.shard == 1
         run: |
           set -a
           source tests/runtime/.env.example
           set +a
           NODE_ENV=production pnpm build --force
       - name: Start the built web app and native Eve runtime
+        if: matrix.shard == 1
         run: |
           set -euo pipefail
           node --env-file=tests/runtime/.env.example --import tsx scripts/start.ts --port 3000 > .eve/runtime-start.log 2>&1 &
@@ -148,6 +158,15 @@ jobs:
             --request POST --header 'content-type: application/json' --data '{}' \
             http://127.0.0.1:3000/internal/channel-input/respond)
           test "$callback_status" = 401
+      - name: Upload runtime shard report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: runtime-report-${{ matrix.shard }}
+          path: .eve/runtime-reports/shard-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Stop isolated services
         if: always()
         run: |
@@ -157,6 +176,29 @@ jobs:
             rm -rf -- "$ZOEN_SESSION_ARCHIVE_DIR"
           fi
           exit "$status"
+
+  runtime-storage:
+    name: Runtime storage and build
+    if: always()
+    needs: runtime-shards
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Download all runtime shard reports
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: runtime-report-*
+          path: .eve/runtime-reports
+          merge-multiple: true
+      - name: Verify every shard succeeded and the complete suite passed once
+        run: node scripts/verify-runtime-shards.mjs .eve/runtime-reports '${{ needs.runtime-shards.result }}'
 
   postgres-recovery:
     name: PostgreSQL backup recovery

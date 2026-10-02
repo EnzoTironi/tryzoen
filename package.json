@@ -146,7 +146,7 @@
     "start:app": "node --env-file-if-exists=.env.local --import tsx scripts/start.ts",
     "test": "turbo run test:app",
     "test:app": "pnpm build:semantic && vitest run",
-    "test:runtime": "pnpm --filter @zoen/companion-ui build:ui && pnpm build:semantic && node --env-file=tests/runtime/.env.example node_modules/vitest/vitest.mjs run --config vitest.runtime.config.ts",
+    "test:runtime": "node --import tsx scripts/runtime-tests.ts run",
     "types:check": "turbo run types:check:app",
     "types:generate": "next typegen",
     "types:check:app": "tsc --noEmit -p tsconfig.json",
