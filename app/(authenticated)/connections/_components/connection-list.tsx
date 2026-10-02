@@ -1,7 +1,7 @@
 "use client";
 
 import type { z } from "zod";
-import type { channelProviderSchema } from "@shared/identity/channel-auth";
+import { channelProviderSchema } from "@shared/identity/channel-auth";
 import { useState, type ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { ChannelAuthForm } from "@web/auth/channel/form";
@@ -17,7 +17,7 @@ export function ConnectionList({
   identities,
   returnTo,
   kind = "all",
-  availableChannels = ["telegram", "kapso"],
+  availableChannels = channelProviderSchema.options,
 }: {
   readonly googleState: ComponentProps<typeof GoogleWorkspaceAction>["state"];
   readonly identities: ComponentProps<typeof LinkedChannels>["identities"];

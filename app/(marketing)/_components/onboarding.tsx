@@ -69,11 +69,12 @@ export function OnboardingTrigger({
   children,
   ...props
 }: Omit<ButtonProps, "render" | "nativeButton">) {
+  const { t } = useI18n();
   return (
     <Button
       {...props}
       nativeButton={false}
-      render={<a href={`${companionAppOrigin}/`} />}
+      render={<a href={`${companionAppOrigin}/`} aria-label={t("Começar")} />}
     >
       {children}
     </Button>

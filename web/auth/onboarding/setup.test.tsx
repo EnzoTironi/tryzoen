@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => mocks.router }));
 vi.mock("@web/trpc/client", () => ({
   api: {
     useUtils: () => ({
-      companion: { identity: { invalidate: async () => {} } },
+      companion: { identity: { invalidate: async () => undefined } },
     }),
     companion: {
       identity: {
@@ -27,7 +27,7 @@ vi.mock("@web/trpc/client", () => ({
           },
           isPending: false,
           error: null,
-          refetch: async () => {},
+          refetch: async () => undefined,
         }),
       },
     },
@@ -37,7 +37,7 @@ vi.mock("@web/trpc/client", () => ({
           data: { state: "unavailable" },
           isPending: false,
           error: mocks.connectionError ? new Error("Unavailable") : null,
-          refetch: async () => {},
+          refetch: async () => undefined,
         }),
       },
     },
@@ -47,7 +47,7 @@ vi.mock("@web/trpc/client", () => ({
           data: [],
           isPending: false,
           error: null,
-          refetch: async () => {},
+          refetch: async () => undefined,
         }),
       },
     },
@@ -56,7 +56,7 @@ vi.mock("@web/trpc/client", () => ({
         useMutation: () => ({
           isPending: false,
           error: mocks.saveError ? new Error("Network failed") : null,
-          mutate: () => {},
+          mutate: () => undefined,
         }),
       },
     },
