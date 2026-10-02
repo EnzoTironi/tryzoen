@@ -13,7 +13,7 @@ export const WorkspacePathSchema = z
           path
         )
   )
-  .regex(/^(?!.*(?:\/\.|\.\.|\/\/)).*$/);
+  .refine((path) => !/(?:\/\.|\.\.|\/\/)/u.test(path));
 export const GitRevisionSchema = z.string().regex(/^[a-f0-9]{40}$/);
 export const WorkspaceRecordedViewSchema = z
   .strictObject({
