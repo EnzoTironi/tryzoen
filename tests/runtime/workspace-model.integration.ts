@@ -86,6 +86,17 @@ test.each(["chatgpt", "grok"] as const)(
         { role: "user", content: [{ type: "text", text: "6 * 7?" }] },
       ],
       maxOutputTokens: 100,
+      tools: [
+        {
+          type: "function",
+          name: "recorded_view",
+          inputSchema: {
+            type: "object",
+            properties: { revision: { type: "string" } },
+            additionalProperties: false,
+          },
+        },
+      ],
       providerOptions: { openai: { safetyIdentifier: "synthetic-user" } },
     });
     const chunks = await Array.fromAsync(response.stream);
@@ -108,6 +119,16 @@ test.each(["chatgpt", "grok"] as const)(
     );
     expect(body.model).toBe(model);
     expect(body.stream).toBe(true);
+    expect(body.tools).toEqual([
+      expect.objectContaining({
+        name: "recorded_view",
+        ...(provider === "chatgpt" ? { strict: false } : {}),
+      }),
+    ]);
+    expect(
+      z.array(z.object({ strict: z.boolean().optional() })).parse(body.tools)[0]
+        ?.strict
+    ).toBe(provider === "chatgpt" ? false : undefined);
     expect(JSON.stringify(body)).not.toContain("synthetic-access");
     expect(body.instructions).toBe(
       provider === "chatgpt" ? "Keep this workspace isolated" : undefined

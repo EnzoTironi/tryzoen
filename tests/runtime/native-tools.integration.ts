@@ -2,6 +2,7 @@ import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
+import { z } from "zod";
 import { resolveCapabilities } from "../../server/tools/catalog";
 import { readPublishedSkills } from "../../server/tools/skills";
 import { workspaceFixture, workspaceExecutionFor } from "./workspace-fixture";
@@ -62,6 +63,13 @@ test("native tools and skills expose only the selected workspace", async () => {
   ).rejects.toThrow(Error);
   const catalog = await resolveCapabilities(nativeContext(context));
   expect(catalog["workspace-save"]?.inputSchema).toBeDefined();
+  for (const tool of Object.values(catalog)) {
+    if (!(tool.inputSchema instanceof z.ZodType))
+      throw new Error("Expected a native tool schema");
+    expect(JSON.stringify(z.toJSONSchema(tool.inputSchema))).not.toMatch(
+      /\(\?[=!]|\(\?<[=!]/u
+    );
+  }
   expect(
     Object.keys(catalog).every((name) => /^[a-zA-Z0-9_-]{1,64}$/.test(name))
   ).toBe(true);

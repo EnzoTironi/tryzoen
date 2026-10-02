@@ -70,7 +70,12 @@ export default defineDynamic({
           inputSchema: z
             .object({
               path: WorkspacePathSchema.regex(
-                /^(?:knowledge\/(?!models\/|definitions\/|routing\/|purpose\.md$)|proposals\/(?:skills|tools)\/)/u
+                /^(?:knowledge\/|proposals\/(?:skills|tools)\/)/u
+              ).refine(
+                (path) =>
+                  !/^knowledge\/(?:models\/|definitions\/|routing\/|purpose\.md$)/u.test(
+                    path
+                  )
               ),
               expectedRevision: z.nullable(GitRevisionSchema),
               content: z.string().max(262_144),
