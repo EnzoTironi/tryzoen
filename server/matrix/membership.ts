@@ -68,7 +68,8 @@ export async function changeMatrixGroupMembership(
       WHERE binding_id = ${input.id} AND user_id = ${person.userId}`);
     if (input.action === "add") {
       await joinNativeGroup(binding.roomId, matrixId);
-      if (current[0]?.state === "joined") return person.userId;
+      if (current[0]?.state === "joined" && !current[0].native_pending)
+        return person.userId;
       await query(sql`INSERT INTO matrix_room_members(binding_id, user_id) VALUES (${input.id}, ${person.userId})
         ON CONFLICT (binding_id, user_id) DO UPDATE SET state = 'joined', native_pending = false, joined_at = now()`);
     } else {
