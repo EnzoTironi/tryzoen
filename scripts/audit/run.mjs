@@ -131,8 +131,40 @@ export function configurationHash(root) {
 /** @param {unknown} value */
 const auditOutput = (value) => (typeof value === "string" ? value : "");
 
-/** @param {string} reason */
+/** @param {string} reason @returns {{ok: false, accepted: false, message: string}} */
 const reject = (reason) => ({ ok: false, accepted: false, message: reason });
+
+/** @param {string} name */
+const blockedAuditEnvironment = (name) =>
+  /^(EXPO_|EAS_|CSC_|WIN_CSC_|APPLE_|npm_config_audit|NPM_CONFIG_AUDIT)/u.test(
+    name
+  ) ||
+  /^(?:pnpm_config_|npm_config_)(?:(?:lockfile_dir|dir|prefix|production|dev|optional|only)$|audit(?:_|$))/iu.test(
+    name
+  );
+
+/**
+ * @param {unknown} rawPolicy
+ * @param {string} configuration
+ * @param {number} now
+ * @param {readonly string[]} environmentNames
+ * @returns {{ok: true, policy: import("zod").infer<typeof policySchema>} | {ok: false, accepted: false, message: string}}
+ */
+function checkAuditContext(rawPolicy, configuration, now, environmentNames) {
+  const parsedPolicy = policySchema.safeParse(rawPolicy);
+  if (!parsedPolicy.success) return reject("Invalid temporary risk policy.");
+  const policy = parsedPolicy.data;
+  if (!Number.isFinite(now) || now >= Date.parse(deadline))
+    return reject("Temporary risk acceptance expired.");
+  if (
+    configuration !== policy.configurationSha256 ||
+    environmentNames.some(blockedAuditEnvironment)
+  )
+    return reject(
+      "Deployment, distribution, dependency or signing configuration changed."
+    );
+  return { ok: true, policy };
+}
 
 /**
  * @param {{status: number | null, stdout: string, error?: unknown, signal?: string | null}} result
@@ -148,6 +180,14 @@ export function evaluateAudit(
   now,
   environmentNames
 ) {
+  const context = checkAuditContext(
+    rawPolicy,
+    configuration,
+    now,
+    environmentNames
+  );
+  if (!context.ok) return context;
+  const policy = context.policy;
   if (result.error || result.signal || ![0, 1].includes(result.status ?? -1)) {
     return reject(
       "Audit transport/process failure; temporary risk was not accepted."
@@ -176,22 +216,6 @@ export function evaluateAudit(
   if (blocking.length !== 1 || blocking[0]?.github_advisory_id !== advisoryId)
     return reject("Other blocking advisory; temporary risk was not accepted.");
   const item = blocking[0];
-  const parsedPolicy = policySchema.safeParse(rawPolicy);
-  if (!parsedPolicy.success) return reject("Invalid temporary risk policy.");
-  const policy = parsedPolicy.data;
-  if (!Number.isFinite(now) || now >= Date.parse(deadline))
-    return reject("Temporary risk acceptance expired.");
-  if (
-    configuration !== policy.configurationSha256 ||
-    environmentNames.some((name) =>
-      /^(EXPO_|EAS_|CSC_|WIN_CSC_|APPLE_|npm_config_audit|NPM_CONFIG_AUDIT)/u.test(
-        name
-      )
-    )
-  )
-    return reject(
-      "Deployment, distribution, dependency or signing configuration changed."
-    );
   const finding = item.findings[0];
   if (
     item.module_name !== policy.package ||
@@ -215,23 +239,8 @@ if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const result = spawnSync(
-    "pnpm",
-    [
-      "audit",
-      "--audit-level=low",
-      "--json",
-      "--registry=https://registry.npmjs.org",
-    ],
-    {
-      cwd: directory,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    }
-  );
-  // Keep the current registry report intact, including the accepted advisory.
-  process.stdout.write(auditOutput(result.stdout));
-  process.stderr.write(auditOutput(result.stderr));
+  /** @type {import("node:child_process").SpawnSyncReturns<string> | undefined} */
+  let result;
   let outcome;
   try {
     /** @type {unknown} */
@@ -239,13 +248,47 @@ if (
       readFileSync(new URL("policy.json", import.meta.url), "utf8")
     );
     const auditEnvironment = readAuditEnvironment();
-    outcome = evaluateAudit(
-      result,
+    const configuration = configurationHash(directory);
+    const context = checkAuditContext(
       policy,
-      configurationHash(directory),
+      configuration,
       Date.now(),
       auditEnvironment.names
     );
+    if (!context.ok) outcome = context;
+    else {
+      result = spawnSync(
+        "pnpm",
+        [
+          "audit",
+          `--dir=${directory}`,
+          `--lockfile-dir=${directory}`,
+          // pnpm normalizes these falsey selectors to include both prod and dev.
+          "--only=null",
+          "--production=false",
+          "--dev=false",
+          "--optional=true",
+          "--audit-level=low",
+          "--json",
+          "--registry=https://registry.npmjs.org",
+        ],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+        }
+      );
+      // Keep the current registry report intact, including the accepted advisory.
+      process.stdout.write(auditOutput(result.stdout));
+      process.stderr.write(auditOutput(result.stderr));
+      outcome = evaluateAudit(
+        result,
+        policy,
+        configurationHash(directory),
+        Date.now(),
+        auditEnvironment.names
+      );
+    }
     if (auditEnvironment.summaryPath)
       appendFileSync(auditEnvironment.summaryPath, `\n${outcome.message}\n`);
   } catch {
@@ -258,9 +301,6 @@ if (
   console.log(
     outcome.accepted ? `::warning::${outcome.message}` : outcome.message
   );
-  process.exitCode = outcome.ok
-    ? 0
-    : result.status === null || result.status === 0
-      ? 1
-      : result.status;
+  const status = result?.status ?? 1;
+  process.exitCode = outcome.ok ? 0 : status === 0 ? 1 : status;
 }
