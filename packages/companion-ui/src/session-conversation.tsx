@@ -5,6 +5,7 @@ import type { Client } from "eve/client";
 import { Conversation } from "./conversation";
 import { useSessionAgent } from "./session/use-session-agent";
 import { visibleConversationMessages } from "./session/delivered";
+import { latestSessionFailure } from "./session/events";
 import type { ConversationDraft } from "./session/input";
 import { useMessageReactions } from "./reactions/use-message-reactions";
 import type { ReactionData } from "./reactions/schema";
@@ -37,6 +38,7 @@ export function SessionConversation({
     [agent.data.messages, agent.events]
   );
   const [actionError, setActionError] = useState<string>();
+  const failure = latestSessionFailure(agent.events);
   return (
     <Conversation
       key={sessionId}
@@ -56,6 +58,13 @@ export function SessionConversation({
       error={
         actionError ??
         agent.error?.message ??
+        (failure
+          ? t(
+              failure.type === "session.failed"
+                ? "This conversation was interrupted. Start a new conversation to continue."
+                : "This response could not be completed. Send another message to try again."
+            )
+          : undefined) ??
         (feedback.query.isError
           ? t("Couldn’t load reactions. Reopen the conversation to try again.")
           : undefined)
