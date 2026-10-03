@@ -114,3 +114,15 @@ version, no patched version and exact 100 paths. The final reviewed fingerprint
 is `e416be64fb05f4929d7ffb49a87b78d6de57e881d448c2924b726db50d9605bc`.
 The vulnerability remains unfixed, the acceptance expires at the same
 **2026-10-04T02:59:00Z**, and deployment requires separate user authorization.
+
+The 2026-10-03 UTC restore review compared the configuration with `3c0710ad`.
+Only `infrastructure/postgres/pgbackrest.conf` changed in the guarded set: restores
+use eight workers while other commands retain one. Independent review verified
+the isolated recovery proof and unchanged encryption, TLS, integrity checks,
+network isolation and action bound. Dependencies, node-forge consumers,
+certificate handling, signing and distribution settings are unchanged. The fresh
+official-registry audit still reports the same unfixed high advisory, version
+and exact 100 paths; the infrastructure audit reports zero findings. The reviewed
+fingerprint is `11a3c22fad092c8612e99d522625a382833a010c6a065df9f0614ff0d57dd6ee`.
+The expiry remains **2026-10-04T02:59:00Z**; this review grants no deployment
+authority.
