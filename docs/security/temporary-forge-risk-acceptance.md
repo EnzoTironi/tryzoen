@@ -1,20 +1,50 @@
-# Temporary prelaunch node-forge risk acceptance
+# Temporary dependency risk acceptance
 
-This temporary prelaunch policy covers only GHSA-86w9-cpqp-85rv. The
-vulnerability remains unfixed, other findings stay blocking, and the policy
-grants no deployment authority.
+On October 3, 2026, the user explicitly approved the bounded proposal for
+consolidated PR #192 at `afb218273ac69eb3e631b1318e2254030683f414` after its
+source checks, builds and both combined reviews passed. This replaces the
+historical node-forge-only scope below. The approved configuration changes open
+verified Google registration, disable full content diagnostics, isolate runtime
+reports by attempt, add bounded R2 qualification and set semantic image file
+ownership. Implementing this decision changes only the audit owner, its
+regressions/fixtures, this policy record and the two mandatory audit invocations.
+
+The temporary policy permits these exact reported graph entries:
+
+| Graph          | Package              | Version | Advisory                                                                 | Reported paths |
+| -------------- | -------------------- | ------- | ------------------------------------------------------------------------ | -------------- |
+| Application    | node-forge           | 1.4.0   | [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv) | 100            |
+| Application    | http-cache-semantics | 4.2.0   | [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | 2              |
+| Application    | braces               | 3.0.3   | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | 100            |
+| Infrastructure | braces               | 3.0.3   | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | 3              |
+
+These vulnerabilities remain unfixed. The fresh official-registry reports have
+three high findings in the application and one in infrastructure, with no
+published patched versions. Report path counts do not establish absence of other
+dependency paths. The node-forge paths include Expo CLI 57.0.27 and
+@expo/code-signing-certificates 0.0.6; cache semantics appears through the Electron
+build tooling; braces appears through application and infrastructure file/build
+tooling. These paths do not prove affected behavior is unreachable.
+
 The acceptance ends at **2026-10-04T02:59:00Z**, October 3 at 23:59 in
-America/Sao_Paulo, or earlier if deployment, distribution or signing configuration
-changes. Do not extend the policy without a new explicit decision.
+America/Sao_Paulo, or earlier if guarded configuration changes. The deadline is
+unchanged. Do not extend the policy without a new explicit decision. Integration
+and production release remain conditional on every protected check, including
+exact-source native launch, isolated production restore and post-deployment
+acceptance. This decision permits no force/admin merge, disabled check or
+production database reset.
 
-The affected version is node-forge 1.4.0 through Expo CLI 57.0.27, directly and
-through @expo/code-signing-certificates 0.0.6. The root lock and exact current audit
-path set are pinned. The wrapper runs the real official-registry audit at the
-existing low threshold, prints its raw JSON unchanged, and emits an
-"accepted temporary risk" warning and CI summary. It fails closed on other
-blocking advisories, changed versions or paths, process/transport errors,
-malformed reports, expiration or changed configuration. Infrastructure keeps its
-existing unfiltered low-threshold audit.
+`node scripts/audit/run.mjs` audits the application and
+`node scripts/audit/run.mjs --graph infrastructure` audits the separately locked
+infrastructure. Both invoke the real official registry at the existing low
+threshold, include development/production/optional dependencies, print raw JSON
+unchanged and emit an "accepted temporary risk" warning and CI summary. The
+version-two policy pins each graph's exact advisory set, package versions and
+reported path hashes, and the combined configuration. New or duplicate
+advisories, changed versions/paths/severity, available fixes, process/transport
+errors, malformed reports, expired acceptance or changed configuration fail
+closed. A clean audit applies no exception. Neither graph can borrow the other's
+report or lockfile. There is no version-one fallback.
 
 Configuration guard coverage includes workflow files, infrastructure, mobile and
 desktop configuration/native files, package manifests and lockfiles, Docker,
@@ -36,16 +66,26 @@ See [the advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv) and
 External Vercel auto-deploy settings remain unverified and must be checked before
 main promotion. Checked-in main pushes run checks. Production operations remain
 manual, plus Sunday recovery on October 4 at 04:47 UTC, after this acceptance
-expires. The exception authorizes no deploy, distribution, workflow disablement,
-or additional advisory exception.
+expires. The earlier node-forge-only exception authorized no deploy,
+distribution, workflow disablement or additional advisory exception. The current
+specific approval above adds only its named graph entries and conditional release
+scope.
 
 The pure regression fixture is the public JSON captured read-only from
 https://registry.npmjs.org with pnpm 11.24.0 on 2026-10-02 at source
 6f8f07079a7748d4081b3e214b4e741a73d4db0b. The live root audit exited 1 with
 one high finding; the isolated infrastructure audit exited 0 with zero findings.
-Run `node --test scripts/audit/regressions.mjs` for pure regressions and
-`node scripts/audit/run.mjs` for the current registry audit. A successful check
-using acceptance still contains this vulnerability.
+The current pure fixtures are the public application and infrastructure JSON
+captured from the same registry on October 3 at source `afb21827`; the historical
+one-advisory observation remains below. Run
+`node --test scripts/audit/regressions.mjs` for pure regressions and both graph
+commands above for current registry audits. Successful checks using acceptance
+still contain these vulnerabilities.
+
+## Historical node-forge-only configuration reviews
+
+The following records describe earlier scopes and fingerprints. They do not
+extend or broaden the current policy.
 
 On 2026-10-02, independent review of CI sharding commit
 `bef0be8efcf5b34a0ba6c025b8e751796dd13aaa` checked all 106 guarded files.

@@ -40,7 +40,7 @@ jobs:
         run: |
           node --test scripts/audit/regressions.mjs
           node scripts/audit/run.mjs
-          pnpm --dir infrastructure audit --audit-level=low
+          node scripts/audit/run.mjs --graph infrastructure
 
       - name: Run checks
         # Each compiler/linter/test process also uses its own CPU pool.
