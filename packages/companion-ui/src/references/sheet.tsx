@@ -29,6 +29,7 @@ import {
 import { useComposerReferences } from "./provider";
 import { referenceAt, insertReference } from "./schema";
 import { IconButton } from "../icon-button";
+import { CompanionSheet } from "../sheet";
 import { systemFont, useColors } from "../theme";
 
 export function useComposerSheet({
@@ -143,6 +144,7 @@ export function useComposerSheet({
       insert(item.token, token.start, token.end);
     }
   };
+  const Sheet = visible ? ComposerSheet : CompanionSheet;
   return {
     source: !!source,
     changeText: (value: string) => {
@@ -180,7 +182,7 @@ export function useComposerSheet({
     },
     content:
       !disabled && (menu || visible) ? (
-        <ComposerSheet
+        <Sheet
           title={
             visible
               ? token.trigger === "$"
@@ -313,7 +315,7 @@ export function useComposerSheet({
                 ))}
             </>
           )}
-        </ComposerSheet>
+        </Sheet>
       ) : null,
   };
 }
