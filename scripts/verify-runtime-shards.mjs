@@ -1,18 +1,56 @@
 /// <reference types="node" />
 /// <reference lib="es2023.array" />
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const [directory, jobResult] = process.argv.slice(2);
+const [directory, jobResult, attemptArgument] = process.argv.slice(2);
 assert.equal(jobResult, "success", "Every runtime shard job must succeed.");
 assert.ok(directory, "Provide the downloaded runtime report directory.");
-const reports = [1, 2, 3, 4].map((shard) => `shard-${shard}.json`);
-assert.deepEqual(
-  readdirSync(directory).toSorted(),
-  reports,
-  "Exactly four runtime shard reports are required."
+const currentAttempt = Number(attemptArgument);
+assert.ok(
+  attemptArgument &&
+    /^[1-9]\d*$/u.test(attemptArgument) &&
+    Number.isSafeInteger(currentAttempt),
+  "Provide the current positive integer workflow attempt."
 );
+/** @type {Map<number, { attempt: number, path: string }>} */
+const latest = new Map();
+for (const artifact of readdirSync(directory, { withFileTypes: true })) {
+  const match = /^runtime-report-([1-4])-attempt-([1-9]\d*)$/u.exec(
+    artifact.name
+  );
+  assert.ok(
+    artifact.isDirectory() && match,
+    `Unexpected runtime report artifact: ${artifact.name}.`
+  );
+  const shard = Number(match[1]);
+  const attempt = Number(match[2]);
+  assert.ok(
+    Number.isSafeInteger(attempt) && attempt <= currentAttempt,
+    `${artifact.name}: attempt exceeds the current workflow attempt.`
+  );
+  const reportName = `shard-${shard}.json`;
+  const artifactDirectory = join(directory, artifact.name);
+  assert.deepEqual(
+    readdirSync(artifactDirectory),
+    [reportName],
+    `${artifact.name}: exactly its own shard report is required.`
+  );
+  const path = join(artifactDirectory, reportName);
+  assert.ok(
+    lstatSync(path).isFile(),
+    `${path}: report must be a regular file.`
+  );
+  if (attempt > (latest.get(shard)?.attempt ?? 0)) {
+    latest.set(shard, { attempt, path });
+  }
+}
+const reports = [1, 2, 3, 4].map((shard) => {
+  const report = latest.get(shard);
+  assert.ok(report, `Missing runtime report for shard ${shard}.`);
+  return report.path;
+});
 // These files are the union of both projects in vitest.runtime.config.ts.
 const expectedFiles = readdirSync(new URL("../tests/runtime/", import.meta.url))
   .filter((name) => name.endsWith(".integration.ts"))
@@ -24,7 +62,7 @@ let passedTests = 0;
 
 for (const reportName of reports) {
   /** @type {unknown} */
-  const report = JSON.parse(readFileSync(join(directory, reportName), "utf8"));
+  const report = JSON.parse(readFileSync(reportName, "utf8"));
   assert.partialDeepStrictEqual(
     report,
     { success: true },

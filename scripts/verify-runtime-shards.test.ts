@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,15 +54,27 @@ function report(shard: number) {
   };
 }
 
-function writeReport(shard: number, value: ReturnType<typeof report>) {
-  writeFileSync(
-    join(directory, `shard-${shard + 1}.json`),
-    JSON.stringify(value)
+function reportPath(shard: number, attempt = 1) {
+  return join(
+    directory,
+    `runtime-report-${shard + 1}-attempt-${attempt}`,
+    `shard-${shard + 1}.json`
   );
 }
 
-function verify(result = "success") {
-  return spawnSync(process.execPath, [script, directory, result], {
+function writeReport(
+  shard: number,
+  value: ReturnType<typeof report>,
+  attempt = 1
+) {
+  mkdirSync(join(directory, `runtime-report-${shard + 1}-attempt-${attempt}`), {
+    recursive: true,
+  });
+  writeFileSync(reportPath(shard, attempt), JSON.stringify(value));
+}
+
+function verify(result = "success", attempt = "1") {
+  return spawnSync(process.execPath, [script, directory, result, attempt], {
     encoding: "utf8",
   });
 }
@@ -92,22 +111,87 @@ test.each(["failure", "cancelled", "skipped", ""])(
 );
 
 test("rejects a missing shard report", () => {
-  rmSync(join(directory, "shard-4.json"));
-  expect(verify().stderr).toContain(
-    "Exactly four runtime shard reports are required"
-  );
+  rmSync(join(directory, "runtime-report-4-attempt-1"), { recursive: true });
+  expect(verify().stderr).toContain("Missing runtime report for shard 4");
 });
 
 test("rejects an unexpected shard report", () => {
   writeFileSync(join(directory, "shard-5.json"), "{}");
-  expect(verify().stderr).toContain(
-    "Exactly four runtime shard reports are required"
-  );
+  expect(verify().stderr).toContain("Unexpected runtime report artifact");
 });
 
 test("rejects a malformed report", () => {
-  writeFileSync(join(directory, "shard-1.json"), "{");
+  writeFileSync(reportPath(0), "{");
   expect(verify().status).not.toBe(0);
+});
+
+test("uses a passing retry while retaining the older failed report", () => {
+  writeReport(1, { ...report(1), success: false });
+  writeReport(1, report(1), 2);
+  const result = verify("success", "2");
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+  expect(readdirSync(directory)).toHaveLength(5);
+});
+
+test("rejects the newest failed retry even when older attempts passed", () => {
+  writeReport(1, report(1), 2);
+  writeReport(1, { ...report(1), success: false }, 10);
+  expect(verify("success", "10").stderr).toContain("run did not pass");
+});
+
+test("rejects an empty latest artifact rather than using an older report", () => {
+  writeReport(1, report(1), 2);
+  rmSync(reportPath(1, 2));
+  expect(verify("success", "2").stderr).toContain(
+    "exactly its own shard report is required"
+  );
+});
+
+test("accepts an aggregate-only retry using the latest reports of all four shards", () => {
+  const result = verify("success", "2");
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+});
+
+test("rejects artifacts from a future attempt", () => {
+  writeReport(1, report(1), 2);
+  expect(verify().stderr).toContain(
+    "attempt exceeds the current workflow attempt"
+  );
+});
+
+test.each(["", "0", "-1", "01", "1.5", "9007199254740992"])(
+  "rejects the invalid current attempt %s",
+  (attempt) => {
+    expect(verify("success", attempt).stderr).toContain(
+      "Provide the current positive integer workflow attempt"
+    );
+  }
+);
+
+test.each([
+  "runtime-report-5-attempt-1",
+  "runtime-report-1-attempt-01",
+  "runtime-report-1-attempt-0",
+  "runtime-report-1-attempt-9007199254740992",
+])("rejects the invalid artifact name %s", (name) => {
+  mkdirSync(join(directory, name));
+  expect(verify().status).not.toBe(0);
+});
+
+test("rejects an artifact containing another shard's report", () => {
+  writeFileSync(
+    join(directory, "runtime-report-1-attempt-1", "shard-2.json"),
+    JSON.stringify(report(1))
+  );
+  expect(verify().stderr).toContain("exactly its own shard report is required");
+});
+
+test("rejects a report linked outside its artifact", () => {
+  rmSync(reportPath(0));
+  symlinkSync(reportPath(1), reportPath(0));
+  expect(verify().stderr).toContain("report must be a regular file");
 });
 
 test.each([

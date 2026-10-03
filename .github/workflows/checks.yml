@@ -162,7 +162,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: runtime-report-${{ matrix.shard }}
+          name: runtime-report-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: .eve/runtime-reports/shard-${{ matrix.shard }}.json
           include-hidden-files: true
           if-no-files-found: error
@@ -196,9 +196,8 @@ jobs:
         with:
           pattern: runtime-report-*
           path: .eve/runtime-reports
-          merge-multiple: true
       - name: Verify every shard succeeded and the complete suite passed once
-        run: node scripts/verify-runtime-shards.mjs .eve/runtime-reports '${{ needs.runtime-shards.result }}'
+        run: node scripts/verify-runtime-shards.mjs .eve/runtime-reports '${{ needs.runtime-shards.result }}' '${{ github.run_attempt }}'
 
   postgres-recovery:
     name: PostgreSQL backup recovery
