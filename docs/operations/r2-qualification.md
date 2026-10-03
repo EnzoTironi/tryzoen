@@ -54,7 +54,8 @@ pnpm qualify:r2 cleanup \
 
 `plan` needs no credentials and makes no network or filesystem changes. `run` and
 `cleanup` print a JSON receipt. Exit zero means the requested command completed;
-exit one means invalid input, failed checks, or unresolved cleanup. Only a successful
+exit one means invalid input, failed checks, or unresolved cleanup; exit 130 means
+interruption. Only a successful
 Cloudflare **run** with every required check and completed deletion emits
 `providerQualified: true`. A cleanup invocation cannot promote a failed run.
 

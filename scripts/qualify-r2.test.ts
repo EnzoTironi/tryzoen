@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import {
   mkdtemp,
+  open,
   readFile,
   realpath,
   rm,
@@ -12,6 +14,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -28,7 +31,11 @@ async function directory() {
   directories.push(path);
   return path;
 }
-async function cli(args: string[], preload?: string) {
+async function cli(
+  args: string[],
+  preload?: string,
+  beforeCompletion?: (child: ChildProcess) => Promise<void>
+) {
   const child = spawn(
     process.execPath,
     [
@@ -57,10 +64,18 @@ async function cli(args: string[], preload?: string) {
   child.stderr.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
-  const code = await new Promise<number | null>((resolve, reject) => {
+  const completion = new Promise<number | null>((resolve, reject) => {
     child.once("error", reject);
     child.once("close", resolve);
   });
+  try {
+    await beforeCompletion?.(child);
+  } catch (error) {
+    child.kill();
+    await completion;
+    throw error;
+  }
+  const code = await completion;
   expect(output).not.toContain("private-access-sentinel");
   expect(output).not.toContain("private-secret-sentinel");
   expect(output).not.toContain("private-control-sentinel");
@@ -80,6 +95,8 @@ async function s3() {
   let losePut = false;
   let refuseHead = false;
   let corruptOwnership = false;
+  let holdDelete = false;
+  let releaseDelete: (() => void) | undefined;
   async function handle(request: IncomingMessage, response: ServerResponse) {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     const method = request.method ?? "GET";
@@ -136,6 +153,12 @@ async function s3() {
     }
     if (method === "DELETE") {
       objects.delete(path);
+      if (holdDelete) {
+        holdDelete = false;
+        await new Promise<void>((resolve) => {
+          releaseDelete = resolve;
+        });
+      }
       response.writeHead(204);
       response.end();
       return;
@@ -179,6 +202,13 @@ async function s3() {
       losePut = false;
       refuseHead = false;
       corruptOwnership = false;
+    },
+    holdDelete: () => {
+      holdDelete = true;
+    },
+    waitingForDelete: () => releaseDelete !== undefined,
+    releaseDelete: () => {
+      releaseDelete?.();
     },
     async [Symbol.asyncDispose]() {
       server.closeAllConnections();
@@ -382,6 +412,128 @@ it("persists unknown writes, never retries automatically, and cleans them in a l
     providerQualified: false,
     cleanupComplete: true,
     requests: 6,
+  });
+  expect(fixture.objects.size).toBe(0);
+});
+
+it("loads cleanup state under the lock after another writer advances the manifest", async () => {
+  await using fixture = await s3();
+  fixture.losePut();
+  fixture.refuseHead();
+  const root = await directory();
+  const path = join(root, "run");
+  expect((await cli(runArgs(fixture.endpoint, path))).code).toBe(1);
+  fixture.recover();
+  const preload = join(root, "pause-lock.mjs");
+  const paused = join(root, "paused");
+  const resume = join(root, "resume");
+  await writeFile(
+    preload,
+    `
+import fs from "node:fs/promises";
+import {syncBuiltinESMExports} from "node:module";
+import {setTimeout as delay} from "node:timers/promises";
+const original = fs.open;
+fs.open = async (...args) => {
+  if (String(args[0]).endsWith("/run.lock")) {
+    await fs.writeFile(${JSON.stringify(paused)}, "paused", {mode: 0o600});
+    const deadline = Date.now() + 3000;
+    for (;;) {
+      try { await fs.access(${JSON.stringify(resume)}); break; } catch {}
+      if (Date.now() > deadline) throw new Error("Fixture lock barrier timed out");
+      await delay(10);
+    }
+  }
+  return original(...args);
+};
+syncBuiltinESMExports();`,
+    { mode: 0o600 }
+  );
+  let advancedRequests = 0;
+  const cleaned = await cli(
+    cleanupArgs(fixture.endpoint, path),
+    preload,
+    async () => {
+      const until = Date.now() + 2000;
+      for (;;) {
+        const ready = await readFile(paused).then(
+          () => true,
+          () => false
+        );
+        if (ready) break;
+        if (Date.now() > until)
+          throw new Error("Cleanup never reached lock barrier");
+        await delay(10);
+      }
+      // A separate writer holds the same public file lock while advancing durable intent.
+      const lockPath = join(path, "run.lock");
+      const lock = await open(lockPath, "wx", 0o600);
+      try {
+        const manifestPath = join(path, "manifest.json");
+        const manifest = z
+          .looseObject({
+            runId: z.uuid(),
+            requests: z.number(),
+            objects: z.array(z.object({ name: z.string(), state: z.string() })),
+          })
+          .parse(JSON.parse(await readFile(manifestPath, "utf8")));
+        manifest.requests += 7;
+        advancedRequests = manifest.requests;
+        manifest.objects.push({ name: "discarded-receipt", state: "pending" });
+        await writeFile(manifestPath, JSON.stringify(manifest), {
+          mode: 0o600,
+        });
+        fixture.objects.set(
+          `/qualification-bucket/qualification/${manifest.runId}/discarded-receipt`,
+          {
+            bytes: Buffer.alloc(4096, 3),
+            metadata: {
+              "qualification-run": manifest.runId,
+              "qualification-name": "discarded-receipt",
+            },
+          }
+        );
+      } finally {
+        await lock.close();
+        await rm(lockPath);
+      }
+      await writeFile(resume, "resume", { mode: 0o600 });
+    }
+  );
+  expect(cleaned.code).toBe(0);
+  expect(cleaned.result).toMatchObject({
+    requests: advancedRequests + 6,
+    cleanupComplete: true,
+    providerQualified: false,
+  });
+  expect(fixture.objects.size).toBe(0);
+});
+
+it("finishes exact-key cleanup after interruption without qualifying the run", async () => {
+  await using fixture = await s3();
+  fixture.holdDelete();
+  const path = join(await directory(), "run");
+  const stopped = await cli(
+    runArgs(fixture.endpoint, path),
+    undefined,
+    async (child) => {
+      const until = Date.now() + 3000;
+      while (!fixture.waitingForDelete()) {
+        if (Date.now() > until)
+          throw new Error("Cleanup did not reach the delete barrier");
+        await delay(10);
+      }
+      child.kill("SIGTERM");
+      await delay(30);
+      fixture.releaseDelete();
+    }
+  );
+  expect(stopped.code).toBe(130);
+  expect(stopped.result).toMatchObject({
+    cleanupComplete: true,
+    providerQualified: false,
+    localTransportPassed: false,
+    failure: "qualification_interrupted",
   });
   expect(fixture.objects.size).toBe(0);
 });

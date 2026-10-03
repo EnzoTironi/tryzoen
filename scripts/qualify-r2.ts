@@ -175,6 +175,18 @@ async function load(path: string) {
   }
 }
 
+async function locked<Value>(path: string, run: () => Promise<Value>) {
+  const lockPath = join(dirname(path), "run.lock");
+  const lock = await open(lockPath, "wx", 0o600);
+  try {
+    await lock.writeFile(String(process.pid));
+    return await run();
+  } finally {
+    await lock.close();
+    await rm(lockPath);
+  }
+}
+
 const stopping = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.once(signal, () => {
@@ -199,8 +211,6 @@ async function qualify(
       (accessKeyId && secretAccessKey && (command === "cleanup" || apiToken)),
     "missing_r2_qualification_credential_reference"
   );
-  const lock = await open(join(dirname(path), "run.lock"), "wx", 0o600);
-  await lock.writeFile(String(process.pid));
   let cleaning = command === "cleanup";
   const deadline = Date.now() + lifetimeMs;
   const client = new S3Client({
@@ -487,9 +497,12 @@ async function qualify(
       await clean();
     } finally {
       client.destroy();
-      await lock.close();
-      await rm(join(dirname(path), "run.lock"));
     }
+  }
+  if (stopping.signal.aborted && command === "run") {
+    manifest.phase = "failed";
+    failure = "qualification_interrupted";
+    await save(path, manifest);
   }
   const cleanupComplete = manifest.objects.every(
     (object) => object.state === "deleted"
@@ -517,7 +530,9 @@ async function qualify(
       failure,
     })
   );
-  if (!cleanupComplete || (command === "run" && !passed)) process.exitCode = 1;
+  if (stopping.signal.aborted) process.exitCode = 130;
+  else if (!cleanupComplete || (command === "run" && !passed))
+    process.exitCode = 1;
 }
 
 try {
@@ -573,14 +588,23 @@ No bucket creation, public settings changes, prefix listing, or database writes.
         values.manifest && !values["output-dir"] && !values["denied-bucket"],
         "cleanup_requires_only_manifest_and_target"
       );
-      const manifest = await load(values.manifest);
       requireCheck(
-        manifest.endpoint === selected.endpoint &&
-          manifest.bucket === bucket &&
-          manifest.mode === (values.local ? "local" : "cloudflare"),
-        "cleanup_target_must_match_manifest"
+        isAbsolute(values.manifest) &&
+          basename(values.manifest) === "manifest.json",
+        "invalid_manifest_path"
       );
-      await qualify(command, values.manifest, manifest);
+      await privateDirectory(dirname(values.manifest));
+      const path = values.manifest;
+      await locked(path, async () => {
+        const manifest = await load(path);
+        requireCheck(
+          manifest.endpoint === selected.endpoint &&
+            manifest.bucket === bucket &&
+            manifest.mode === (values.local ? "local" : "cloudflare"),
+          "cleanup_target_must_match_manifest"
+        );
+        await qualify(command, path, manifest);
+      });
     } else {
       requireCheck(!values.manifest, "manifest_is_only_for_cleanup");
       const deniedBucket = values["denied-bucket"]
@@ -645,8 +669,10 @@ No bucket creation, public settings changes, prefix listing, or database writes.
           checks: [],
           objects: [],
         };
-        await save(path, manifest);
-        await qualify(command, path, manifest);
+        await locked(path, async () => {
+          await save(path, manifest);
+          await qualify(command, path, manifest);
+        });
       }
     }
   }
