@@ -2,7 +2,8 @@ import type { MessageStreamEvent } from "eve/client";
 
 export function latestSessionFailure(events: readonly MessageStreamEvent[]) {
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]!;
+    const event = events[index];
+    if (!event) continue;
     switch (event.type) {
       case "turn.failed":
       case "session.failed":

@@ -10,19 +10,24 @@ import {
 } from "../../../tests/helpers/companion-i18n";
 import { SessionConversation } from "./session-conversation";
 import { useSessionAgent } from "./session/use-session-agent";
+import type { useConversationDraft } from "./session/draft";
+import type { useMessageReactions } from "./reactions/use-message-reactions";
 
-vi.mock("./session/use-session-agent", () => ({ useSessionAgent: vi.fn() }));
+vi.mock("./session/use-session-agent", () => ({
+  useSessionAgent: vi.fn<typeof useSessionAgent>(),
+}));
 vi.mock("./session/draft", () => ({
   useConversationDraft: () => ({
     draft: { text: "", files: [] },
-    saveDraft: vi.fn(),
+    saveDraft: vi.fn<ReturnType<typeof useConversationDraft>["saveDraft"]>(),
   }),
 }));
 vi.mock("./reactions/use-message-reactions", () => ({
   useMessageReactions: () => ({
     query: { data: [], isError: false },
-    showMessages: vi.fn(),
-    setReaction: vi.fn(),
+    showMessages:
+      vi.fn<ReturnType<typeof useMessageReactions>["showMessages"]>(),
+    setReaction: vi.fn<ReturnType<typeof useMessageReactions>["setReaction"]>(),
   }),
 }));
 vi.mock("./conversation", () => ({
@@ -55,7 +60,7 @@ function conversation(events: readonly MessageStreamEvent[]) {
     status: "ready",
     hasOlder: false,
     isLoadingOlder: false,
-    cancel: vi.fn(),
+    cancel: vi.fn<ReturnType<typeof useSessionAgent>["cancel"]>(),
     loadOlder: async () => undefined,
     respond: async () => undefined,
     resume: async () => undefined,

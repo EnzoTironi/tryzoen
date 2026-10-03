@@ -20,9 +20,7 @@ const waiting = {
 } satisfies MessageStreamEvent;
 
 it("retains a recoverable model failure through the idle boundary and history replay", () => {
-  const replayed: MessageStreamEvent[] = JSON.parse(
-    JSON.stringify([failed, waiting])
-  );
+  const replayed = structuredClone([failed, waiting]);
   expect(latestSessionFailure(replayed)).toEqual(failed);
   expect(isTerminalSession(replayed)).toBe(false);
 });
