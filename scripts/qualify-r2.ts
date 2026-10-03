@@ -45,6 +45,14 @@ const manifestSchema = z.strictObject({
   putBytes: z.number().int().min(0).max(maxBytes),
   phase: z.enum(["running", "passed", "failed"]),
   checks: z.array(z.enum(checks)).max(checks.length),
+  anonymousRead: z
+    .strictObject({
+      method: z.literal("GET"),
+      status: z.number().int().min(100).max(599),
+      responseBytes: z.number().int().min(0).max(4096),
+      responseSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    })
+    .optional(),
   objects: z
     .array(
       z.strictObject({
@@ -473,10 +481,21 @@ async function qualify(
         await reserve();
         const response = await fetch(
           `${selected.endpoint}/${manifest.bucket}/${key("immutable")}`,
-          { method: "HEAD", redirect: "error", signal: signal() }
+          { method: "GET", redirect: "error", signal: signal() }
         );
+        const bytes = await readBody(response.body, 4096);
+        manifest.anonymousRead = {
+          method: "GET",
+          status: response.status,
+          responseBytes: bytes.byteLength,
+          responseSha256: digest(bytes),
+        };
+        await save(path, manifest);
         requireCheck(
-          [401, 403].includes(response.status),
+          [401, 403].includes(response.status) ||
+            (response.status === 400 &&
+              bytes.toString("utf8") ===
+                '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>'),
           "anonymous_object_read_not_denied"
         );
       });
@@ -523,6 +542,7 @@ async function qualify(
       maxRequests: manifest.maxRequests,
       putBytes: manifest.putBytes,
       checks: manifest.checks,
+      anonymousRead: manifest.anonymousRead,
       cleanupComplete,
       localTransportPassed:
         command === "run" && passed && manifest.mode === "local",
