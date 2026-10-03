@@ -750,6 +750,13 @@
       "when": 1790965220348,
       "tag": "0106_remove-unused-state",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1791028354609,
+      "tag": "0107_matrix-contribution-receipts",
+      "breakpoints": true
     }
   ]
 }

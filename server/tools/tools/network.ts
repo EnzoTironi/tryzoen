@@ -29,10 +29,15 @@ export default defineDynamic({
       return {
         "network-bots": defineTool({
           description:
-            "Find published bots and their exact destination identity/revision in the active trusted network. Copy the chosen destination unchanged into network-contact; a username alone is insufficient. Company membership or mutually accepted personal trust is required. Contact does not grant private files, memories, credentials or other networks.",
+            "Find published bots by username prefix in the active trusted network, returning at most 20 matches. This does not search names or descriptions. For a supplied @username, use that username unchanged without the leading @, then select the exact username from the returned matches. Copy its destination identity/revision unchanged into network-contact; a username alone is insufficient. Company membership or mutually accepted personal trust is required. Contact does not grant private files, memories, credentials or other networks.",
           inputSchema: z
             .object({
-              query: z.string().max(30),
+              query: z
+                .string()
+                .max(30)
+                .describe(
+                  "Username prefix, without @. For a supplied username, preserve it exactly; an empty prefix lists at most 20 bots."
+                ),
             })
             .strict(),
           execute: (input, execution) =>

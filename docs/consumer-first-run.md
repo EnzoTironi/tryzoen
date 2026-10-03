@@ -4,15 +4,15 @@ Short path for a person using the hosted Companion — not an operator self-host
 guide. Operators stay on [self-host](self-host.md) and
 [Alchemy deployment and recovery](../infrastructure/README.md).
 
-## Flow — updated 2026-09-15
+## Flow — updated 2026-10-03
 
 Google is the canonical hosted identity. A first message from an unknown
 WhatsApp or Telegram sender does **not** create a Zoen user or personal
 workspace. The webhook stores a pending address and asks the person to sign in
 with Google, then link that messenger from Account.
 
-1. New browser accounts start at Google sign-in (`/sign-in`). Closed beta
-   requires a verified identity in `ZOEN_BETA_IDENTITIES`. There is still no
+1. New browser accounts start at Google sign-in (`/sign-in`). Anyone with a
+   verified Google identity can register without an invitation. There is no
    plan selection or card before that sign-in.
 2. After Google, use Account → Connections to confirm Telegram or WhatsApp
    with a short-lived challenge in the private chat. A messenger already owned

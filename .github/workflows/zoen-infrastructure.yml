@@ -79,7 +79,7 @@ jobs:
         if: env.OPERATION == 'deploy'
         run: |
           node scripts/audit/run.mjs
-          pnpm --dir infrastructure audit --audit-level=low
+          node scripts/audit/run.mjs --graph infrastructure
           pnpm check --concurrency=1
           pnpm --dir infrastructure types:check
           pnpm --dir infrastructure test:providers

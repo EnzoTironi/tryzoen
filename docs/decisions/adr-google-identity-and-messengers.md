@@ -23,8 +23,7 @@ This uses Better Auth's existing Google provider, account-linking implementation
 encrypted OAuth credentials and `updateAccountOnSignIn: false`. It does not add a
 second session system. See [Google authentication](https://better-auth.com/docs/authentication/google).
 
-Closed-beta registration requires `ZOEN_REGISTRATION_MODE=closed` and a verified
-identity in `ZOEN_BETA_IDENTITIES`; Google entries use `google:email@example.com`.
+Registration is open to verified Google identities without an invitation list.
 Existing users can sign in without registering again. Accounts with matching
 email text but different provider subjects are not silently merged.
 

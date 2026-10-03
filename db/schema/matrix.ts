@@ -10,6 +10,35 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { workspaceGroupBindings } from "./workspace-agents";
+import { workspaces } from "./workspaces";
+
+/** Owner-private outcome receipt. Eve owns proposals and pending approvals. */
+export const matrixContributionReceipts = pgTable(
+  "matrix_contribution_receipts",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    operationId: uuid("operation_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    eventId: text("event_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.operationId] }),
+    check(
+      "matrix_contribution_receipts_hash_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`
+    ),
+    check(
+      "matrix_contribution_receipts_event_check",
+      sql`${table.eventId} IS NULL OR char_length(${table.eventId}) BETWEEN 1 AND 256`
+    ),
+  ]
+);
 
 export const matrixIdentities = pgTable("matrix_identities", {
   userId: text("user_id").primaryKey(),

@@ -40,6 +40,8 @@ export default defineAgent({
           const messaging = messagingReply(request);
           if (messaging !== undefined) return messaging;
           for (const name of [
+            "community-contribute",
+            "community-contribution-result",
             "creator-evaluation-remove",
             "creator-qualification",
             "creator-pilot",

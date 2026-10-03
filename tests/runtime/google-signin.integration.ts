@@ -25,11 +25,6 @@ vi.mock("@shared/environment", async (original) => {
       BETTER_AUTH_URL: "http://localhost:3000",
       GOOGLE_CLIENT_ID: "google-signin-proof",
       GOOGLE_CLIENT_SECRET: new Secret("synthetic-google-secret"),
-      ZOEN_REGISTRATION_MODE: "closed",
-      ZOEN_BETA_IDENTITIES: [
-        "google:invited@zoen.example.invalid",
-        "google:unverified@zoen.example.invalid",
-      ],
     },
   };
 });
@@ -39,7 +34,7 @@ const cookie = (response: Response) =>
     .map((value) => value.split(";")[0])
     .filter((value) => !value?.endsWith("="))
     .join("; ");
-test("Google creates one identity, enforces beta admission and preserves sign-in when Workspace is disconnected", async () => {
+test("Google registers verified people without an invitation and preserves sign-in when Workspace is disconnected", async () => {
   const databaseURL = env.DATABASE_URL;
   const pool = new Pool({
     connectionString: databaseURL,
@@ -61,7 +56,7 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
   const users = new Set<string>();
   const profile = {
     sub: subject,
-    email: "invited@zoen.example.invalid",
+    email: "first-time@zoen.example.invalid",
     email_verified: true,
   };
   let nonce = "";
@@ -331,13 +326,40 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
         })
       )?.user.id
     ).toBe(session.user.id);
+    const newcomer = {
+      sub: randomUUID(),
+      email: "newcomer@zoen.example.invalid",
+      email_verified: true,
+    };
+    const registered = await request("/sign-in/social", {
+      provider: "google",
+      idToken: {
+        token: token("google-signin-proof", newcomer),
+      },
+    });
+    expect(registered.status).toBe(200);
+    const newcomerSession = await auth.api.getSession({
+      headers: new Headers({ cookie: cookie(registered) }),
+    });
+    assert.ok(newcomerSession);
+    users.add(newcomerSession.user.id);
+    expect(newcomerSession.user.email).toBe(newcomer.email);
+    expect(newcomerSession.user.id).not.toBe(session.user.id);
+    const newcomerScope = accessScopeForUser(
+      `better-auth:${newcomerSession.user.id}`
+    );
+    await ensureScope(newcomerScope);
+    expect(newcomerScope.workspaceId).not.toBe(scope.workspaceId);
+    expect(
+      (
+        await pool.query(
+          'SELECT id FROM account WHERE "providerId" = $1 AND "accountId" = $2',
+          ["google", newcomer.sub]
+        )
+      ).rows
+    ).toHaveLength(1);
     await Promise.all(
       [
-        {
-          sub: randomUUID(),
-          email: "outsider@zoen.example.invalid",
-          email_verified: true,
-        },
         {
           sub: randomUUID(),
           email: "unverified@zoen.example.invalid",
@@ -345,7 +367,7 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
         },
         {
           sub: randomUUID(),
-          email: "invited@zoen.example.invalid",
+          email: "first-time@zoen.example.invalid",
           email_verified: true,
         },
       ].map(async (denied) => {
@@ -376,8 +398,8 @@ test("Google creates one identity, enforces beta admission and preserves sign-in
     const created = await pool.query<{
       id: string;
     }>("SELECT id FROM public.user WHERE email IN ($1, $2, $3) AND name = $4", [
-      "invited@zoen.example.invalid",
-      "outsider@zoen.example.invalid",
+      "first-time@zoen.example.invalid",
+      "newcomer@zoen.example.invalid",
       "unverified@zoen.example.invalid",
       "Onboarding proof",
     ]);

@@ -23,7 +23,7 @@ fixture-tested, live, and missing proof.
 
 | Surface                | Installed         | Fixture / CI                              | Live                                                                      | Missing proof                                   |
 | ---------------------- | ----------------- | ----------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------- |
-| Google sign-in         | Yes               | PostgreSQL + Better Auth                  | Existing-account round trip is on the deployed launch SHA, not this stack | New invitee, Gmail/Calendar consent             |
+| Google sign-in         | Yes               | PostgreSQL + Better Auth                  | Existing-account round trip is on the deployed launch SHA, not this stack | First-time registration, Gmail/Calendar consent |
 | Google Workspace tools | Yes               | Team connection tests                     | Blocked                                                                   | Interactive OAuth on this SHA                   |
 | Telegram bot           | Yes               | Webhook fixtures                          | Group isolation fixture, not actual delivery                              | Real group reply on this install                |
 | WhatsApp Kapso bot     | Yes               | Auth fixtures                             | Historical DM on launch SHA                                               | Ordinary groups; templates                      |
@@ -36,7 +36,7 @@ fixture-tested, live, and missing proof.
 | Account UI wipe        | Yes               | Honesty tests                             | Partial by design                                                         | Must not be sold as full deletion               |
 | Account erasure        | Yes               | PostgreSQL deletion tests                 | Pending Mem0/Matrix/Vaultwarden/mautrix/backups                           | Live provider purge                             |
 | Browser / Kernel       | Yes               | Launch eval listed                        | Blocked                                                                   | `eval:ci` / Kernel on this SHA                  |
-| Closed-beta load       | Envelope declared | Unmeasured                                | Blocked                                                                   | OP01–OP03                                       |
+| Hosted load            | Envelope declared | Unmeasured                                | Blocked                                                                   | OP01–OP03                                       |
 | Alchemy deploy         | Workflow exists   | Not run here                              | Blocked                                                                   | REL02 images/digests/health                     |
 | Beeper Desktop         | No                | —                                         | Unavailable                                                               | Not installed                                   |
 | iMessage               | No                | —                                         | Unavailable                                                               | Out of this stack                               |
@@ -119,8 +119,8 @@ Provider subscriptions, terms and quotas still apply. Fail-closed
 `requireVaultwarden` and `requireWhatsAppBridge` are not activation.
 Ordinary WhatsApp groups are not enabled by the current Kapso Cloud API
 setup. Telegram group support is being qualified and is not a live
-delivery on this install. Closed-beta admission uses
-`ZOEN_REGISTRATION_MODE=closed` and `ZOEN_BETA_IDENTITIES`.
+delivery on this install. Google registration is open to verified identities
+without an invitation list.
 `shared/billing/plans.ts` declares plan budgets; production turn/tool dispatch
 does not enforce them. Stripe entitlements and Account billing remain active.
 Durable usage accounting, admission and load qualification are separate

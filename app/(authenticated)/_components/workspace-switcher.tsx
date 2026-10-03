@@ -7,7 +7,11 @@ import { useI18n } from "@zoen/companion-ui/i18n";
 import styles from "./workspace-switcher.module.css";
 import { workspaceHref } from "@web/workspaces/navigation";
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({
+  management = false,
+}: {
+  readonly management?: boolean;
+}) {
   const { t } = useI18n();
   const router = useRouter();
   const selected = useSearchParams().get("space");
@@ -35,11 +39,15 @@ export function WorkspaceSwitcher() {
         value={selected ?? "personal"}
         onChange={(event) => {
           const value = event.currentTarget.value;
-          if (value === "manage")
-            router.push(workspaceHref("/space", selected), { scroll: false });
-          else if (value === "create")
-            router.push("/space?create=1", { scroll: false });
-          else
+          if (value === "manage" || value === "create") {
+            if (management)
+              router.push(
+                value === "manage"
+                  ? workspaceHref("/space", selected)
+                  : "/space?create=1",
+                { scroll: false }
+              );
+          } else
             router.push(
               value === "personal"
                 ? "/"
@@ -59,10 +67,12 @@ export function WorkspaceSwitcher() {
               {workspace.name}
             </option>
           ))}
-        <optgroup label={t("Seu espaço")}>
-          <option value="manage">{t("Arquivos, agente e memórias")}</option>
-          <option value="create">{t("Criar espaço de trabalho")}</option>
-        </optgroup>
+        {management && (
+          <optgroup label={t("Seu espaço")}>
+            <option value="manage">{t("Arquivos, agente e memórias")}</option>
+            <option value="create">{t("Criar espaço de trabalho")}</option>
+          </optgroup>
+        )}
       </select>
     </label>
   );

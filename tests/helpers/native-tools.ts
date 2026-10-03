@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { DynamicResolveContext, ToolContext } from "eve/tools";
 import { resolveCapabilities } from "../../server/tools/catalog";
+import type { ToolCatalog } from "../../server/tools/definition";
 import workspaceSkills from "@agent/tools/workspace-skills";
+import communityContributions from "@agent/tools/community-contributions";
 export function nativeContext(
   execution: Pick<ToolContext, "session">
 ): DynamicResolveContext {
@@ -21,7 +23,15 @@ export async function callNativeTool(
   name: string,
   input: unknown
 ) {
-  const tool = (await resolveCapabilities(nativeContext(execution)))[name];
+  const context = nativeContext(execution);
+  const tools: ToolCatalog = {
+    ...(await resolveCapabilities(context)),
+    ...(await communityContributions.events["session.started"]?.(
+      undefined,
+      context
+    )),
+  };
+  const tool = tools[name];
   if (!tool) throw new Error(`Tool unavailable: ${name}`);
   if (!(tool.inputSchema instanceof z.ZodType))
     throw new Error("Expected an authored Zod schema");

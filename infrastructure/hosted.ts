@@ -249,13 +249,9 @@ export const hosted = Effect.gen(function* () {
       COMPANION_CODEX_MODEL: "gpt-5.6-luna",
       COMPANION_BROWSER_MODEL_PROVIDER: "codex-local",
       COMPANION_BROWSER_MODEL: "gpt-5.6-luna",
-      ZOEN_REGISTRATION_MODE: "closed",
       ZOEN_BILLING_MODE: "free-beta",
-      ZOEN_BETA_FULL_TELEMETRY: "true",
+      ZOEN_BETA_FULL_TELEMETRY: "false",
       ZOEN_OPERATOR_EMAILS: yield* Config.string("ZOEN_OPERATOR_EMAILS").pipe(
-        Config.withDefault("")
-      ),
-      ZOEN_BETA_IDENTITIES: yield* Config.string("ZOEN_BETA_IDENTITIES").pipe(
         Config.withDefault("")
       ),
       BETTER_AUTH_URL: appOrigin,

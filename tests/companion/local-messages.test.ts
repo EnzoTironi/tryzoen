@@ -6,6 +6,7 @@ import {
   browserMessageStorage,
   clearBrowserMessages,
 } from "../../web/trpc/message-storage";
+import type { ConversationDraft } from "../../packages/companion-ui/src/session/input";
 
 for (const [name, value] of Object.entries(indexedDBGlobals))
   if (name === "indexedDB" || name.startsWith("IDB"))
@@ -24,6 +25,65 @@ const outgoing = {
   status: "sending",
   createdAt: 1,
 };
+
+it("retains distinct personal and two company drafts while workspace server caches are discarded", async () => {
+  const storage = browserMessageStorage(crypto.randomUUID());
+  const userId = `better-auth:${crypto.randomUUID()}`;
+  const workspaces = ["personal", "company-a", "company-b"];
+  const drafts = workspaces.map(
+    (workspace) =>
+      ({
+        text: `Private draft in ${workspace}`,
+        files: [
+          {
+            type: "file",
+            filename: `${workspace}.txt`,
+            mediaType: "text/plain",
+            url: "data:text/plain;base64,YQ==",
+          },
+        ],
+      }) satisfies ConversationDraft
+  );
+  const key = (workspace: string) => [
+    "agent-draft",
+    JSON.stringify([workspace, userId]),
+    "same-conversation-id",
+  ];
+  for (const [index, workspace] of workspaces.entries()) {
+    const client = new QueryClient();
+    const persistence = new MessagePersistence(client, storage, (message) => {
+      expect(message).toBe("");
+    });
+    try {
+      await persistence.restore();
+      expect(client.getQueryData(key(workspace))).toBeUndefined();
+      expect(client.getQueryData(["private-server-response"])).toBeUndefined();
+      client.setQueryData(key(workspace), drafts[index]);
+      client.setQueryData(["private-server-response"], {
+        workspace,
+        source: "Authorized server content must be revalidated",
+      });
+      await persistence.flush();
+    } finally {
+      persistence.close();
+      client.clear();
+    }
+  }
+  for (const [index, workspace] of workspaces.entries()) {
+    const client = new QueryClient();
+    const persistence = new MessagePersistence(client, storage, (message) => {
+      expect(message).toBe("");
+    });
+    try {
+      await persistence.restore();
+      expect(client.getQueryData(key(workspace))).toEqual(drafts[index]);
+      expect(client.getQueryData(["private-server-response"])).toBeUndefined();
+    } finally {
+      persistence.close();
+      client.clear();
+    }
+  }
+});
 
 it("restores private drafts and delivery identities, but never auto-replays an uncertain agent submission", async () => {
   const storage = browserMessageStorage(crypto.randomUUID());

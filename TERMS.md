@@ -1,16 +1,16 @@
-# Zoen hosted beta terms
+# Zoen hosted service terms
 
-Effective: September 14, 2026.
+Effective: October 3, 2026.
 
-These terms describe the invitation-only hosted Zoen beta. They are separate from
+These terms describe the hosted Zoen service. They are separate from
 the repository's MIT code license. Self-hosted operators are responsible for their
 own service terms, configuration and data handling.
 
 ## Access and cost
 
-The closed beta is free; paid checkout is disabled. Features, limits and
+The hosted service is currently free; paid checkout is disabled. Features, limits and
 availability may change during development. A paid service would require a
-separate, explicit choice. The beta does not promise uninterrupted availability
+separate, explicit choice. The service does not promise uninterrupted availability
 or suitability for emergency, medical, legal or other high-stakes decisions.
 
 ## Accounts and connected services

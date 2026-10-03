@@ -1,12 +1,33 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "classification": "accepted temporary risk",
-  "advisory": "GHSA-86w9-cpqp-85rv",
-  "package": "node-forge",
-  "version": "1.4.0",
-  "expoCli": "57.0.27",
-  "expoCertificates": "0.0.6",
+  "authorization": "protected integration and release after required checks",
   "expiresAt": "2026-10-04T02:59:00Z",
-  "pathsSha256": "6f251b7dbe4daa56f99c2e27147920624d6e77231aaf7edd32c8d7648b3379bb",
-  "configurationSha256": "11a3c22fad092c8612e99d522625a382833a010c6a065df9f0614ff0d57dd6ee"
+  "configurationSha256": "c979cb118819d5e2e2885279666c2a07ab46644cf26fdd2908758353948313bd",
+  "graphs": {
+    "application": {
+      "GHSA-86w9-cpqp-85rv": {
+        "package": "node-forge",
+        "version": "1.4.0",
+        "pathsSha256": "6f251b7dbe4daa56f99c2e27147920624d6e77231aaf7edd32c8d7648b3379bb"
+      },
+      "GHSA-ch52-4w7c-c8xp": {
+        "package": "http-cache-semantics",
+        "version": "4.2.0",
+        "pathsSha256": "77abf37b86ef369a1ed1bcc53491fb978ffc1f0085f934a36f37247d26612457"
+      },
+      "GHSA-vfj7-8cjw-p6xm": {
+        "package": "braces",
+        "version": "3.0.3",
+        "pathsSha256": "90ec093a94f2c773dbd6b21f27828f0d99dc3d71c3941b93059af5274956acdb"
+      }
+    },
+    "infrastructure": {
+      "GHSA-vfj7-8cjw-p6xm": {
+        "package": "braces",
+        "version": "3.0.3",
+        "pathsSha256": "54caa99a0cf1c39a3e3f042738263dbd32b3842ecada317c35ba06e7a531689e"
+      }
+    }
+  }
 }

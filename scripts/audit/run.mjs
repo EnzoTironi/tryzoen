@@ -2,15 +2,18 @@
 /// <reference lib="es2023.array" />
 import { spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { z } from "zod";
 import { readAuditEnvironment } from "./env.mjs";
 
-const directory = fileURLToPath(new URL("../../", import.meta.url));
-const advisoryId = "GHSA-86w9-cpqp-85rv";
+const filename = realpathSync(fileURLToPath(import.meta.url));
+const directory = resolve(dirname(filename), "../..");
 const deadline = "2026-10-04T02:59:00Z";
+const graphSchema = z.enum(["application", "infrastructure"]);
+const hashSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const severitySchema = z.enum(["info", "low", "moderate", "high", "critical"]);
 const severities = severitySchema.options;
 const reportSchema = z.strictObject({
@@ -41,17 +44,39 @@ const reportSchema = z.strictObject({
     }),
   }),
 });
-const policySchema = z.looseObject({
-  schemaVersion: z.literal(1),
-  advisory: z.literal(advisoryId),
+const forgePolicySchema = z.strictObject({
   package: z.literal("node-forge"),
   version: z.literal("1.4.0"),
+  pathsSha256: hashSchema,
+});
+const cachePolicySchema = z.strictObject({
+  package: z.literal("http-cache-semantics"),
+  version: z.literal("4.2.0"),
+  pathsSha256: hashSchema,
+});
+const bracesPolicySchema = z.strictObject({
+  package: z.literal("braces"),
+  version: z.literal("3.0.3"),
+  pathsSha256: hashSchema,
+});
+const policySchema = z.strictObject({
+  schemaVersion: z.literal(2),
   expiresAt: z.literal(deadline),
   classification: z.literal("accepted temporary risk"),
-  expoCli: z.literal("57.0.27"),
-  expoCertificates: z.literal("0.0.6"),
-  pathsSha256: z.string().regex(/^[a-f0-9]{64}$/u),
-  configurationSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  authorization: z.literal(
+    "protected integration and release after required checks"
+  ),
+  configurationSha256: hashSchema,
+  graphs: z.strictObject({
+    application: z.strictObject({
+      "GHSA-86w9-cpqp-85rv": forgePolicySchema,
+      "GHSA-ch52-4w7c-c8xp": cachePolicySchema,
+      "GHSA-vfj7-8cjw-p6xm": bracesPolicySchema,
+    }),
+    infrastructure: z.strictObject({
+      "GHSA-vfj7-8cjw-p6xm": bracesPolicySchema,
+    }),
+  }),
 });
 
 /** @param {import("node:crypto").BinaryLike} value */
@@ -167,19 +192,16 @@ function checkAuditContext(rawPolicy, configuration, now, environmentNames) {
 }
 
 /**
- * @param {{status: number | null, stdout: string, error?: unknown, signal?: string | null}} result
- * @param {unknown} rawPolicy
- * @param {string} configuration
- * @param {number} now
- * @param {readonly string[]} environmentNames
+ * @param {{result: {status: number | null, stdout: string, error?: unknown, signal?: string | null}, policy: unknown, configuration: string, now: number, environmentNames: readonly string[], graph: import("zod").infer<typeof graphSchema>}} input
  */
-export function evaluateAudit(
+export function evaluateAudit({
   result,
-  rawPolicy,
+  policy: rawPolicy,
   configuration,
   now,
-  environmentNames
-) {
+  environmentNames,
+  graph,
+}) {
   const context = checkAuditContext(
     rawPolicy,
     configuration,
@@ -201,96 +223,122 @@ export function evaluateAudit(
       "Malformed or inconsistent audit JSON; temporary risk was not accepted."
     );
   }
-  const blocking = Object.values(report.advisories).filter(
-    (item) => item.severity !== "info"
-  );
+  const items = Object.values(report.advisories);
+  const blocking = items.filter((item) => item.severity !== "info");
   if (result.status !== (blocking.length ? 1 : 0))
     return reject("Unexpected audit exit status.");
-  if (!blocking.length)
+  if (!items.length)
     return {
       ok: true,
       accepted: false,
       message:
         "Audit completed at the existing low threshold; temporary exception was not applied.",
     };
-  if (blocking.length !== 1 || blocking[0]?.github_advisory_id !== advisoryId)
-    return reject("Other blocking advisory; temporary risk was not accepted.");
-  const item = blocking[0];
-  const finding = item.findings[0];
+  const expected = new Map(Object.entries(policy.graphs[graph]));
   if (
-    item.module_name !== policy.package ||
-    item.severity !== "high" ||
-    item.patched_versions !== null ||
-    item.findings.length !== 1 ||
-    finding.version !== policy.version ||
-    pathsHash(finding.paths) !== policy.pathsSha256
+    items.length !== expected.size ||
+    new Set(items.map((item) => item.github_advisory_id)).size !==
+      items.length ||
+    items.some((item) => !expected.has(item.github_advisory_id))
   )
-    return reject(
-      "Advisory version, dependency paths or fix availability changed."
-    );
+    return reject("Other blocking advisory; temporary risk was not accepted.");
+  for (const item of items) {
+    const approved = expected.get(item.github_advisory_id);
+    const finding = item.findings[0];
+    if (
+      !approved ||
+      item.module_name !== approved.package ||
+      item.severity !== "high" ||
+      item.patched_versions !== null ||
+      item.findings.length !== 1 ||
+      finding.version !== approved.version ||
+      pathsHash(finding.paths) !== approved.pathsSha256
+    )
+      return reject(
+        "Advisory version, dependency paths or fix availability changed."
+      );
+  }
   return {
     ok: true,
     accepted: true,
-    message: `${advisoryId}: accepted temporary risk for node-forge@1.4.0 until ${deadline}. Vulnerability remains unfixed. Prelaunch integration only; no deployment authorization.`,
+    message: `${graph}: accepted temporary risk for ${items.map((item) => `${item.github_advisory_id} ${item.module_name}@${item.findings[0].version}`).join(", ")} until ${deadline}. Vulnerabilities remain unfixed. Protected integration and release require all remaining checks.`,
   };
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && realpathSync(process.argv[1]) === filename) {
   /** @type {import("node:child_process").SpawnSyncReturns<string> | undefined} */
   let result;
   let outcome;
   try {
-    /** @type {unknown} */
-    const policy = JSON.parse(
-      readFileSync(new URL("policy.json", import.meta.url), "utf8")
-    );
-    const auditEnvironment = readAuditEnvironment();
-    const configuration = configurationHash(directory);
-    const context = checkAuditContext(
-      policy,
-      configuration,
-      Date.now(),
-      auditEnvironment.names
-    );
-    if (!context.ok) outcome = context;
-    else {
-      result = spawnSync(
-        "pnpm",
-        [
-          "audit",
-          `--dir=${directory}`,
-          `--config.lockfile-dir=${directory}`,
-          // pnpm normalizes these falsey selectors to include both prod and dev.
-          "--only=null",
-          "--production=false",
-          "--dev=false",
-          "--optional=true",
-          "--audit-level=low",
-          "--json",
-          "--registry=https://registry.npmjs.org",
-        ],
-        {
-          cwd: directory,
-          encoding: "utf8",
-          maxBuffer: 16 * 1024 * 1024,
-        }
+    const { values } = parseArgs({
+      options: {
+        graph: { type: "string", default: "application" },
+        help: { type: "boolean", short: "h" },
+      },
+    });
+    if (values.help) {
+      outcome = {
+        ok: true,
+        accepted: false,
+        message:
+          "Usage: node scripts/audit/run.mjs [--graph application|infrastructure]\nRuns the real official-registry audit at the low threshold with the reviewed, expiring risk policy.",
+      };
+    } else {
+      const graph = graphSchema.parse(values.graph);
+      const auditDirectory =
+        graph === "application"
+          ? directory
+          : resolve(directory, "infrastructure");
+      /** @type {unknown} */
+      const policy = JSON.parse(
+        readFileSync(resolve(dirname(filename), "policy.json"), "utf8")
       );
-      // Keep the current registry report intact, including the accepted advisory.
-      process.stdout.write(auditOutput(result.stdout));
-      process.stderr.write(auditOutput(result.stderr));
-      outcome = evaluateAudit(
-        result,
+      const auditEnvironment = readAuditEnvironment();
+      const configuration = configurationHash(directory);
+      const context = checkAuditContext(
         policy,
-        configurationHash(directory),
+        configuration,
         Date.now(),
         auditEnvironment.names
       );
+      if (!context.ok) outcome = context;
+      else {
+        result = spawnSync(
+          "pnpm",
+          [
+            "audit",
+            `--dir=${auditDirectory}`,
+            `--config.lockfile-dir=${auditDirectory}`,
+            // pnpm normalizes these falsey selectors to include both prod and dev.
+            "--only=null",
+            "--production=false",
+            "--dev=false",
+            "--optional=true",
+            "--audit-level=low",
+            "--json",
+            "--registry=https://registry.npmjs.org",
+          ],
+          {
+            cwd: auditDirectory,
+            encoding: "utf8",
+            maxBuffer: 16 * 1024 * 1024,
+          }
+        );
+        // Keep the current registry report intact, including the accepted advisory.
+        process.stdout.write(auditOutput(result.stdout));
+        process.stderr.write(auditOutput(result.stderr));
+        outcome = evaluateAudit({
+          result,
+          policy,
+          configuration: configurationHash(directory),
+          now: Date.now(),
+          environmentNames: auditEnvironment.names,
+          graph,
+        });
+      }
+      if (auditEnvironment.summaryPath)
+        appendFileSync(auditEnvironment.summaryPath, `\n${outcome.message}\n`);
     }
-    if (auditEnvironment.summaryPath)
-      appendFileSync(auditEnvironment.summaryPath, `\n${outcome.message}\n`);
   } catch {
     outcome = {
       ok: false,
