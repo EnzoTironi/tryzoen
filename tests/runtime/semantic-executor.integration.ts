@@ -286,9 +286,6 @@ test("the runtime requires authentication before accepting any calculation", asy
   expect(response.status).toBe(401);
 });
 
-const event = (value: string | undefined, name: string) =>
-  Number(value?.match(new RegExp(`(?:^|\n)${name} (\\d+)`))?.[1]);
-
 test("a huge computed value stays in the bounded capsule; the application survives and admission recovers", async () => {
   const databaseContainer = z
     .string()
@@ -304,20 +301,29 @@ test("a huge computed value stays in the bounded capsule; the application surviv
   const origin = new URL(z.string().parse(env.ZOEN_SEMANTIC_URLS?.[0]));
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
-  const { stdout } = await promisify(execFile)(
+  const runDocker = promisify(execFile);
+  const { stdout } = await runDocker(
     "docker",
-    ["inspect", "--format", "{{json .NetworkSettings.Ports}}", container],
+    [
+      "inspect",
+      "--format",
+      '{"id":{{json .Id}},"ports":{{json .NetworkSettings.Ports}}}',
+      container,
+    ],
     { timeout: 5_000 }
   );
-  const ports = z
+  const capsule = z
     .object({
-      "18130/tcp": z.array(
-        z.object({ HostIp: z.string(), HostPort: z.string() })
-      ),
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      ports: z.object({
+        "18130/tcp": z.array(
+          z.object({ HostIp: z.string(), HostPort: z.string() })
+        ),
+      }),
     })
     .parse(JSON.parse(stdout));
   expect(["localhost", "127.0.0.1", "[::1]"]).toContain(origin.hostname);
-  expect(ports["18130/tcp"]).toContainEqual({
+  expect(capsule.ports["18130/tcp"]).toContainEqual({
     HostIp: origin.hostname === "localhost" ? "127.0.0.1" : origin.hostname,
     HostPort: origin.port,
   });
@@ -325,6 +331,7 @@ test("a huge computed value stays in the bounded capsule; the application surviv
   expect(before["memory.max"]).toBe("1610612736");
   expect(before["memory.swap.max"]).toBe("0");
   const application = { pid: process.pid, rss: process.memoryUsage().rss };
+  const oomSince = new Date().toISOString();
   const started = performance.now();
   // Allocate the computed array inside SQL before text/JSON decoding. A single
   // large repeat also tests CPU-heavy conversion and can hit the deadline first.
@@ -341,14 +348,52 @@ test("a huge computed value stays in the bounded capsule; the application surviv
     failure = error;
   }
   const elapsedMs = performance.now() - started;
-  const after = await capsuleMemory(container);
+  let after: Awaited<ReturnType<typeof capsuleMemory>> | undefined;
+  let oomEvents: string[];
   let recoveredResult: number | null = null;
   try {
+    // The kernel may kill the service as well as its child. Observe recovery
+    // before reading the new cgroup; its counters reset after a restart.
     await expect
-      .poll(() => executeSemanticSnapshot(input), { timeout: 10_000 })
+      .poll(
+        async () => {
+          after = await capsuleMemory(container);
+          return after;
+        },
+        { timeout: 10_000, interval: 500 }
+      )
+      .toMatchObject({
+        "memory.max": "1610612736",
+        "memory.swap.max": "0",
+      });
+    await expect
+      .poll(() => executeSemanticSnapshot(input), {
+        timeout: 10_000,
+        interval: 500,
+      })
       .toMatchObject({ rows: [{ total: 30 }] });
     recoveredResult = 30;
   } finally {
+    const { stdout: observed } = await runDocker(
+      "docker",
+      [
+        "events",
+        "--since",
+        oomSince,
+        "--until",
+        new Date().toISOString(),
+        "--filter",
+        `container=${capsule.id}`,
+        "--filter",
+        "event=oom",
+        "--format",
+        "{{.Action}}",
+      ],
+      { timeout: 5_000 }
+    );
+    oomEvents = z
+      .array(z.literal("oom"))
+      .parse(observed.split("\n").filter(Boolean));
     // Persist the counter and error before assertions so CI retains evidence
     // when an OOM, deadline or recovery expectation fails.
     const { writeFile } = await import("node:fs/promises");
@@ -358,6 +403,7 @@ test("a huge computed value stays in the bounded capsule; the application surviv
         {
           before,
           after,
+          oomEvents,
           elapsedMs,
           failure: failure instanceof Error ? failure.message : String(failure),
           applicationBefore: application,
@@ -374,8 +420,6 @@ test("a huge computed value stays in the bounded capsule; the application surviv
   }
   expect(failure).toBeInstanceOf(Error);
   expect(failure).toHaveProperty("message", "Semantic execution failed");
-  expect(event(after["memory.events"], "oom_kill")).toBeGreaterThan(
-    event(before["memory.events"], "oom_kill")
-  );
+  expect(oomEvents).toContain("oom");
   expect(process.pid).toBe(application.pid);
 }, 30_000);
