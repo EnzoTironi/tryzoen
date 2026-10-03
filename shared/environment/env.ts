@@ -1,4 +1,5 @@
 import { semanticEnvironmentShape } from "./env/semantic";
+import { r2QualificationEnvironmentShape } from "./env/r2-qualification";
 import { Secret } from "@shared/environment/secret";
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
@@ -70,6 +71,7 @@ function installationSecretWithLocalDefault<
 export const env = createEnv({
   server: {
     ...semanticEnvironmentShape,
+    ...r2QualificationEnvironmentShape,
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     EVE_NEXT_PRODUCTION_PORT: z.coerce
       .number()

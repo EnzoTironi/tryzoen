@@ -170,6 +170,7 @@
     "package:desktop": "pnpm --filter @zoen/desktop package",
     "dev:mobile": "pnpm --filter @zoen/mobile start",
     "preview:companion": "next dev",
+    "qualify:r2": "node --import tsx scripts/qualify-r2.ts",
     "build:semantic": "node --import tsx server/workspaces/semantic/build.ts"
   },
   "version": "0.0.0",
