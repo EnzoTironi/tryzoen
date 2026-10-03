@@ -37,9 +37,7 @@ export default async function SignInPage({
       >
         {params.error ? (
           <p role="alert" className="type-caption text-destructive">
-            {t(
-              "Could not sign in. During beta, use the Google account on your invitation."
-            )}
+            {t("Could not sign in. Please try again with Google.")}
           </p>
         ) : null}
         {params.reason === "channel-unlinked" ? (

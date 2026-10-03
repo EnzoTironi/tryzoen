@@ -243,7 +243,6 @@ export const env = createEnv({
         .transform((value) => new Secret(value))
     ),
 
-    ZOEN_REGISTRATION_MODE: z.enum(["open", "closed"]).default("open"),
     ZOEN_LEGACY_APP_ENABLED: z
       .enum(["true", "false"])
       .default("false")
@@ -260,25 +259,6 @@ export const env = createEnv({
           .split(",")
           .map((email) => email.trim().toLowerCase())
           .filter(Boolean)
-      ),
-    ZOEN_BETA_IDENTITIES: z
-      .string()
-      .default("")
-      .transform((value) =>
-        value
-          .split(",")
-          .map((item) => item.trim().toLowerCase())
-          .filter(Boolean)
-      )
-      .refine(
-        (identities) =>
-          identities.every(
-            (item) =>
-              /^(telegram|kapso):[+0-9]+$/u.test(item) ||
-              (item.startsWith("google:") &&
-                z.email().safeParse(item.slice(7)).success)
-          ),
-        "Use comma-separated telegram:ID, kapso:NUMBER or google:EMAIL identities"
       ),
     ZOEN_BILLING_MODE: z.enum(["free-beta", "paid"]).default("free-beta"),
     // Paid billing requires an explicit mode change as well as credentials.

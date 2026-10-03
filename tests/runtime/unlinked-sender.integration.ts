@@ -3,7 +3,7 @@ import type { z } from "zod";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import {
   ChannelAccountError,
   ChannelAccounts,
@@ -12,17 +12,6 @@ import {
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import { workspaceFixture } from "./workspace-fixture";
 import { linkedIdentity } from "./identity-fixture";
-import type * as Environment from "../../shared/environment/env";
-vi.mock("@shared/environment", async (original) => {
-  const loaded = await original<typeof Environment>();
-  return {
-    env: {
-      ...loaded.env,
-      ZOEN_REGISTRATION_MODE: "closed",
-      ZOEN_BETA_IDENTITIES: ["telegram:100001"],
-    },
-  };
-});
 const secret = () => randomBytes(32).toString("base64url");
 const reasonOf = <A>(effect: Promise<A>) =>
   Promise.try(async () => {

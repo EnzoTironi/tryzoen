@@ -67,12 +67,7 @@ const initializeAuth = async function () {
       databaseHooks: {
         user: {
           create: {
-            before: async (identity) =>
-              identity.emailVerified &&
-              (env.ZOEN_REGISTRATION_MODE === "open" ||
-                env.ZOEN_BETA_IDENTITIES.includes(
-                  `google:${identity.email.toLowerCase()}`
-                )),
+            before: async (identity) => identity.emailVerified,
           },
         },
       },

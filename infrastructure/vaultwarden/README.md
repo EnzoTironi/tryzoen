@@ -70,5 +70,5 @@ master password. Rotation is not a blind replacement of all Fly secrets:
 No rotation drill or production deployment is claimed by the isolated proof.
 Upgrade the pinned server digest deliberately, back up before changing it, validate
 with compatible official clients and restore on failure. Do not run an older server
-against an incompatible migrated database. Capacity beyond the small closed beta,
+against an incompatible migrated database. Capacity beyond the isolated test workload,
 automatic failover, mobile clients and browser extensions need their own proofs.

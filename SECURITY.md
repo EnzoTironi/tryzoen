@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Zoen is in closed beta. Security fixes target the current `main` branch and its
+Security fixes target the current `main` branch and its
 latest qualified deployment. Earlier commits and unmaintained forks do not have
 a supported backport line. Review migration and recovery requirements before
 upgrading an installation.

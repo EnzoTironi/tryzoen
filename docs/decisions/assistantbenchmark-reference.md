@@ -21,7 +21,7 @@ The archive contains summaries and public feedback, not the underlying conversat
 | Purchasing               | Optional live browser benchmark; no payment authorization from a webpage           |
 | Recommendation quality   | Optional task-specific judge; no implied release score                             |
 | Content creation/games   | Not a launch benchmark claim                                                       |
-| Phone calls              | Out of scope for the closed beta; iMessage also remains disabled                   |
+| Phone calls              | Out of scope for the current release; iMessage also remains disabled               |
 
 Priority regressions derived from public complaints are: an integration continuing after disconnect; private memory entering a shared room; tool output attempting to override instructions; a repeated webhook duplicating an action; an interrupted task claiming success; and a silently lost or fabricated task result. Existing owning families are `evals/agent/safety.eval.ts`, `evals/agent/memory.eval.ts`, `evals/agent/scheduled-lifecycle.eval.ts`, `tests/runtime/personal-memory-revocation-race.integration.ts`, `tests/runtime/workspace-team.integration.ts`, and `tests/runtime/queue-delivery.integration.ts`.
 
