@@ -84,7 +84,7 @@ export function PanelShell({
               <Logo />
               <span>Zoen</span>
             </Link>
-            <WorkspaceSwitcher />
+            <WorkspaceSwitcher management />
             <Button
               aria-label={t("Sua conta")}
               className={styles.accountButton}
