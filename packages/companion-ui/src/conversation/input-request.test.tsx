@@ -303,6 +303,58 @@ it("blocks approval of a network request without the frozen destination", () => 
   expect(onRespond).not.toHaveBeenCalled();
 });
 
+it("presents a private contribution's complete message, purpose and destination", () => {
+  const input = {
+    destination: {
+      workspaceId: "company:cedarbay",
+      channelId: "10000000-0000-4000-8000-000000000001",
+      roomId: "!approved:zoen.test",
+      communityName: "Cedarbay community",
+      channelName: "Approved research channel",
+      revision: "a".repeat(64),
+    },
+    purpose: "Share the exact approved excerpt.",
+    text: "First full line.\nLast full line.",
+    operationId: "20000000-0000-4000-8000-000000000001",
+  };
+  const markup = renderToStaticMarkup(
+    <InputRequestCard
+      part={{ ...mailApproval, toolName: "community-contribute", input }}
+      enabled
+      onRespond={async () => undefined}
+    />
+  );
+  for (const value of [
+    ...Object.values(input.destination),
+    input.purpose,
+    "First full line.",
+    "Last full line.",
+  ])
+    expect(markup).toContain(value);
+  expect(buttons.get("Approve")?.disabled).toBe(false);
+});
+
+it("incomplete community disclosure disables approval while retaining cancellation", () => {
+  const onRespond = vi.fn<ComponentProps<typeof InputRequestCard>["onRespond"]>(
+    async () => undefined
+  );
+  renderToStaticMarkup(
+    <InputRequestCard
+      part={{
+        ...mailApproval,
+        toolName: "community-contribute",
+        input: { text: "Private text" },
+      }}
+      enabled
+      onRespond={onRespond}
+    />
+  );
+  expect(buttons.get("Approve")?.disabled).toBe(true);
+  buttons.get("Approve")?.onPress();
+  expect(onRespond).not.toHaveBeenCalled();
+  expect(buttons.get("Cancel")?.disabled).toBe(false);
+});
+
 it("distinguishes unsupported tools from invalid Gmail or network payloads", () => {
   const markup = renderToStaticMarkup(
     <InputRequestCard

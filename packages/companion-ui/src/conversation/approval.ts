@@ -121,18 +121,58 @@ export const NetworkContactInputSchema = networkContactPayloadSchema.refine(
   "The complete recipient and payload must fit the approval display. Use a smaller message; no content may be omitted."
 );
 
+export const CommunityDestinationSchema = z.strictObject({
+  workspaceId: wellFormedText.min(1).max(200),
+  channelId: z.uuid(),
+  roomId: wellFormedText.min(1).max(256),
+  communityName: wellFormedText.min(1).max(200),
+  channelName: wellFormedText.min(1).max(200),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+const communityContributionPayloadSchema = z.strictObject({
+  destination: CommunityDestinationSchema,
+  purpose: wellFormedText.min(1).max(1000),
+  text: wellFormedText.min(1).max(8000),
+  operationId: z.uuid(),
+});
+
+export function renderCommunityContributionApproval(raw: unknown) {
+  return disclose(
+    "Share with community — only the message text is published",
+    communityContributionPayloadSchema.parse(raw)
+  );
+}
+
+export const CommunityContributionInputSchema =
+  communityContributionPayloadSchema.refine((input) => {
+    try {
+      renderCommunityContributionApproval(input);
+      return input.text.trim().length > 0 && input.purpose.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }, "The exact purpose, channel and full message must fit the approval display. Use a smaller message; no content may be omitted.");
+
 /** Invalid known actions are distinct from unsupported actions. An invalid result
  * must disable approval; it must never select generic or summary-only fallback. */
 export function renderApprovalDisclosure(toolName: string, input: unknown) {
-  if (toolName !== "gmail-send" && toolName !== "network-contact")
+  if (
+    toolName !== "gmail-send" &&
+    toolName !== "network-contact" &&
+    toolName !== "community-contribute"
+  )
     return { kind: "unsupported" } as const;
   try {
     let text: string;
     if (toolName === "gmail-send") {
       const payload = gmailSendInputSchema.parse(input);
       text = renderGmailApproval(payload, payload.approvalMessage);
-    } else {
+    } else if (toolName === "network-contact") {
       text = renderNetworkApproval(NetworkContactInputSchema.parse(input));
+    } else {
+      text = renderCommunityContributionApproval(
+        CommunityContributionInputSchema.parse(input)
+      );
     }
     return { kind: "ready", text } as const;
   } catch {

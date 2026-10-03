@@ -152,7 +152,7 @@ export async function requireMatrixInputNoticeEgress(eventId: string) {
  * A committed native departure remains unsafe until its exact state is verified;
  * current workspace/org and agent-member rows also fence recipient revocation.
  */
-async function requireSafeMatrixAudience(
+export async function requireSafeMatrixAudience(
   actor: Awaited<ReturnType<typeof matrixDeliveryActor>>
 ) {
   if (!actor.groupBindingId) throw new WorkspaceAccessDenied();
