@@ -43,6 +43,11 @@ async function waitForNativeEvent(
       .toContain(text);
   } catch (error) {
     await writeFile(
+      join(tmpdir(), `zoen-community-runtime-${sessionId}.txt`),
+      server.output(),
+      { mode: 0o600 }
+    );
+    await writeFile(
       join(tmpdir(), `zoen-community-events-${sessionId}.json`),
       JSON.stringify(events),
       { mode: 0o600 }

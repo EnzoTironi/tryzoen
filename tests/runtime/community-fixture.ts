@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { query } from "@db/queries";
 import { sql } from "drizzle-orm";
+import { expect, vi } from "vitest";
+import { z } from "zod";
+import { MatrixEventSchema, matrixRequest } from "../../server/matrix/client";
 import { discoverContributionChannels } from "../../server/matrix/contributions";
 import { createMatrixRoom, joinMatrixRoom } from "../../server/matrix/rooms";
 import { workspaceFixture } from "./workspace-fixture";
@@ -35,6 +38,35 @@ export async function communityFixture() {
     await joinMatrixRoom(first.actor, firstRoom.id);
     await joinMatrixRoom(second.actor, secondRoom.id);
     await joinMatrixRoom(secondActor, secondRoom.id);
+    for (const room of [firstRoom, secondRoom]) {
+      const eventIds = z
+        .array(MatrixEventSchema)
+        .parse(
+          await matrixRequest(
+            "GET",
+            `rooms/${encodeURIComponent(room.roomId)}/state`
+          )
+        )
+        .filter(
+          (event) =>
+            event.type === "m.room.member" &&
+            event.content.membership === "join"
+        )
+        .map((event) => z.string().min(1).parse(event.event_id));
+      expect(eventIds.length).toBeGreaterThan(0);
+      await vi.waitFor(
+        async () => {
+          const received = await query(
+            sql`SELECT id FROM matrix_received_events WHERE id IN (${sql.join(
+              eventIds.map((id) => sql`${id}`),
+              sql`, `
+            )})`
+          );
+          expect(received).toHaveLength(eventIds.length);
+        },
+        { timeout: 10_000, interval: 25 }
+      );
+    }
     const { destinations } = await discoverContributionChannels(first.personal);
     const destination = destinations.find(
       (item) => item.channelId === firstRoom.id
