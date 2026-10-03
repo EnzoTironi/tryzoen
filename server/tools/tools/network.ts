@@ -50,7 +50,7 @@ export default defineDynamic({
         }),
         "network-contact": defineTool({
           description:
-            "Ask another trusted person's or company's bot through Matrix and A2A, using this workspace's published bot identity. First discover the recipient with network-bots and copy its exact destination identity/revision. This sends the exact text to that reviewed bot and requires approval. A changed destination requires fresh discovery and approval. Share only content authorized for that recipient. Returns the result or a pending receipt; use network-result to check a pending receipt, never resend the question. The destination cannot recursively contact bots through this grant.",
+            "Ask another trusted person's or company's bot through Matrix and A2A, using this workspace's published bot identity. First discover the recipient with network-bots and copy its exact destination identity/revision. Call this tool with the user's exact message to present the native approval; do not ask_question or send a separate approval question. Nothing is dispatched until the user approves this exact recipient and text. A changed destination requires fresh discovery and approval. Share only content authorized for that recipient. Returns the result or a pending receipt; use network-result to check a pending receipt, never resend the question. The destination cannot recursively contact bots through this grant.",
           inputSchema: NetworkContactInputSchema,
           approval: always(),
           execute: (input, execution) =>
