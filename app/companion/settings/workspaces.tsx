@@ -14,7 +14,10 @@ export function SettingsWorkspaces() {
   const attempt = useRef<{ name: string; operationId: string } | undefined>(
     undefined
   );
-  const create = api.workspaces.create.useMutation({ retry: false });
+  const create = api.workspaces.create.useMutation({
+    retry: false,
+    networkMode: "always",
+  });
   return (
     <>
       <WorkspaceSwitcher />
