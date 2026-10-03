@@ -42,6 +42,7 @@ import { TRPCError } from "@trpc/server";
 import {
   createUserWorkspace,
   listUserWorkspaces,
+  WorkspaceCreationSchema,
 } from "../../server/workspaces/directory";
 import {
   WorkspaceRepository,
@@ -331,17 +332,9 @@ export const workspacesRouter = {
     withSignal(signal, async () => listUserWorkspaces(ctx.actor))
   ),
   create: workspaceProcedure
-    .input(
-      z.object({
-        name: z
-          .string()
-          .refine((value) => value === value.trim(), "Expected trimmed text")
-          .min(1)
-          .max(80),
-      })
-    )
+    .input(WorkspaceCreationSchema)
     .mutation(({ ctx, input, signal }) =>
-      withSignal(signal, async () => createUserWorkspace(ctx.actor, input.name))
+      withSignal(signal, async () => createUserWorkspace(ctx.actor, input))
     ),
   files: workspaceProcedure
     .input(

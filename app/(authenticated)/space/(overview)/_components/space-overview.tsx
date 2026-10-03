@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BrainIcon,
@@ -40,6 +40,9 @@ export function SpaceOverview() {
   const [path, setPath] = useState<string>();
   const [newFile, setNewFile] = useState(false);
   const [name, setName] = useState("");
+  const creation = useRef<{ name: string; operationId: string } | undefined>(
+    undefined
+  );
   const create = api.workspaces.create.useMutation();
   const listing = api.workspaces.files.useQuery({});
   const file = api.workspaces.files.useQuery(
@@ -63,8 +66,14 @@ export function SpaceOverview() {
           className={styles.create}
           onSubmit={(event) => {
             event.preventDefault();
+            const title = name.trim();
+            if (creation.current?.name !== title)
+              creation.current = {
+                name: title,
+                operationId: crypto.randomUUID(),
+              };
             void create
-              .mutateAsync({ name: name.trim() })
+              .mutateAsync(creation.current)
               .then(({ workspaceId }) => {
                 router.replace(
                   `/space?space=${encodeURIComponent(workspaceId)}`

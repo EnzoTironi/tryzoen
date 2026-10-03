@@ -76,6 +76,7 @@ export type { OntologyActionDraft } from "./library/ontology/action-draft";
 
 export { useAccessibilityPreferences, useDarkAppearance } from "./theme";
 export { LanguageOptions } from "./i18n/language-options";
+export { WorkspaceCreation } from "./workspaces/create";
 
 export { LearnedClaimEditor } from "./learned/editor";
 export { LearnedClaimProvenance } from "./learned/provenance";
