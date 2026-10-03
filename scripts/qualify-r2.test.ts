@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import {
   mkdtemp,
@@ -86,7 +87,7 @@ async function cli(
 }
 
 /** Native SDK over HTTP; the fixture owns only synthetic objects. */
-async function s3() {
+async function s3(anonymous?: { status: number; body: string }) {
   const objects = new Map<
     string,
     { bytes: Buffer; metadata: Record<string, string> }
@@ -111,7 +112,13 @@ async function s3() {
       );
     }
     if (!authorized) {
-      error(403, "AccessDenied");
+      if (anonymous) {
+        response.writeHead(anonymous.status, {
+          "content-type": "application/xml",
+          ...(anonymous.status === 302 ? { location: "/must-not-follow" } : {}),
+        });
+        response.end(anonymous.body);
+      } else error(403, "AccessDenied");
       return;
     }
     if (path === "/qualification-bucket/" || path === "/qualification-bucket") {
@@ -358,6 +365,16 @@ it("uses real SDK conditional writes, bounded digest reads, and exact-key cleanu
     cleanupComplete: true,
     requests: 25,
     putBytes: 24576,
+    anonymousRead: {
+      method: "GET",
+      status: 403,
+      responseBytes: 76,
+      responseSha256: createHash("sha256")
+        .update(
+          "<Error><Code>AccessDenied</Code><Message>synthetic fixture</Message></Error>"
+        )
+        .digest("hex"),
+    },
   });
   expect(result.result.checks).toEqual([
     "immutable-write",
@@ -389,6 +406,56 @@ it("uses real SDK conditional writes, bounded digest reads, and exact-key cleanu
   expect(cleaned.code).toBe(0);
   expect(fixture.attempts).toHaveLength(25);
 });
+
+it.each([
+  [
+    "R2 missing authorization",
+    400,
+    '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>',
+    true,
+  ],
+  ["generic bad request", 400, "Bad request", false],
+  [
+    "another invalid argument",
+    400,
+    '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Bucket</Message></Error>',
+    false,
+  ],
+  [
+    "embedded authorization XML",
+    400,
+    '<html><?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error></html>',
+    false,
+  ],
+  [
+    "successful authorization-shaped body",
+    200,
+    '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>',
+    false,
+  ],
+  ["successful object read", 200, "synthetic object bytes", false],
+  ["oversized error", 400, "x".repeat(4097), false],
+  ["redirect", 302, "Redirect", false],
+] as const)(
+  "checks an actual anonymous GET and fails closed on %s",
+  async (_, status, body, denied) => {
+    await using fixture = await s3({ status, body });
+    const path = join(await directory(), "run");
+    const result = await cli(runArgs(fixture.endpoint, path));
+    expect(result.code).toBe(denied ? 0 : 1);
+    expect(result.result).toMatchObject({
+      localTransportPassed: denied,
+      providerQualified: false,
+      cleanupComplete: true,
+    });
+    const unsigned = fixture.attempts.filter((attempt) => !attempt.authorized);
+    expect(unsigned).toHaveLength(1);
+    expect(unsigned[0]).toMatchObject({ method: "GET" });
+    expect(fixture.objects.size).toBe(0);
+    const checks = z.array(z.string()).parse(result.result.checks);
+    expect(checks.includes("anonymous-denial")).toBe(denied);
+  }
+);
 
 it("persists unknown writes, never retries automatically, and cleans them in a later invocation", async () => {
   await using fixture = await s3();

@@ -91,6 +91,12 @@ on the named existing out-of-scope bucket, and verifies anonymous access is deni
 on a known object. These observations cover those endpoints and that negative
 bucket; they do not inventory Worker proxies, every account bucket, or token policy.
 
+The anonymous probe uses a bounded `GET` on bytes already verified by a signed
+read. It requires HTTP 401/403 or the exact HTTP 400 XML authorization error
+observed from R2 (`InvalidArgument`, `Authorization`). Other 400 responses,
+redirects, oversized bodies and HTTP 200 fail qualification. The receipt retains
+the method, status, response byte count and SHA-256, without the response body.
+
 Transport checks exercise conditional `If-None-Match: *` writes, immediate reads,
 identical and conflicting write rejection, missing-object handling, bounded stream
 consumption, byte length and SHA-256 integrity, and exact-key deletion. One canary
