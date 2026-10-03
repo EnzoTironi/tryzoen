@@ -160,7 +160,7 @@ jobs:
           test "$callback_status" = 401
       - name: Upload runtime shard report
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-report-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: .eve/runtime-reports/shard-${{ matrix.shard }}.json
