@@ -1,10 +1,13 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import {
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -244,14 +247,49 @@ await test("clean audit reports cannot bypass expiry, configuration or inherited
   }
 });
 
-await test("the real wrapper rejects alternate-lockfile selection before invoking audit and pins its source", () => {
-  const root = mkdtempSync(join(tmpdir(), "zoen-audit-source-"));
+await test("the real wrapper through a symlink rejects alternate-lockfile selection and pins its source", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "zoen-audit-source-")));
   const marker = join(root, "invoked");
   const argumentsPath = join(root, "arguments.json");
   const alternate = join(root, "alternate");
-  const script = fileURLToPath(new URL("run.mjs", import.meta.url));
-  const repository = fileURLToPath(new URL("../../", import.meta.url));
+  const repository = join(root, "repository");
+  const script = join(repository, "scripts/audit/run.mjs");
+  const alias = join(root, "audit-alias.mjs");
+  const repositoryAlias = join(root, "repository-alias");
+  const clock = join(root, "clock.mjs");
   try {
+    mkdirSync(dirname(script), { recursive: true });
+    for (const name of ["run.mjs", "env.mjs"]) {
+      const source = new URL(name, import.meta.url);
+      const destination = join(dirname(script), name);
+      copyFileSync(source, destination);
+      assert.deepEqual(readFileSync(destination), readFileSync(source));
+    }
+    symlinkSync(script, alias);
+    symlinkSync(repository, repositoryAlias, "dir");
+    symlinkSync(
+      fileURLToPath(new URL("../../node_modules", import.meta.url)),
+      join(repository, "node_modules"),
+      "dir"
+    );
+    writeFileSync(join(repository, ".gitignore"), "node_modules\n");
+    writeFileSync(join(repository, "package.json"), '{"type":"module"}\n');
+    writeFileSync(
+      join(repository, "pnpm-lock.yaml"),
+      "lockfileVersion: '9.0'\nimporters:\n  .: {}\n"
+    );
+    execFileSync("git", ["init", "--quiet"], { cwd: repository });
+    execFileSync("git", ["add", "package.json", "pnpm-lock.yaml"], {
+      cwd: repository,
+    });
+    writeFileSync(
+      join(dirname(script), "policy.json"),
+      JSON.stringify({
+        ...policy,
+        configurationSha256: configurationHash(repository),
+      })
+    );
+    writeFileSync(clock, `Date.now = () => ${beforeExpiry};\n`);
     mkdirSync(alternate);
     writeFileSync(
       join(alternate, "pnpm-lock.yaml"),
@@ -282,7 +320,7 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       "NPM_CONFIG_LOCKFILE_DIR",
       "npm_config_lockfile_dir",
     ]) {
-      const denied = spawnSync(process.execPath, [script], {
+      const denied = spawnSync(process.execPath, ["--import", clock, alias], {
         cwd: alternate,
         env: { ...environment, [name]: alternate },
         encoding: "utf8",
@@ -291,7 +329,7 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       assert.match(denied.stdout, /configuration changed/u);
       assert.throws(() => readFileSync(marker), { code: "ENOENT" });
     }
-    const success = spawnSync(process.execPath, [script], {
+    const success = spawnSync(process.execPath, ["--import", clock, alias], {
       cwd: alternate,
       env: environment,
       encoding: "utf8",
@@ -302,21 +340,35 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       `stdout:\n${success.stdout}\nstderr:\n${success.stderr}`
     );
     assert.equal(readFileSync(marker, "utf8"), "invoked");
-    assert.equal(
-      readFileSync(argumentsPath, "utf8"),
-      JSON.stringify([
-        "audit",
-        `--dir=${repository}`,
-        `--config.lockfile-dir=${repository}`,
-        "--only=null",
-        "--production=false",
-        "--dev=false",
-        "--optional=true",
-        "--audit-level=low",
-        "--json",
-        "--registry=https://registry.npmjs.org",
-      ])
+    const pinnedArguments = JSON.stringify([
+      "audit",
+      `--dir=${repository}`,
+      `--config.lockfile-dir=${repository}`,
+      "--only=null",
+      "--production=false",
+      "--dev=false",
+      "--optional=true",
+      "--audit-level=low",
+      "--json",
+      "--registry=https://registry.npmjs.org",
+    ]);
+    assert.equal(readFileSync(argumentsPath, "utf8"), pinnedArguments);
+    const preserved = spawnSync(
+      process.execPath,
+      [
+        "--preserve-symlinks-main",
+        "--import",
+        clock,
+        join(repositoryAlias, "scripts/audit/run.mjs"),
+      ],
+      { cwd: alternate, env: environment, encoding: "utf8" }
     );
+    assert.equal(
+      preserved.status,
+      0,
+      `stdout:\n${preserved.stdout}\nstderr:\n${preserved.stderr}`
+    );
+    assert.equal(readFileSync(argumentsPath, "utf8"), pinnedArguments);
     const unknown = structuredClone(captured);
     finding(unknown).github_advisory_id = "GHSA-aaaa-bbbb-cccc";
     for (const { output, ending, expectedStatus, message } of [
@@ -346,7 +398,7 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       },
     ]) {
       writeAuditCommand(output, ending);
-      const failure = spawnSync(process.execPath, [script], {
+      const failure = spawnSync(process.execPath, ["--import", clock, alias], {
         cwd: alternate,
         env: environment,
         encoding: "utf8",
@@ -354,6 +406,29 @@ await test("the real wrapper rejects alternate-lockfile selection before invokin
       assert.equal(failure.status, expectedStatus);
       assert.ok(failure.stdout.includes(message));
     }
+    writeAuditCommand(clean, "process.exitCode = 0;");
+    rmSync(marker);
+    mkdirSync(join(repository, ".github/workflows"), { recursive: true });
+    const workflow = join(repository, ".github/workflows/checks.yml");
+    writeFileSync(workflow, "name: added guarded configuration\n");
+    const changed = spawnSync(process.execPath, ["--import", clock, alias], {
+      cwd: alternate,
+      env: environment,
+      encoding: "utf8",
+    });
+    assert.equal(changed.status, 1);
+    assert.match(changed.stdout, /configuration changed/u);
+    assert.throws(() => readFileSync(marker), { code: "ENOENT" });
+    rmSync(workflow);
+    writeFileSync(clock, `Date.now = () => ${Date.parse(policy.expiresAt)};\n`);
+    const expired = spawnSync(process.execPath, ["--import", clock, alias], {
+      cwd: alternate,
+      env: environment,
+      encoding: "utf8",
+    });
+    assert.equal(expired.status, 1);
+    assert.match(expired.stdout, /Temporary risk acceptance expired/u);
+    assert.throws(() => readFileSync(marker), { code: "ENOENT" });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

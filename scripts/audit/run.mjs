@@ -2,13 +2,14 @@
 /// <reference lib="es2023.array" />
 import { spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { readAuditEnvironment } from "./env.mjs";
 
-const directory = fileURLToPath(new URL("../../", import.meta.url));
+const filename = realpathSync(fileURLToPath(import.meta.url));
+const directory = resolve(dirname(filename), "../..");
 const advisoryId = "GHSA-86w9-cpqp-85rv";
 const deadline = "2026-10-04T02:59:00Z";
 const severitySchema = z.enum(["info", "low", "moderate", "high", "critical"]);
@@ -235,17 +236,14 @@ export function evaluateAudit(
   };
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && realpathSync(process.argv[1]) === filename) {
   /** @type {import("node:child_process").SpawnSyncReturns<string> | undefined} */
   let result;
   let outcome;
   try {
     /** @type {unknown} */
     const policy = JSON.parse(
-      readFileSync(new URL("policy.json", import.meta.url), "utf8")
+      readFileSync(resolve(dirname(filename), "policy.json"), "utf8")
     );
     const auditEnvironment = readAuditEnvironment();
     const configuration = configurationHash(directory);
