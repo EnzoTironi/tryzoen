@@ -9,6 +9,7 @@ import {
   invitePersonalTrust,
   answerPersonalTrust,
   blockPersonalTrust,
+  discoverNetworkBots,
 } from "../../server/workspaces/network";
 import {
   openMatrixConversation,
@@ -77,6 +78,16 @@ export const networkFixture = async function (
       description: `Public reference code: ${publicCode}.`,
       discoverable: true,
     });
+    const discovered = await discoverNetworkBots(
+      callerActor,
+      destination.username
+    );
+    if (
+      discovered.length !== 1 ||
+      discovered[0]?.username !== destination.username ||
+      !discovered[0].destination.revision
+    )
+      throw new Error("The synthetic network destination is not discoverable.");
     await repository.write(destinationActor, {
       path: "agent/MEMORY.md",
       content: privateCode,
