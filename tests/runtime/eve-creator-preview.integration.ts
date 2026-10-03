@@ -604,16 +604,40 @@ test("private release chat approval survives restart, cancels safely and rejects
   async function respond(
     sessionId: string,
     events: Awaited<ReturnType<typeof server.settled>>,
-    response: { optionId?: string; text?: string },
-    turn: number
+    response: { optionId?: string; text?: string }
   ) {
+    const requestId = releaseQuestion(events).requestId;
     await server.request(`/probe/input/${sessionId}`, {
       auth,
-      responses: [
-        { requestId: releaseQuestion(events).requestId, ...response },
-      ],
+      responses: [{ requestId, ...response }],
     });
-    return server.settled(sessionId, turn);
+    const releaseResult = z.object({
+      result: z.object({ toolName: z.literal("creator-release") }),
+    });
+    let next = events;
+    await expect
+      .poll(
+        async () => {
+          next = await server.settled(sessionId);
+          const question = next.findLastIndex(
+            (event) => event.type === "input.requested"
+          );
+          return (
+            (releaseQuestion(next).requestId !== requestId &&
+              next
+                .slice(question + 1)
+                .some((event) => event.type === "session.waiting")) ||
+            next.some(
+              (event) =>
+                event.type === "action.result" &&
+                releaseResult.safeParse(event.data).success
+            )
+          );
+        },
+        { timeout: 30_000, interval: 100 }
+      )
+      .toBe(true);
+    return next;
   }
   try {
     const cancelled = await begin();
@@ -638,33 +662,24 @@ test("private release chat approval survives restart, cancels safely and rejects
     expect(releaseQuestion(cancelled.events).prompt).not.toContain(
       '"playbook":'
     );
-    await respond(
-      cancelled.sessionId,
-      cancelled.events,
-      { optionId: "cancel" },
-      2
-    );
+    await respond(cancelled.sessionId, cancelled.events, {
+      optionId: "cancel",
+    });
     expect(
       await listCreatorReleases(workspace.personal, source.draft.id)
     ).toEqual([]);
     const cancelNotes = await begin();
-    const notes = await respond(
-      cancelNotes.sessionId,
-      cancelNotes.events,
-      { optionId: "approve" },
-      2
-    );
-    await respond(cancelNotes.sessionId, notes, { optionId: "cancel" }, 3);
+    const notes = await respond(cancelNotes.sessionId, cancelNotes.events, {
+      optionId: "approve",
+    });
+    await respond(cancelNotes.sessionId, notes, { optionId: "cancel" });
     expect(
       await listCreatorReleases(workspace.personal, source.draft.id)
     ).toEqual([]);
     const stale = await begin();
-    const staleNotes = await respond(
-      stale.sessionId,
-      stale.events,
-      { optionId: "approve" },
-      2
-    );
+    const staleNotes = await respond(stale.sessionId, stale.events, {
+      optionId: "approve",
+    });
     await saveCreatorPreviewReview(workspace.personal, {
       id: source.preview.id,
       expectedRevision: source.review.revision,
@@ -673,12 +688,9 @@ test("private release chat approval survives restart, cancels safely and rejects
         notes: "Revised human notes after the approval prompt.",
       },
     });
-    const failed = await respond(
-      stale.sessionId,
-      staleNotes,
-      { text: "Approve what I saw before." },
-      3
-    );
+    const failed = await respond(stale.sessionId, staleNotes, {
+      text: "Approve what I saw before.",
+    });
     expect(JSON.stringify(failed)).toContain(
       "The draft or its evaluations changed"
     );
@@ -691,26 +703,23 @@ test("private release chat approval survives restart, cancels safely and rejects
     );
     await server.stop();
     server = await runtime(await freePort(), "127.0.0.1", directory);
-    const finalNotes = await respond(
-      current.sessionId,
-      current.events,
-      { optionId: "approve" },
-      2
+    const finalNotes = await respond(current.sessionId, current.events, {
+      optionId: "approve",
+    });
+    expect(releaseQuestion(finalNotes).prompt).toContain(
+      "Record your approval notes"
     );
     expect(
       await listCreatorReleases(workspace.personal, source.draft.id)
     ).toEqual([]);
-    await respond(
-      current.sessionId,
-      finalNotes,
-      { text: "Human approved this exact private snapshot after restart." },
-      3
-    );
+    const published = await respond(current.sessionId, finalNotes, {
+      text: "Human approved this exact private snapshot after restart.",
+    });
     const releases = await listCreatorReleases(
       workspace.personal,
       source.draft.id
     );
-    expect(releases).toHaveLength(1);
+    expect(releases, JSON.stringify(published)).toHaveLength(1);
     expect(releases[0]).toMatchObject({
       revision: source.draft.revision,
       notes: "Human approved this exact private snapshot after restart.",
