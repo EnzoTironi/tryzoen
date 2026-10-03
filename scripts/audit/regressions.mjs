@@ -353,6 +353,8 @@ await test("the real wrapper through a symlink rejects alternate-lockfile select
       "--registry=https://registry.npmjs.org",
     ]);
     assert.equal(readFileSync(argumentsPath, "utf8"), pinnedArguments);
+    rmSync(marker);
+    rmSync(argumentsPath);
     const preserved = spawnSync(
       process.execPath,
       [
@@ -368,6 +370,7 @@ await test("the real wrapper through a symlink rejects alternate-lockfile select
       0,
       `stdout:\n${preserved.stdout}\nstderr:\n${preserved.stderr}`
     );
+    assert.equal(readFileSync(marker, "utf8"), "invoked");
     assert.equal(readFileSync(argumentsPath, "utf8"), pinnedArguments);
     const unknown = structuredClone(captured);
     finding(unknown).github_advisory_id = "GHSA-aaaa-bbbb-cccc";
