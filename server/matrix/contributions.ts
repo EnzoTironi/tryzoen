@@ -189,7 +189,7 @@ export async function publishCommunityContribution(
     },
     { outermost: true }
   );
-  let attempted = false;
+  const publication = { attempted: false };
   try {
     return await transaction(
       async () => {
@@ -210,7 +210,7 @@ export async function publishCommunityContribution(
         const transactionId = `zoen-contribution-${createHash("sha256")
           .update(JSON.stringify([actor.workspaceId, operationId]))
           .digest("hex")}`;
-        attempted = true;
+        publication.attempted = true;
         const sent = publicationSchema.parse(
           await matrixRequest(
             "PUT",
@@ -231,7 +231,7 @@ export async function publishCommunityContribution(
     );
   } catch (error) {
     operationSignal().throwIfAborted();
-    if (!attempted) throw error;
+    if (!publication.attempted) throw error;
     return { status: "pending" as const, operationId };
   }
 }

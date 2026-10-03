@@ -44,7 +44,7 @@ test("one personal owner discovers two communities and publishes only the exact 
     .object({ destinations: z.array(CommunityDestinationSchema) })
     .parse(await callNativeTool(execution, "community-channels", {}));
   expect(
-    discovered.destinations.map((item) => item.communityName).sort()
+    discovered.destinations.map((item) => item.communityName).toSorted()
   ).toEqual(["Cedarbay", "Harbor"]);
   await expect(
     fixture.first.repository.read(
@@ -64,7 +64,8 @@ test("one personal owner discovers two communities and publishes only the exact 
     })
     .parse(
       await callNativeTool(execution, "community-contribute", {
-        ...{ ...fixture.input, operationId },
+        ...fixture.input,
+        operationId,
       })
     );
   const messages = (
@@ -171,7 +172,7 @@ test("lost native send response retains an immutable private receipt and explici
     }),
   ]);
   expect(retries[0]).toEqual(retries[1]);
-  expect(retries[0]?.status).toBe("published");
+  expect(retries[0].status).toBe("published");
   const messages = (
     await readMatrixMessages(fixture.first.actor, fixture.firstRoom.id)
   ).messages;
@@ -353,7 +354,7 @@ test("company sessions, group contexts, delegated sessions and aborted owner cal
   ])
     await expect(
       callNativeTool(denied, "community-contribute", fixture.input)
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Tool unavailable|WorkspaceAccessDenied|aborted/u);
   await expect(
     publishCommunityContribution(fixture.first.actor, fixture.input)
   ).rejects.toBeInstanceOf(WorkspaceAccessDenied);

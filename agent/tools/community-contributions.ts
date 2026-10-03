@@ -59,7 +59,8 @@ export default defineDynamic({
           availableInSubagents: false,
           approval: {
             request: always(),
-            response: (context) => authorizeApprovalResponse(context),
+            response: (approvalContext) =>
+              authorizeApprovalResponse(approvalContext),
           },
           execute: (input, execution) =>
             withSignal(execution.abortSignal, async () =>

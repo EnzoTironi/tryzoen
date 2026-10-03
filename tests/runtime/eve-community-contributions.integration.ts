@@ -77,7 +77,7 @@ async function pendingContribution(
     .object({ requests: z.array(inputRequestSchema) })
     .parse(pending.find((event) => event.type === "input.requested")?.data)
     .requests[0];
-  if (!request || request.kind !== "tool-approval")
+  if (request?.kind !== "tool-approval")
     throw new Error(
       "Exact community contribution must park at native approval"
     );
