@@ -32,7 +32,7 @@ const capturedInfrastructure = readAuditReport(
   )
 );
 import policy from "./policy.json" with { type: "json" };
-const beforeExpiry = Date.parse("2026-10-04T02:58:59Z");
+const beforeExpiry = Date.parse("2026-10-05T02:58:59Z");
 /** @param {ReturnType<typeof readAuditReport>} report */
 const finding = (report) => {
   const item = Object.values(report.advisories)[0];
@@ -98,7 +98,7 @@ await test("expires at the exact deadline and remains closed afterward", () => {
 
 await test("does not allow the policy to extend the deadline or add another advisory", () => {
   for (const changed of [
-    { expiresAt: "2026-10-05T02:59:00Z" },
+    { expiresAt: "2026-10-06T02:59:00Z" },
     { advisory: "GHSA-aaaa-bbbb-cccc" },
   ]) {
     assert.equal(
@@ -109,6 +109,32 @@ await test("does not allow the policy to extend the deadline or add another advi
   const expanded = structuredClone(policy);
   Object.assign(expanded.graphs.application, {
     "GHSA-aaaa-bbbb-cccc": expanded.graphs.application["GHSA-86w9-cpqp-85rv"],
+  });
+  assert.equal(evaluate(captured, { policy: expanded }).ok, false);
+});
+
+await test("rejects the expired version-two decision and the removed cache exception", () => {
+  for (const changed of [
+    { schemaVersion: 2 },
+    { expiresAt: "2026-10-04T02:59:00Z" },
+  ]) {
+    for (const graph of ["application", "infrastructure"]) {
+      const report =
+        graph === "application" ? captured : capturedInfrastructure;
+      assert.equal(
+        evaluate(report, { policy: { ...policy, ...changed }, graph }).ok,
+        false
+      );
+    }
+  }
+  const expanded = structuredClone(policy);
+  Object.assign(expanded.graphs.application, {
+    "GHSA-ch52-4w7c-c8xp": {
+      package: "http-cache-semantics",
+      version: "4.2.0",
+      pathsSha256:
+        "77abf37b86ef369a1ed1bcc53491fb978ffc1f0085f934a36f37247d26612457",
+    },
   });
   assert.equal(evaluate(captured, { policy: expanded }).ok, false);
 });
@@ -284,7 +310,7 @@ await test("clean audit reports cannot bypass expiry, configuration or inherited
   for (const changes of [
     { now: Date.parse(policy.expiresAt) },
     { configuration: "changed" },
-    { policy: { ...policy, expiresAt: "2026-10-05T02:59:00Z" } },
+    { policy: { ...policy, expiresAt: "2026-10-06T02:59:00Z" } },
     ...[
       "PNPM_CONFIG_LOCKFILE_DIR",
       "pnpm_config_lockfile_dir",

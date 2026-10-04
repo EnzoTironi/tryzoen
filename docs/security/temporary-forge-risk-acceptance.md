@@ -1,5 +1,64 @@
 # Temporary dependency risk acceptance
 
+## October 4 R2 release decision
+
+This decision becomes effective only after the owner explicitly approves its
+exact accompanying patch. The prior approval expired at 2026-10-04T02:59:00Z
+and grants no current exception.
+
+The reviewed source is `2ae93a778c591fec139fcac3928be59021d8c222`, tree
+`f64740461f5e595ea8ae215554afb12b82942ad2`, and guarded configuration
+`8caa55b2fc8aa42d33fa8d9455e77286bbd1a4851b61521377f0012c63f385a3`. It includes the stable
+multi-platform RustFS fixture, the native evaluation's isolated payload setup,
+fresh Fly vault versions bound into the migration input, and the same retained
+erasure journal bound to both consumer apps. These protected configuration
+changes supersede the unapplied 3aa3432b and ea144484 proposals.
+
+The proposed deadline is **2026-10-05T02:59:00Z**, October 4 at 23:59 in
+America/Sao_Paulo. Acceptance permits protected integration and release only
+after every required check passes. It permits no admin or force merge,
+disabled check, production database reset, or cloud credential grant.
+
+Only these exact reported entries are proposed for acceptance:
+
+| Graph          | Package    | Version | Advisory            | Reported paths |
+| -------------- | ---------- | ------- | ------------------- | -------------- |
+| Application    | node-forge | 1.4.0   | GHSA-86w9-cpqp-85rv | 100            |
+| Application    | braces     | 3.0.3   | GHSA-vfj7-8cjw-p6xm | 100            |
+| Infrastructure | braces     | 3.0.3   | GHSA-vfj7-8cjw-p6xm | 3              |
+
+Both vulnerabilities remain unfixed. The node-forge advisory describes forged
+RSA signatures from malformed nested algorithm identifiers. The braces advisory
+describes stack exhaustion from nested patterns. Expo updates remain disabled;
+the scoped source review found no direct authored runtime braces import. These
+exposure limits do not prove either vulnerability is unreachable in every
+application, desktop, mobile or infrastructure artifact.
+
+Fresh official-registry reports captured on October 4 at this source contain two
+high application findings and one high infrastructure finding, with no published
+patched versions. The exact reported path-set hashes remain pinned independently
+for each graph. Reported counts do not prove absence of other dependency paths.
+
+The cache exception is removed. The installed http-cache-semantics 4.3.0 uses the
+checked-in narrow patch for unsafe shared stale-response paths. Thirteen actual
+package regressions, permitted positive controls and an independent reproduction
+qualify that patch; a disappearing registry alert alone was not accepted as a fix.
+
+Both real official-registry audits retain the low threshold, existing dependency
+categories and raw output. Strict policy version three rejects the expired
+version-two policy, any added or duplicate advisory, a changed package, version,
+severity or path set, an available fix, malformed output and transport or process
+failure. It checks the exact deadline, guarded configuration and inherited audit
+or signing selectors before the registry call, including for clean reports.
+Required source, runtime, native launch, isolated production recovery, protected
+deployment and observed product checks remain mandatory. Do not extend this
+deadline or refresh the fingerprint without another explicit decision.
+
+Primary advisories: [node-forge](https://github.com/advisories/GHSA-86w9-cpqp-85rv)
+and [braces](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+
+## Historical October 3 decision, expired
+
 On October 3, 2026, the user explicitly approved the bounded proposal for
 consolidated PR #192 at `afb218273ac69eb3e631b1318e2254030683f414` after its
 source checks, builds and both combined reviews passed. This replaces the
