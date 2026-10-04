@@ -4,7 +4,6 @@ import type { LinqSendOptions } from "@linqapp/chat-sdk-adapter";
 import type { LinqAPIV3 } from "@linqapp/sdk";
 import type { AdapterPostableMessage } from "chat";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type * as Blob from "@vercel/blob";
 import type * as EnvModule from "@shared/environment";
 import { sendMessageOutputSchema } from "@zoen/companion-ui/messages";
 import type { AccessScope } from "@shared/identity/access-scope";
@@ -32,7 +31,6 @@ const linqChannelCapture = vi.hoisted(() => ({
   clientApiKeys: [] as string[],
   // SAFETY: The mocked channel factory replaces this value during module loading.
   config: undefined as LinqChannelConfig | undefined,
-  images: new Map<string, BrowserImage>(),
   readImage: vi.fn<
     (
       scope: AccessScope,
@@ -160,7 +158,6 @@ vi.mock("@db/services/browser-images", () => ({
   ) {
     const image = await linqChannelCapture.readImage(scope, id, options);
     if (!image) return undefined;
-    linqChannelCapture.images.set(id, image);
     return {
       byteSize: image.bytes.byteLength,
       contentHash:
@@ -170,28 +167,11 @@ vi.mock("@db/services/browser-images", () => ({
       filename: image.filename,
       id,
       mediaType: image.mediaType,
-      storagePathname: id,
+      bytes: image.bytes,
     };
   },
 }));
-vi.mock("@vercel/blob", async (importOriginal) => {
-  const blob = await importOriginal<typeof Blob>();
-  return {
-    ...blob,
-    async get(pathname: string) {
-      const image = linqChannelCapture.images.get(pathname);
-      if (!image) return null;
-      return {
-        blob: {
-          contentType: image.mediaType,
-          size: image.bytes.byteLength,
-        },
-        statusCode: 200,
-        stream: new Response(Buffer.from(image.bytes)).body,
-      };
-    },
-  };
-});
+
 const handleActionResult = linqChannelCapture.config?.events?.["action.result"];
 if (!handleActionResult) {
   throw new Error("The Linq channel must configure action result delivery.");

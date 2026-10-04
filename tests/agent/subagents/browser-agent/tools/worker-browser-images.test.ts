@@ -15,7 +15,6 @@ const image = {
 
 const mocks = vi.hoisted(() => ({
   captureScreenshot: vi.fn(),
-  del: vi.fn(),
   deleteFile: vi.fn(),
   fetch: vi.fn(),
   mask: vi.fn(),
@@ -24,7 +23,6 @@ const mocks = vi.hoisted(() => ({
   readFile: vi.fn(),
   reserve: vi.fn(),
   retrieve: vi.fn(),
-  put: vi.fn(),
   requireOwnedBrowserSession: vi.fn(),
   requireWorkerScope: vi.fn(),
 }));
@@ -41,10 +39,6 @@ vi.mock("@agent/subagents/browser-agent/lib/vault-screenshot-mask", () => ({
 vi.mock("@db/services/browser-images", () => ({
   finalizeBrowserImageArtifact: mocks.persist,
   reserveBrowserImageArtifact: mocks.reserve,
-}));
-vi.mock("@vercel/blob", () => ({
-  del: mocks.del,
-  put: mocks.put,
 }));
 vi.mock("@agent/subagents/browser-agent/lib/kernel", () => ({
   getKernel: () => ({
@@ -63,7 +57,6 @@ import captureBrowserImage from "@agent/subagents/browser-agent/tools/capture_br
 const scope = { userId: "user-1", workspaceId: "workspace-1" };
 const reservation = {
   id: artifactId,
-  storagePathname: `browser-images/workspace/${artifactId}`,
 };
 
 beforeEach(() => {
@@ -75,9 +68,7 @@ beforeEach(() => {
     workerSessionId: "worker-session-1",
   });
   mocks.reserve.mockResolvedValue({ reservation, status: "pending" });
-  mocks.persist.mockResolvedValue({ image, storagePathname: "stored/image" });
-  mocks.del.mockResolvedValue(undefined);
-  mocks.put.mockResolvedValue({ pathname: "stored/image" });
+  mocks.persist.mockResolvedValue({ image });
   mocks.mask.mockImplementation(
     async (
       _sessionId: string,
@@ -132,7 +123,8 @@ describe("capture_browser_image", () => {
     expect(mocks.persist).toHaveBeenCalledWith(
       scope,
       reservation,
-      expect.objectContaining({ sourceKind: "viewport" })
+      expect.objectContaining({ bytes: png, sourceKind: "viewport" }),
+      toolContext.abortSignal
     );
     expect(result).toEqual({ image });
     expect(JSON.stringify(result)).not.toContain("base64");
@@ -193,7 +185,8 @@ describe("capture_browser_image", () => {
     expect(mocks.persist).toHaveBeenCalledWith(
       scope,
       reservation,
-      expect.objectContaining({ sourceKind: "image_resource" })
+      expect.objectContaining({ bytes: png, sourceKind: "image_resource" }),
+      toolContext.abortSignal
     );
     expect(JSON.stringify(mocks.persist.mock.calls)).not.toContain(
       "private=ignored"
@@ -224,7 +217,8 @@ describe("capture_browser_image", () => {
     expect(mocks.persist).toHaveBeenCalledWith(
       scope,
       reservation,
-      expect.objectContaining({ sourceKind: "element" })
+      expect.objectContaining({ bytes: png, sourceKind: "element" }),
+      toolContext.abortSignal
     );
   });
 

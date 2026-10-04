@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maximumBrowserImageBytes } from "@shared/browser/artifact";
 
 const scope = {
   workspaceId: z.string().min(1).max(200),
@@ -52,6 +53,11 @@ export const PayloadScopeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("private-artifact"),
     ownerUserId: privateOwner,
   }),
+  z.strictObject({
+    ...scope,
+    kind: z.literal("browser-image"),
+    ownerUserId: privateOwner,
+  }),
 ]);
 const coordinates = {
   candidateId: z.uuid().toLowerCase(),
@@ -75,6 +81,10 @@ export const PayloadReferenceSchema = z.discriminatedUnion("kind", [
   PayloadScopeSchema.options[3].extend({
     ...coordinates,
     byteLength: z.number().int().min(1).max(10_485_760),
+  }),
+  PayloadScopeSchema.options[4].extend({
+    ...coordinates,
+    byteLength: z.number().int().min(1).max(maximumBrowserImageBytes),
   }),
 ]);
 

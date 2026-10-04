@@ -10,6 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { maximumBrowserImageBytes } from "@shared/browser/artifact";
 
 /** Coordinates survive deletion of their domain owner so cleanup can retry an
  * unknown upload or DELETE. A restored database never restores erasure consent. */
@@ -41,7 +42,7 @@ export const payloadObjects = pgTable(
       "payload_object_scope_check",
       sql`length(${table.workspaceId}) BETWEEN 1 AND 200
         AND ((${table.kind} IN ('workspace-bundle', 'workspace-source') AND ${table.ownerUserId} IS NULL)
-          OR (${table.kind} IN ('private-memory-bundle', 'private-artifact') AND ${table.ownerUserId} IS NOT NULL AND length(${table.ownerUserId}) BETWEEN 1 AND 200))`
+          OR (${table.kind} IN ('private-memory-bundle', 'private-artifact', 'browser-image') AND ${table.ownerUserId} IS NOT NULL AND length(${table.ownerUserId}) BETWEEN 1 AND 200))`
     ),
     check(
       "payload_object_integrity_check",
@@ -49,7 +50,8 @@ export const payloadObjects = pgTable(
         AND ((${table.kind} = 'workspace-bundle' AND ${table.byteLength} BETWEEN 0 AND 25165824)
           OR (${table.kind} = 'workspace-source' AND ${table.byteLength} BETWEEN 0 AND 10485760)
           OR (${table.kind} = 'private-memory-bundle' AND ${table.byteLength} BETWEEN 1 AND 25165824)
-          OR (${table.kind} = 'private-artifact' AND ${table.byteLength} BETWEEN 1 AND 10485760))`
+          OR (${table.kind} = 'private-artifact' AND ${table.byteLength} BETWEEN 1 AND 10485760)
+          OR (${table.kind} = 'browser-image' AND ${table.byteLength} BETWEEN 1 AND ${maximumBrowserImageBytes}))`
     ),
     check(
       "payload_object_state_check",

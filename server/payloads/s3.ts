@@ -81,6 +81,7 @@ function payloadLocator(prefix: string, key: string) {
       z.union([
         PayloadReferenceSchema.options[2].shape.kind,
         PayloadReferenceSchema.options[3].shape.kind,
+        PayloadReferenceSchema.options[4].shape.kind,
       ]),
       shape.candidateId,
     ])

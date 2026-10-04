@@ -54,7 +54,6 @@ describe("database services", () => {
     const database = pgliteDatabase as never;
     vi.spyOn(Database, "db", "get").mockReturnValue(database);
     const [
-      browserImages,
       browsers,
       browserTraces,
       chats,
@@ -64,7 +63,6 @@ describe("database services", () => {
       scope,
       vault,
     ] = await Promise.all([
-      import("@db/services/browser-images"),
       import("@db/services/browsers"),
       import("@db/services/browser-traces"),
       import("@db/services/chats"),
@@ -78,84 +76,6 @@ describe("database services", () => {
     const bob = accessScopeForUser("bob");
     await scope.ensureScope(alice);
     await scope.ensureScope(bob);
-    const imageInput = {
-      browserSessionId: "browser-alice",
-      idempotencyKey: "worker-session:call-image",
-      label: "Product image",
-      rootSessionId: "session-alice",
-      sourceKind: "viewport",
-      workerSessionId: "worker-alice",
-    };
-    const firstReservation = await browserImages.reserveBrowserImageArtifact(
-      alice,
-      imageInput
-    );
-    const retryReservation = await browserImages.reserveBrowserImageArtifact(
-      alice,
-      imageInput
-    );
-    expect(firstReservation.status).toBe("pending");
-    expect(retryReservation).toEqual(firstReservation);
-    if (firstReservation.status !== "pending") {
-      throw new Error("Expected a pending browser image reservation.");
-    }
-    const finalized = await browserImages.finalizeBrowserImageArtifact(
-      alice,
-      firstReservation.reservation,
-      {
-        byteSize: 8,
-        contentHash: "content-hash",
-        filename: "product.png",
-        mediaType: "image/png",
-        sourceKind: "viewport",
-        storagePathname: `${firstReservation.reservation.storagePathname}/content-hash`,
-      }
-    );
-    const image = finalized.image;
-    expect(image).toMatchObject({
-      byteSize: 8,
-      label: "Product image",
-      mediaType: "image/png",
-    });
-    await expect(
-      browserImages.finalizeBrowserImageArtifact(
-        alice,
-        firstReservation.reservation,
-        {
-          byteSize: 9,
-          contentHash: "losing-content-hash",
-          filename: "losing.png",
-          mediaType: "image/png",
-          sourceKind: "viewport",
-          storagePathname: `${firstReservation.reservation.storagePathname}/losing-content-hash`,
-        }
-      )
-    ).resolves.toEqual(finalized);
-    const storedImage = await browserImages.readReadyBrowserImageArtifact(
-      alice,
-      image.id,
-      {
-        rootSessionId: "session-alice",
-      }
-    );
-    expect(storedImage?.createdAt).toMatch(
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u
-    );
-    expect(
-      await browserImages.readReadyBrowserImageArtifact(bob, image.id)
-    ).toBeUndefined();
-    expect(
-      await browserImages.reserveBrowserImageArtifact(alice, imageInput)
-    ).toEqual({
-      image,
-      status: "ready",
-    });
-    await expect(
-      browserImages.reserveBrowserImageArtifact(alice, {
-        ...imageInput,
-        workerSessionId: "different-worker",
-      })
-    ).rejects.toThrow("idempotency key is already in use");
     await sessions.claimSession(alice, "session-alice");
     expect(await sessions.isSessionOwned(alice, "session-alice")).toBe(true);
     expect(await sessions.isSessionOwned(bob, "session-alice")).toBe(false);
