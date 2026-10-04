@@ -27,7 +27,7 @@ export const browserImageArtifactReferenceSchema = z
     mediaType: browserImageMediaTypeSchema,
     url: z.string(),
   })
-  .refine((artifact) => artifact.url === browserImageArtifactUrl(artifact.id), {
+  .refine((artifact) => artifact.url === `/artifacts/${artifact.id}`, {
     message: "Artifact URL must match its id.",
     path: ["url"],
   });
