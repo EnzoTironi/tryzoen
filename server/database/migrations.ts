@@ -8,6 +8,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { operationSignal } from "../operations/async";
 import { Client } from "pg";
+import { openPayloads } from "../payloads/connection";
+import {
+  payloadPreparationFolder,
+  transferLegacyPayloads,
+} from "./payload-cutover";
 
 class MigrationFailure extends Error {
   readonly _tag = "MigrationFailure";
@@ -81,6 +86,15 @@ const inspectJournal = async function (
 
 /** A single session lock covers both application and Eve/Graphile migrations. */
 export async function migrateApplication(connectionString: string) {
+  try {
+    const payloads = openPayloads();
+    payloads.close();
+  } catch {
+    throw new MigrationFailure({
+      message:
+        "Private payload configuration is missing or invalid; no application migration was applied.",
+    });
+  }
   const client = new Client({
     connectionString,
     connectionTimeoutMillis: 15_000,
@@ -108,16 +122,28 @@ export async function migrateApplication(connectionString: string) {
       ".."
     );
     const workflowFolder = resolve(workflowRoot, "src/drizzle/migrations");
-    await inspectJournal(client, appFolder, "drizzle", "__drizzle_migrations");
+    const initial = await inspectJournal(
+      client,
+      appFolder,
+      "drizzle",
+      "__drizzle_migrations"
+    );
     await inspectJournal(
       client,
       workflowFolder,
       "workflow_drizzle",
       "workflow_migrations"
     );
-    await Promise.try(async () =>
-      migrate(drizzle(client), { migrationsFolder: appFolder })
-    ).catch(() => {
+    await Promise.try(async () => {
+      await using preparation = await payloadPreparationFolder(appFolder);
+      if (initial.applied <= preparation.preparationCount) {
+        await migrate(drizzle(client), {
+          migrationsFolder: preparation.directory,
+        });
+        await transferLegacyPayloads(client);
+      }
+      await migrate(drizzle(client), { migrationsFolder: appFolder });
+    }).catch(() => {
       throw new MigrationFailure({
         message: "Application migration failed; no web release was switched.",
       });

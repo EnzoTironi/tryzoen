@@ -27,6 +27,10 @@ export class TransactionBoundaryError extends Error {
   }
 }
 
+export function requireDatabaseTransaction() {
+  if (!transactions.getStore()) throw new TransactionBoundaryError();
+}
+
 /**
  * Bound parameters stay separate from SQL; nested calls share the active transaction.
  * Budgeted callers serialize statements on that transaction's connection.

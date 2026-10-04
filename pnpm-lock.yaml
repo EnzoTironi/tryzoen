@@ -10,6 +10,7 @@ overrides:
   xcode>uuid: 11.1.1
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
   qs@<6.16.0: 6.16.0
+  http-cache-semantics@>=4.0.0 <4.3.0: 4.3.0
   fast-uri@>=3.0.0 <3.1.8: 3.1.8
   ip-address@>=10.0.0 <10.7.2: 10.7.2
   undici@>=6.0.0 <6.29.0: 6.29.0
@@ -24,6 +25,7 @@ patchedDependencies:
   '@linqapp/chat-sdk-adapter@0.5.1': 78b56cdd08c4250ad2680c094858b28d6d6935538d8e59e6dd578f106c77b9e7
   '@workflow/world-postgres@5.0.0-beta.44': 5f3fa60339fa0d367a91c1aba0c9e292a508a7ea3bd29543c054325426ecf9a8
   eve@0.63.0: e0e5c7e45c333c242b9c800e8f97a12e1bc1442271451c8979c78d8213f6988d
+  http-cache-semantics@4.3.0: 97fad22ce6ad0966c89fc5bdc939d4a1559db253ed810855269f85921d49272d
 
 importers:
 
@@ -264,6 +266,9 @@ importers:
       '@next/env':
         specifier: 16.3.6
         version: 16.3.6
+      '@types/http-cache-semantics':
+        specifier: 4.2.0
+        version: 4.2.0
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -291,6 +296,9 @@ importers:
       fake-indexeddb:
         specifier: ^6.2.5
         version: 6.2.5
+      http-cache-semantics:
+        specifier: 4.3.0
+        version: 4.3.0(patch_hash=97fad22ce6ad0966c89fc5bdc939d4a1559db253ed810855269f85921d49272d)
       knip:
         specifier: 6.32.3
         version: 6.32.3
@@ -6601,8 +6609,8 @@ packages:
     resolution: {integrity: sha512-Tz7u1i95/g2x2jz81+x0FBVhBhY5aRTvD3tXXdFaljuNdzDLJ8UGNRrTcj2cgQvAg3iW/h77Fz15nLW0L0CrZw==}
     engines: {node: '>=20.19.0'}
 
-  http-cache-semantics@4.2.0:
-    resolution: {integrity: sha512-dTxcvPXqPvXBQpq5dUr6mEMJX4oIEFv6bwom3FDwKRDsuIjjJGANqhBuoAn9c1RQJIdAKav33ED65E2ys+87QQ==}
+  http-cache-semantics@4.3.0:
+    resolution: {integrity: sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA==}
 
   http-errors@2.0.1:
     resolution: {integrity: sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==}
@@ -14576,7 +14584,7 @@ snapshots:
     dependencies:
       clone-response: 1.0.3
       get-stream: 5.2.0
-      http-cache-semantics: 4.2.0
+      http-cache-semantics: 4.3.0(patch_hash=97fad22ce6ad0966c89fc5bdc939d4a1559db253ed810855269f85921d49272d)
       keyv: 4.5.4
       lowercase-keys: 2.0.0
       normalize-url: 6.1.0
@@ -16750,7 +16758,7 @@ snapshots:
       domutils: 4.0.2
       entities: 8.1.0
 
-  http-cache-semantics@4.2.0: {}
+  http-cache-semantics@4.3.0(patch_hash=97fad22ce6ad0966c89fc5bdc939d4a1559db253ed810855269f85921d49272d): {}
 
   http-errors@2.0.1:
     dependencies:

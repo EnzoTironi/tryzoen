@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { query, transaction } from "@db/queries";
+import { query } from "@db/queries";
+import { Client } from "pg";
+import { env } from "@shared/environment/env";
 import { sql } from "drizzle-orm";
 import { expect, test } from "vitest";
 import { emptyOntology, OntologyReadSchema } from "@zoen/companion-ui/ontology";
@@ -128,57 +130,88 @@ test("recorded as-of and world-valid time are independent, scoped and read-only 
 test("publication time is captured after transaction admission and retries retain the same recorded instant", async () => {
   await using workspace = await workspaceFixture();
   const { actor, repository } = workspace;
-  await transaction(async () => {
-    const clock = await query<{ admitted: string }>(
-      sql`SELECT to_char(transaction_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS admitted`
+  const input = {
+    operationId: randomUUID(),
+    expectedRevision: null,
+    path: "knowledge/time.md",
+    content: "Synthetic recorded-time evidence.",
+  };
+  const locker = new Client({
+    connectionString: env.DATABASE_URL,
+    connectionTimeoutMillis: 5000,
+  });
+  await locker.connect();
+  let admitted: string | undefined;
+  let publication: ReturnType<typeof repository.write> | undefined;
+  try {
+    await locker.query("BEGIN");
+    await locker.query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE", [
+      actor.workspaceId,
+    ]);
+    const lock = await locker.query<{ pid: number }>(
+      "SELECT pg_backend_pid() AS pid"
     );
-    const admitted = clock[0]?.admitted;
-    if (!admitted) throw new Error("Missing transaction admission time");
-    const input = {
-      operationId: randomUUID(),
-      expectedRevision: null,
-      path: "knowledge/time.md",
-      content: "Synthetic recorded-time evidence.",
-    };
-    const saved = await repository.write(actor, input);
-    const receipt = await query<{
-      publishedAfterAdmission: boolean;
-      recorded: string;
-    }>(
-      sql`SELECT created_at > ${admitted}::timestamptz AS "publishedAfterAdmission", created_at::text AS recorded
+    const pid = lock.rows[0]?.pid;
+    if (!pid) throw new Error("Missing owned lock-holder identity");
+    publication = repository.write(actor, input);
+    await expect
+      .poll(
+        async () => {
+          const clock = await query<{
+            admitted: string;
+          }>(sql`SELECT to_char(xact_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS admitted
+          FROM pg_stat_activity WHERE ${pid} = ANY(pg_blocking_pids(pid))`);
+          admitted = clock[0]?.admitted;
+          return admitted !== undefined;
+        },
+        { timeout: 5000, interval: 20 }
+      )
+      .toBe(true);
+  } finally {
+    await locker.query("ROLLBACK");
+    await locker.end();
+    await publication;
+  }
+  if (!admitted)
+    throw new Error("Missing actual publication transaction admission");
+  const saved = await publication;
+  const receipt = await query<{
+    publishedAfterAdmission: boolean;
+    recorded: string;
+  }>(
+    sql`SELECT created_at > ${admitted}::timestamptz AS "publishedAfterAdmission", created_at::text AS recorded
         FROM workspace_revision WHERE workspace_id = ${actor.workspaceId} AND revision = ${saved.revision}`
-    );
-    expect(receipt[0]?.publishedAfterAdmission).toBe(true);
-    expect(await repository.write(actor, input)).toEqual(saved);
-    const repeated = await query<{ recorded: string }>(
-      sql`SELECT created_at::text AS recorded FROM workspace_revision
+  );
+  expect(receipt[0]?.publishedAfterAdmission).toBe(true);
+  expect(await repository.write(actor, input)).toEqual(saved);
+  const repeated = await query<{ recorded: string }>(
+    sql`SELECT created_at::text AS recorded FROM workspace_revision
         WHERE workspace_id = ${actor.workspaceId} AND revision = ${saved.revision}`
-    );
-    expect(repeated[0]?.recorded).toBe(receipt[0]?.recorded);
-    // Simulate a backwards clock: the next receipt must still follow its parent.
-    const movedClock = await query<{ asOf: string }>(
-      sql`UPDATE workspace_revision SET created_at = clock_timestamp() + interval '1 hour'
+  );
+  expect(repeated[0]?.recorded).toBe(receipt[0]?.recorded);
+  // Simulate a backwards clock: the next receipt must still follow its parent.
+  const movedClock = await query<{ asOf: string }>(
+    sql`UPDATE workspace_revision SET created_at = clock_timestamp() + interval '1 hour'
         WHERE workspace_id = ${actor.workspaceId} AND revision = ${saved.revision}
         RETURNING to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "asOf"`
-    );
-    const asOf = movedClock[0]?.asOf;
-    if (!asOf) throw new Error("Missing synthetic parent clock");
-    const changed = await repository.write(actor, {
-      ...input,
-      operationId: randomUUID(),
-      expectedRevision: saved.revision,
-      content: "Later synthetic recorded-time evidence.",
-    });
-    const ordering = await query<{ followsParent: boolean }>(
-      sql`SELECT created_at > ${asOf}::timestamptz AS "followsParent"
+  );
+  const asOf = movedClock[0]?.asOf;
+  if (!asOf) throw new Error("Missing synthetic parent clock");
+  const changed = await repository.write(actor, {
+    ...input,
+    operationId: randomUUID(),
+    expectedRevision: saved.revision,
+    content: "Later synthetic recorded-time evidence.",
+  });
+  const ordering = await query<{ followsParent: boolean }>(
+    sql`SELECT created_at > ${asOf}::timestamptz AS "followsParent"
         FROM workspace_revision WHERE workspace_id = ${actor.workspaceId} AND revision = ${changed.revision}`
-    );
-    expect(ordering[0]?.followsParent).toBe(true);
-    expect(
-      await repository.selection(actor, [input.path], { asOf })
-    ).toMatchObject({
-      revision: saved.revision,
-      documents: [{ content: input.content }],
-    });
+  );
+  expect(ordering[0]?.followsParent).toBe(true);
+  expect(
+    await repository.selection(actor, [input.path], { asOf })
+  ).toMatchObject({
+    revision: saved.revision,
+    documents: [{ content: input.content }],
   });
 });

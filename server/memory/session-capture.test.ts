@@ -257,8 +257,8 @@ test("file-only delivery preserves exact source coordinates and ACKs each source
     "ORDER BY capture_sequence LIMIT 25 FOR UPDATE"
   );
   expect(delivered[1]).toEqual({
-    sql: "SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = $1",
-    params: [namespaceA],
+    sql: "SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = $1 UNION ALL SELECT $2::uuid AS namespace_id FROM payload_erasure WHERE scope_key=$3",
+    params: [namespaceA, namespaceA, namespaceA],
   });
   expect(delivered.slice(2)).toEqual(
     [first, second].map((item) => ({

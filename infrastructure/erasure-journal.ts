@@ -5,7 +5,11 @@ import { retain } from "alchemy/RemovalPolicy";
 import { Effect } from "effect";
 
 /** Kept outside Postgres/pgBackRest so restoring application data cannot undo erasure. */
-export const provisionErasureJournal = (app: Fly.App, stage: string) =>
+export const provisionErasureJournal = (
+  app: Fly.App,
+  stage: string,
+  migrationApp: Fly.App
+) =>
   Effect.gen(function* () {
     const bucket = yield* Fly.Bucket("AccountErasureJournal", {
       name: `zoen-erasure-journal-${stage}`,
@@ -18,24 +22,31 @@ export const provisionErasureJournal = (app: Fly.App, stage: string) =>
       ["ZOEN_ERASURE_JOURNAL_ACCESS_KEY", bucket.accessKeyId],
       ["ZOEN_ERASURE_JOURNAL_SECRET_KEY", bucket.secretAccessKey],
     ] as const;
-    const secrets = yield* Effect.forEach(definitions, ([name, value]) =>
-      Fly.Secret(`Erasure${name}`, {
-        app,
-        name,
-        value: value.pipe(
-          Output.map((credential) => {
-            if (!credential)
-              throw new Error(
-                "Tigris did not return an erasure journal credential"
-              );
-            return credential;
-          })
-        ),
-      }).pipe(retain(true))
-    );
-    return Output.all(...secrets.map((secret) => secret.digest)).pipe(
-      Output.map((digests) =>
-        createHash("sha256").update(JSON.stringify(digests)).digest("hex")
-      )
-    );
+    const bind = (id: string, consumer: Fly.App) =>
+      Effect.gen(function* () {
+        const secrets = yield* Effect.forEach(definitions, ([name, value]) =>
+          Fly.Secret(`${id}${name}`, {
+            app: consumer,
+            name,
+            value: value.pipe(
+              Output.map((credential) => {
+                if (!credential)
+                  throw new Error(
+                    "Tigris did not return an erasure journal credential"
+                  );
+                return credential;
+              })
+            ),
+          }).pipe(retain(true))
+        );
+        return Output.all(...secrets.map((secret) => secret.digest)).pipe(
+          Output.map((digests) =>
+            createHash("sha256").update(JSON.stringify(digests)).digest("hex")
+          )
+        );
+      });
+    return {
+      webVersion: yield* bind("Erasure", app),
+      migrationVersion: yield* bind("MigrationErasure", migrationApp),
+    };
   });

@@ -127,7 +127,7 @@ export const shareGoogleConnection = async function (
       reason: "unavailable",
     });
   });
-  return await withDatabaseTransaction(async () => {
+  const capabilities = await withDatabaseTransaction(async () => {
     await requireWorkspaceAccess(actor, true);
     const source =
       await query(sql`SELECT id FROM account WHERE id = ${account.id}
@@ -136,22 +136,32 @@ export const shareGoogleConnection = async function (
       throw new GoogleWorkspaceError({
         reason: "authorization_required",
       });
-    const capabilities = await readWorkspaceCapabilities(actor);
-    if (!capabilities.enabled.includes("google")) {
-      await WorkspaceRepository.write(actor, {
-        operationId: randomUUID(),
-        expectedRevision: capabilities.revision,
-        path: capabilitiesPath,
-        content: JSON.stringify(
-          {
-            version: 1,
-            enabled: [...capabilities.enabled, "google"],
-          },
-          null,
-          2
-        ),
-      });
-    }
+    return readWorkspaceCapabilities(actor);
+  });
+  if (!capabilities.enabled.includes("google")) {
+    await WorkspaceRepository.write(actor, {
+      operationId: randomUUID(),
+      expectedRevision: capabilities.revision,
+      path: capabilitiesPath,
+      content: JSON.stringify(
+        {
+          version: 1,
+          enabled: [...capabilities.enabled, "google"],
+        },
+        null,
+        2
+      ),
+    });
+  }
+  return await withDatabaseTransaction(async () => {
+    await requireWorkspaceAccess(actor, true);
+    const source =
+      await query(sql`SELECT id FROM account WHERE id = ${account.id}
+      AND ('better-auth:' || "userId") = ${actor.userId} AND "refreshToken" = ${encryptedRefreshToken} FOR SHARE`);
+    if (source.length !== 1)
+      throw new GoogleWorkspaceError({ reason: "authorization_required" });
+    if (!(await readWorkspaceCapabilities(actor)).enabled.includes("google"))
+      throw new WorkspaceAccessDenied();
     await query(sql`INSERT INTO workspace_connections(workspace_id, provider, label, credentials, connected_by)
       VALUES (${actor.workspaceId}, 'google', ${identity.email}, ${credentials}, ${actor.userId})
       ON CONFLICT (workspace_id) DO UPDATE SET label = EXCLUDED.label, credentials = EXCLUDED.credentials,

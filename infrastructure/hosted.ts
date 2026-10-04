@@ -1,14 +1,20 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as Fly from "alchemy/Fly";
 import * as Output from "alchemy/Output";
 import { adopt } from "alchemy/AdoptPolicy";
 import { retain } from "alchemy/RemovalPolicy";
 import { Random } from "alchemy/Random";
 import { Config, Effect, Redacted } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 import { CompanionStagePolicy } from "./companion-stage.ts";
 import { releaseImage } from "./images.ts";
 import { production } from "./production.ts";
-import { appSecrets, webSecretNames } from "./secrets.ts";
+import {
+  appSecrets,
+  privatePayloadVersion,
+  webSecretNames,
+} from "./secrets.ts";
 import { backupSecrets } from "./backups.ts";
 import { PrepareServiceDatabases } from "./database.ts";
 import { MigrateApplication } from "./migrations.ts";
@@ -32,6 +38,12 @@ export const hosted = Effect.gen(function* () {
   const hostname = prod ? production.hostname : `${webName}.fly.dev`;
   const appHostname = prod ? production.appHostname : hostname;
   const appOrigin = `https://${appHostname}`;
+  // Resolve manual vault rotations before registering the migration action.
+  const payloadVersion = yield* privatePayloadVersion([pgName, webName]).pipe(
+    Effect.provide(CredentialsFromEnv),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.orDie
+  );
 
   const postgresApp = yield* Fly.App("PostgresApp", {
     name: pgName,
@@ -193,7 +205,11 @@ export const hosted = Effect.gen(function* () {
 
   const webSecrets = yield* appSecrets("Web", webApp, webSecretNames);
   const semantic = yield* deploySemantic({ stage: policy.stage, webApp });
-  const erasureJournal = yield* provisionErasureJournal(webApp, policy.stage);
+  const erasureJournal = yield* provisionErasureJournal(
+    webApp,
+    policy.stage,
+    postgresApp
+  );
   const databaseUrls = yield* Effect.forEach(
     ["DATABASE_URL", "DATABASE_URL_UNPOOLED"],
     (name) =>
@@ -217,6 +233,11 @@ export const hosted = Effect.gen(function* () {
     database: policy.database,
     image: webImage,
     prepared: databases,
+    storage: {
+      payloadVersion,
+      migrationJournalVersion: erasureJournal.migrationVersion,
+      webJournalVersion: erasureJournal.webVersion,
+    },
     web: {
       app: webName,
       retained: prod
@@ -310,7 +331,8 @@ export const hosted = Effect.gen(function* () {
       "zoen.vault": vaultSecrets.webVersion.pipe(
         Output.map((value) => value ?? "")
       ),
-      "zoen.erasure-journal": erasureJournal,
+      "zoen.erasure-journal": erasureJournal.webVersion,
+      "zoen.private-storage": migrations.privateStorageVersion,
       "zoen.runtime-database": Output.all(
         ...databaseUrls.map((secret) => secret.digest)
       ).pipe(Output.map((digests) => JSON.stringify(digests))),

@@ -2,8 +2,9 @@
 
 `pnpm qualify:r2` checks an **existing dedicated test bucket** before the roadmap's
 payload migration. It never creates a bucket, enables public access, changes a
-token, lists objects, or touches PostgreSQL. The four canonical database payloads
-remain in their existing owners until the complete migration is ready.
+token, lists objects, or touches PostgreSQL. It does not qualify database
+publication or authorize activating the payload migration. The runtime and
+recovery requirements are in [Private payload operations](private-payloads.md).
 
 ## Prerequisites
 

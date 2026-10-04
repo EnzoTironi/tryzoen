@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 // oxlint-disable-next-line vitest/no-import-node-test -- This isolated package uses the Node runner.
 import { test } from "node:test";
 import { credentials, Retry } from "@distilled.cloud/fly-io";
@@ -7,6 +8,26 @@ import { Effect, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { migrateApplication } from "../migrations.ts";
 import { startMigratedWeb } from "../web-cutover.ts";
+import {
+  erasureJournalSecretNames,
+  privatePayloadSecretNames,
+  privatePayloadVersion,
+  privateStorageSecretNames,
+} from "../secrets.ts";
+
+const secretDigests = privateStorageSecretNames.map((name) => ({
+  name,
+  digest: `opaque-${name}`,
+}));
+const payloadDigests = privatePayloadSecretNames.map((name) => [
+  name,
+  `opaque-${name}`,
+]);
+const journalVersion = createHash("sha256")
+  .update(
+    JSON.stringify(erasureJournalSecretNames.map((name) => `opaque-${name}`))
+  )
+  .digest("hex");
 
 const migration = {
   app: "test-pg",
@@ -18,6 +39,13 @@ const migration = {
     host: "primary.internal",
     release: "pg-image",
     credentialVersion: "v1",
+  },
+  storage: {
+    payloadVersion: createHash("sha256")
+      .update(JSON.stringify([payloadDigests, payloadDigests]))
+      .digest("hex"),
+    migrationJournalVersion: journalVersion,
+    webJournalVersion: journalVersion,
   },
   web: {
     app: "test-web",
@@ -31,8 +59,15 @@ function migrationApi({
   backup = 0,
   migrationExit = "0",
   grant = 0,
+  inventory = 0,
   stopWorks = true,
   volume = "vol_auth",
+  secretApp = "",
+  missingSecret = "",
+  duplicateSecret = "",
+  rotatedSecret = "",
+  emptyDigest = "",
+  secretStatus = 200,
 } = {}) {
   const web: Machine[] = ["primary-web", "unrecorded-replica"].map((id) => ({
     id,
@@ -49,7 +84,37 @@ function migrationApi({
   const calls: string[] = [];
   const fetch: typeof globalThis.fetch = async (url, init) => {
     const request = new Request(url, init);
-    const path = new URL(request.url).pathname;
+    const requestUrl = new URL(request.url);
+    const path = requestUrl.pathname;
+    if (path.endsWith("/secrets")) {
+      calls.push(`${request.method} ${path}`);
+      assert.equal(request.method, "GET");
+      assert.equal(requestUrl.searchParams.get("show_secrets"), "false");
+      const app = path.split("/")[3];
+      const secrets = secretDigests
+        .filter(({ name }) => app !== secretApp || name !== missingSecret)
+        .flatMap((secret) => {
+          if (app !== secretApp) return [secret];
+          if (secret.name === duplicateSecret) return [secret, secret];
+          return [
+            {
+              ...secret,
+              digest:
+                secret.name === rotatedSecret
+                  ? "rotated-digest"
+                  : secret.name === emptyDigest
+                    ? "  "
+                    : secret.digest,
+            },
+          ];
+        });
+      return app === secretApp && secretStatus !== 200
+        ? Response.json(
+            { error: "private provider diagnostics with credential material" },
+            { status: secretStatus }
+          )
+        : Response.json({ secrets });
+    }
     if (path.includes("/test-web/")) {
       calls.push(`${request.method} ${path}`);
       if (path.endsWith("/machines")) return Response.json(web);
@@ -84,7 +149,9 @@ function migrationApi({
           ? backup
           : command.endsWith("bootstrap-application.sh")
             ? grant
-            : 0,
+            : command.endsWith("backup-health.sh")
+              ? inventory
+              : 0,
         stdout: command === "sh" ? migrationExit : "",
         stderr: "private database diagnostics",
       });
@@ -120,13 +187,37 @@ function migrationApi({
           Effect.provideService(FetchHttpClient.Fetch, fetch)
         )
       ),
+    prepare: () =>
+      Effect.runPromise(
+        privatePayloadVersion([migration.app, migration.web.app]).pipe(
+          Retry.none,
+          Effect.provide(
+            credentials({
+              apiKey: "test-token",
+              apiBaseUrl: "https://fly.invalid/v1",
+            })
+          ),
+          Effect.provide(FetchHttpClient.layer),
+          Effect.provideService(FetchHttpClient.Fetch, fetch)
+        )
+      ),
   };
 }
 
-await test("backs up, stops all old web replicas, migrates, grants and removes the temporary machine in order", async () => {
+await test("backs up, drains web, migrates, grants, verifies the inventory and removes the temporary machine in order", async () => {
   const api = migrationApi();
-  assert.deepEqual(await api.run(), { image: migration.image, verified: true });
-  assert.equal(api.calls[0], "/usr/local/bin/backup.sh");
+  assert.deepEqual(await api.run(), {
+    image: migration.image,
+    verified: true,
+    privateStorageVersion: createHash("sha256")
+      .update(JSON.stringify(migration.storage))
+      .digest("hex"),
+  });
+  assert.deepEqual(api.calls.slice(0, 3), [
+    "GET /v1/apps/test-pg/secrets",
+    "GET /v1/apps/test-web/secrets",
+    "/usr/local/bin/backup.sh",
+  ]);
   const create = api.calls.indexOf("POST /v1/apps/test-pg/machines");
   assert.ok(
     create >
@@ -136,6 +227,10 @@ await test("backs up, stops all old web replicas, migrates, grants and removes t
   );
   assert.ok(
     api.calls.indexOf("/usr/local/bin/bootstrap-application.sh") > create
+  );
+  assert.ok(
+    api.calls.indexOf("/usr/local/bin/backup-health.sh") >
+      api.calls.indexOf("/usr/local/bin/bootstrap-application.sh")
   );
   assert.equal(
     api.calls.at(-1),
@@ -151,8 +246,93 @@ await test("backs up, stops all old web replicas, migrates, grants and removes t
 await test("a backup failure leaves every serving web machine untouched", async () => {
   const api = migrationApi({ backup: 1 });
   await assert.rejects(api.run(), /Pre-migration backup failed/);
-  assert.deepEqual(api.calls, ["/usr/local/bin/backup.sh"]);
+  assert.deepEqual(api.calls, [
+    "GET /v1/apps/test-pg/secrets",
+    "GET /v1/apps/test-web/secrets",
+    "/usr/local/bin/backup.sh",
+  ]);
   assert.ok(api.web.every(({ state }) => state === "started"));
+});
+
+for (const secretApp of [migration.app, migration.web.app]) {
+  for (const missingSecret of privateStorageSecretNames) {
+    await test(`missing ${missingSecret} in ${secretApp} leaves all serving machines untouched`, async () => {
+      const api = migrationApi({ secretApp, missingSecret });
+      await assert.rejects(api.run(), /missing or ambiguous/);
+      assert.ok(
+        api.calls.every(
+          (call) => call.startsWith("GET ") && call.endsWith("/secrets")
+        )
+      );
+      assert.ok(api.web.every(({ state }) => state === "started"));
+    });
+  }
+  await test(`ambiguous or empty secret metadata in ${secretApp} aborts before backup or drain`, async () => {
+    for (const problem of [
+      { duplicateSecret: "ZOEN_PAYLOAD_ACCESS_KEY" },
+      { emptyDigest: "ZOEN_ERASURE_JOURNAL_SECRET_KEY" },
+    ]) {
+      const api = migrationApi({ secretApp, ...problem });
+      await assert.rejects(api.run(), /missing or ambiguous/);
+      assert.ok(
+        api.calls.every(
+          (call) => call.startsWith("GET ") && call.endsWith("/secrets")
+        )
+      );
+      assert.ok(api.web.every(({ state }) => state === "started"));
+    }
+  });
+  await test(`an unavailable ${secretApp} vault aborts with sanitized diagnostics before backup or drain`, async () => {
+    const api = migrationApi({ secretApp, secretStatus: 503 });
+    await assert.rejects(
+      api.run(),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes(
+          "Private storage secret inventory unavailable"
+        ) &&
+        !error.message.includes("credential material")
+    );
+    assert.ok(
+      api.calls.every(
+        (call) => call.startsWith("GET ") && call.endsWith("/secrets")
+      )
+    );
+    assert.ok(api.web.every(({ state }) => state === "started"));
+  });
+  for (const rotatedSecret of [
+    "ZOEN_PAYLOAD_SECRET_KEY",
+    "ZOEN_ERASURE_JOURNAL_SECRET_KEY",
+  ]) {
+    await test(`a rotated ${rotatedSecret} in ${secretApp} requires a newly prepared deployment before drain`, async () => {
+      const api = migrationApi({ secretApp, rotatedSecret });
+      await assert.rejects(api.run(), /Private storage secrets changed/);
+      assert.ok(
+        api.calls.every(
+          (call) => call.startsWith("GET ") && call.endsWith("/secrets")
+        )
+      );
+      assert.ok(api.web.every(({ state }) => state === "started"));
+    });
+  }
+}
+
+await test("deployment preparation reads payload digests afresh and never requires managed journal credentials", async () => {
+  const first = migrationApi({
+    secretApp: migration.app,
+    missingSecret: "ZOEN_ERASURE_JOURNAL_SECRET_KEY",
+  });
+  assert.equal(await first.prepare(), migration.storage.payloadVersion);
+  const second = migrationApi({
+    secretApp: migration.web.app,
+    rotatedSecret: "ZOEN_PAYLOAD_PREFIX",
+  });
+  assert.notEqual(await second.prepare(), migration.storage.payloadVersion);
+  assert.ok(
+    [...first.calls, ...second.calls].every(
+      (call) => call.startsWith("GET ") && call.endsWith("/secrets")
+    )
+  );
 });
 
 await test("a wrong retained volume aborts before mutating web or applying migrations", async () => {
@@ -187,6 +367,19 @@ await test("a failed grant verification leaves old web stopped and diagnostics p
       error instanceof Error &&
       error.message.includes("web remains stopped") &&
       !error.message.includes("private database diagnostics")
+  );
+  assert.ok(api.web.every(({ state }) => state === "stopped"));
+  assert.equal(
+    api.calls.at(-1),
+    "DELETE /v1/apps/test-pg/machines/isolated-migration"
+  );
+});
+
+await test("a failed backup inventory probe keeps web stopped and removes the temporary migrator", async () => {
+  const api = migrationApi({ inventory: 1 });
+  await assert.rejects(
+    api.run(),
+    /Backup inventory verification failed; web remains stopped/
   );
   assert.ok(api.web.every(({ state }) => state === "stopped"));
   assert.equal(

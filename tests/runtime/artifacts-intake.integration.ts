@@ -119,10 +119,10 @@ test("deleted attachments cannot be redownloaded by intake, and a revoked source
     )
   ).rejects.toBeInstanceOf(Error);
   const rows = await query(
-    sql`SELECT content, derived_text FROM private_artifact WHERE id = ${fixture.file.artifactId}`
+    sql`SELECT payload_object_id, derived_text FROM private_artifact WHERE id = ${fixture.file.artifactId}`
   );
   expect(rows[0]).toEqual({
-    content: null,
+    payload_object_id: null,
     derived_text: null,
   });
   await query(

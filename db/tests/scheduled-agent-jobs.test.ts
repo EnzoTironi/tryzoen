@@ -35,6 +35,18 @@ describe("scheduled agent jobs", () => {
     ]) {
       await applyMigration(client, migration);
     }
+    const payloadPreparation = await readFile(
+      new URL("../migrations/0108_payload-registration.sql", import.meta.url),
+      "utf8"
+    );
+    const generationStatement = payloadPreparation
+      .split("--> statement-breakpoint")
+      .find((statement) =>
+        statement.includes('ADD COLUMN "payload_generation"')
+      );
+    if (!generationStatement)
+      throw new Error("Missing workspace generation DDL");
+    await client.exec(generationStatement);
     const pgliteDatabase = drizzle(client, {
       schema,
     });

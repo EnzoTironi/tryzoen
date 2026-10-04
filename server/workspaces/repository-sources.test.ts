@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { PayloadReferenceSchema } from "../payloads/contract";
+import { payloadDigest } from "../payloads/s3";
 import { beforeAll, beforeEach, expect, test, vi } from "vitest";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -14,16 +17,28 @@ import { WorkspaceAccessDenied } from "./access";
 import { WorkspaceRepository } from "./repository";
 import { knowledgeSourceValidationLimits } from "./knowledge/validation";
 
-// Mock only owning database/access boundaries; candidate publication uses real,
-// bounded temporary Git bundles. This is not a PostgreSQL transaction proof.
+// Mock database, access and external payload publication at their owning
+// boundaries. Candidate Git and complete source validation remain real; native
+// runtime suites separately prove PostgreSQL transactions and S3 behavior.
 const boundary = vi.hoisted(() => ({
   query: vi.fn<(statement: SQL) => Promise<Record<string, unknown>[]>>(),
   access: vi.fn<(actor: unknown, admin?: boolean) => Promise<void>>(),
+  payloadRead: vi.fn<typeof import("../payloads/publication").readPayload>(),
+  payloadRegister:
+    vi.fn<typeof import("../payloads/publication").registerPayload>(),
+  payloadPut: vi.fn<typeof import("../payloads/publication").putRegistered>(),
+  payloadAdopt: vi.fn<typeof import("../payloads/publication").adoptPayload>(),
 }));
 vi.mock("@db/queries", () => ({
   query: boundary.query,
   transaction: async (run: () => Promise<unknown>) => run(),
   SqlError: class extends Error {},
+}));
+vi.mock("../payloads/publication", () => ({
+  readPayload: boundary.payloadRead,
+  registerPayload: boundary.payloadRegister,
+  putRegistered: boundary.payloadPut,
+  adoptPayload: boundary.payloadAdopt,
 }));
 vi.mock("./access", () => ({
   requireWorkspaceAccess: boundary.access,
@@ -77,6 +92,9 @@ let stored: typeof initial;
 const receipts = new Map<string, { revision: string; request_hash: string }>();
 let casAttempts = 0;
 let raced = false;
+const generation = "07f23860-f3a8-4ad6-a42e-a27dc891ed98";
+const originalPayload = "bff42ef5-ecb4-4b44-890b-5e9ee316b86b";
+const candidates = new Map<string, Uint8Array>();
 const dialect = new PgDialect();
 
 beforeAll(async () => {
@@ -106,6 +124,34 @@ beforeEach(() => {
   casAttempts = 0;
   raced = false;
   boundary.access.mockReset().mockResolvedValue(undefined);
+  candidates.clear();
+  boundary.payloadRead
+    .mockReset()
+    .mockImplementation(async () => Uint8Array.from(stored.bundle));
+  boundary.payloadRegister
+    .mockReset()
+    .mockImplementation(async (scope, bytes) =>
+      PayloadReferenceSchema.parse({
+        ...scope,
+        candidateId: randomUUID(),
+        sha256: payloadDigest(bytes),
+        byteLength: bytes.byteLength,
+      })
+    );
+  boundary.payloadPut
+    .mockReset()
+    .mockImplementation(async (reference, bytes) => {
+      if (
+        payloadDigest(bytes) !== reference.sha256 ||
+        bytes.byteLength !== reference.byteLength
+      )
+        throw new Error("Invalid synthetic publication bytes");
+      candidates.set(reference.candidateId, Uint8Array.from(bytes));
+    });
+  boundary.payloadAdopt.mockReset().mockImplementation(async (reference) => {
+    if (!candidates.has(reference.candidateId))
+      throw new Error("Synthetic candidate has not been verified");
+  });
   boundary.query.mockReset().mockImplementation(async (statement) => {
     const { sql, params } = dialect.sqlToQuery(statement);
     if (params[0] !== actor.workspaceId)
@@ -114,11 +160,15 @@ beforeEach(() => {
       const receipt = receipts.get(z.string().parse(params[1]));
       return receipt ? [receipt] : [];
     }
-    if (sql.startsWith("SELECT head_sha AS head, bundle")) {
+    if (sql.startsWith("SELECT payload_generation AS generation"))
+      return [{ generation }];
+    if (sql.startsWith("SELECT pg_advisory_xact_lock")) return [];
+    if (sql.startsWith("SELECT r.head_sha AS head")) {
       return [
         {
           head: stored.revision,
-          bundle: stored.bundle,
+          payloadId: originalPayload,
+          generation,
           recordedRevision: null,
         },
       ];
@@ -126,9 +176,11 @@ beforeEach(() => {
     if (sql.startsWith("INSERT INTO workspace_repository")) {
       casAttempts++;
       if (raced || params[3] !== stored.revision) return [];
+      const bytes = candidates.get(z.uuid().parse(params[2]));
+      if (!bytes) throw new Error("Missing verified candidate");
       stored = {
         revision: z.string().parse(params[1]),
-        bundle: Buffer.from(z.instanceof(Uint8Array).parse(params[2])),
+        bundle: Buffer.from(bytes),
         files: [],
       };
       return [{ head_sha: stored.revision }];
@@ -191,6 +243,7 @@ test("reviewed publication validates files before CAS and consumes its draft ato
   expect(casAttempts).toBe(1);
   expect(receipts.size).toBe(1);
   expect(boundary.access.mock.calls).toEqual([
+    [actor, true],
     [actor, true],
     [actor, true],
   ]);

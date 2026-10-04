@@ -53,6 +53,15 @@ jobs:
       ZOEN_MATRIX_SERVER_NAME: matrix.zoen.test
       ZOEN_MATRIX_AS_TOKEN: synthetic-native-matrix-appservice-token-2026
       ZOEN_MATRIX_HS_TOKEN: synthetic-native-matrix-homeserver-token-2026
+      ZOEN_PAYLOAD_ENDPOINT: http://127.0.0.1:19480
+      ZOEN_PAYLOAD_BUCKET: synthetic-storage-2a69cdcd
+      ZOEN_PAYLOAD_ACCESS_KEY: synthetic-payload-publication
+      ZOEN_PAYLOAD_SECRET_KEY: synthetic-payload-publication-owned-fixture
+      ZOEN_PAYLOAD_PREFIX: zoen/payloads/v1
+      ZOEN_ERASURE_JOURNAL_ENDPOINT: http://127.0.0.1:19480
+      ZOEN_ERASURE_JOURNAL_BUCKET: synthetic-erasure-runtime
+      ZOEN_ERASURE_JOURNAL_ACCESS_KEY: synthetic-payload-publication
+      ZOEN_ERASURE_JOURNAL_SECRET_KEY: synthetic-payload-publication-owned-fixture
       CODEX_HOME: /tmp/zoen-eval-codex
     steps:
       - uses: actions/checkout@v6
@@ -64,6 +73,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install the native ChatGPT credential owner
         run: npm install --global @openai/codex@0.155.1 && codex --version
+      - name: Prepare isolated private payloads and journal
+        run: |
+          docker compose -p zoen-native-evals -f tests/runtime/compose.yaml up --detach --no-deps payloads
+          node --import tsx --input-type=module -e "import { prepareRuntimePayloads } from './scripts/runtime-payloads.ts'; await prepareRuntimePayloads();"
+          journal_root=$(mktemp -d "$RUNNER_TEMP/zoen-native-journal-XXXXXX")
+          printf 'ZOEN_SESSION_ARCHIVE_DIR=%s\n' "$journal_root" >> "$GITHUB_ENV"
       - name: Prepare isolated database roles and migrations
         env:
           DATABASE_URL_UNPOOLED: postgresql://zoen_migrator:eval-migration-password@127.0.0.1:5432/companion_runtime_test
@@ -191,3 +206,12 @@ jobs:
       - name: Remove ephemeral credentials
         if: always()
         run: rm -f .eve/eval.env "$CODEX_HOME/auth.json" "$CODEX_HOME/auth.json.seed-digest" "$CODEX_HOME/config.toml"
+      - name: Stop isolated private payloads and erase the test journal
+        if: always()
+        run: |
+          status=0
+          docker compose -p zoen-native-evals -f tests/runtime/compose.yaml down --volumes || status=$?
+          if [[ "${ZOEN_SESSION_ARCHIVE_DIR:-}" == "$RUNNER_TEMP"/zoen-native-journal-* ]]; then
+            rm -rf -- "$ZOEN_SESSION_ARCHIVE_DIR" || status=$?
+          fi
+          exit "$status"

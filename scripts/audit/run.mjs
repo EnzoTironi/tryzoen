@@ -11,7 +11,7 @@ import { readAuditEnvironment } from "./env.mjs";
 
 const filename = realpathSync(fileURLToPath(import.meta.url));
 const directory = resolve(dirname(filename), "../..");
-const deadline = "2026-10-04T02:59:00Z";
+const deadline = "2026-10-05T02:59:00Z";
 const graphSchema = z.enum(["application", "infrastructure"]);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const severitySchema = z.enum(["info", "low", "moderate", "high", "critical"]);
@@ -49,18 +49,13 @@ const forgePolicySchema = z.strictObject({
   version: z.literal("1.4.0"),
   pathsSha256: hashSchema,
 });
-const cachePolicySchema = z.strictObject({
-  package: z.literal("http-cache-semantics"),
-  version: z.literal("4.2.0"),
-  pathsSha256: hashSchema,
-});
 const bracesPolicySchema = z.strictObject({
   package: z.literal("braces"),
   version: z.literal("3.0.3"),
   pathsSha256: hashSchema,
 });
 const policySchema = z.strictObject({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   expiresAt: z.literal(deadline),
   classification: z.literal("accepted temporary risk"),
   authorization: z.literal(
@@ -70,7 +65,6 @@ const policySchema = z.strictObject({
   graphs: z.strictObject({
     application: z.strictObject({
       "GHSA-86w9-cpqp-85rv": forgePolicySchema,
-      "GHSA-ch52-4w7c-c8xp": cachePolicySchema,
       "GHSA-vfj7-8cjw-p6xm": bracesPolicySchema,
     }),
     infrastructure: z.strictObject({

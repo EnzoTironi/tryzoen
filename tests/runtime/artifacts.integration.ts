@@ -16,6 +16,7 @@ import { ArtifactId, artifactLimits } from "../../server/artifacts/model";
 import { Messaging } from "../../server/messaging";
 import { accessScopeForUser } from "../../shared/identity/access-scope";
 import { linkedIdentity } from "./identity-fixture";
+import { corruptPayload } from "./payload-corruption";
 const fixture = async function (
   body: (context: {
     artifacts: typeof Artifacts;
@@ -385,9 +386,9 @@ test("detects persisted byte corruption before content or derivation can be retu
       ...(await source(messaging, owner.id)),
       bytes: Buffer.from("good"),
     });
-    await query(
-      sql`UPDATE private_artifact SET content = ${Buffer.from("evil")} WHERE id = ${file.artifactId}`
-    );
+    const [pointer] = await query(sql`SELECT payload_object_id AS id
+      FROM private_artifact WHERE id=${file.artifactId}`);
+    await corruptPayload(z.uuid().parse(pointer?.id), Buffer.from("evil"));
     expect(
       await artifacts
         .read({
@@ -539,10 +540,10 @@ test("derived text is hash-bound and UTF-8 bounded; deletion wipes bytes and der
       reason: "deleted",
     });
     const rows = await query(
-      sql`SELECT content, derived_text, derived_kind, deleted_at IS NOT NULL AS deleted FROM private_artifact WHERE id = ${file.artifactId}`
+      sql`SELECT payload_object_id, derived_text, derived_kind, deleted_at IS NOT NULL AS deleted FROM private_artifact WHERE id = ${file.artifactId}`
     );
     expect(rows[0]).toEqual({
-      content: null,
+      payload_object_id: null,
       derived_text: null,
       derived_kind: null,
       deleted: true,
@@ -558,7 +559,7 @@ test("database rejects orphan derived text and invalid byte lengths, and source 
     for (const statement of [
       sql`UPDATE private_artifact SET derived_text = 'orphan', derived_kind = NULL WHERE id = ${file.artifactId}`,
       sql`UPDATE private_artifact SET derived_text = ${"é".repeat(32769)}, derived_kind = 'text' WHERE id = ${file.artifactId}`,
-      sql`UPDATE private_artifact SET byte_length = 0, content = ${Buffer.alloc(0)} WHERE id = ${file.artifactId}`,
+      sql`UPDATE private_artifact SET byte_length = 0 WHERE id = ${file.artifactId}`,
     ]) {
       await expect(query(statement)).rejects.toMatchObject({
         _tag: "SqlError",

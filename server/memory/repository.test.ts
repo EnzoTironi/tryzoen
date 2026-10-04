@@ -1,3 +1,4 @@
+import { PrivateMemoryError } from "./errors";
 import type { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { SQL } from "drizzle-orm";
@@ -9,7 +10,6 @@ import {
   requireMemoryNamespaceAvailable,
 } from "./namespace";
 import {
-  PrivateMemoryError,
   PrivateMemoryRepository,
   PrivateMemoryBackupSchema,
   inspectPrivateMemoryArchive,
@@ -21,6 +21,7 @@ const owners = vi.hoisted(() => ({
   transaction: vi.fn<typeof import("@db/queries").transaction>(),
   query: vi.fn<(statement: SQL) => Promise<Record<string, unknown>[]>>(),
   access: vi.fn<() => Promise<boolean>>(),
+  payloadRead: vi.fn<typeof import("../payloads/publication").readPayload>(),
   namespace: vi.fn<typeof memoryNamespace>(),
   selection: vi.fn<
     (
@@ -40,6 +41,10 @@ vi.mock("@db/queries", () => ({
   transaction: owners.transaction,
   SqlError: class extends Error {},
 }));
+vi.mock("../payloads/publication", async (original) => ({
+  ...(await original<typeof import("../payloads/publication")>()),
+  readPayload: owners.payloadRead,
+}));
 vi.mock("../workspaces/access", async (original) => ({
   ...(await original<typeof import("../workspaces/access")>()),
   requireWorkspaceAccess: owners.access,
@@ -47,7 +52,8 @@ vi.mock("../workspaces/access", async (original) => ({
 vi.mock("../workspaces/repository", () => ({
   WorkspaceRepository: { selection: owners.selection },
 }));
-// Historical owner-boundary harness; runtime erasure acceptance uses real PostgreSQL.
+// Git and archive authorization remain real. External payload publication and
+// database ownership are mocked here; runtime suites qualify PostgreSQL and S3.
 vi.mock("./namespace", async (original) => ({
   ...(await original<typeof import("./namespace")>()),
   memoryNamespace: owners.namespace,
@@ -150,6 +156,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   owners.transaction.mockReset().mockImplementation((run) => run());
   owners.access.mockReset().mockResolvedValue(true);
+  owners.payloadRead
+    .mockReset()
+    .mockImplementation(async () => Uint8Array.from(retained.bundle));
   owners.namespace.mockReset().mockImplementation(async () => {
     // Keep the real guard visible in this historical boundary harness. These
     // mocked ownership cases do not replace the real PostgreSQL acceptance.
@@ -202,7 +211,14 @@ beforeEach(() => {
     if (compiled.sql.includes("FROM workspace_memory_erasure")) return [];
     if (!compiled.sql.includes("FROM private_memory_repository"))
       throw new Error("Backup must only read its private repository");
-    return [retained];
+    return [
+      {
+        head: retained.head,
+        payloadId: "47bf5e45-0e6a-4f74-9c3c-4be5aab5b123",
+        workspaceId: actor.workspaceId,
+        userId: actor.userId,
+      },
+    ];
   });
 });
 
@@ -238,6 +254,7 @@ for (const principal of [
     });
     if (!publication.applied) throw new Error("Expected private publication");
     let pendingNamespace = "8a55b657-573e-4d5b-af0d-fca0d96d208d";
+    owners.payloadRead.mockResolvedValue(Uint8Array.from(publication.bundle));
     owners.query.mockImplementation(async (statement) => {
       const compiled = new PgDialect().sqlToQuery(statement);
       if (compiled.sql.includes("FROM workspace_memory_erasure"))
@@ -247,7 +264,12 @@ for (const principal of [
       if (!compiled.sql.includes("FROM private_memory_repository"))
         throw new Error("Unexpected private memory query");
       return [
-        { head: publication.receipt.revision, bundle: publication.bundle },
+        {
+          head: publication.receipt.revision,
+          payloadId: "47bf5e45-0e6a-4f74-9c3c-4be5aab5b123",
+          workspaceId: principal.workspaceId,
+          userId: principal.userId,
+        },
       ];
     });
     const value = await PrivateMemoryRepository.read(principal);
@@ -256,7 +278,9 @@ for (const principal of [
       new PgDialect().sqlToQuery(statement)
     );
     expect(presence?.sql).toMatch(/WHERE namespace_id = \$1/u);
-    expect(presence?.params).toEqual(["3a3df84d-d3d8-4189-99ea-f2d49807067e"]);
+    expect(presence?.params).toEqual(
+      Array.from({ length: 3 }, () => "3a3df84d-d3d8-4189-99ea-f2d49807067e")
+    );
     expect(value.snapshot.claims[0]?.file.state).toMatchObject({
       kind: "active",
       body: { text: "Private unsourced preference", sources: [] },
@@ -313,9 +337,12 @@ for (const principal of [
         expect(compiled.sql).not.toMatch(
           /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
         );
-        expect(compiled.params).toEqual([
-          "3a3df84d-d3d8-4189-99ea-f2d49807067e",
-        ]);
+        expect(compiled.params).toEqual(
+          Array.from(
+            { length: 3 },
+            () => "3a3df84d-d3d8-4189-99ea-f2d49807067e"
+          )
+        );
         return [{ namespace_id: compiled.params[0] }];
       });
       await expect(operation.run()).rejects.toMatchObject({
@@ -484,7 +511,9 @@ test("archive inspection and same-head restore refuse an outstanding exact-names
     expect(compiled.sql).not.toMatch(
       /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
     );
-    expect(compiled.params).toEqual([archive.namespaceId]);
+    expect(compiled.params).toEqual(
+      Array.from({ length: 3 }, () => archive.namespaceId)
+    );
     return [{ namespace_id: archive.namespaceId }];
   });
   await expect(
@@ -594,7 +623,9 @@ test("backup withholds an exact namespace awaiting erasure before Git/source exp
     expect(compiled.sql).not.toMatch(
       /FOR SHARE|FOR UPDATE|SKIP LOCKED|available_at/u
     );
-    expect(compiled.params).toEqual(["3a3df84d-d3d8-4189-99ea-f2d49807067e"]);
+    expect(compiled.params).toEqual(
+      Array.from({ length: 3 }, () => "3a3df84d-d3d8-4189-99ea-f2d49807067e")
+    );
     return [{ namespace_id: compiled.params[0] }];
   });
   await expect(PrivateMemoryRepository.backup(actor)).rejects.toMatchObject({

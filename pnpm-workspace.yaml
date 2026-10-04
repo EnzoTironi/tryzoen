@@ -4,6 +4,8 @@ packages:
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  # Registry security release; the local patch also closes its reproduced stale bypass.
+  - http-cache-semantics@4.3.0
   # Expo's current SDK 57 compatibility cohort, verified against its npm releases.
   - expo@57.0.26
   - expo-constants@57.0.20
@@ -45,6 +47,7 @@ overrides:
   # Security fixes within the existing parser majors.
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "qs@<6.16.0": 6.16.0
+  "http-cache-semantics@>=4.0.0 <4.3.0": 4.3.0
   "fast-uri@>=3.0.0 <3.1.8": 3.1.8
   "ip-address@>=10.0.0 <10.7.2": 10.7.2
   "undici@>=6.0.0 <6.29.0": 6.29.0
@@ -56,6 +59,7 @@ overrides:
   # Drizzle's legacy loader only uses transform; do not retain its vulnerable dev server.
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:
+  http-cache-semantics@4.3.0: patches/http-cache-semantics@4.3.0.patch
   "@10play/tentap-editor@1.0.1": patches/@10play__tentap-editor@1.0.1.patch
   "@linqapp/chat-sdk-adapter@0.5.1": patches/@linqapp__chat-sdk-adapter@0.5.1.patch
   "@workflow/world-postgres@5.0.0-beta.44": patches/@workflow__world-postgres@5.0.0-beta.44.patch

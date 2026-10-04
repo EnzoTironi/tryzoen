@@ -58,7 +58,7 @@ for (const kind of ["creator", "pilot"] as const) {
     const statement = owners.query.mock.calls[1]?.[0];
     if (!statement) throw new Error("Expected exact erasure admission query");
     const compiled = dialect.sqlToQuery(statement);
-    expect(compiled.params).toEqual([namespace]);
+    expect(compiled.params).toEqual([namespace, namespace, namespace]);
     expect(compiled.sql).not.toMatch(
       /SKIP LOCKED|available_at|FOR (UPDATE|SHARE)/u
     );
@@ -73,7 +73,11 @@ for (const kind of ["creator", "pilot"] as const) {
       throw new Error("Expected corpus lock then erasure admission");
     expect(dialect.sqlToQuery(first).sql).toContain("FOR UPDATE");
     expect(dialect.sqlToQuery(last).sql).toContain("workspace_memory_erasure");
-    expect(dialect.sqlToQuery(last).params).toEqual([namespace]);
+    expect(dialect.sqlToQuery(last).params).toEqual([
+      namespace,
+      namespace,
+      namespace,
+    ]);
   });
 }
 

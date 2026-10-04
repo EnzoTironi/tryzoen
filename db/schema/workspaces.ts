@@ -7,6 +7,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 
@@ -14,6 +15,7 @@ export const workspaces = pgTable(
   "workspaces",
   {
     id: text("id").primaryKey(),
+    payloadGeneration: uuid("payload_generation").notNull().defaultRandom(),
     createdAt: timestamp("created_at", {
       mode: "date",
       precision: 3,

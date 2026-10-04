@@ -38,7 +38,7 @@ jobs:
 
       - name: Audit application and infrastructure dependencies
         run: |
-          node --test scripts/audit/regressions.mjs
+          node --test scripts/audit/regressions.mjs scripts/audit/cache-regressions.mjs
           node scripts/audit/run.mjs
           node scripts/audit/run.mjs --graph infrastructure
 
@@ -118,6 +118,22 @@ jobs:
         run: |
           journal_root=$(mktemp -d "${TMPDIR:-/tmp}/zoen-k3-runtime-XXXXXX")
           printf 'ZOEN_SESSION_ARCHIVE_DIR=%s\n' "$journal_root" >> "$GITHUB_ENV"
+      - name: Verify native payload publication, privacy erasure and staged cutover
+        if: matrix.shard == 1
+        run: |
+          pnpm test:payloads:cutover
+          pnpm test:payloads:foundation
+          pnpm test:payloads:collection
+          pnpm test:payloads:restore
+      - name: Upload native payload cutover evidence
+        if: always() && matrix.shard == 1
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: native-payload-reports-attempt-${{ github.run_attempt }}
+          path: .eve/runtime-reports/payload-*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Create isolated services and verify migration idempotence
         run: |
           pnpm test:runtime:setup

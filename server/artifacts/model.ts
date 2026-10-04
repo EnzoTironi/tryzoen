@@ -44,17 +44,29 @@ const ArtifactDerivedSchema = z.object({
   text: ArtifactText,
   kind: z.enum(["text", "transcript"]),
 });
-export const ArtifactRowSchema = z.object({
+const artifactOwnerShape = {
   ...ArtifactMetadataSchema.shape,
   ownerUserId: reference,
   workspaceId: reference,
   sourceIdentityId: IdentityId,
   sourceInboxId: IdentityId,
-  content: z.nullable(ArtifactBytes),
-  derivedText: z.nullable(ArtifactText),
-  derivedKind: z.nullable(ArtifactDerivedSchema.shape.kind),
-  deleted: z.boolean(),
-});
+};
+export const ArtifactRowSchema = z.discriminatedUnion("deleted", [
+  z.object({
+    ...artifactOwnerShape,
+    deleted: z.literal(false),
+    payloadId: z.uuid(),
+    derivedText: z.nullable(ArtifactText),
+    derivedKind: z.nullable(ArtifactDerivedSchema.shape.kind),
+  }),
+  z.object({
+    ...artifactOwnerShape,
+    deleted: z.literal(true),
+    payloadId: z.null(),
+    derivedText: z.null(),
+    derivedKind: z.null(),
+  }),
+]);
 export type ArtifactRow = z.output<typeof ArtifactRowSchema>;
 export const ArtifactAccessSchema = z.object({
   identityId: IdentityId,

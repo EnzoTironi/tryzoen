@@ -4,6 +4,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 
 import { UsernameSchema } from "../accounts/directory";
+import { recordMemoryErasureIntents } from "../memory/erasure-intents";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -157,6 +158,11 @@ export const removeWorkspaceMember = async function (
       sql`SELECT user_id FROM workspace_memberships WHERE workspace_id = ${actor.workspaceId} AND user_id = ${targetUserId} AND role = 'member' FOR UPDATE`
     );
     if (!memberships.length) throw new WorkspaceAccessDenied();
+    await recordMemoryErasureIntents({
+      kind: "member",
+      workspaceId: actor.workspaceId,
+      ownerUserId: targetUserId,
+    });
     // Sessions, jobs, runs and report outputs cascade from the membership row, so
     // everything that must be counted or cancelled through them happens first.
     const sessions = await query(

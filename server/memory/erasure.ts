@@ -4,9 +4,11 @@ import type {
   workspaceMemoryErasures,
   workspaceMemoryNamespaces,
 } from "@db/schema/learned-memory";
-import { PrivateMemoryError } from "./repository";
+import { PrivateMemoryError } from "./errors";
 import { env } from "@shared/environment/env";
 import { eraseSessionSources } from "./session-files";
+import { queuePayloadErasure } from "../payloads/erasure";
+import { ErasureJournal } from "../accounts/erasure-journal";
 
 /** One receipt commits independently; a failed filesystem operation keeps its obligation. */
 async function eraseNextReceipt() {
@@ -23,20 +25,39 @@ async function eraseNextReceipt() {
       if (!receipt) return null;
       const { namespaceId, ownerUserId } = receipt;
       try {
-        // Keep the receipt lock if any DB acknowledgement rolls back to this savepoint.
-        await transaction(async () => {
-          if (!env.ZOEN_SESSION_ARCHIVE_DIR)
+        const prepared = await transaction(async () => {
+          if (!ownerUserId || !env.ZOEN_SESSION_ARCHIVE_DIR)
             throw new PrivateMemoryError("unavailable");
-          // Recovery can restore a retired generation beside its erasure receipt.
-          // A busy generation must retry; skipping its lock cannot prove absence.
           const [restored] = await query<
             Pick<typeof workspaceMemoryNamespaces.$inferSelect, "userId">
           >(sql`SELECT user_id AS "userId" FROM workspace_memory_namespace
             WHERE namespace_id=${namespaceId} FOR UPDATE NOWAIT`);
-          if (restored && (!ownerUserId || restored.userId !== ownerUserId))
+          if (restored && restored.userId !== ownerUserId)
             throw new PrivateMemoryError("unavailable");
-          await eraseSessionSources(env.ZOEN_SESSION_ARCHIVE_DIR, namespaceId);
-          if (restored) {
+          await ErasureJournal.appendMemoryNamespace({
+            kind: "private-memory",
+            ownerUserId,
+            namespaceId,
+          });
+          return {
+            restored,
+            root: env.ZOEN_SESSION_ARCHIVE_DIR,
+            payloadsErased: await queuePayloadErasure({
+              kind: "private-memory",
+              ownerUserId,
+              namespaceId,
+            }),
+          };
+        });
+        if (!prepared.payloadsErased) {
+          await query(sql`UPDATE workspace_memory_erasure SET available_at=clock_timestamp()+interval '1 minute'
+            WHERE namespace_id=${namespaceId}`);
+          return { cleared: 0 };
+        }
+        // Keep the receipt lock if any DB acknowledgement rolls back to this savepoint.
+        await transaction(async () => {
+          await eraseSessionSources(prepared.root, namespaceId);
+          if (prepared.restored) {
             // Cascades retire this generation's Git, recalls and source outbox.
             // Its delete trigger preserves our already-locked receipt.
             const retired = await query(

@@ -100,6 +100,8 @@ async function deliverNamespace(root: string, visited: readonly string[]) {
       JOIN workspaces w ON w.id = n.workspace_id
       WHERE s.stored_at IS NULL AND n.enabled AND s.available_at <= statement_timestamp()
         AND NOT EXISTS (SELECT 1 FROM workspace_memory_erasure e WHERE e.namespace_id = n.namespace_id)
+        AND NOT EXISTS (SELECT 1 FROM payload_erasure e WHERE e.owner_user_id=n.user_id
+          AND (e.scope_key='account' OR e.scope_key=n.namespace_id::text))
         ${
           visited.length
             ? sql`AND s.namespace_id NOT IN (${sql.join(

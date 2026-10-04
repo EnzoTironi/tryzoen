@@ -9,7 +9,7 @@ import {
   matrixConfiguration,
   matrixRequest,
 } from "./client";
-import { MatrixErasureDepartureSchema } from "./erasure";
+import { MatrixErasureDepartureSchema } from "./erasure-contract";
 import { readNativeGroupMembership } from "./membership";
 
 const departureSchema = MatrixErasureDepartureSchema.extend({

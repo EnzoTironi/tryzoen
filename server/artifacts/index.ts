@@ -4,6 +4,13 @@ import { ZodError as SchemaError } from "zod";
 import { SqlError } from "../../db/queries";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { PayloadError } from "../payloads/contract";
+import {
+  adoptPayload,
+  putRegistered,
+  registerPayload,
+} from "../payloads/publication";
 import { artifactAccess } from "./access";
 import { artifactDigest, verifiedArtifact } from "./content";
 import {
@@ -33,7 +40,7 @@ const metadataColumns = sql`a.id AS "artifactId", a.sha256, a.filename, a.media_
     a.byte_length AS "byteLength", a.created_at::text AS "createdAt", a.source_event_id AS "sourceEventId",
     a.source_message_id AS "sourceMessageId", a.source_media_id AS "sourceMediaId"`;
 const rowColumns = sql`${metadataColumns}, a.owner_user_id AS "ownerUserId", a.workspace_id AS "workspaceId",
-    a.source_identity_id AS "sourceIdentityId", a.source_inbox_id AS "sourceInboxId", a.content,
+    a.source_identity_id AS "sourceIdentityId", a.source_inbox_id AS "sourceInboxId", a.payload_object_id AS "payloadId",
     a.derived_text AS "derivedText", a.derived_kind AS "derivedKind", a.deleted_at IS NOT NULL AS deleted`;
 const requireRow = async function (
   input: z.output<typeof ArtifactAccessSchema>,
@@ -110,7 +117,7 @@ export const Artifacts = {
           return stored.row ? await verifiedArtifact(stored.row) : null;
         });
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;
@@ -125,44 +132,82 @@ export const Artifacts = {
   put: async function (input: z.output<typeof ArtifactPutSchema>) {
     try {
       try {
-        return await withDatabaseTransaction(async () => {
-          const value = await decodeArtifactInput(ArtifactPutSchema, input);
-          const bytes = Buffer.from(value.bytes);
-          const sha256 = artifactDigest(bytes);
-          const stored = await findSource(value);
-          if (stored.row) {
-            const existing = await verifiedArtifact(stored.row);
+        const value = await decodeArtifactInput(ArtifactPutSchema, input);
+        const bytes = Buffer.from(value.bytes);
+        const sha256 = artifactDigest(bytes);
+        const initial = await withDatabaseTransaction(
+          async () => {
+            const stored = await findSource(value);
+            if (stored.row) {
+              const existing = await verifiedArtifact(stored.row);
+              if (
+                existing.metadata.sha256 !== sha256 ||
+                existing.metadata.byteLength !== bytes.length
+              )
+                throw new ArtifactError({ reason: "source_conflict" });
+              return { kind: "replayed" as const, metadata: existing.metadata };
+            }
+            const artifactId = randomUUID();
+            const reference = await registerPayload(
+              {
+                workspaceId: stored.scope.workspaceId,
+                ownerGeneration: artifactId,
+                ownerUserId: stored.scope.userId,
+                kind: "private-artifact",
+              },
+              bytes
+            );
+            return {
+              kind: "candidate" as const,
+              reference,
+              artifactId,
+              scope: stored.scope,
+              source: stored.source,
+            };
+          },
+          { outermost: true }
+        );
+        if (initial.kind === "replayed") return initial.metadata;
+        await putRegistered(initial.reference, bytes);
+        return await withDatabaseTransaction(
+          async () => {
+            await query(
+              sql`SELECT pg_advisory_xact_lock(194804,hashtext(${JSON.stringify([value.identityId, initial.source.sourceEventId, initial.source.sourceMediaId])}))`
+            );
+            const stored = await findSource(value);
+            if (stored.row) {
+              const existing = await verifiedArtifact(stored.row);
+              if (
+                existing.metadata.sha256 !== sha256 ||
+                existing.metadata.byteLength !== bytes.length
+              )
+                throw new ArtifactError({ reason: "source_conflict" });
+              return existing.metadata;
+            }
             if (
-              existing.metadata.sha256 !== sha256 ||
-              existing.metadata.byteLength !== bytes.length
+              !isDeepStrictEqual(initial.scope, stored.scope) ||
+              !isDeepStrictEqual(initial.source, stored.source)
             )
-              throw new ArtifactError({
-                reason: "source_conflict",
-              });
-            return existing.metadata;
-          }
-          const { source, scope } = stored;
-          await query(sql`INSERT INTO private_artifact
-          (id, owner_user_id, workspace_id, source_identity_id, source_inbox_id, source_event_id,
-           source_message_id, source_media_id, filename, media_type, byte_length, sha256, content)
-          VALUES (${randomUUID()}, ${scope.userId}, ${scope.workspaceId}, ${value.identityId},
-            ${value.sourceInboxId}, ${source.sourceEventId}, ${source.sourceMessageId}, ${source.sourceMediaId},
-            ${source.filename}, ${source.mediaType}, ${bytes.length}, ${sha256}, ${bytes})
-          ON CONFLICT (source_identity_id, source_event_id, source_media_id) DO NOTHING`);
-          const current = await findSource(value);
-          if (!current.row) return unavailable();
-          const saved = await verifiedArtifact(current.row);
-          if (
-            saved.metadata.sha256 !== sha256 ||
-            saved.metadata.byteLength !== bytes.length
-          )
-            throw new ArtifactError({
-              reason: "source_conflict",
-            });
-          return saved.metadata;
-        });
+              throw new ArtifactError({ reason: "source_conflict" });
+            const { source, scope } = stored;
+            await adoptPayload(initial.reference);
+            await query(sql`INSERT INTO private_artifact
+            (id,owner_user_id,workspace_id,source_identity_id,source_inbox_id,source_event_id,source_message_id,source_media_id,filename,media_type,byte_length,sha256,payload_object_id)
+            VALUES (${initial.artifactId},${scope.userId},${scope.workspaceId},${value.identityId},${value.sourceInboxId},${source.sourceEventId},${source.sourceMessageId},${source.sourceMediaId},${source.filename},${source.mediaType},${bytes.length},${sha256},${initial.reference.candidateId})`);
+            const current = await findSource(value);
+            if (!current.row) return unavailable();
+            const saved = await verifiedArtifact(current.row);
+            if (
+              saved.metadata.sha256 !== sha256 ||
+              saved.metadata.byteLength !== bytes.length
+            )
+              throw new ArtifactError({ reason: "source_conflict" });
+            return saved.metadata;
+          },
+          { outermost: true }
+        );
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;
@@ -184,7 +229,7 @@ export const Artifacts = {
           return await verifiedArtifact(row);
         });
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;
@@ -211,7 +256,7 @@ export const Artifacts = {
           return await z.array(ArtifactMetadataSchema).parseAsync(rows);
         });
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;
@@ -240,7 +285,7 @@ export const Artifacts = {
           return existing.metadata;
         });
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;
@@ -258,7 +303,7 @@ export const Artifacts = {
         return await withDatabaseTransaction(async () => {
           const value = await decodeArtifactInput(ArtifactAccessSchema, input);
           await requireRow(value, true);
-          await query(sql`UPDATE private_artifact SET content = NULL, derived_text = NULL, derived_kind = NULL,
+          await query(sql`UPDATE private_artifact SET payload_object_id = NULL, derived_text = NULL, derived_kind = NULL,
           deleted_at = COALESCE(deleted_at, clock_timestamp()), updated_at = clock_timestamp()
           WHERE id = ${value.artifactId} AND deleted_at IS NULL`);
           return {
@@ -267,7 +312,7 @@ export const Artifacts = {
           };
         });
       } catch (error) {
-        if (error instanceof SqlError) {
+        if (error instanceof SqlError || error instanceof PayloadError) {
           return unavailable();
         }
         throw error;

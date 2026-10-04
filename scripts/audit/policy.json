@@ -1,20 +1,15 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "classification": "accepted temporary risk",
   "authorization": "protected integration and release after required checks",
-  "expiresAt": "2026-10-04T02:59:00Z",
-  "configurationSha256": "c979cb118819d5e2e2885279666c2a07ab46644cf26fdd2908758353948313bd",
+  "expiresAt": "2026-10-05T02:59:00Z",
+  "configurationSha256": "8caa55b2fc8aa42d33fa8d9455e77286bbd1a4851b61521377f0012c63f385a3",
   "graphs": {
     "application": {
       "GHSA-86w9-cpqp-85rv": {
         "package": "node-forge",
         "version": "1.4.0",
         "pathsSha256": "6f251b7dbe4daa56f99c2e27147920624d6e77231aaf7edd32c8d7648b3379bb"
-      },
-      "GHSA-ch52-4w7c-c8xp": {
-        "package": "http-cache-semantics",
-        "version": "4.2.0",
-        "pathsSha256": "77abf37b86ef369a1ed1bcc53491fb978ffc1f0085f934a36f37247d26612457"
       },
       "GHSA-vfj7-8cjw-p6xm": {
         "package": "braces",

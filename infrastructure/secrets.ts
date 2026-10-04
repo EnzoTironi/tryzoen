@@ -1,9 +1,67 @@
 import { createHash } from "node:crypto";
+import * as Machines from "@distilled.cloud/fly-io/machines";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Fly from "alchemy/Fly";
 import * as Output from "alchemy/Output";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { Config, Effect } from "effect";
+
+export const privatePayloadSecretNames = [
+  "ZOEN_PAYLOAD_ENDPOINT",
+  "ZOEN_PAYLOAD_BUCKET",
+  "ZOEN_PAYLOAD_ACCESS_KEY",
+  "ZOEN_PAYLOAD_SECRET_KEY",
+  "ZOEN_PAYLOAD_PREFIX",
+] as const;
+
+export const erasureJournalSecretNames = [
+  "ZOEN_ERASURE_JOURNAL_BUCKET",
+  "ZOEN_ERASURE_JOURNAL_ACCESS_KEY",
+  "ZOEN_ERASURE_JOURNAL_SECRET_KEY",
+] as const;
+
+export const privateStorageSecretNames = [
+  ...privatePayloadSecretNames,
+  ...erasureJournalSecretNames,
+] as const;
+
+/** Reads names and digests only; payload credentials remain in the two Fly vaults. */
+export const privateStorageDigests = Effect.fn(function* (
+  app: string,
+  names: readonly string[]
+) {
+  const inventory = yield* Machines.listSecrets({
+    app_name: app,
+    show_secrets: false,
+  }).pipe(
+    Effect.mapError(
+      () =>
+        new Error(
+          "Private storage secret inventory unavailable; keeping the existing web release."
+        )
+    )
+  );
+  return yield* Effect.forEach(names, (name) => {
+    const entries = inventory.secrets?.filter((secret) => secret.name === name);
+    const digest = entries?.[0]?.digest;
+    return entries?.length === 1 && digest?.trim()
+      ? Effect.succeed([name, digest] as const)
+      : Effect.fail(
+          new Error(
+            "Required private storage secrets are missing or ambiguous; keeping the existing web release."
+          )
+        );
+  });
+});
+
+export const privatePayloadVersion = Effect.fn(function* (
+  apps: readonly string[]
+) {
+  const digests = yield* Effect.forEach(apps, (app) =>
+    privateStorageDigests(app, privatePayloadSecretNames)
+  );
+  return createHash("sha256").update(JSON.stringify(digests)).digest("hex");
+});
 
 export const webSecretNames = [
   "BETTER_AUTH_SECRET",

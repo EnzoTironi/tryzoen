@@ -15,10 +15,10 @@ import {
 } from "../workspaces/access";
 import { eraseVaultwardenUser } from "../workspaces/vault";
 import { ErasureJournal } from "./erasure-journal";
-import {
-  captureMatrixErasureDepartures,
-  MatrixErasureDepartureSchema,
-} from "../matrix/erasure";
+import { queuePayloadErasure } from "../payloads/erasure";
+import { recordMemoryErasureIntents } from "../memory/erasure-intents";
+import { captureMatrixErasureDepartures } from "../matrix/erasure";
+import { MatrixErasureDepartureSchema } from "../matrix/erasure-contract";
 import { lockMatrixOrganizations } from "../matrix/authority";
 export class AccountDeletionError extends Error {
   readonly _tag = "AccountDeletionError";
@@ -51,6 +51,7 @@ const externalPending = [
   "whatsapp",
   "matrix",
   "file_memory",
+  "private_files",
   "backups",
 ] as const;
 const resultSchema = z.object({
@@ -215,6 +216,14 @@ export const closeOrganizationForDeletion = async function (
         throw new AccountDeletionError({
           reason: "unavailable",
         });
+      // Organization locks fence new workspaces; existing workspace locks fence
+      // namespace and creator-corpus admission throughout journal pagination.
+      await query(sql`SELECT id FROM workspaces
+        WHERE organization_id=${input.organizationId} ORDER BY id FOR UPDATE`);
+      await recordMemoryErasureIntents({
+        kind: "organization",
+        organizationId: input.organizationId,
+      });
       await query(
         sql`DELETE FROM workspaces WHERE organization_id = ${input.organizationId}`
       );
@@ -547,6 +556,7 @@ const persistCompletedRequest = async function (
         ON CONFLICT(request_id,surface) DO UPDATE SET
           status=EXCLUDED.status,matrix_ids=EXCLUDED.matrix_ids`);
   }
+  await queuePayloadErasure({ kind: "account", ownerUserId: userId });
   return await resultSchema.parseAsync({
     backupExpiresAt: resultSchema.shape.backupExpiresAt.parse(
       rows[0]?.backupExpiresAt

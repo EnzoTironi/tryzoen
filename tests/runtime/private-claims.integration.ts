@@ -1,3 +1,4 @@
+import { PrivateMemoryError } from "../../server/memory/errors";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
@@ -6,14 +7,12 @@ import { z } from "zod";
 import * as queries from "@db/queries";
 import { env } from "@shared/environment/env";
 import { dbMigrationEnv } from "../../db/env/migration";
-import {
-  PrivateMemoryRepository,
-  PrivateMemoryError,
-} from "../../server/memory/repository";
+import { PrivateMemoryRepository } from "../../server/memory/repository";
 import { readWorkspaceGit } from "../../server/workspaces/git";
 import { workspaceFixture } from "./workspace-fixture";
 import { privateMemoryFixture } from "./private-memory-fixture";
 import { requireRuntimeDatabase } from "./database";
+import { corruptPayload } from "./payload-corruption";
 
 const body = (text: string) => ({
   text,
@@ -660,7 +659,7 @@ test("a retained private backup restores a lost bundle with retained revision fe
   await queries.query(sql`UPDATE workspace_memory_namespace SET enabled = false
     WHERE workspace_id = ${actor.workspaceId} AND user_id = ${actor.userId}`);
   // Fault injection only into this synthetic owner's disposable projection.
-  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,bundle=NULL,recorded_at=NULL
+  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,payload_object_id=NULL,recorded_at=NULL
     WHERE namespace_id IN (SELECT namespace_id FROM workspace_memory_namespace WHERE workspace_id=${actor.workspaceId} AND user_id=${actor.userId})`);
 
   expect(
@@ -747,16 +746,16 @@ test("restore rolls back the entire bundle/index on SQL receipt failure and reva
     },
   });
   const archive = await PrivateMemoryRepository.backup(actor);
-  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,bundle=NULL,recorded_at=NULL
+  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,payload_object_id=NULL,recorded_at=NULL
     WHERE namespace_id IN (SELECT namespace_id FROM workspace_memory_namespace WHERE workspace_id=${actor.workspaceId} AND user_id=${actor.userId})`);
   const expectRetainedDamagedState = async () => {
     await expect(PrivateMemoryRepository.read(actor)).rejects.toMatchObject({
       reason: "unavailable",
     });
     expect(
-      await queries.query(sql`SELECT head_sha AS head,bundle,recorded_at AS "recordedAt"
+      await queries.query(sql`SELECT head_sha AS head,payload_object_id AS "payloadId",recorded_at AS "recordedAt"
       FROM private_memory_repository WHERE namespace_id=${archive.namespaceId}`)
-    ).toEqual([{ head: null, bundle: null, recordedAt: null }]);
+    ).toEqual([{ head: null, payloadId: null, recordedAt: null }]);
     expect(
       await queries.query(sql`SELECT operation_id AS "operationId",revision FROM private_memory_operation
       WHERE namespace_id=${archive.namespaceId}`)
@@ -807,7 +806,7 @@ test("restore rejects unsigned content, an erased namespace rebind and blind rec
       archive: { ...archive, namespaceId: randomUUID() },
     })
   ).rejects.toThrow("WorkspaceAccessDenied");
-  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,bundle=NULL,recorded_at=NULL
+  await queries.query(sql`UPDATE private_memory_repository SET head_sha=NULL,payload_object_id=NULL,recorded_at=NULL
     WHERE namespace_id=${archive.namespaceId}`);
   await queries.query(
     sql`DELETE FROM private_memory_operation WHERE namespace_id=${archive.namespaceId}`
@@ -829,8 +828,12 @@ test("a signed exact-head archive repairs corrupted bytes without fabricating a 
   );
   const before = (await PrivateMemoryRepository.read(actor)).snapshot;
   const archive = await PrivateMemoryRepository.backup(actor);
-  await queries.query(sql`UPDATE private_memory_repository SET bundle=${Buffer.from("corrupt synthetic bytes")}
-    WHERE namespace_id=${archive.namespaceId}`);
+  const [pointer] = await queries.query(sql`SELECT payload_object_id AS id
+    FROM private_memory_repository WHERE namespace_id=${archive.namespaceId}`);
+  await corruptPayload(
+    z.uuid().parse(pointer?.id),
+    Buffer.from("corrupt synthetic bytes")
+  );
   await expect(PrivateMemoryRepository.read(actor)).rejects.toBeInstanceOf(
     PrivateMemoryError
   );

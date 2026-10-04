@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { env } from "@shared/environment/env";
+import { nativeProcessEnvironment } from "@shared/environment/env/native-process";
 import {
   operationSignal,
   withTimeout,
@@ -30,6 +30,7 @@ export interface GitBundle {
   git: (args: readonly string[], allowedExitCode?: number) => Promise<string>;
 }
 const executeGit = promisify(execFile);
+const env = nativeProcessEnvironment();
 
 /** Temporary native Git reconstruction only. Owners choose strict paths, scopes,
  * publication policy and budgets; this boundary grants no data authorization. */

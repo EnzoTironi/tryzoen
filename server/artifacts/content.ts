@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readPayload } from "../payloads/publication";
+import { PayloadError } from "../payloads/contract";
 
 import {
   ArtifactError,
@@ -11,10 +13,25 @@ export const artifactDigest = (bytes: Uint8Array) =>
 
 export const verifiedArtifact = async function (row: ArtifactRow) {
   if (row.deleted) throw new ArtifactError({ reason: "deleted" });
+  const bytes = await readPayload(
+    {
+      workspaceId: row.workspaceId,
+      ownerGeneration: row.artifactId,
+      ownerUserId: row.ownerUserId,
+      kind: "private-artifact",
+    },
+    row.payloadId
+  ).catch((error: unknown) => {
+    if (
+      error instanceof PayloadError &&
+      (error.reason === "missing" || error.reason === "corrupt")
+    )
+      throw new ArtifactError({ reason: "corrupt" });
+    throw error;
+  });
   if (
-    !row.content ||
-    row.content.byteLength !== row.byteLength ||
-    artifactDigest(row.content) !== row.sha256
+    bytes.byteLength !== row.byteLength ||
+    artifactDigest(bytes) !== row.sha256
   )
     throw new ArtifactError({ reason: "corrupt" });
   if ((row.derivedText === null) !== (row.derivedKind === null))
@@ -22,7 +39,7 @@ export const verifiedArtifact = async function (row: ArtifactRow) {
   const metadata = await ArtifactMetadataSchema.parseAsync(row);
   return {
     metadata,
-    bytes: row.content,
+    bytes,
     derived:
       row.derivedText !== null && row.derivedKind !== null
         ? { text: row.derivedText, kind: row.derivedKind }
