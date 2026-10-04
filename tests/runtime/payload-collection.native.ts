@@ -50,6 +50,11 @@ import {
 import { PrivateMemoryRepository } from "../../server/memory/repository";
 import { publishWorkspaceGit } from "../../server/workspaces/git";
 import { workspaceFixture } from "./workspace-fixture";
+import { requireWorkspaceAccess } from "../../server/workspaces/access";
+import { closeOrganizationForDeletion } from "../../server/accounts/deletion";
+import { ErasureJournal } from "../../server/accounts/erasure-journal";
+import { approveCreatorRelease } from "../../server/creators/releases";
+import { reviewedCreatorVersion } from "../helpers/creator-release";
 
 async function providerRead(reference: PayloadReference) {
   const connection = openPayloads();
@@ -172,6 +177,93 @@ describe("native payload collection", () => {
     await putRegistered(reference, bundle.bundle);
     return reference;
   }
+
+  it.each(["memory", "creator-corpus"] as const)(
+    "journals an in-flight %s admission in another company workspace before its cascade",
+    async (kind) => {
+      const actor = owner().actor;
+      const [organization] = await query(
+        sql`SELECT organization_id FROM workspaces WHERE id=${actor.workspaceId}`
+      );
+      const organizationId = z
+        .string()
+        .min(1)
+        .parse(organization?.organization_id);
+      const second = { ...actor, workspaceId: `zz-team-${randomUUID()}` };
+      await query(sql`INSERT INTO workspaces(id,organization_id)
+        VALUES (${second.workspaceId},${organizationId})`);
+      await query(sql`INSERT INTO workspace_memberships(workspace_id,user_id,role)
+        VALUES (${second.workspaceId},${actor.userId},'admin')`);
+      await query(sql`DELETE FROM organization_memberships
+        WHERE organization_id=${organizationId} AND user_id=${owner().guest.userId}`);
+      const creator =
+        kind === "creator-corpus" ? await reviewedCreatorVersion(second) : null;
+      const held = Promise.withResolvers<number>();
+      const release = Promise.withResolvers<void>();
+      const admission = transaction(async () => {
+        await requireWorkspaceAccess(second);
+        const [backend] = await query(sql`SELECT pg_backend_pid() AS pid`);
+        held.resolve(z.number().int().parse(backend?.pid));
+        await release.promise;
+        if (creator) {
+          await approveCreatorRelease(second, creator.input);
+          const [corpus] =
+            await query(sql`SELECT namespace_id FROM creator_release_corpora
+            WHERE release_id=${creator.input.id}`);
+          return z.uuid().parse(corpus?.namespace_id);
+        }
+        return (await memoryNamespace(second)).id;
+      });
+      let closing: ReturnType<typeof closeOrganizationForDeletion> | undefined;
+      try {
+        const pid = await held.promise;
+        closing = closeOrganizationForDeletion(actor, { organizationId });
+        // The admission remains open until PostgreSQL proves the real cascade
+        // transaction is waiting on its workspace fence, without a timing mock.
+        await expect
+          .poll(
+            async () => {
+              const result = await administrator.query(
+                "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename='zoen_app' AND $1=ANY(pg_blocking_pids(pid))",
+                [pid]
+              );
+              return z
+                .array(z.object({ count: z.number().int() }))
+                .length(1)
+                .parse(result.rows)[0]?.count;
+            },
+            { timeout: 5000 }
+          )
+          .toBe(1);
+        release.resolve();
+        const namespaceId = await admission;
+        expect(await closing).toEqual({ closed: true });
+        const captured = [];
+        for await (const record of ErasureJournal.readMemoryNamespaces(
+          actor.userId
+        ))
+          captured.push(record.namespaceId);
+        expect(captured).toContain(namespaceId);
+        expect(
+          await query(
+            sql`SELECT id FROM workspaces WHERE organization_id=${organizationId}`
+          )
+        ).toEqual([]);
+        expect(
+          await query(
+            sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id=${namespaceId}`
+          )
+        ).toHaveLength(1);
+        expect(
+          (await PrivateMemoryRepository.read(owner().guestPersonal)).snapshot
+            .claims
+        ).toEqual([]);
+      } finally {
+        release.resolve();
+        await Promise.allSettled([admission, ...(closing ? [closing] : [])]);
+      }
+    }
+  );
 
   async function published() {
     const reference = await uploaded();
@@ -722,7 +814,19 @@ describe("native payload collection", () => {
     });
     const orphan = unregistered();
     await directPut(orphan);
-    expect((await discoverPayloadOrphans()).discovered).toBe(1);
+    // Earlier cases leave more than one provider page. Prove this exact key's
+    // fence after bounded discovery advances to it, regardless of UUID order.
+    await expect
+      .poll(
+        async () => {
+          await discoverPayloadOrphans();
+          return query(
+            sql`SELECT id FROM public.payload_orphan WHERE id=${orphan.candidateId}`
+          );
+        },
+        { timeout: 5000 }
+      )
+      .toEqual([{ id: orphan.candidateId }]);
     await transaction(async () => {
       await query(
         sql`CREATE TEMP TABLE payload_orphan(id uuid) ON COMMIT DROP`

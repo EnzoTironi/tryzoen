@@ -38,7 +38,7 @@ jobs:
 
       - name: Audit application and infrastructure dependencies
         run: |
-          node --test scripts/audit/regressions.mjs
+          node --test scripts/audit/regressions.mjs scripts/audit/cache-regressions.mjs
           node scripts/audit/run.mjs
           node scripts/audit/run.mjs --graph infrastructure
 

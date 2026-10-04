@@ -216,6 +216,10 @@ export const closeOrganizationForDeletion = async function (
         throw new AccountDeletionError({
           reason: "unavailable",
         });
+      // Organization locks fence new workspaces; existing workspace locks fence
+      // namespace and creator-corpus admission throughout journal pagination.
+      await query(sql`SELECT id FROM workspaces
+        WHERE organization_id=${input.organizationId} ORDER BY id FOR UPDATE`);
       await recordMemoryErasureIntents({
         kind: "organization",
         organizationId: input.organizationId,

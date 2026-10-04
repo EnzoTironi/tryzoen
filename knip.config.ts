@@ -36,11 +36,15 @@ export default {
         "benchmarks/performance/run.ts",
         // Read-only platform prerequisite inventory, invoked independently of native builds.
         "scripts/native-readiness.ts",
+        // The protected audit job executes the installed cache's behavior directly.
+        "scripts/audit/cache-regressions.mjs",
         // Manual CDP regression against the isolated shared conversation UI.
         "tests/companion/composer-hit-targets.ts",
       ],
       ignoreDependencies: [
         "react-native-svg",
+        // 4.3 advertises index.js as its types; the audit check uses DefinitelyTyped.
+        "@types/http-cache-semantics",
         // Eve evaluates shared reaction schemas from root-authored module bundles.
         "unicode-emoji-json",
         // Eve also resolves the shared vault schema's parser from its root bundle.

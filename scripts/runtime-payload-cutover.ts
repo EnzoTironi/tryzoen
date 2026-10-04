@@ -139,7 +139,7 @@ try {
       ? 1
       : mode === "foundation"
         ? 6
-        : 19;
+        : 21;
   z.object({
     success: z.literal(true),
     numPassedTests: z.literal(expected),

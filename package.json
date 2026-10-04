@@ -82,6 +82,7 @@
   },
   "devDependencies": {
     "@next/env": "16.3.6",
+    "@types/http-cache-semantics": "4.2.0",
     "@types/node": "24.13.3",
     "@types/pg": "^8.23.1",
     "@types/react": "19.2.18",
@@ -91,6 +92,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-turbo": "2.10.12",
     "fake-indexeddb": "^6.2.5",
+    "http-cache-semantics": "4.3.0",
     "knip": "6.32.3",
     "oxfmt": "0.65.0",
     "oxlint": "1.80.0",

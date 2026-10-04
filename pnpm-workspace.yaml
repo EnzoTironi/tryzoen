@@ -4,7 +4,7 @@ packages:
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  # CVE-2026-93748 fix, published October 4; keep the exact security release pinned.
+  # Registry security release; the local patch also closes its reproduced stale bypass.
   - http-cache-semantics@4.3.0
   # Expo's current SDK 57 compatibility cohort, verified against its npm releases.
   - expo@57.0.26
@@ -59,6 +59,7 @@ overrides:
   # Drizzle's legacy loader only uses transform; do not retain its vulnerable dev server.
   "@esbuild-kit/core-utils>esbuild": 0.25.12
 patchedDependencies:
+  http-cache-semantics@4.3.0: patches/http-cache-semantics@4.3.0.patch
   "@10play/tentap-editor@1.0.1": patches/@10play__tentap-editor@1.0.1.patch
   "@linqapp/chat-sdk-adapter@0.5.1": patches/@linqapp__chat-sdk-adapter@0.5.1.patch
   "@workflow/world-postgres@5.0.0-beta.44": patches/@workflow__world-postgres@5.0.0-beta.44.patch
