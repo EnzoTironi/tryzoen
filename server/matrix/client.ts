@@ -3,6 +3,7 @@ import { TimeoutError } from "../operations/async";
 import { z } from "zod";
 import { readBody } from "../http/body";
 import { env } from "@shared/environment";
+import { parseRetryAfterHeader } from "../channels/provider-errors";
 export class MatrixError extends Error {
   readonly _tag = "MatrixError";
   declare readonly reason:
@@ -16,6 +17,14 @@ export class MatrixError extends Error {
     super("MatrixError");
     this.name = "MatrixError";
     Object.assign(this, input);
+  }
+}
+export class MatrixRateLimitError extends MatrixError {
+  readonly retryAfterMs: number;
+  constructor(input: { readonly retryAfterMs: number }) {
+    super({ reason: "unavailable" });
+    this.name = "MatrixRateLimitError";
+    this.retryAfterMs = input.retryAfterMs;
   }
 }
 export const matrixConfiguration = async () => {
@@ -86,8 +95,29 @@ export const matrixRequest = async function (
           const error = z
             .object({
               errcode: z.optional(z.string()),
+              retry_after_ms: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .catch(undefined),
             })
             .parse(payload);
+          if (response.status === 429) {
+            const retryAfterSeconds = parseRetryAfterHeader(
+              response.headers.get("retry-after") ?? undefined
+            );
+            throw new MatrixRateLimitError({
+              retryAfterMs: Math.min(
+                86_400_000,
+                Math.max(
+                  1000,
+                  error.retry_after_ms ?? (retryAfterSeconds ?? 60) * 1000,
+                  (retryAfterSeconds ?? 0) * 1000
+                )
+              ),
+            });
+          }
           throw new MatrixError({
             reason: matrixFailureReason(error.errcode, response.status),
           });

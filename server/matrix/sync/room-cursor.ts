@@ -19,8 +19,9 @@ const cursorSchema = z.object({
   userIds: z.array(z.string().max(255)).max(100),
   expiresAt: z.number().int().nonnegative(),
   presencePublishedAt: z.number().int().nonnegative(),
+  presenceRetryAt: z.number().int().nonnegative().default(0),
 });
-export async function sealRoomSyncCursor(value: z.infer<typeof cursorSchema>) {
+export async function sealRoomSyncCursor(value: z.input<typeof cursorSchema>) {
   const cursor = await symmetricEncrypt({
     key: (await (await getAuth()).$context).secretConfig,
     data: JSON.stringify(cursorSchema.parse(value)),
