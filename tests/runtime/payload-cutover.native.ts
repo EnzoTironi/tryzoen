@@ -173,6 +173,42 @@ test("native staged cutover preserves all four payload owners, survives a reject
       matrixIds: [],
       departures: [],
     });
+    const erasedNamespace = randomUUID();
+    const namespaceClaim = await publishPrivateMemoryGit({
+      scope: {
+        workspaceId: fixture.personal.workspaceId,
+        userId: actor.userId,
+      },
+      bundle: null,
+      head: null,
+      change: {
+        action: "assert",
+        operationId: randomUUID(),
+        claimId: randomUUID(),
+        expectedRevision: null,
+        body: {
+          text: "Synthetic namespace-only erased fact",
+          sources: [],
+          relations: [],
+          validTime: null,
+        },
+      },
+      publication: async () => ({
+        authorUserId: actor.userId,
+        recordedAt: "2026-10-04T00:00:00.000001Z",
+      }),
+    });
+    if (!namespaceClaim.applied)
+      throw new Error("Expected the namespace-only fixture");
+    await query(sql`INSERT INTO workspace_memory_namespace(workspace_id,user_id,namespace_id)
+      VALUES (${fixture.personal.workspaceId},${actor.userId},${erasedNamespace})`);
+    await query(sql`INSERT INTO private_memory_repository(namespace_id,head_sha,bundle,recorded_at)
+      VALUES (${erasedNamespace},${namespaceClaim.receipt.revision},${namespaceClaim.bundle},${namespaceClaim.snapshot.recordedAt}::timestamptz)`);
+    await ErasureJournal.appendMemoryNamespace({
+      kind: "private-memory",
+      ownerUserId: actor.userId,
+      namespaceId: erasedNamespace,
+    });
     const fault = `synthetic_cutover_${artifactId.replaceAll("-", "")}`;
     await migration.query(`CREATE FUNCTION ${fault}() RETURNS trigger LANGUAGE plpgsql AS $body$
       BEGIN IF NEW.id='${z.uuid().parse(artifactId)}'::uuid AND NEW.payload_object_id IS NOT NULL THEN
@@ -230,6 +266,16 @@ test("native staged cutover preserves all four payload owners, survives a reject
       sql`SELECT namespace_id FROM workspace_memory_namespace WHERE namespace_id=${erased.id}`
     );
     expect(removed).toEqual([]);
+    expect(
+      await query(
+        sql`SELECT namespace_id FROM workspace_memory_namespace WHERE namespace_id=${erasedNamespace}`
+      )
+    ).toEqual([]);
+    expect(
+      await query(
+        sql`SELECT id FROM workspaces WHERE id=${fixture.personal.workspaceId}`
+      )
+    ).toEqual([{ id: fixture.personal.workspaceId }]);
     expect(
       await query(
         sql`SELECT id FROM workspaces WHERE id=${fixture.guestPersonal.workspaceId}`

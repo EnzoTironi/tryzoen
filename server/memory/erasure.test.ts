@@ -37,6 +37,10 @@ const boundary = vi.hoisted(() => {
     archiveRoot: vi.fn<() => string | undefined>(),
     payloadErasure:
       vi.fn<typeof import("../payloads/erasure").queuePayloadErasure>(),
+    journal:
+      vi.fn<
+        typeof import("../accounts/erasure-journal").ErasureJournal.appendMemoryNamespace
+      >(),
   };
 });
 vi.mock("../../db/index", () => ({
@@ -48,6 +52,9 @@ vi.mock("./session-files", async (original) => ({
 }));
 vi.mock("../payloads/erasure", () => ({
   queuePayloadErasure: boundary.payloadErasure,
+}));
+vi.mock("../accounts/erasure-journal", () => ({
+  ErasureJournal: { appendMemoryNamespace: boundary.journal },
 }));
 vi.mock("@shared/environment/env", async (original) => {
   const actual = await original<typeof import("@shared/environment/env")>();
@@ -70,6 +77,7 @@ const owner = "better-auth:synthetic-memory-owner";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  boundary.journal.mockResolvedValue(undefined);
   boundary.execute.mockResolvedValue({ rows: [] });
   boundary.savepointExecute.mockResolvedValue({ rows: [] });
   boundary.rootExecute.mockRejectedValue(new Error("Unexpected root query"));

@@ -20,7 +20,7 @@ import { prepareRuntimePayloads } from "./runtime-payloads";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const mode = z
-  .enum(["cutover", "foundation", "collection"])
+  .enum(["cutover", "foundation", "collection", "restore"])
   .parse(process.argv[2] ?? "cutover");
 const project = "zoen-payload-cutover-" + randomUUID().slice(0, 8);
 const temporary = await mkdtemp(join(tmpdir(), "zoen-k3-cutover-"));
@@ -38,6 +38,7 @@ const environment = {
   ZOEN_SESSION_ARCHIVE_DIR: temporary,
   CODEX_HOME: join(temporary, "empty-model-auth"),
   ZOEN_ERASURE_JOURNAL_BUCKET: "synthetic-erasure-cutover",
+  ZOEN_RESTORE_TEST_CONTAINER: project + "-postgres-1",
 };
 const compose = ["compose", "-p", project, "-f", "tests/runtime/compose.yaml"];
 const reportPath = join(root, `.eve/runtime-reports/payload-${mode}.json`);
@@ -133,7 +134,12 @@ try {
     "--reporter=json",
     "--outputFile=" + reportPath,
   ]);
-  const expected = mode === "cutover" ? 1 : mode === "foundation" ? 6 : 17;
+  const expected =
+    mode === "cutover" || mode === "restore"
+      ? 1
+      : mode === "foundation"
+        ? 6
+        : 19;
   z.object({
     success: z.literal(true),
     numPassedTests: z.literal(expected),

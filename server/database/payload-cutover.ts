@@ -109,6 +109,36 @@ async function migrationTransaction<Value>(
 /** Restore-independent erasure intent is read before transferring old private
  * bytes. Startup's existing reconciler still owns the complete account wipe. */
 async function discardErasedPayloadOwners(client: Client) {
+  for await (const scope of ErasureJournal.readMemoryNamespaces()) {
+    await migrationTransaction(client, async () => {
+      for (const table of [
+        "workspace_memory_namespace",
+        "creator_release_corpora",
+      ]) {
+        const result = await client.query(
+          `SELECT user_id FROM ${table} WHERE namespace_id=$1 FOR UPDATE`,
+          [scope.namespaceId]
+        );
+        const owners = z
+          .array(z.object({ user_id: z.string() }))
+          .parse(result.rows);
+        if (owners.some((owner) => owner.user_id !== scope.ownerUserId))
+          throw new Error("Memory erasure owner mismatch");
+      }
+      await client.query(
+        "INSERT INTO workspace_memory_erasure(namespace_id,owner_user_id) VALUES ($1,$2) ON CONFLICT(namespace_id) DO NOTHING",
+        [scope.namespaceId, scope.ownerUserId]
+      );
+      await client.query(
+        "DELETE FROM workspace_memory_namespace WHERE namespace_id=$1 AND user_id=$2",
+        [scope.namespaceId, scope.ownerUserId]
+      );
+      await client.query(
+        "DELETE FROM creator_release_corpora WHERE namespace_id=$1 AND user_id=$2",
+        [scope.namespaceId, scope.ownerUserId]
+      );
+    });
+  }
   let after = "";
   for (;;) {
     operationSignal().throwIfAborted();

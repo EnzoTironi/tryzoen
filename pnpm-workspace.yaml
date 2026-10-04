@@ -4,6 +4,8 @@ packages:
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  # CVE-2026-93748 fix, published October 4; keep the exact security release pinned.
+  - http-cache-semantics@4.3.0
   # Expo's current SDK 57 compatibility cohort, verified against its npm releases.
   - expo@57.0.26
   - expo-constants@57.0.20
@@ -45,6 +47,7 @@ overrides:
   # Security fixes within the existing parser majors.
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "qs@<6.16.0": 6.16.0
+  "http-cache-semantics@>=4.0.0 <4.3.0": 4.3.0
   "fast-uri@>=3.0.0 <3.1.8": 3.1.8
   "ip-address@>=10.0.0 <10.7.2": 10.7.2
   "undici@>=6.0.0 <6.29.0": 6.29.0

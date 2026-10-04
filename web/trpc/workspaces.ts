@@ -78,10 +78,8 @@ import {
   removeWorkspaceMember,
   revokeWorkspaceInvitation,
 } from "../../server/workspaces/team";
-import {
-  PrivateMemoryRepository,
-  PrivateMemoryError,
-} from "../../server/memory/repository";
+import { PrivateMemoryRepository } from "../../server/memory/repository";
+import { PrivateMemoryError } from "../../server/memory/errors";
 import {
   listKnowledgeProposals,
   readKnowledgeProposal,

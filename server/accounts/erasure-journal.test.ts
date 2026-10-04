@@ -91,7 +91,9 @@ beforeEach(() => {
     }
     if (command instanceof ListObjectsV2Command) {
       return {
-        Contents: [...objects.keys()].map((Key) => ({ Key })),
+        Contents: [...objects.keys()]
+          .filter((key) => key.startsWith(command.input.Prefix ?? ""))
+          .map((Key) => ({ Key })),
         IsTruncated: false,
       };
     }
@@ -113,6 +115,42 @@ async function seedA() {
   sdk.created.mockClear();
   return entry;
 }
+
+test("namespace intents remain immutable and cannot be read as account deletion", async () => {
+  const scope = {
+    kind: "private-memory",
+    ownerUserId: userId,
+    namespaceId: "10000000-0000-4000-8000-000000000001",
+  } satisfies Parameters<typeof ErasureJournal.appendMemoryNamespace>[0];
+  await ErasureJournal.appendMemoryNamespace(scope);
+  await ErasureJournal.appendMemoryNamespace(scope);
+  expect(objects.size).toBe(1);
+  const accounts = [];
+  for await (const record of ErasureJournal.read()) accounts.push(record);
+  expect(accounts).toEqual([]);
+  const namespaces = [];
+  for await (const record of ErasureJournal.readMemoryNamespaces(userId))
+    namespaces.push(record);
+  expect(namespaces).toEqual([{ ...scope, version: 1 }]);
+});
+
+test("namespace replay rejects an owner changed under the original immutable key", async () => {
+  await ErasureJournal.appendMemoryNamespace({
+    kind: "private-memory",
+    ownerUserId: userId,
+    namespaceId: "10000000-0000-4000-8000-000000000002",
+  });
+  const entry = [...objects.entries()][0];
+  if (!entry) throw new Error("Missing synthetic namespace intent");
+  const [key, body] = entry;
+  objects.set(key, body.replace(userId, "better-auth:forged-owner"));
+  await expect(
+    ErasureJournal.readMemoryNamespaces().next()
+  ).rejects.toMatchObject({
+    _tag: "ErasureJournalError",
+    reason: "unavailable",
+  });
+});
 
 async function collect() {
   const records = [];

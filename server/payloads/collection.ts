@@ -23,21 +23,34 @@ async function collectNext() {
   return transaction(
     async () => {
       const oldest = await retentionFloor();
-      const [reference] = z
-        .array(PayloadReferenceSchema)
+      const [candidate] = z
+        .array(
+          z.object({
+            reference: PayloadReferenceSchema,
+            quarantined: z.boolean(),
+          })
+        )
         .max(1)
         .parse(
           await query(sql`
-      SELECT p.id AS "candidateId",p.workspace_id AS "workspaceId",p.owner_generation AS "ownerGeneration",
-        p.owner_user_id AS "ownerUserId",p.kind,p.sha256,p.byte_length AS "byteLength"
+      SELECT json_build_object('candidateId',p.id,'workspaceId',p.workspace_id,'ownerGeneration',p.owner_generation,
+        'ownerUserId',p.owner_user_id,'kind',p.kind,'sha256',p.sha256,'byteLength',p.byte_length) AS reference,
+        p.retired_at IS NOT NULL AS quarantined
       FROM payload_object p WHERE p.available_at <= clock_timestamp()
         AND NOT payload_is_referenced(p.id)
-        AND ((p.state='pending' AND p.write_until<=clock_timestamp())
-          OR (p.state='adopted' AND COALESCE(p.retired_at,p.adopted_at)<${oldest}::timestamptz)
-          OR p.state IN ('deleting','deleted'))
+        AND (p.state<>'pending' OR p.write_until<=clock_timestamp())
+        AND (p.retired_at IS NULL OR p.retired_at<${oldest}::timestamptz)
       ORDER BY p.available_at,p.id LIMIT 1 FOR UPDATE OF p SKIP LOCKED`)
         );
-      if (!reference) return null;
+      if (!candidate) return null;
+      const { quarantined, reference } = candidate;
+      if (!quarantined) {
+        // A restored pending row can have been adopted in a newer retained backup.
+        // Fence future adoption now, then wait for backups beyond this discovery.
+        await query(sql`UPDATE payload_object SET state='deleting',deleted_at=NULL,
+          retired_at=clock_timestamp() WHERE id=${reference.candidateId}`);
+        return { removed: 0 };
+      }
       await query(
         sql`UPDATE payload_object SET state='deleting',deleted_at=NULL WHERE id=${reference.candidateId}`
       );

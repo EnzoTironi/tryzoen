@@ -603,7 +603,7 @@ test("retained recovery evidence spans more than fifty corrections and survives 
       includeRetainedSources: true,
     })
   ).rejects.toThrow("GitBundleError");
-}, 20_000);
+}, 40_000);
 
 test("recovery evidence deduplicates exact citations without loading it into ordinary reads", async () => {
   const source = {

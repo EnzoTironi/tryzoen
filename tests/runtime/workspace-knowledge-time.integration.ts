@@ -172,7 +172,7 @@ test("publication time is captured after transaction admission and retries retai
     await locker.end();
     await publication;
   }
-  if (!publication || !admitted)
+  if (!admitted)
     throw new Error("Missing actual publication transaction admission");
   const saved = await publication;
   const receipt = await query<{

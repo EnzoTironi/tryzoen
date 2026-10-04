@@ -17,7 +17,7 @@ CREATE TABLE "payload_orphan" (
 --> statement-breakpoint
 CREATE INDEX "payload_orphan_available_idx" ON "payload_orphan" USING btree ("available_at","id");
 --> statement-breakpoint
-CREATE FUNCTION payload_registration_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $guard$
+CREATE FUNCTION payload_registration_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog,public,pg_temp AS $guard$
 BEGIN
   PERFORM pg_advisory_xact_lock(194805,hashtext(NEW.id::text));
   IF EXISTS(SELECT 1 FROM payload_orphan WHERE id=NEW.id) THEN
@@ -33,7 +33,7 @@ $guard$;
 --> statement-breakpoint
 CREATE TRIGGER payload_registration_guard BEFORE INSERT ON payload_object FOR EACH ROW EXECUTE FUNCTION payload_registration_guard();
 --> statement-breakpoint
-CREATE FUNCTION payload_orphan_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $guard$
+CREATE FUNCTION payload_orphan_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE SET search_path=pg_catalog,public,pg_temp AS $guard$
 BEGIN
   IF TG_OP='DELETE' THEN
     RAISE EXCEPTION 'Orphan payload cleanup coordinates must survive retries';

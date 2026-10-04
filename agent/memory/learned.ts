@@ -1,3 +1,4 @@
+import { PrivateMemoryError } from "../../server/memory/errors";
 import { createHash } from "node:crypto";
 import { withSignal } from "../../server/operations/async";
 import { z } from "zod";
@@ -10,10 +11,7 @@ import {
   type MemoryCompactionCompletedContext,
 } from "eve/memory";
 import { defineTool } from "eve/tools";
-import {
-  PrivateMemoryError,
-  PrivateMemoryRepository,
-} from "../../server/memory/repository";
+import { PrivateMemoryRepository } from "../../server/memory/repository";
 import {
   WorkspaceAccessDenied,
   workspaceActorFromPrincipal,

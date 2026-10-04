@@ -4,10 +4,11 @@ import type {
   workspaceMemoryErasures,
   workspaceMemoryNamespaces,
 } from "@db/schema/learned-memory";
-import { PrivateMemoryError } from "./repository";
+import { PrivateMemoryError } from "./errors";
 import { env } from "@shared/environment/env";
 import { eraseSessionSources } from "./session-files";
 import { queuePayloadErasure } from "../payloads/erasure";
+import { ErasureJournal } from "../accounts/erasure-journal";
 
 /** One receipt commits independently; a failed filesystem operation keeps its obligation. */
 async function eraseNextReceipt() {
@@ -33,6 +34,11 @@ async function eraseNextReceipt() {
             WHERE namespace_id=${namespaceId} FOR UPDATE NOWAIT`);
           if (restored && restored.userId !== ownerUserId)
             throw new PrivateMemoryError("unavailable");
+          await ErasureJournal.appendMemoryNamespace({
+            kind: "private-memory",
+            ownerUserId,
+            namespaceId,
+          });
           return {
             restored,
             root: env.ZOEN_SESSION_ARCHIVE_DIR,

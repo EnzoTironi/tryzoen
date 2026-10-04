@@ -16,6 +16,7 @@ import {
 import { eraseVaultwardenUser } from "../workspaces/vault";
 import { ErasureJournal } from "./erasure-journal";
 import { queuePayloadErasure } from "../payloads/erasure";
+import { recordMemoryErasureIntents } from "../memory/erasure-intents";
 import { captureMatrixErasureDepartures } from "../matrix/erasure";
 import { MatrixErasureDepartureSchema } from "../matrix/erasure-contract";
 import { lockMatrixOrganizations } from "../matrix/authority";
@@ -215,6 +216,10 @@ export const closeOrganizationForDeletion = async function (
         throw new AccountDeletionError({
           reason: "unavailable",
         });
+      await recordMemoryErasureIntents({
+        kind: "organization",
+        organizationId: input.organizationId,
+      });
       await query(
         sql`DELETE FROM workspaces WHERE organization_id = ${input.organizationId}`
       );

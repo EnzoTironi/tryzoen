@@ -464,6 +464,12 @@ describe("native payload collection", () => {
   it("collects an expired unpublished intent and repeats deletion after a real late upload", async () => {
     const neighboring = await published();
     const candidate = await expired();
+    expect(await collectPayloads()).toEqual({ removed: 0 });
+    expect(Buffer.from(await providerRead(candidate))).toEqual(bundle.bundle);
+    await expect(
+      transaction(() => adoptPayload(candidate))
+    ).rejects.toMatchObject({ reason: "invalid" });
+    await floor();
     expect(await collectPayloads()).toEqual({ removed: 1 });
     await expect(providerRead(candidate)).rejects.toMatchObject({
       reason: "missing",
@@ -505,9 +511,35 @@ describe("native payload collection", () => {
     ).toEqual(bundle.bundle);
   });
 
+  it("quarantines restored pending coordinates until retained backups follow their discovery", async () => {
+    const candidate = await expired();
+    // A newer backup can contain the later adopted pointer even though the
+    // restored row is pending and its original write window has expired.
+    await administrator.query(
+      "UPDATE zoen_maintenance.payload_backup_inventory SET oldest_backup_start=clock_timestamp()-interval '30 seconds',observed_at=clock_timestamp()"
+    );
+    expect(await collectPayloads()).toEqual({ removed: 0 });
+    expect(await collectPayloads()).toEqual({ removed: 0 });
+    expect(Buffer.from(await providerRead(candidate))).toEqual(bundle.bundle);
+    const rows = await query(
+      sql`SELECT state,retired_at>write_until AS quarantined FROM payload_object WHERE id=${candidate.candidateId}`
+    );
+    expect(rows).toEqual([{ state: "deleting", quarantined: true }]);
+    await expect(
+      transaction(() => adoptPayload(candidate))
+    ).rejects.toMatchObject({ reason: "invalid" });
+    await floor();
+    expect(await collectPayloads()).toEqual({ removed: 1 });
+    await expect(providerRead(candidate)).rejects.toMatchObject({
+      reason: "missing",
+    });
+  });
+
   it("keeps an unknown DELETE acknowledgement fenced until an actual retry confirms absence", async () => {
     const neighboring = await published();
     const candidate = await expired();
+    expect(await collectPayloads()).toEqual({ removed: 0 });
+    await floor();
     await using fault = await deletionFault(candidate, "lost-ack");
     await expect(collectPayloads()).rejects.toBeInstanceOf(AggregateError);
     const [row] = await query(
@@ -535,6 +567,8 @@ describe("native payload collection", () => {
   it("refuses to acknowledge deletion when a real late PUT makes the follow-up GET positive", async () => {
     const neighboring = await published();
     const candidate = await expired();
+    expect(await collectPayloads()).toEqual({ removed: 0 });
+    await floor();
     await using fault = await deletionFault(candidate, "late-put");
     await expect(collectPayloads()).rejects.toBeInstanceOf(AggregateError);
     const [row] = await query(
@@ -669,6 +703,39 @@ describe("native payload collection", () => {
       )
     ).toEqual(bundle.bundle);
     expect(candidates).toHaveLength(101);
+  });
+
+  it("preserves both orphan fences when the runtime role creates shadow temporary tables", async () => {
+    const registered = await published();
+    const key = payloadObjectKey(env.ZOEN_PAYLOAD_PREFIX, registered);
+    await transaction(async () => {
+      await query(
+        sql`CREATE TEMP TABLE payload_object(id uuid) ON COMMIT DROP`
+      );
+      await expect(
+        transaction(() =>
+          query(
+            sql`INSERT INTO public.payload_orphan(id,object_key) VALUES (${registered.candidateId},${key})`
+          )
+        )
+      ).rejects.toThrow("database operation failed");
+    });
+    const orphan = unregistered();
+    await directPut(orphan);
+    expect((await discoverPayloadOrphans()).discovered).toBe(1);
+    await transaction(async () => {
+      await query(
+        sql`CREATE TEMP TABLE payload_orphan(id uuid) ON COMMIT DROP`
+      );
+      await expect(
+        transaction(() =>
+          query(sql`INSERT INTO public.payload_object(id,workspace_id,owner_generation,owner_user_id,kind,sha256,byte_length,write_until)
+        VALUES (${orphan.candidateId},${orphan.workspaceId},${orphan.ownerGeneration},NULL,${orphan.kind},${orphan.sha256},${orphan.byteLength},clock_timestamp()+interval '2 minutes')`)
+        )
+      ).rejects.toThrow("database operation failed");
+    });
+    expect(Buffer.from(await providerRead(registered))).toEqual(bundle.bundle);
+    expect(Buffer.from(await providerRead(orphan))).toEqual(bundle.bundle);
   });
 
   it("erases exactly the account's private and personal roots while preserving the company's canonical head and another owner", async () => {

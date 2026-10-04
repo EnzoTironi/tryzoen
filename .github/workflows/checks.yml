@@ -124,6 +124,7 @@ jobs:
           pnpm test:payloads:cutover
           pnpm test:payloads:foundation
           pnpm test:payloads:collection
+          pnpm test:payloads:restore
       - name: Upload native payload cutover evidence
         if: always() && matrix.shard == 1
         uses: actions/upload-artifact@v7.0.1

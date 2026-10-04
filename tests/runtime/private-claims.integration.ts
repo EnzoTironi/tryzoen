@@ -1,3 +1,4 @@
+import { PrivateMemoryError } from "../../server/memory/errors";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
@@ -6,10 +7,7 @@ import { z } from "zod";
 import * as queries from "@db/queries";
 import { env } from "@shared/environment/env";
 import { dbMigrationEnv } from "../../db/env/migration";
-import {
-  PrivateMemoryRepository,
-  PrivateMemoryError,
-} from "../../server/memory/repository";
+import { PrivateMemoryRepository } from "../../server/memory/repository";
 import { readWorkspaceGit } from "../../server/workspaces/git";
 import { workspaceFixture } from "./workspace-fixture";
 import { privateMemoryFixture } from "./private-memory-fixture";

@@ -10,7 +10,7 @@ import {
   PrivateMemoryArchiveError,
   type PrivateMemoryArchiveSchema,
 } from "./archive";
-import { PrivateMemoryError } from "./repository";
+import { PrivateMemoryError } from "./errors";
 import { WorkspaceAccessDenied } from "../workspaces/access";
 import { MemoryNamespaceError } from "./namespace";
 import { SessionArchiveUnavailable } from "./session-export";

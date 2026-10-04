@@ -1,3 +1,4 @@
+import { PrivateMemoryError } from "./errors";
 import type { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { SQL } from "drizzle-orm";
@@ -9,7 +10,6 @@ import {
   requireMemoryNamespaceAvailable,
 } from "./namespace";
 import {
-  PrivateMemoryError,
   PrivateMemoryRepository,
   PrivateMemoryBackupSchema,
   inspectPrivateMemoryArchive,
