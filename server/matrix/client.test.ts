@@ -46,6 +46,64 @@ it("parses a response within the explicit byte budget", async () => {
   ).toEqual({ next_batch: "token" });
 });
 
+it.each([
+  { retry: 17000, header: undefined, expected: 17000 },
+  { retry: 17000, header: "19", expected: 19000 },
+  { retry: 19000, header: "17", expected: 19000 },
+  { retry: undefined, header: "19", expected: 19000 },
+  { retry: -1, header: "23", expected: 23000 },
+  { retry: "invalid", header: "invalid", expected: 60000 },
+  { retry: 0, header: undefined, expected: 1000 },
+  { retry: 86_400_001, header: undefined, expected: 86_400_000 },
+])(
+  "retains a bounded presence retry deadline: $expected ms",
+  async ({ retry, header, expected }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json(
+          { errcode: "M_LIMIT_EXCEEDED", retry_after_ms: retry },
+          {
+            status: 429,
+            headers: header ? { "retry-after": header } : undefined,
+          }
+        )
+      )
+    );
+    await expect(
+      matrixRequest(
+        "PUT",
+        "presence/%40viewer%3Atest/status",
+        { presence: "online" },
+        "@viewer:test"
+      )
+    ).rejects.toMatchObject({
+      name: "MatrixRateLimitError",
+      reason: "unavailable",
+      retryAfterMs: expected,
+    });
+  }
+);
+
+it("keeps forbidden responses distinct from presence throttling", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { errcode: "M_FORBIDDEN", retry_after_ms: 1000 },
+          { status: 403 }
+        )
+      )
+  );
+  const request = matrixRequest("GET", "sync");
+  await expect(request).rejects.toMatchObject({
+    reason: "forbidden",
+  });
+  await expect(request).rejects.not.toHaveProperty("retryAfterMs");
+});
+
 it("preserves native mention metadata on originals and replacements", () => {
   const mentions = { user_ids: ["@person:test"] };
   const event = MatrixEventSchema.parse({

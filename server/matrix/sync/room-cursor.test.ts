@@ -23,6 +23,7 @@ test("typing cursor is opaque, purpose-bound, rejects tampering and expires", as
     nextBatch: "private-native-token",
     issuedAt: Date.now(),
     presencePublishedAt: Date.now(),
+    presenceRetryAt: 0,
     userIds: ["@private:test"],
     expiresAt: Date.now() + 30000,
   };

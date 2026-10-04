@@ -8,7 +8,7 @@ import {
   type WorkspaceActorSchema,
 } from "../../workspaces/access";
 import { joinMatrixRoom, requireMatrixRoom } from "../rooms";
-import { MatrixError } from "../client";
+import { MatrixError, MatrixRateLimitError } from "../client";
 import { openRoomSyncCursor, sealRoomSyncCursor } from "./room-cursor";
 import { pollNativeSync } from "./native";
 import { readRoomChanges } from "./changes";
@@ -31,9 +31,19 @@ export async function readMatrixRoomSync(
     )
       throw new WorkspaceAccessDenied();
     let presencePublishedAt = previous?.presencePublishedAt ?? 0;
-    if (Date.now() - presencePublishedAt >= 10000) {
-      await updateMatrixPresence(actor, input.id);
-      presencePublishedAt = Date.now();
+    let presenceRetryAt = previous?.presenceRetryAt ?? 0;
+    if (
+      Date.now() - presencePublishedAt >= 10000 &&
+      Date.now() >= presenceRetryAt
+    ) {
+      try {
+        await updateMatrixPresence(actor, input.id);
+        presencePublishedAt = Date.now();
+        presenceRetryAt = 0;
+      } catch (error) {
+        if (!(error instanceof MatrixRateLimitError)) throw error;
+        presenceRetryAt = Date.now() + Math.max(10000, error.retryAfterMs);
+      }
     }
     const members = await readRoomMembers(actor, input.id, room.kind);
     const presenceSenders = members
@@ -102,6 +112,7 @@ export async function readMatrixRoomSync(
       userIds: expiresAt > Date.now() ? userIds : [],
       expiresAt,
       presencePublishedAt,
+      presenceRetryAt,
     });
     return roomSyncPageSchema.parse({
       status: "ready",
