@@ -5,6 +5,10 @@ import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { query, transaction, TransactionBoundaryError } from "@db/queries";
 import { drainMemoryErasures } from "../../server/memory/erasure";
+import {
+  drainPayloadErasures,
+  queuePayloadErasure,
+} from "../../server/payloads/erasure";
 import * as sources from "../../server/memory/session-files";
 
 const { directory } = await vi.hoisted(async () => {
@@ -35,15 +39,38 @@ afterEach(async () => {
 });
 afterAll(() => rm(directory, { recursive: true, force: true }));
 
-async function enqueue(owner: string | null = null) {
+async function enqueue(
+  owner: string | null = `better-auth:synthetic-erasure-${randomUUID()}`
+) {
   const id = randomUUID();
   receipts.push(id);
   const path = join(directory, id, "raw", "eve");
   await mkdir(path, { recursive: true });
   await writeFile(join(path, "synthetic.jsonl"), "Synthetic erasure fixture");
-  await query(sql`INSERT INTO workspace_memory_erasure(namespace_id, owner_user_id, requested_at, available_at)
-    VALUES (${id}, ${owner}, ${new Date(receipts.length)}, ${new Date(receipts.length)})`);
+  await transaction(async () => {
+    await query(sql`INSERT INTO workspace_memory_erasure(namespace_id, owner_user_id, requested_at, available_at)
+      VALUES (${id}, ${owner}, ${new Date(receipts.length)}, ${new Date(receipts.length)})`);
+    if (owner)
+      await queuePayloadErasure({
+        kind: "private-memory",
+        ownerUserId: owner,
+        namespaceId: id,
+      });
+  });
   return id;
+}
+
+async function completePayloadErasures() {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const pending = await query(sql`SELECT scope_key FROM payload_erasure
+      WHERE scope_key IN (${sql.join(
+        receipts.map((id) => sql`${id}`),
+        sql`, `
+      )}) AND completed_at IS NULL`);
+    if (pending.length === 0) return;
+    await drainPayloadErasures();
+  }
+  throw new Error("The owned namespace payload obligations did not complete");
 }
 
 test("an uncommitted erasure receipt cannot remove files through a nested drain", async () => {
@@ -75,6 +102,7 @@ test("an uncommitted erasure receipt cannot remove files through a nested drain"
 test("a failed erasure does not roll back another account's completion", async () => {
   const healthy = await enqueue();
   const damaged = await enqueue();
+  await completePayloadErasures();
   const erase = sources.eraseSessionSources;
   vi.spyOn(sources, "eraseSessionSources").mockImplementation(
     async (root, id) => {
@@ -101,6 +129,7 @@ test("a failed erasure does not roll back another account's completion", async (
 
 test("a failing receipt backs off durably without storing error content, and recovers after repair", async () => {
   const damaged = await enqueue();
+  await completePayloadErasures();
   const erase = sources.eraseSessionSources;
   const attempts = vi
     .spyOn(sources, "eraseSessionSources")
@@ -157,6 +186,7 @@ test("a failing receipt backs off durably without storing error content, and rec
 test("each dispatch has a five-partition budget", async () => {
   const ids = [];
   for (let i = 0; i < 7; i++) ids.push(await enqueue());
+  await completePayloadErasures();
   expect(await drainMemoryErasures()).toEqual({ cleared: 5 });
   const pending = await query<{
     id: string;
@@ -171,6 +201,7 @@ test("each dispatch has a five-partition budget", async () => {
 test("a locked partition is skipped while an unrelated account completes", async () => {
   const held = await enqueue();
   const healthy = await enqueue();
+  await completePayloadErasures();
   const locked = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const holding = transaction(async () => {
@@ -199,6 +230,24 @@ test("a locked partition is skipped while an unrelated account completes", async
   }
 });
 
+test("an ownerless receipt cannot authorize provider or filesystem erasure", async () => {
+  const id = await enqueue(null);
+  await expect(drainMemoryErasures()).rejects.toBeInstanceOf(AggregateError);
+  expect(
+    await query(
+      sql`SELECT scope_key FROM payload_erasure WHERE scope_key=${id}`
+    )
+  ).toEqual([]);
+  expect(
+    await readFile(join(directory, id, "raw/eve/synthetic.jsonl"), "utf8")
+  ).toBe("Synthetic erasure fixture");
+  expect(
+    await query(
+      sql`SELECT erasure_failures,available_at>clock_timestamp() AS delayed FROM workspace_memory_erasure WHERE namespace_id=${id}`
+    )
+  ).toEqual([{ erasure_failures: 1, delayed: true }]);
+});
+
 async function deletionRequest() {
   const userId = `better-auth:erasure-${randomUUID()}`;
   const id = randomUUID();
@@ -218,6 +267,7 @@ test("concurrent partition acknowledgements complete only this account's file-me
     await enqueue(owner.userId),
     await enqueue(owner.userId),
   ]);
+  await completePayloadErasures();
   const both = Promise.withResolvers<void>();
   const reached = new Set<string>();
   const erase = sources.eraseSessionSources;
@@ -256,6 +306,7 @@ test("concurrent partition acknowledgements complete only this account's file-me
 test("partial filesystem completion stays pending until a retry confirms every subtree", async () => {
   const owner = await deletionRequest();
   const id = await enqueue(owner.userId);
+  await completePayloadErasures();
   const erase = sources.eraseSessionSources;
   const attempts = vi
     .spyOn(sources, "eraseSessionSources")

@@ -8,6 +8,7 @@ export default {
           "vitest.config.ts",
           "vitest.runtime.config.ts",
           "tests/runtime/matrix-security.config.ts",
+          "scripts/verification/*.config.ts",
         ],
       },
       entry: [

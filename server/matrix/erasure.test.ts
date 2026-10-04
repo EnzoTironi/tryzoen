@@ -12,10 +12,8 @@ import {
   vi,
 } from "vitest";
 import type { query } from "@db/queries";
-import {
-  captureMatrixErasureDepartures,
-  MatrixErasureDepartureSchema,
-} from "./erasure";
+import { captureMatrixErasureDepartures } from "./erasure";
+import { MatrixErasureDepartureSchema } from "./erasure-contract";
 
 const queries = vi.hoisted(() => ({ run: vi.fn<typeof query>() }));
 vi.mock("@db/queries", () => ({ query: queries.run }));

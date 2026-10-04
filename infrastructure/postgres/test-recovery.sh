@@ -63,6 +63,11 @@ CREATE TABLE recovery_vectors(id int PRIMARY KEY, value vector(3));
 INSERT INTO workspaces VALUES (1);
 INSERT INTO recovery_vectors VALUES (1, '[1,2,3]');
 SQL
+# Exercise the backup probe against the maintenance table's authored native DDL.
+# Payload owners are qualified separately with the entire migration chain.
+sed '/^ALTER TABLE "payload_object"/,$d' \
+  "$(dirname "${BASH_SOURCE[0]}")/../../db/migrations/0110_payload-collection.sql" | \
+  docker exec -i "$source_name" psql -X -U postgres -d open_instinct_prod -v ON_ERROR_STOP=1
 docker exec "$source_name" /usr/local/bin/bootstrap-application.sh
 docker exec "$source_name" /usr/local/bin/bootstrap-application.sh
 # Queue two real backups behind the same lock, then prove both reach the repo.
@@ -110,6 +115,20 @@ docker exec "$source_name" psql -X -U postgres -d open_instinct_prod -v ON_ERROR
   -c "INSERT INTO recovery_vectors VALUES (2, '[4,5,6]'); SELECT pg_switch_wal();"
 docker exec "$source_name" gosu postgres pgbackrest --stanza=zoen check
 docker exec "$source_name" /usr/local/bin/backup-health.sh
+oldest_backup=$(docker exec "$source_name" gosu postgres pgbackrest --stanza=zoen --output=json info | jq -er '.[0].backup | map(.timestamp.start) | min')
+actual=$(docker exec -e PGPASSWORD=test-app-password "$source_name" psql -X -h 127.0.0.1 -U zoen_app -d open_instinct_prod -At -v ON_ERROR_STOP=1 \
+  -c "SELECT extract(epoch FROM oldest_backup_start) = $oldest_backup AND observed_at BETWEEN clock_timestamp()-interval '1 minute' AND clock_timestamp() AND NOT has_table_privilege('zoen_app','zoen_maintenance.payload_backup_inventory','INSERT,UPDATE,DELETE') FROM zoen_maintenance.payload_backup_inventory WHERE repository='zoen';")
+[[ $actual == t ]] || { echo 'The actual retained backup inventory or its runtime permissions failed.' >&2; exit 1; }
+inventory_before=$(docker exec "$source_name" psql -X -U postgres -d open_instinct_prod -At -v ON_ERROR_STOP=1 \
+  -c "SELECT observed_at FROM zoen_maintenance.payload_backup_inventory WHERE repository='zoen';")
+if docker exec -e PGBACKREST_REPO1_CIPHER_PASS=incorrect-test-key "$source_name" /usr/local/bin/backup-health.sh; then
+  echo 'An unreadable encrypted backup repository produced a healthy retention inventory.' >&2
+  exit 1
+fi
+inventory_after=$(docker exec "$source_name" psql -X -U postgres -d open_instinct_prod -At -v ON_ERROR_STOP=1 \
+  -c "SELECT observed_at FROM zoen_maintenance.payload_backup_inventory WHERE repository='zoen';")
+[[ $inventory_before == "$inventory_after" ]] || { echo 'A failed backup probe refreshed the retention inventory.' >&2; exit 1; }
+echo 'Actual retained backups supplied the read-only payload retention floor; an unreadable repository preserved its previous receipt.'
 docker stop "$source_name" >/dev/null
 docker run -d --name "$restore_name" "${common[@]}" \
   -e ZOEN_RESTORE_PROOF=1 -e ZOEN_RESTORE_FROM_BACKUP=1 \

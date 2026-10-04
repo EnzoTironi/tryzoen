@@ -35,6 +35,8 @@ const boundary = vi.hoisted(() => {
     rollback: vi.fn<() => void>(),
     erase: vi.fn<typeof eraseSessionSources>(),
     archiveRoot: vi.fn<() => string | undefined>(),
+    payloadErasure:
+      vi.fn<typeof import("../payloads/erasure").queuePayloadErasure>(),
   };
 });
 vi.mock("../../db/index", () => ({
@@ -43,6 +45,9 @@ vi.mock("../../db/index", () => ({
 vi.mock("./session-files", async (original) => ({
   ...(await original<typeof import("./session-files")>()),
   eraseSessionSources: boundary.erase,
+}));
+vi.mock("../payloads/erasure", () => ({
+  queuePayloadErasure: boundary.payloadErasure,
 }));
 vi.mock("@shared/environment/env", async (original) => {
   const actual = await original<typeof import("@shared/environment/env")>();
@@ -69,6 +74,7 @@ beforeEach(() => {
   boundary.savepointExecute.mockResolvedValue({ rows: [] });
   boundary.rootExecute.mockRejectedValue(new Error("Unexpected root query"));
   boundary.erase.mockResolvedValue(undefined);
+  boundary.payloadErasure.mockResolvedValue(true);
   boundary.archiveRoot.mockReturnValue(root);
   boundary.outer.mockImplementation(async (run) =>
     run({ execute: boundary.execute, transaction: boundary.savepoint })
@@ -135,7 +141,7 @@ test("success proves namespace absence before files, then acknowledges only its 
   await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
   expect(boundary.erase).toHaveBeenCalledExactlyOnceWith(root, namespaceA);
   expect(boundary.outer).toHaveBeenCalledTimes(2);
-  expect(boundary.savepoint).toHaveBeenCalledTimes(1);
+  expect(boundary.savepoint).toHaveBeenCalledTimes(2);
   const [eraseOrder] = boundary.erase.mock.invocationCallOrder;
   const acknowledgementOrder =
     boundary.savepointExecute.mock.invocationCallOrder[1];
@@ -164,20 +170,16 @@ test("success proves namespace absence before files, then acknowledges only its 
   expect(boundary.rootExecute).not.toHaveBeenCalled();
 });
 
-test("an ownerless receipt clears only the exact namespace without touching account ledgers", async () => {
+test("an ownerless receipt stays pending without erasing files or touching account ledgers", async () => {
   candidate(namespaceB, null);
-  await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 1 });
-  expect(boundary.erase).toHaveBeenCalledExactlyOnceWith(root, namespaceB);
-  expect(statements(boundary.savepointExecute)).toEqual([
-    {
-      sql: 'SELECT user_id AS "userId" FROM workspace_memory_namespace WHERE namespace_id=$1 FOR UPDATE NOWAIT',
-      params: [namespaceB],
-    },
-    {
-      sql: "DELETE FROM workspace_memory_erasure WHERE namespace_id=$1",
-      params: [namespaceB],
-    },
-  ]);
+  await expect(drainMemoryErasures()).rejects.toBeInstanceOf(AggregateError);
+  expect(boundary.erase).not.toHaveBeenCalled();
+  expect(boundary.payloadErasure).not.toHaveBeenCalled();
+  expect(statements(boundary.savepointExecute)).toEqual([]);
+  expect(statements(boundary.execute)[1]).toEqual({
+    sql: "UPDATE workspace_memory_erasure SET erasure_failures=erasure_failures+1, last_failed_at=clock_timestamp(), available_at=clock_timestamp()+$1 * interval '1 second' WHERE namespace_id=$2",
+    params: [60, namespaceB],
+  });
 });
 
 test("missing archive configuration retains the receipt and schedules retry without erasing or acknowledging", async () => {
@@ -280,7 +282,7 @@ test("an acknowledgement failure rolls back the savepoint and retains a retry ev
 });
 
 test("one drain keeps the existing five-receipt bound", async () => {
-  for (let count = 0; count < 5; count++) candidate(namespaceA, null);
+  for (let count = 0; count < 5; count++) candidate();
   await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 5 });
   expect(boundary.outer).toHaveBeenCalledTimes(5);
   expect(boundary.erase).toHaveBeenCalledTimes(5);
@@ -321,11 +323,44 @@ test.each([null, "better-auth:another-owner"])(
       errors: [expect.objectContaining({ reason: "unavailable" })],
     });
     expect(boundary.erase).not.toHaveBeenCalled();
-    expect(boundary.savepointExecute).toHaveBeenCalledTimes(1);
+    expect(boundary.savepointExecute).toHaveBeenCalledTimes(
+      receiptOwner === null ? 0 : 1
+    );
+    expect(boundary.payloadErasure).not.toHaveBeenCalled();
     expect(boundary.rollback).toHaveBeenCalledTimes(1);
     expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
   }
 );
+
+test("pending payload erasure keeps the filesystem receipt and its ledger unacknowledged", async () => {
+  candidate();
+  boundary.payloadErasure.mockResolvedValueOnce(false);
+  await expect(drainMemoryErasures()).resolves.toEqual({ cleared: 0 });
+  expect(boundary.payloadErasure).toHaveBeenCalledExactlyOnceWith({
+    kind: "private-memory",
+    ownerUserId: owner,
+    namespaceId: namespaceA,
+  });
+  expect(boundary.erase).not.toHaveBeenCalled();
+  expect(statements(boundary.savepointExecute)).toHaveLength(1);
+  expect(statements(boundary.execute)[1]).toEqual({
+    sql: "UPDATE workspace_memory_erasure SET available_at=clock_timestamp()+interval '1 minute' WHERE namespace_id=$1",
+    params: [namespaceA],
+  });
+});
+
+test("failed payload cleanup admission rolls back before filesystem effects and retains an exact retry", async () => {
+  candidate();
+  const failure = new Error("Synthetic payload admission failure");
+  boundary.payloadErasure.mockRejectedValueOnce(failure);
+  await expect(drainMemoryErasures()).rejects.toMatchObject({
+    errors: [failure],
+  });
+  expect(boundary.erase).not.toHaveBeenCalled();
+  expect(boundary.rollback).toHaveBeenCalledTimes(1);
+  expect(statements(boundary.savepointExecute)).toHaveLength(1);
+  expect(statements(boundary.execute)[1]?.params).toEqual([60, namespaceA]);
+});
 
 test("namespace lock contention is a retry, never apparent absence or permission to erase", async () => {
   candidate();

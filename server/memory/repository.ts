@@ -36,7 +36,11 @@ import {
 } from "../workspaces/access";
 import { WorkspaceRepository } from "../workspaces/repository";
 import { GitBundleError } from "../files/git";
-import { memoryNamespace, MemoryNamespaceError } from "./namespace";
+import {
+  memoryNamespace,
+  MemoryNamespaceError,
+  isMemoryNamespaceErased,
+} from "./namespace";
 import { publishPrivateMemoryGit, readPrivateMemoryGit } from "./git";
 import {
   verifySessionClaimSource,
@@ -63,6 +67,13 @@ export {
   PrivateMemoryCorpusBackupSchema,
 } from "./archive";
 import { decodePrivateMemoryArchive } from "./archive-codec";
+import { PayloadError } from "../payloads/contract";
+import {
+  adoptPayload,
+  putRegistered,
+  readPayload,
+  registerPayload,
+} from "../payloads/publication";
 
 export class PrivateMemoryError extends Error {
   readonly _tag = "PrivateMemoryError";
@@ -109,12 +120,49 @@ async function privateScope(
   };
 }
 
-async function stored(namespaceId: string, allowMissingHead = false) {
-  const rows = await query(sql`SELECT head_sha AS head, bundle
-    FROM private_memory_repository WHERE namespace_id = ${namespaceId}`);
+async function stored(
+  namespaceId: string,
+  purpose: "read" | "restore" = "read"
+) {
+  const rows =
+    await query(sql`SELECT r.head_sha AS head,r.payload_object_id AS "payloadId",n.workspace_id AS "workspaceId",n.user_id AS "userId"
+    FROM private_memory_repository r JOIN workspace_memory_namespace n ON n.namespace_id=r.namespace_id
+    WHERE r.namespace_id = ${namespaceId} FOR SHARE OF r,n`);
   if (!rows[0]) throw new PrivateMemoryError("unavailable");
-  const repository = storedSchema.parse(rows[0]);
-  if (repository.head === null && !allowMissingHead) {
+  const pointer = z
+    .object({
+      head: GitRevisionSchema.nullable(),
+      payloadId: z.uuid().nullable(),
+      workspaceId: z.string(),
+      userId: z.string(),
+    })
+    .parse(rows[0]);
+  if ((pointer.head === null) !== (pointer.payloadId === null))
+    throw new PrivateMemoryError("unavailable");
+  const bundle =
+    pointer.payloadId === null
+      ? null
+      : await readPayload(
+          {
+            workspaceId: pointer.workspaceId,
+            ownerGeneration: namespaceId,
+            ownerUserId: pointer.userId,
+            kind: "private-memory-bundle",
+          },
+          pointer.payloadId
+        ).catch((error: unknown) => {
+          // Only an authenticated archive may replace missing or corrupt bytes.
+          // The retained head still fences lineage; provider outages never do.
+          if (
+            purpose === "restore" &&
+            error instanceof PayloadError &&
+            (error.reason === "missing" || error.reason === "corrupt")
+          )
+            return null;
+          throw error;
+        });
+  const repository = storedSchema.parse({ ...pointer, bundle });
+  if (repository.head === null && purpose === "read") {
     const [receipt] =
       await query(sql`SELECT revision FROM private_memory_operation WHERE namespace_id=${namespaceId}
       ORDER BY recorded_at DESC LIMIT 1`);
@@ -195,31 +243,36 @@ async function authorized<Result>(
   try {
     return await transaction(run, options);
   } catch (error) {
-    if (
-      error instanceof PrivateMemoryError ||
-      error instanceof WorkspaceAccessDenied
-    )
-      throw error;
-    if (error instanceof LearnedClaimError)
-      throw new PrivateMemoryError(error.reason);
-    if (error instanceof PrivateMemoryArchiveError)
-      throw new PrivateMemoryError(error.reason);
-    if (error instanceof MemoryNamespaceError)
-      throw new PrivateMemoryError(
-        error.reason === "erased" ? "conflict" : "invalid_input"
-      );
-    if (error instanceof GitBundleError && error.reason === "invalid_file")
-      throw new PrivateMemoryError("invalid_input");
-    if (
-      error instanceof GitBundleError ||
-      error instanceof SqlError ||
-      error instanceof SessionArchiveUnavailable
-    )
-      throw new PrivateMemoryError("unavailable", { cause: error });
-    if (error instanceof z.ZodError)
-      throw new PrivateMemoryError("invalid_input");
-    throw error;
+    return privateFailure(error);
   }
+}
+
+function privateFailure(error: unknown): never {
+  if (
+    error instanceof PrivateMemoryError ||
+    error instanceof WorkspaceAccessDenied
+  )
+    throw error;
+  if (error instanceof LearnedClaimError)
+    throw new PrivateMemoryError(error.reason);
+  if (error instanceof PrivateMemoryArchiveError)
+    throw new PrivateMemoryError(error.reason);
+  if (error instanceof MemoryNamespaceError)
+    throw new PrivateMemoryError(
+      error.reason === "erased" ? "conflict" : "invalid_input"
+    );
+  if (error instanceof GitBundleError && error.reason === "invalid_file")
+    throw new PrivateMemoryError("invalid_input");
+  if (
+    error instanceof GitBundleError ||
+    error instanceof SqlError ||
+    error instanceof PayloadError ||
+    error instanceof SessionArchiveUnavailable
+  )
+    throw new PrivateMemoryError("unavailable", { cause: error });
+  if (error instanceof z.ZodError)
+    throw new PrivateMemoryError("invalid_input");
+  throw error;
 }
 
 async function captureClaims(
@@ -272,11 +325,9 @@ async function verifyRestorableArchive(
   requirePrivateMemoryArchiveAuthentication(archive);
   // A receipt can coexist with a namespace after coordinated DB recovery.
   // Check its presence under the namespace lock before reading retained history.
-  const erasure =
-    await query(sql`SELECT namespace_id FROM workspace_memory_erasure
-      WHERE namespace_id = ${owner.namespace.id}`);
-  if (erasure.length) throw new PrivateMemoryError("conflict");
-  const current = await stored(owner.namespace.id, true);
+  if (await isMemoryNamespaceErased(owner.namespace.id))
+    throw new PrivateMemoryError("conflict");
+  const current = await stored(owner.namespace.id, "restore");
   const restored = await readPrivateMemoryGit({
     scope: owner.scope,
     head: archive.revision,
@@ -352,53 +403,107 @@ function restoreArchive(
   } catch {
     return Promise.reject(new PrivateMemoryError("invalid_input"));
   }
-  return authorized(
-    async () => {
-      const { owner, current, restored, citations } =
-        await verifyRestorableArchive(actor, archive);
-      await requireWorkspaceAccess(owner.actor);
-      const identical =
-        current.head === archive.revision &&
-        (current.bundle === null
-          ? archive.bundle === null
-          : archive.bundle !== null &&
-            Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)));
-      if (current.head !== archive.revision && current.head !== expected)
-        throw new PrivateMemoryError("conflict");
-      // Even an identical Git head may have lost immutable files/receipt indexes.
-      // Full lineage/CAS/high-water/current file access is checked before writes.
-      if (archive.version === 3) {
-        await restoreCompleteSessionSources(
-          owner.actor,
-          owner.namespace.id,
-          citations,
-          archive.sources
-        );
-      } else
-        await restoreSessionClaimSources(
-          owner.actor,
-          owner.namespace.id,
-          citations,
-          archive.sources
-        );
-      if (identical) return { applied: false as const, revision: current.head };
-      const written =
-        await query(sql`UPDATE private_memory_repository SET head_sha = ${archive.revision},bundle = ${archive.bundle},
-        recorded_at = ${restored.snapshot.recordedAt}::timestamptz
-        WHERE namespace_id = ${owner.namespace.id} AND head_sha IS NOT DISTINCT FROM ${current.head} RETURNING namespace_id`);
-      if (written.length !== 1) throw new PrivateMemoryError("conflict");
-      await query(
-        sql`DELETE FROM private_memory_operation WHERE namespace_id = ${owner.namespace.id}`
+  async function repairSources(
+    checked: Awaited<ReturnType<typeof verifyRestorableArchive>>
+  ) {
+    if (archive.version === 3)
+      await restoreCompleteSessionSources(
+        checked.owner.actor,
+        checked.owner.namespace.id,
+        checked.citations,
+        archive.sources
       );
-      for (const entry of restored.operations.toReversed())
-        await recordOperation(owner.namespace.id, entry);
-      await query(
-        sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${owner.namespace.id}`
+    else
+      await restoreSessionClaimSources(
+        checked.owner.actor,
+        checked.owner.namespace.id,
+        checked.citations,
+        archive.sources
       );
-      return { applied: true as const, revision: archive.revision };
-    },
-    { outermost: true }
-  );
+  }
+  function sameBundle(current: Awaited<ReturnType<typeof stored>>) {
+    return (
+      current.head === archive.revision &&
+      (current.bundle === null
+        ? archive.bundle === null
+        : archive.bundle !== null &&
+          Buffer.from(current.bundle).equals(Buffer.from(archive.bundle)))
+    );
+  }
+  return Promise.try(async () => {
+    const initial = await authorized(
+      async () => {
+        const checked = await verifyRestorableArchive(actor, archive);
+        const { owner, current } = checked;
+        await requireWorkspaceAccess(owner.actor);
+        if (current.head !== archive.revision && current.head !== expected)
+          throw new PrivateMemoryError("conflict");
+        if (sameBundle(current)) {
+          await repairSources(checked);
+          return { kind: "replayed" as const, revision: current.head };
+        }
+        const reference =
+          archive.bundle === null
+            ? null
+            : await registerPayload(
+                {
+                  workspaceId: owner.scope.workspaceId,
+                  ownerGeneration: owner.namespace.id,
+                  ownerUserId: owner.scope.userId,
+                  kind: "private-memory-bundle",
+                },
+                archive.bundle
+              );
+        return {
+          kind: "candidate" as const,
+          head: current.head,
+          namespaceId: owner.namespace.id,
+          preferenceRevision: owner.namespace.preferenceRevision,
+          reference,
+        };
+      },
+      { outermost: true }
+    );
+    if (initial.kind === "replayed")
+      return { applied: false as const, revision: initial.revision };
+    if (initial.reference !== null && archive.bundle !== null)
+      await putRegistered(initial.reference, archive.bundle);
+    return authorized(
+      async () => {
+        const checked = await verifyRestorableArchive(actor, archive);
+        const { owner, current, restored } = checked;
+        if (
+          owner.namespace.id !== initial.namespaceId ||
+          owner.namespace.preferenceRevision !== initial.preferenceRevision
+        )
+          throw new PrivateMemoryError("conflict");
+        await requireWorkspaceAccess(owner.actor);
+        if (sameBundle(current)) {
+          await repairSources(checked);
+          return { applied: false as const, revision: current.head };
+        }
+        if (current.head !== initial.head)
+          throw new PrivateMemoryError("conflict");
+        await repairSources(checked);
+        if (initial.reference !== null) await adoptPayload(initial.reference);
+        const written =
+          await query(sql`UPDATE private_memory_repository SET head_sha=${archive.revision},payload_object_id=${initial.reference?.candidateId ?? null},
+        recorded_at=${restored.snapshot.recordedAt}::timestamptz WHERE namespace_id=${owner.namespace.id}
+        AND head_sha IS NOT DISTINCT FROM ${current.head} RETURNING namespace_id`);
+        if (written.length !== 1) throw new PrivateMemoryError("conflict");
+        await query(
+          sql`DELETE FROM private_memory_operation WHERE namespace_id=${owner.namespace.id}`
+        );
+        for (const entry of restored.operations.toReversed())
+          await recordOperation(owner.namespace.id, entry);
+        await query(
+          sql`UPDATE workspace_memory_recall SET snapshot=NULL WHERE namespace_id=${owner.namespace.id}`
+        );
+        return { applied: true as const, revision: archive.revision };
+      },
+      { outermost: true }
+    );
+  }).catch(privateFailure);
 }
 
 /** Inspection authenticates the same immutable bytes and recovery fences as apply.
@@ -567,74 +672,139 @@ export const PrivateMemoryRepository = {
       return value;
     });
   },
-  change(
+  async change(
     actor: z.infer<typeof WorkspaceActorSchema>,
     raw: z.infer<typeof LearnedClaimChangeSchema>
   ) {
-    return authorized(async () => {
+    try {
       const change = LearnedClaimChangeSchema.parse(raw);
-      const owner = await privateScope(actor);
-      if (!owner.namespace.automaticEnabled && change.action === "assert")
-        throw new PrivateMemoryError("disabled");
-      const repository = await stored(owner.namespace.id);
-      // Replay is resolved from canonical commit metadata before the CAS check.
-      const result = await publishPrivateMemoryGit({
-        scope: owner.scope,
-        bundle: repository.bundle,
-        head: repository.head,
-        change,
-        publication: async () => {
-          const rows = await query<{ recordedAt: string }>(sql`SELECT to_char(
-            GREATEST(clock_timestamp(), COALESCE(recorded_at + interval '1 microsecond', '-infinity'::timestamptz))
-              AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
-            FROM private_memory_repository WHERE namespace_id = ${owner.namespace.id}`);
-          if (!rows[0]) throw new PrivateMemoryError("unavailable");
+      const initial = await authorized(
+        async () => {
+          const owner = await privateScope(actor);
+          if (!owner.namespace.automaticEnabled && change.action === "assert")
+            throw new PrivateMemoryError("disabled");
+          const repository = await stored(owner.namespace.id);
+          const result = await publishPrivateMemoryGit({
+            scope: owner.scope,
+            bundle: repository.bundle,
+            head: repository.head,
+            change,
+            publication: async () => {
+              const rows = await query<{
+                recordedAt: string;
+              }>(sql`SELECT to_char(
+              GREATEST(clock_timestamp(), COALESCE(recorded_at + interval '1 microsecond', '-infinity'::timestamptz))
+                AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
+              FROM private_memory_repository WHERE namespace_id = ${owner.namespace.id}`);
+              if (!rows[0]) throw new PrivateMemoryError("unavailable");
+              return {
+                recordedAt: rows[0].recordedAt,
+                authorUserId: owner.scope.userId,
+              };
+            },
+          });
+          if (!result.applied)
+            return {
+              kind: "replayed" as const,
+              receipt: LearnedClaimReceiptSchema.parse(result.receipt),
+            };
+          await verifyEvidence(
+            owner.actor,
+            "claim" in result
+              ? [result.claim.file]
+              : result.cleared.map((claim) => claim.file),
+            true
+          );
+          const reference = await registerPayload(
+            {
+              workspaceId: owner.scope.workspaceId,
+              ownerGeneration: owner.namespace.id,
+              ownerUserId: owner.scope.userId,
+              kind: "private-memory-bundle",
+            },
+            result.bundle
+          );
           return {
-            recordedAt: rows[0].recordedAt,
-            authorUserId: owner.scope.userId,
+            kind: "candidate" as const,
+            reference,
+            result,
+            head: repository.head,
+            namespaceId: owner.namespace.id,
+            preferenceRevision: owner.namespace.preferenceRevision,
           };
         },
-      });
-      if (!result.applied)
-        return {
-          applied: false as const,
-          receipt: LearnedClaimReceiptSchema.parse(result.receipt),
-        };
-      await verifyEvidence(
-        owner.actor,
-        "claim" in result
-          ? [result.claim.file]
-          : result.cleared.map((claim) => claim.file),
-        true
+        { outermost: true }
       );
-      await requireWorkspaceAccess(owner.actor);
-      const published = await query(sql`UPDATE private_memory_repository SET
-        head_sha = ${result.receipt.revision}, bundle = ${result.bundle}, recorded_at = ${result.snapshot.recordedAt}::timestamptz
-        WHERE namespace_id = ${owner.namespace.id} AND head_sha IS NOT DISTINCT FROM ${change.expectedRevision}
-        RETURNING namespace_id`);
-      if (published.length !== 1) throw new PrivateMemoryError("conflict");
-      await recordOperation(owner.namespace.id, {
-        revision: result.receipt.revision,
-        operation: result.operation,
-      });
-      // Old recall receipts remain tombstoned instead of silently replaying new facts.
-      await query(
-        sql`UPDATE workspace_memory_recall SET snapshot = NULL WHERE namespace_id = ${owner.namespace.id}`
+      if (initial.kind === "replayed")
+        return { applied: false as const, receipt: initial.receipt };
+      await putRegistered(initial.reference, initial.result.bundle);
+      return await authorized(
+        async () => {
+          const owner = await privateScope(actor);
+          if (
+            owner.namespace.id !== initial.namespaceId ||
+            owner.namespace.preferenceRevision !== initial.preferenceRevision
+          )
+            throw new PrivateMemoryError("conflict");
+          if (!owner.namespace.automaticEnabled && change.action === "assert")
+            throw new PrivateMemoryError("disabled");
+          const current = await stored(owner.namespace.id);
+          if (current.head !== initial.head) {
+            const replay = await publishPrivateMemoryGit({
+              scope: owner.scope,
+              bundle: current.bundle,
+              head: current.head,
+              change,
+              publication: async () => {
+                throw new PrivateMemoryError("conflict");
+              },
+            });
+            if (replay.applied) throw new PrivateMemoryError("conflict");
+            return {
+              applied: false as const,
+              receipt: LearnedClaimReceiptSchema.parse(replay.receipt),
+            };
+          }
+          const result = initial.result;
+          await verifyEvidence(
+            owner.actor,
+            "claim" in result
+              ? [result.claim.file]
+              : result.cleared.map((claim) => claim.file),
+            true
+          );
+          await requireWorkspaceAccess(owner.actor);
+          await adoptPayload(initial.reference);
+          const published = await query(sql`UPDATE private_memory_repository SET
+          head_sha=${result.receipt.revision},payload_object_id=${initial.reference.candidateId},recorded_at=${result.snapshot.recordedAt}::timestamptz
+          WHERE namespace_id=${owner.namespace.id} AND head_sha IS NOT DISTINCT FROM ${change.expectedRevision} RETURNING namespace_id`);
+          if (published.length !== 1) throw new PrivateMemoryError("conflict");
+          await recordOperation(owner.namespace.id, {
+            revision: result.receipt.revision,
+            operation: result.operation,
+          });
+          await query(
+            sql`UPDATE workspace_memory_recall SET snapshot=NULL WHERE namespace_id=${owner.namespace.id}`
+          );
+          return LearnedClaimChangeResultSchema.parse(
+            "claim" in result
+              ? {
+                  applied: true as const,
+                  receipt: result.receipt,
+                  claim: result.claim,
+                }
+              : {
+                  applied: true as const,
+                  receipt: result.receipt,
+                  cleared: result.cleared,
+                }
+          );
+        },
+        { outermost: true }
       );
-      return LearnedClaimChangeResultSchema.parse(
-        "claim" in result
-          ? {
-              applied: true as const,
-              receipt: result.receipt,
-              claim: result.claim,
-            }
-          : {
-              applied: true as const,
-              receipt: result.receipt,
-              cleared: result.cleared,
-            }
-      );
-    });
+    } catch (error) {
+      return privateFailure(error);
+    }
   },
   history(actor: z.infer<typeof WorkspaceActorSchema>, claimId: string) {
     return authorized(async () => {
@@ -718,10 +888,8 @@ export const PrivateMemoryRepository = {
       )
         throw new WorkspaceAccessDenied();
       const owner = await privateScope(actor);
-      const erasure =
-        await query(sql`SELECT namespace_id FROM workspace_memory_erasure
-        WHERE namespace_id = ${owner.namespace.id}`);
-      if (erasure.length) throw new PrivateMemoryError("conflict");
+      if (await isMemoryNamespaceErased(owner.namespace.id))
+        throw new PrivateMemoryError("conflict");
       const repository = await stored(owner.namespace.id);
       const captured = await readPrivateMemoryGit({
         scope: owner.scope,

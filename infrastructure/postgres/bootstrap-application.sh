@@ -56,6 +56,16 @@ BEGIN
   END LOOP;
 END;
 $grants$;
+DO $payload_inventory$
+BEGIN
+  IF to_regclass('zoen_maintenance.payload_backup_inventory') IS NOT NULL THEN
+    REVOKE ALL ON SCHEMA zoen_maintenance FROM PUBLIC,zoen_app;
+    REVOKE ALL ON ALL TABLES IN SCHEMA zoen_maintenance FROM PUBLIC,zoen_app;
+    GRANT USAGE ON SCHEMA zoen_maintenance TO zoen_app;
+    GRANT SELECT ON zoen_maintenance.payload_backup_inventory TO zoen_app;
+  END IF;
+END;
+$payload_inventory$;
 -- Graphile protects its internal queue with RLS even after table grants. Scope
 -- the worker policy to this schema; the application still cannot alter policies,
 -- own tables, assume the migration role, or bypass RLS anywhere else.

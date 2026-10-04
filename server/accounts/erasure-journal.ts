@@ -9,8 +9,8 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { env } from "@shared/environment/env";
-import { MatrixErasureDepartureSchema } from "../matrix/erasure";
+import { erasureJournalEnvironment } from "@shared/environment/env/erasure-journal";
+import { MatrixErasureDepartureSchema } from "../matrix/erasure-contract";
 
 const recordSchema = z.strictObject({
   version: z.literal(1),
@@ -31,6 +31,7 @@ class ErasureJournalError extends Error {
 }
 
 function openJournal() {
+  const env = erasureJournalEnvironment();
   const bucket = env.ZOEN_ERASURE_JOURNAL_BUCKET;
   const accessKey = env.ZOEN_ERASURE_JOURNAL_ACCESS_KEY;
   const secretKey = env.ZOEN_ERASURE_JOURNAL_SECRET_KEY;

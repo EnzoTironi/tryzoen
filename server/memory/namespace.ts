@@ -27,11 +27,19 @@ export class MemoryNamespaceError extends Error {
  * A presence read must not wait on a worker's receipt lock and then treat its
  * later deletion as permission to access a restored generation.
  */
-export async function requireMemoryNamespaceAvailable(namespaceId: string) {
+export async function isMemoryNamespaceErased(namespaceId: string) {
+  const namespace = z.uuid().parse(namespaceId);
   const erasure =
     await dbQuery(sql`SELECT namespace_id FROM workspace_memory_erasure
-    WHERE namespace_id = ${namespaceId}`);
-  if (erasure.length) throw new MemoryNamespaceError("erased");
+    WHERE namespace_id = ${namespace}
+    UNION ALL SELECT ${namespace}::uuid AS namespace_id FROM payload_erasure
+    WHERE scope_key=${namespace}`);
+  return erasure.length > 0;
+}
+
+export async function requireMemoryNamespaceAvailable(namespaceId: string) {
+  if (await isMemoryNamespaceErased(namespaceId))
+    throw new MemoryNamespaceError("erased");
 }
 
 export const memoryNamespace = async function (

@@ -3,3 +3,4 @@
 17 2 * * 0 /usr/local/bin/backup.sh full
 17 2 * * 1-6 /usr/local/bin/backup.sh diff
 17 0-1,3-23 * * * /usr/local/bin/backup.sh incr
+*/2 * * * * /usr/local/bin/backup-health.sh

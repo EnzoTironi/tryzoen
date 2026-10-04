@@ -10,8 +10,8 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { bytea } from "./binary";
 import { workspaces } from "./workspaces";
+import { payloadObjects } from "./payloads";
 
 export const workspaceRepositories = pgTable(
   "workspace_repository",
@@ -20,19 +20,20 @@ export const workspaceRepositories = pgTable(
       .primaryKey()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     headSha: text("head_sha").notNull(),
-    bundle: bytea("bundle").notNull(),
+    payloadId: uuid("payload_object_id")
+      .notNull()
+      .references(() => payloadObjects.id),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    index("workspace_repository_payload_idx")
+      .on(table.payloadId)
+      .where(sql`${table.payloadId} IS NOT NULL`),
     check(
       "workspace_repository_head_sha_check",
       sql`${table.headSha} ~ '^[a-f0-9]{40}$'`
-    ),
-    check(
-      "workspace_repository_bundle_check",
-      sql`octet_length(${table.bundle}) <= 25165824`
     ),
   ]
 );
@@ -82,9 +83,14 @@ export const workspaceSources = pgTable(
     workspaceId: text("workspace_id").notNull(),
     revision: text("revision").notNull(),
     filename: text("filename").notNull(),
-    content: bytea("content").notNull(),
+    payloadId: uuid("payload_object_id")
+      .notNull()
+      .references(() => payloadObjects.id),
   },
   (table) => [
+    index("workspace_source_payload_idx")
+      .on(table.payloadId)
+      .where(sql`${table.payloadId} IS NOT NULL`),
     primaryKey({ columns: [table.workspaceId, table.revision] }),
     foreignKey({
       columns: [table.workspaceId, table.revision],
@@ -96,10 +102,6 @@ export const workspaceSources = pgTable(
     check(
       "workspace_source_filename_check",
       sql`length(${table.filename}) BETWEEN 1 AND 255`
-    ),
-    check(
-      "workspace_source_content_check",
-      sql`octet_length(${table.content}) <= 10485760`
     ),
   ]
 );

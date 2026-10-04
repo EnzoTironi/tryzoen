@@ -12,7 +12,7 @@ import {
 import { channelIdentities } from "./channels";
 import { channelInbox } from "./messaging";
 import { workspaces } from "./workspaces";
-import { bytea } from "./binary";
+import { payloadObjects } from "./payloads";
 
 export const privateArtifacts = pgTable(
   "private_artifact",
@@ -35,7 +35,7 @@ export const privateArtifacts = pgTable(
     mediaType: text("media_type").notNull(),
     byteLength: integer("byte_length").notNull(),
     sha256: text("sha256").notNull(),
-    content: bytea("content"),
+    payloadId: uuid("payload_object_id").references(() => payloadObjects.id),
     derivedText: text("derived_text"),
     derivedKind: text("derived_kind"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -47,6 +47,9 @@ export const privateArtifacts = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
+    index("private_artifact_payload_idx")
+      .on(table.payloadId)
+      .where(sql`${table.payloadId} IS NOT NULL`),
     unique("private_artifact_source_unique").on(
       table.sourceIdentityId,
       table.sourceEventId,
@@ -67,8 +70,8 @@ export const privateArtifacts = pgTable(
     check("private_artifact_hash", sql`${table.sha256} ~ '^[0-9a-f]{64}$'`),
     check(
       "private_artifact_content",
-      sql`(${table.deletedAt} IS NULL AND ${table.content} IS NOT NULL AND octet_length(${table.content}) = ${table.byteLength})
-        OR (${table.deletedAt} IS NOT NULL AND ${table.content} IS NULL AND ${table.derivedText} IS NULL AND ${table.derivedKind} IS NULL)`
+      sql`(${table.deletedAt} IS NULL AND ${table.payloadId} IS NOT NULL)
+        OR (${table.deletedAt} IS NOT NULL AND ${table.payloadId} IS NULL AND ${table.derivedText} IS NULL AND ${table.derivedKind} IS NULL)`
     ),
     check(
       "private_artifact_derived",

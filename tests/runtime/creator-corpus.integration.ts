@@ -9,7 +9,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { query } from "@db/queries";
+import { query, transaction } from "@db/queries";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
@@ -34,6 +34,10 @@ import {
 import { creatorGroundingSchema } from "@zoen/companion-ui/creators";
 import { verifyCreatorGrounding } from "../../server/creators/grounding";
 import { drainMemoryErasures } from "../../server/memory/erasure";
+import {
+  drainPayloadErasures,
+  queuePayloadErasure,
+} from "../../server/payloads/erasure";
 import { saveDirectoryProfile } from "../../server/accounts/directory";
 import {
   inviteCreatorPilot,
@@ -393,11 +397,33 @@ test("release cascade leaves a durable receipt and existing erasure worker remov
   expect(receipts).toHaveLength(1);
   // Previous synthetic owners may also have queued erasures; all use this isolated directory.
   for (let attempt = 0; attempt < 20; attempt++) {
-    const queued = await query<{ namespaceId: string }>(
-      sql`SELECT namespace_id AS "namespaceId" FROM workspace_memory_erasure`
+    const queued = await query<{
+      namespaceId: string;
+      ownerUserId: string | null;
+    }>(
+      sql`SELECT namespace_id AS "namespaceId",owner_user_id AS "ownerUserId" FROM workspace_memory_erasure`
     );
     if (queued.some((row) => !fixtureNamespaces.has(row.namespaceId)))
       throw new Error("Refusing to drain unrelated erasure obligations.");
+    for (const receipt of queued) {
+      const ownerUserId = receipt.ownerUserId;
+      if (!ownerUserId)
+        throw new Error("Refusing an ownerless corpus erasure obligation");
+      await transaction(() =>
+        queuePayloadErasure({
+          kind: "private-memory",
+          ownerUserId,
+          namespaceId: receipt.namespaceId,
+        })
+      );
+    }
+    await drainPayloadErasures();
+    await query(sql`UPDATE workspace_memory_erasure e SET available_at=clock_timestamp()
+      WHERE namespace_id IN (${sql.join(
+        [...fixtureNamespaces].map((id) => sql`${id}`),
+        sql`, `
+      )}) AND EXISTS(
+        SELECT 1 FROM payload_erasure p WHERE p.scope_key=e.namespace_id::text AND p.owner_user_id=e.owner_user_id AND p.completed_at IS NOT NULL)`);
     await drainMemoryErasures();
     const pending = await query(
       sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id=${corpus.namespace}`

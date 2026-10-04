@@ -3,20 +3,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { query } from "@db/queries";
 import { lockMatrixOrganizations, lockMatrixRoomFences } from "./authority";
-
-const coordinate = z
-  .string()
-  .min(1)
-  .max(512)
-  .regex(/^[^\s]+$/u);
-export const MatrixErasureDepartureSchema = z.strictObject({
-  bindingId: z.uuid(),
-  matrixId: coordinate.startsWith("@"),
-  roomId: coordinate.startsWith("!"),
-  installationId: coordinate,
-  workspaceId: z.string().min(1).max(200),
-  organizationId: z.string().min(1).max(200).nullable(),
-});
+import { MatrixErasureDepartureSchema } from "./erasure-contract";
 const bindingSchema = MatrixErasureDepartureSchema.omit({ matrixId: true });
 const referenceLimit = 1024;
 

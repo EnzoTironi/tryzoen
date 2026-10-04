@@ -5,6 +5,7 @@ import type { WorkspaceActorSchema } from "../../workspaces/access";
 import { WorkspaceAccessDenied } from "../../workspaces/access";
 import { readCreatorRelease } from "../releases";
 import { requireActiveCreatorPilot } from "../pilots";
+import { isMemoryNamespaceErased } from "../../memory/namespace";
 import {
   corpusAccessSchema,
   corpusDigest,
@@ -38,10 +39,8 @@ export async function authorizedCreatorCorpus(
     .parse(stored);
   // Restored approvals can coexist with a retained namespace erasure receipt.
   // Any pending receipt denies content, including one deferred for retry.
-  const erasure =
-    await query(sql`SELECT namespace_id FROM workspace_memory_erasure
-    WHERE namespace_id = ${corpus.namespace}`);
-  if (erasure.length) throw new WorkspaceAccessDenied();
+  if (await isMemoryNamespaceErased(corpus.namespace))
+    throw new WorkspaceAccessDenied();
   if (
     corpus.manifest.releaseId !== releaseId ||
     corpusDigest(JSON.stringify(corpus.manifest)) !== corpus.digest

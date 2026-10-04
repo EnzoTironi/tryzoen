@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
+import { prepareRuntimePayloads } from "./runtime-payloads";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const command = process.argv[2] ?? "up";
@@ -44,14 +45,14 @@ if (["--help", "-h", "help"].includes(command)) {
   pnpm test:runtime:reset     Delete this test project's volumes and recreate them
   pnpm test:runtime:down      Stop this test project, retaining its disposable volumes
 
-Requires Docker Compose and Node 24. Uses loopback ports 15432, 18008, 18130 and 18131.
+Requires Docker Compose and Node 24. Uses loopback ports 15432, 18008, 18130, 18131 and 19480.
 The reset command deletes only the zoen-runtime-tests Compose project's data.`);
 } else if (command === "down") {
   run("docker", [...compose, "down"]);
 } else if (command === "run") {
   const archiveRoot = mkdtempSync(join(tmpdir(), "zoen-k3-runtime-"));
   const runtimeEnvironment = {
-    ...inheritedEnvironment,
+    ...environment,
     ZOEN_SESSION_ARCHIVE_DIR: archiveRoot,
   };
   try {
@@ -89,11 +90,13 @@ The reset command deletes only the zoen-runtime-tests Compose project's data.`);
     "--wait-timeout",
     "120",
   ]);
+  await prepareRuntimePayloads();
   run(process.execPath, [
-    "node_modules/drizzle-kit/bin.cjs",
-    "migrate",
-    "--config",
-    "db/drizzle.config.ts",
+    "--import",
+    "tsx",
+    "--input-type=module",
+    "-e",
+    "import { migrateApplication } from './server/database/migrations.ts'; console.log(JSON.stringify(await migrateApplication(process.env.DATABASE_URL_UNPOOLED)));",
   ]);
   run(
     process.execPath,

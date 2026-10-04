@@ -10,8 +10,8 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { bytea } from "./binary";
 import { workspaceMemoryNamespaces } from "./learned-memory";
+import { payloadObjects } from "./payloads";
 
 /** The private bundle contains the canonical files and Git operation metadata.
  * Its namespace can never appear in the shared workspace repository. */
@@ -24,7 +24,7 @@ export const privateMemoryRepositories = pgTable(
         onDelete: "cascade",
       }),
     headSha: text("head_sha"),
-    bundle: bytea("bundle"),
+    payloadId: uuid("payload_object_id").references(() => payloadObjects.id),
     recordedAt: timestamp("recorded_at", {
       withTimezone: true,
       precision: 6,
@@ -32,9 +32,12 @@ export const privateMemoryRepositories = pgTable(
     }),
   },
   (table) => [
+    index("private_memory_repository_payload_idx")
+      .on(table.payloadId)
+      .where(sql`${table.payloadId} IS NOT NULL`),
     check(
       "private_memory_repository_snapshot_check",
-      sql`(${table.headSha} IS NULL AND ${table.bundle} IS NULL AND ${table.recordedAt} IS NULL) OR (${table.headSha} IS NOT NULL AND ${table.bundle} IS NOT NULL AND ${table.recordedAt} IS NOT NULL AND ${table.headSha} ~ '^[a-f0-9]{40}$' AND octet_length(${table.bundle}) BETWEEN 1 AND 25165824)`
+      sql`(${table.headSha} IS NULL AND ${table.payloadId} IS NULL AND ${table.recordedAt} IS NULL) OR (${table.headSha} IS NOT NULL AND ${table.payloadId} IS NOT NULL AND ${table.recordedAt} IS NOT NULL AND ${table.headSha} ~ '^[a-f0-9]{40}$')`
     ),
   ]
 );

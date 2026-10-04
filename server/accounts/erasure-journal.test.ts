@@ -21,13 +21,13 @@ vi.mock("@aws-sdk/client-s3", async (original) => ({
     destroy = sdk.destroy;
   },
 }));
-vi.mock("@shared/environment/env", () => ({
-  env: {
+vi.mock("@shared/environment/env/erasure-journal", () => ({
+  erasureJournalEnvironment: () => ({
     ZOEN_ERASURE_JOURNAL_BUCKET: "synthetic-erasure-bucket",
     ZOEN_ERASURE_JOURNAL_ENDPOINT: "https://journal.synthetic.invalid",
     ZOEN_ERASURE_JOURNAL_ACCESS_KEY: { reveal: () => "synthetic-access-key" },
     ZOEN_ERASURE_JOURNAL_SECRET_KEY: { reveal: () => "synthetic-secret-key" },
-  },
+  }),
 }));
 // Keep the real departure schema without loading SQL/provider dependencies.
 vi.mock("@db/queries", () => ({

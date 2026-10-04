@@ -507,7 +507,12 @@ export async function publishPrivateMemoryGit(input: {
               input.change.targetRevision
             )
           : undefined;
-      const publication = await input.publication();
+      const publication = previous
+        ? {
+            recordedAt: previous.operation.recordedAt,
+            authorUserId: previous.operation.authorUserId,
+          }
+        : await input.publication();
       const plan =
         input.change.action === "clear"
           ? planLearnedClaimClear({

@@ -18,7 +18,11 @@ import {
   writeSessionSource,
 } from "./session-files";
 import { LearnedClaimSessionSourceSchema } from "../../packages/companion-ui/src/learned/claim";
-import { memoryNamespace, requireMemoryNamespaceAvailable } from "./namespace";
+import {
+  memoryNamespace,
+  requireMemoryNamespaceAvailable,
+  isMemoryNamespaceErased,
+} from "./namespace";
 import { operationSignal, withDeadline, withSignal } from "../operations/async";
 
 const hash = (value: string) =>
@@ -61,10 +65,8 @@ async function archiveNamespace(
   const namespace = z.uuid().parse(rows[0].namespace_id);
   // Recovery may restore a namespace while its non-restored erasure is pending.
   // Never release raw evidence/export or rebuild its index in that state.
-  const erasure = await query(
-    sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = ${namespace}`
-  );
-  if (erasure.length) throw new SessionArchiveUnavailable();
+  if (await isMemoryNamespaceErased(namespace))
+    throw new SessionArchiveUnavailable();
   return namespace;
 }
 
@@ -786,10 +788,8 @@ export async function rebuildSessionSourceReceipts(
       const namespace = await archiveNamespace(actor, sessionId, true);
       const directory = await sessionDirectory(root, namespace, sessionId);
       const highWater = await lockSourceReceiptRecovery();
-      const erasure = await query(
-        sql`SELECT namespace_id FROM workspace_memory_erasure WHERE namespace_id = ${namespace}`
-      );
-      if (erasure.length) throw new SessionArchiveUnavailable();
+      if (await isMemoryNamespaceErased(namespace))
+        throw new SessionArchiveUnavailable();
       let count = 0;
       let bytes = 0;
       let restored = 0;

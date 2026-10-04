@@ -182,6 +182,40 @@ test("two simultaneous edits have one publication winner and never overwrite eac
     );
   }));
 
+test("imports retain exact source bytes beside the matching Git revision and enforce current source access", () =>
+  run(async ({ actor, guest, personal, repository }) => {
+    const bytes = Buffer.from(
+      "Synthetic source: produção diária, 42 unidades."
+    );
+    const input = {
+      operationId: randomUUID(),
+      expectedRevision: null,
+      path: "knowledge/production.md",
+      content: "Daily production: 42 units.",
+    };
+    const source = {
+      kind: "import" as const,
+      filename: "production.txt",
+      bytes,
+    };
+    const first = await repository.write(actor, input, source);
+    expect(await repository.write(actor, input, source)).toEqual(first);
+    const retained = await repository.source(guest, first.revision);
+    expect(retained.filename).toBe(source.filename);
+    expect(Buffer.from(retained.bytes)).toEqual(bytes);
+    expect(
+      (await repository.read(guest, input.path, first.revision)).content
+    ).toBe(input.content);
+    await expect(
+      repository.source(personal, first.revision)
+    ).rejects.toMatchObject({ reason: "not_found" });
+    await query(sql`DELETE FROM workspace_memberships
+      WHERE workspace_id=${actor.workspaceId} AND user_id=${guest.userId}`);
+    await expect(
+      repository.source(guest, first.revision)
+    ).rejects.toBeInstanceOf(WorkspaceAccessDenied);
+  }));
+
 test("members cannot alter agent instructions; removal blocks current files, history and export", () =>
   run(async ({ actor, guest, repository }) => {
     const first = await repository.write(actor, {

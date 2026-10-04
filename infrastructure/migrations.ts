@@ -121,6 +121,18 @@ export const migrateApplication = Effect.fn("migrateApplication")(
         return yield* Effect.fail(
           new Error("Runtime grant verification failed; web remains stopped.")
         );
+      const inventory = yield* Machines.execMachine({
+        app_name: input.app,
+        machine_id: input.primary,
+        command: ["/usr/local/bin/backup-health.sh"],
+        timeout: 60,
+      });
+      if (inventory.exit_code !== 0)
+        return yield* Effect.fail(
+          new Error(
+            "Backup inventory verification failed; web remains stopped."
+          )
+        );
       return { image: input.image, verified: true };
     }).pipe(Effect.scoped)
 );

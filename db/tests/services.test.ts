@@ -34,6 +34,18 @@ describe("database services", () => {
     ])
       await applyMigration(client, migration);
     await client.exec("ALTER TABLE workspaces ADD COLUMN display_name text");
+    const payloadPreparation = await readFile(
+      new URL("../migrations/0108_payload-registration.sql", import.meta.url),
+      "utf8"
+    );
+    const generationStatement = payloadPreparation
+      .split("--> statement-breakpoint")
+      .find((statement) =>
+        statement.includes('ADD COLUMN "payload_generation"')
+      );
+    if (!generationStatement)
+      throw new Error("Missing workspace generation DDL");
+    await client.exec(generationStatement);
     const pgliteDatabase = drizzle(client, {
       schema,
     });

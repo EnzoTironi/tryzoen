@@ -46,6 +46,13 @@ import {
 } from "./knowledge/validation";
 import { sourceBindingSchema } from "@zoen/companion-ui/workspace-sources";
 import { createHash } from "node:crypto";
+import { PayloadError } from "../payloads/contract";
+import {
+  adoptPayload,
+  putRegistered,
+  readPayload,
+  registerPayload,
+} from "../payloads/publication";
 import {
   requireWorkspaceAccess,
   WorkspaceAccessDenied,
@@ -150,18 +157,36 @@ const visibleToGrant = (path: string, grants: readonly string[] | null) =>
 const sharedExecution = (actor: z.output<typeof WorkspaceActorSchema>) =>
   !!(actor.agentGrantId ?? actor.groupBindingId);
 const snapshot = async function (workspaceId: string, asOf?: string) {
-  // One statement captures the bundle and receipt under the same MVCC snapshot.
-  // A concurrent publisher cannot select a revision missing from this bundle.
+  // Hold the canonical owner and payload locks through verified object reading.
   const recorded = asOf
     ? sql`(SELECT revision FROM workspace_revision
         WHERE workspace_id = ${workspaceId} AND created_at <= ${asOf}::timestamptz
         ORDER BY created_at DESC, revision DESC LIMIT 1)`
     : sql`NULL`;
   const rows = await query(
-    sql`SELECT head_sha AS head, bundle, ${recorded} AS "recordedRevision"
-      FROM workspace_repository WHERE workspace_id = ${workspaceId}`
+    sql`SELECT r.head_sha AS head, r.payload_object_id AS "payloadId", w.payload_generation AS generation,
+      ${recorded} AS "recordedRevision" FROM workspace_repository r
+      JOIN workspaces w ON w.id=r.workspace_id WHERE r.workspace_id = ${workspaceId} FOR SHARE OF r,w`
   );
-  return rows[0] ? await repositorySchema.parseAsync(rows[0]) : null;
+  if (!rows[0]) return null;
+  const pointer = z
+    .object({
+      head: GitRevisionSchema,
+      payloadId: z.uuid(),
+      generation: z.uuid(),
+      recordedRevision: GitRevisionSchema.nullable(),
+    })
+    .parse(rows[0]);
+  const bundle = await readPayload(
+    {
+      workspaceId,
+      ownerGeneration: pointer.generation,
+      ownerUserId: null,
+      kind: "workspace-bundle",
+    },
+    pointer.payloadId
+  );
+  return repositorySchema.parse({ ...pointer, bundle });
 };
 
 /** Resolve recorded views inside the caller's workspace-access transaction. */
@@ -394,7 +419,11 @@ export const WorkspaceRepository = {
           : null;
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError)
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      )
         return unavailable();
       throw error;
     }
@@ -425,7 +454,11 @@ export const WorkspaceRepository = {
         };
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -457,7 +490,11 @@ export const WorkspaceRepository = {
         };
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -521,7 +558,11 @@ export const WorkspaceRepository = {
         };
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -543,7 +584,11 @@ export const WorkspaceRepository = {
         return await z.array(workspaceRevisionSchema).parseAsync(rows);
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -557,7 +602,11 @@ export const WorkspaceRepository = {
         return await snapshot(actor.workspaceId);
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -573,16 +622,36 @@ export const WorkspaceRepository = {
         await requireWorkspaceAccess(actor);
         const sha = await GitRevisionSchema.parseAsync(revision);
         const rows =
-          await query(sql`SELECT filename, content AS bytes FROM workspace_source
-          WHERE workspace_id = ${actor.workspaceId} AND revision = ${sha}`);
+          await query(sql`SELECT s.filename,s.payload_object_id AS "payloadId",w.payload_generation AS generation FROM workspace_source s
+          JOIN workspaces w ON w.id=s.workspace_id WHERE s.workspace_id = ${actor.workspaceId} AND s.revision = ${sha} FOR SHARE OF s,w`);
         if (!rows[0])
           throw new WorkspaceRepositoryError({
             reason: "not_found",
           });
-        return await importSourceSchema.parseAsync(rows[0]);
+        const pointer = z
+          .object({
+            filename: z.string(),
+            payloadId: z.uuid(),
+            generation: z.uuid(),
+          })
+          .parse(rows[0]);
+        const bytes = await readPayload(
+          {
+            workspaceId: actor.workspaceId,
+            ownerGeneration: pointer.generation,
+            ownerUserId: null,
+            kind: "workspace-source",
+          },
+          pointer.payloadId
+        );
+        return await importSourceSchema.parseAsync({ ...pointer, bytes });
       });
     } catch (error) {
-      if (error instanceof SqlError || error instanceof SchemaError) {
+      if (
+        error instanceof SqlError ||
+        error instanceof SchemaError ||
+        error instanceof PayloadError
+      ) {
         return unavailable();
       }
       throw error;
@@ -675,14 +744,25 @@ export const WorkspaceRepository = {
           })
         )
         .digest("hex");
-      const initial = await withDatabaseTransaction(async () => {
-        await requireWorkspaceAccess(actor, admin);
-        const prior = await replay(actor.workspaceId, input.operationId, hash);
-        return {
-          prior,
-          stored: await snapshot(actor.workspaceId),
-        };
-      });
+      const initial = await withDatabaseTransaction(
+        async () => {
+          await requireWorkspaceAccess(actor, admin);
+          const owners = await query(
+            sql`SELECT payload_generation AS generation FROM workspaces WHERE id=${actor.workspaceId} FOR SHARE`
+          );
+          const prior = await replay(
+            actor.workspaceId,
+            input.operationId,
+            hash
+          );
+          return {
+            prior,
+            stored: await snapshot(actor.workspaceId),
+            generation: z.uuid().parse(owners[0]?.generation),
+          };
+        },
+        { outermost: true }
+      );
       if (initial.prior)
         return {
           revision: initial.prior,
@@ -800,35 +880,67 @@ export const WorkspaceRepository = {
             throw new WorkspaceRepositoryError({ reason: "invalid_input" });
         }
       }
-      return await withDatabaseTransaction(async () => {
-        await requireWorkspaceAccess(actor, admin);
-        const prior = await replay(actor.workspaceId, input.operationId, hash);
-        if (prior)
-          return {
-            revision: prior,
+      const intent = await withDatabaseTransaction(
+        async () => {
+          await requireWorkspaceAccess(actor, admin);
+          const owners = await query(
+            sql`SELECT payload_generation AS generation FROM workspaces WHERE id=${actor.workspaceId} FOR SHARE`
+          );
+          if (owners[0]?.generation !== initial.generation)
+            throw new WorkspaceRepositoryError({ reason: "conflict" });
+          const scope = {
+            workspaceId: actor.workspaceId,
+            ownerGeneration: initial.generation,
+            ownerUserId: null,
           };
-        const published =
-          await query(sql`INSERT INTO workspace_repository (workspace_id, head_sha, bundle)
-            VALUES (${actor.workspaceId}, ${candidate.revision}, ${candidate.bundle})
-            ON CONFLICT (workspace_id) DO UPDATE SET head_sha = EXCLUDED.head_sha,
-              bundle = EXCLUDED.bundle, updated_at = clock_timestamp()
-              WHERE workspace_repository.head_sha = ${input.expectedRevision}
-            RETURNING head_sha`);
-        if (published.length !== 1) {
-          const racedReplay = await replay(
+          return {
+            bundle: await registerPayload(
+              { ...scope, kind: "workspace-bundle" },
+              candidate.bundle
+            ),
+            source:
+              original === null
+                ? null
+                : await registerPayload(
+                    { ...scope, kind: "workspace-source" },
+                    original.bytes
+                  ),
+          };
+        },
+        { outermost: true }
+      );
+      await putRegistered(intent.bundle, candidate.bundle);
+      if (intent.source !== null && original !== null)
+        await putRegistered(intent.source, original.bytes);
+      return await withDatabaseTransaction(
+        async () => {
+          await query(
+            sql`SELECT pg_advisory_xact_lock(194803,hashtext(${actor.workspaceId}))`
+          );
+          await requireWorkspaceAccess(actor, admin);
+          const prior = await replay(
             actor.workspaceId,
             input.operationId,
             hash
           );
-          if (racedReplay)
+          if (prior)
             return {
-              revision: racedReplay,
+              revision: prior,
             };
-          throw new WorkspaceRepositoryError({
-            reason: "conflict",
-          });
-        }
-        await query(sql`INSERT INTO workspace_revision (workspace_id, revision, parent_revision, operation_id,
+          await adoptPayload(intent.bundle);
+          const published =
+            await query(sql`INSERT INTO workspace_repository (workspace_id, head_sha, payload_object_id)
+            VALUES (${actor.workspaceId}, ${candidate.revision}, ${intent.bundle.candidateId})
+            ON CONFLICT (workspace_id) DO UPDATE SET head_sha = EXCLUDED.head_sha,
+              payload_object_id = EXCLUDED.payload_object_id, updated_at = clock_timestamp()
+              WHERE workspace_repository.head_sha = ${input.expectedRevision}
+            RETURNING head_sha`);
+          if (published.length !== 1) {
+            throw new WorkspaceRepositoryError({
+              reason: "conflict",
+            });
+          }
+          await query(sql`INSERT INTO workspace_revision (workspace_id, revision, parent_revision, operation_id,
             request_hash, paths, author_user_id, source, source_sha256, created_at)
             VALUES (${actor.workspaceId}, ${candidate.revision}, ${input.expectedRevision}, ${input.operationId},
               ${hash}, ARRAY[${sql.join(
@@ -837,28 +949,33 @@ export const WorkspaceRepository = {
               )}]::text[], ${actor.userId}, ${source.kind}, ${sourceSha},
               GREATEST(clock_timestamp(), (SELECT created_at + interval '1 microsecond' FROM workspace_revision
                 WHERE workspace_id = ${actor.workspaceId} AND revision = ${input.expectedRevision})))`);
-        if (original !== null) {
-          const totals = await query<{
-            bytes: number;
-          }>(sql`SELECT coalesce(sum(octet_length(content)), 0)::int AS bytes
-              FROM workspace_source WHERE workspace_id = ${actor.workspaceId}`);
-          if ((totals[0]?.bytes ?? 0) + original.bytes.length > 104_857_600)
-            throw new WorkspaceRepositoryError({
-              reason: "invalid_input",
-            });
-          await query(sql`INSERT INTO workspace_source (workspace_id, revision, filename, content)
-              VALUES (${actor.workspaceId}, ${candidate.revision}, ${original.filename}, ${original.bytes})`);
-        }
-        return {
-          revision: candidate.revision,
-        };
-      });
+          if (original !== null) {
+            const totals = await query<{
+              bytes: number;
+            }>(sql`SELECT coalesce(sum(p.byte_length), 0)::int AS bytes
+              FROM workspace_source s JOIN payload_object p ON p.id=s.payload_object_id WHERE s.workspace_id = ${actor.workspaceId}`);
+            if ((totals[0]?.bytes ?? 0) + original.bytes.length > 104_857_600)
+              throw new WorkspaceRepositoryError({
+                reason: "invalid_input",
+              });
+            if (intent.source === null) throw new PayloadError("invalid");
+            await adoptPayload(intent.source);
+            await query(sql`INSERT INTO workspace_source (workspace_id, revision, filename, payload_object_id)
+              VALUES (${actor.workspaceId}, ${candidate.revision}, ${original.filename}, ${intent.source.candidateId})`);
+          }
+          return {
+            revision: candidate.revision,
+          };
+        },
+        { outermost: true }
+      );
     } catch (error) {
       if (error instanceof GitBundleError && error.reason !== "unavailable")
         throw new WorkspaceRepositoryError({ reason: "invalid_input" });
       if (
         error instanceof SqlError ||
         error instanceof SchemaError ||
+        error instanceof PayloadError ||
         error instanceof GitBundleError
       ) {
         return unavailable();

@@ -1,5 +1,8 @@
 import { semanticEnvironmentShape } from "./env/semantic";
 import { r2QualificationEnvironmentShape } from "./env/r2-qualification";
+import { privatePayloadEnvironmentShape } from "./env/private-payloads";
+import { erasureJournalEnvironmentShape } from "./env/erasure-journal";
+import { nativeProcessEnvironmentShape } from "./env/native-process";
 import { Secret } from "@shared/environment/secret";
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
@@ -72,6 +75,7 @@ export const env = createEnv({
   server: {
     ...semanticEnvironmentShape,
     ...r2QualificationEnvironmentShape,
+    ...privatePayloadEnvironmentShape,
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     EVE_NEXT_PRODUCTION_PORT: z.coerce
       .number()
@@ -123,7 +127,7 @@ export const env = createEnv({
     KAPSO_PHONE_NUMBER_ID: requiredValue.optional(),
     COMPANION_FFPROBE_PATH: requiredValue.default("ffprobe"),
     COMPANION_TRANSCRIPTION_MODEL: requiredValue.optional(),
-    PATH: z.string().optional(),
+    ...nativeProcessEnvironmentShape,
     COMPANION_MODEL_PROVIDER: z.optional(installationModelProviderSchema),
     COMPANION_CODEX_MODEL: z.optional(codexModelSchema),
     COMPANION_BROWSER_MODEL_PROVIDER: z.optional(browserModelProviderSchema),
@@ -161,22 +165,7 @@ export const env = createEnv({
       .min(1)
       .max(4)
       .default(1),
-    ZOEN_ERASURE_JOURNAL_BUCKET: requiredValue.optional(),
-    ZOEN_ERASURE_JOURNAL_ENDPOINT: z
-      .url()
-      .default("https://fly.storage.tigris.dev"),
-    ZOEN_ERASURE_JOURNAL_ACCESS_KEY: z.optional(
-      z
-        .string()
-        .min(1)
-        .transform((value) => new Secret(value))
-    ),
-    ZOEN_ERASURE_JOURNAL_SECRET_KEY: z.optional(
-      z
-        .string()
-        .min(1)
-        .transform((value) => new Secret(value))
-    ),
+    ...erasureJournalEnvironmentShape,
     ZOEN_MATRIX_URL: z.url().optional(),
     ZOEN_MATRIX_NATIVE_NOTIFICATIONS: z
       .enum(["true", "false"])

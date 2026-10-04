@@ -31,6 +31,7 @@ function migrationApi({
   backup = 0,
   migrationExit = "0",
   grant = 0,
+  inventory = 0,
   stopWorks = true,
   volume = "vol_auth",
 } = {}) {
@@ -84,7 +85,9 @@ function migrationApi({
           ? backup
           : command.endsWith("bootstrap-application.sh")
             ? grant
-            : 0,
+            : command.endsWith("backup-health.sh")
+              ? inventory
+              : 0,
         stdout: command === "sh" ? migrationExit : "",
         stderr: "private database diagnostics",
       });
@@ -123,7 +126,7 @@ function migrationApi({
   };
 }
 
-await test("backs up, stops all old web replicas, migrates, grants and removes the temporary machine in order", async () => {
+await test("backs up, drains web, migrates, grants, verifies the inventory and removes the temporary machine in order", async () => {
   const api = migrationApi();
   assert.deepEqual(await api.run(), { image: migration.image, verified: true });
   assert.equal(api.calls[0], "/usr/local/bin/backup.sh");
@@ -136,6 +139,10 @@ await test("backs up, stops all old web replicas, migrates, grants and removes t
   );
   assert.ok(
     api.calls.indexOf("/usr/local/bin/bootstrap-application.sh") > create
+  );
+  assert.ok(
+    api.calls.indexOf("/usr/local/bin/backup-health.sh") >
+      api.calls.indexOf("/usr/local/bin/bootstrap-application.sh")
   );
   assert.equal(
     api.calls.at(-1),
@@ -187,6 +194,19 @@ await test("a failed grant verification leaves old web stopped and diagnostics p
       error instanceof Error &&
       error.message.includes("web remains stopped") &&
       !error.message.includes("private database diagnostics")
+  );
+  assert.ok(api.web.every(({ state }) => state === "stopped"));
+  assert.equal(
+    api.calls.at(-1),
+    "DELETE /v1/apps/test-pg/machines/isolated-migration"
+  );
+});
+
+await test("a failed backup inventory probe keeps web stopped and removes the temporary migrator", async () => {
+  const api = migrationApi({ inventory: 1 });
+  await assert.rejects(
+    api.run(),
+    /Backup inventory verification failed; web remains stopped/
   );
   assert.ok(api.web.every(({ state }) => state === "stopped"));
   assert.equal(

@@ -360,7 +360,7 @@ test("a lost head keeps its operational high-water fence and index repair cannot
   const archive = await PrivateMemoryRepository.backup(actor);
   const namespace = await fixture.namespace(actor);
   await query(
-    sql`UPDATE private_memory_repository SET head_sha=NULL,bundle=NULL,recorded_at=NULL WHERE namespace_id=${namespace.id}`
+    sql`UPDATE private_memory_repository SET head_sha=NULL,payload_object_id=NULL,recorded_at=NULL WHERE namespace_id=${namespace.id}`
   );
   await expect(PrivateMemoryRepository.read(actor)).rejects.toMatchObject({
     reason: "unavailable",
