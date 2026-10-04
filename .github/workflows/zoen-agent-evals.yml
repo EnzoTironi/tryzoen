@@ -75,6 +75,7 @@ jobs:
         run: npm install --global @openai/codex@0.155.1 && codex --version
       - name: Prepare isolated private payloads and journal
         run: |
+          pnpm --filter @zoen/companion-ui build:ui
           docker compose -p zoen-native-evals -f tests/runtime/compose.yaml up --detach --no-deps payloads
           node --import tsx --input-type=module -e "import { prepareRuntimePayloads } from './scripts/runtime-payloads.ts'; await prepareRuntimePayloads();"
           journal_root=$(mktemp -d "$RUNNER_TEMP/zoen-native-journal-XXXXXX")
