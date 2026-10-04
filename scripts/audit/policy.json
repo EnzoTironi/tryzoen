@@ -3,7 +3,7 @@
   "classification": "accepted temporary risk",
   "authorization": "protected integration and release after required checks",
   "expiresAt": "2026-10-05T02:59:00Z",
-  "configurationSha256": "8caa55b2fc8aa42d33fa8d9455e77286bbd1a4851b61521377f0012c63f385a3",
+  "configurationSha256": "b7c095473f28997264294f029e68d6aaef4c9717f2279ea0b3780762cadeaa01",
   "graphs": {
     "application": {
       "GHSA-86w9-cpqp-85rv": {

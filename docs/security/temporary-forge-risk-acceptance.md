@@ -1,5 +1,36 @@
 # Temporary dependency risk acceptance
 
+## October 4 native bootstrap fingerprint decision
+
+This fingerprint change becomes effective only after the owner explicitly
+approves its exact accompanying patch. The October 4 deadline remains
+**2026-10-05T02:59:00Z**, 23:59 in America/Sao_Paulo. This proposal does not
+extend that deadline or add a package, advisory, dependency path or credential.
+
+The source is `39e0dbb0c8f6e1864f5477fc5ad9e95b9f750c5e`, tree
+`c1387f214321f7ef277cabd55fb6e4fea3ea351a`. The guarded configuration is
+`b7c095473f28997264294f029e68d6aaef4c9717f2279ea0b3780762cadeaa01`.
+The sole release-source change since the qualified R2 tree builds the existing
+shared UI package before native evaluation migrations. The actual main-only
+run failed on the missing compiled files-schema export before any model call.
+The corrected complete bootstrap passed against a clean isolated PostgreSQL 17
+and RustFS fixture, including all 113 application migrations, a second
+idempotent migration and owned cleanup. This is a bootstrap proof; the actual
+protected model evaluations remain required after integration.
+
+The same node-forge 1.4.0 and braces 3.0.3 application findings and the braces
+3.0.3 infrastructure finding remain unfixed. Fresh official-registry reports
+are identical to the accepted fixtures. Their exact advisory, severity, version
+and path-set pins remain unchanged. The narrow http-cache-semantics patch and
+all audits, guards, source checks, runtime checks, native evaluations, recovery,
+protected deployment and observed product checks remain required.
+
+The previous source-specific approval allowed the exact b590fc491e74 artifact.
+This new proposal changes only the policy fingerprint and this decision record.
+It permits normal protected integration and release after all checks pass;
+it permits no admin merge, disabled check, production reset, cloud credential
+grant or later deadline/fingerprint refresh without another explicit decision.
+
 ## October 4 R2 release decision
 
 This decision becomes effective only after the owner explicitly approves its
