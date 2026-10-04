@@ -59,7 +59,7 @@ async function personalGoogleRPC() {
   const url = `http://127.0.0.1:${address.port}`;
   return {
     async client(
-      actor?: Awaited<ReturnType<typeof workspaceFixture>>["actor"]
+      actor?: Awaited<ReturnType<typeof workspaceFixture>>["actor" | "guest"]
     ) {
       const headers = new Headers();
       if (actor) {
