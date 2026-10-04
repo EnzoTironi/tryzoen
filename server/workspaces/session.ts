@@ -3,7 +3,10 @@ import { ensureScope } from "@db/services/scope";
 import { accessScopeForUser } from "@shared/identity/access-scope";
 import { requireWorkspaceAccess, WorkspaceAccessDenied } from "./access";
 
-export const resolveWorkspaceActor = async function (headers: Headers) {
+export const resolveWorkspaceActor = async function (
+  headers: Headers,
+  workspace: "selected" | "personal" = "selected"
+) {
   const session = await readAuthSession(headers);
   if (!session) throw new WorkspaceAccessDenied();
   const personal = accessScopeForUser(`better-auth:${session.user.id}`);
@@ -12,7 +15,10 @@ export const resolveWorkspaceActor = async function (headers: Headers) {
   });
   return await requireWorkspaceAccess({
     userId: personal.userId,
-    workspaceId: headers.get("x-zoen-workspace") ?? personal.workspaceId,
+    workspaceId:
+      workspace === "personal"
+        ? personal.workspaceId
+        : (headers.get("x-zoen-workspace") ?? personal.workspaceId),
     authSessionId: session.session.id,
   });
 };
