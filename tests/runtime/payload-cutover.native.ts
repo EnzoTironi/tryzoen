@@ -242,7 +242,7 @@ test("native staged cutover preserves all four payload owners, survives a reject
       );
     }
     const completed = await migrateApplication(migrationUrl.toString());
-    expect(completed.applicationMigrations).toBe(113);
+    expect(completed.applicationMigrations).toBe(114);
     expect(await migrateApplication(migrationUrl.toString())).toEqual(
       completed
     );
