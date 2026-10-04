@@ -849,6 +849,10 @@ describe("native payload collection", () => {
       ...privateScope(),
       kind: "private-artifact",
     });
+    const browserImage = unregistered({
+      ...privateScope(),
+      kind: "browser-image",
+    });
     const foreign = unregistered({
       ...privateScope(),
       ownerUserId: owner().guest.userId,
@@ -862,6 +866,7 @@ describe("native payload collection", () => {
       ownerGeneration: z.uuid().parse(personalRow?.generation),
     });
     await directPut(artifact);
+    await directPut(browserImage);
     await directPut(foreign);
     await directPut(personal);
     const user = await accountIntent();
@@ -872,7 +877,7 @@ describe("native payload collection", () => {
       completed: 1,
       progressed: 2,
     });
-    for (const reference of [ownPrivate, artifact, personal])
+    for (const reference of [ownPrivate, artifact, browserImage, personal])
       await expect(providerRead(reference)).rejects.toMatchObject({
         reason: "missing",
       });

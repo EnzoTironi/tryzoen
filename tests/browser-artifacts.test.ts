@@ -40,6 +40,22 @@ describe("browser image contracts", () => {
     ).toBe(false);
   });
 
+  it.each(["bad", "", "%", "\ud800"])(
+    "rejects invalid artifact id %j without throwing",
+    (id) => {
+      expect(
+        browserImageArtifactReferenceSchema.safeParse({
+          byteSize: 4,
+          filename: "product.png",
+          id,
+          label: "Product image",
+          mediaType: "image/png",
+          url: `/artifacts/${id}`,
+        }).success
+      ).toBe(false);
+    }
+  );
+
   it("extracts and strips only exact artifact image markdown", () => {
     const artifact = browserImageArtifactReferenceSchema.parse({
       byteSize: 4,

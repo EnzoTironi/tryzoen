@@ -1,11 +1,10 @@
-/* oxlint-disable vitest/require-mock-type-parameters -- The auth and Blob mocks implement only the route boundaries exercised here. */
+/* oxlint-disable vitest/require-mock-type-parameters -- The auth and artifact mocks implement only the route boundaries exercised here. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const artifactId = "0d01e667-d128-4bb7-a248-1ae21db72f4f";
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const mocks = vi.hoisted(() => ({
   getAuthSession: vi.fn(),
-  getBlob: vi.fn(),
   readArtifact: vi.fn(),
 }));
 
@@ -15,10 +14,6 @@ vi.mock("@db/services/auth/session", () => ({
 vi.mock("@db/services/browser-images", () => ({
   readReadyBrowserImageArtifact: mocks.readArtifact,
 }));
-vi.mock("@vercel/blob", () => ({
-  get: mocks.getBlob,
-}));
-
 import { GET } from "@app/artifacts/[artifactId]/route";
 
 beforeEach(() => {
@@ -28,12 +23,8 @@ beforeEach(() => {
     byteSize: png.byteLength,
     filename: "Product image.png",
     mediaType: "image/png",
-    storagePathname: "artifacts/product",
-  });
-  mocks.getBlob.mockResolvedValue({
-    blob: { contentType: "image/png", etag: '"etag"', size: png.byteLength },
-    statusCode: 200,
-    stream: new Response(png).body,
+    bytes: png,
+    contentHash: "c".repeat(64),
   });
 });
 
@@ -43,7 +34,7 @@ describe("browser image route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/png");
-    expect(response.headers.get("cache-control")).toBe("private, max-age=3600");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("content-security-policy")).toContain(
       "default-src 'none'"
     );
@@ -54,24 +45,21 @@ describe("browser image route", () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(png);
   });
 
-  it("passes conditional ETags through to private Blob", async () => {
-    mocks.getBlob.mockResolvedValue({
-      blob: { contentType: "image/png", etag: '"etag"', size: png.byteLength },
-      statusCode: 304,
-      stream: null,
-    });
-
-    const response = await GET(
-      request({ "if-none-match": '"etag"' }),
-      context()
-    );
-
-    expect(response.status).toBe(304);
-    expect(mocks.getBlob).toHaveBeenCalledWith(
-      "artifacts/product",
-      expect.objectContaining({ ifNoneMatch: '"etag"' })
-    );
-  });
+  it.each(['"' + "c".repeat(64) + '"', 'W/"' + "c".repeat(64) + '"', "*"])(
+    "checks current authority before answering a matching ETag %s",
+    async (etag) => {
+      const sent = request({ "if-none-match": etag });
+      const response = await GET(sent, context());
+      expect(response.status).toBe(304);
+      expect(mocks.readArtifact).toHaveBeenCalledWith(
+        "better-auth:user-1",
+        artifactId,
+        { signal: sent.signal }
+      );
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(await response.text()).toBe("");
+    }
+  );
 
   it.each([
     ["unauthenticated", null, artifactId],
@@ -85,7 +73,7 @@ describe("browser image route", () => {
 
       expect(response.status).toBe(404);
       expect(await response.text()).toBe("Not found");
-      expect(mocks.getBlob).not.toHaveBeenCalled();
+      expect(mocks.readArtifact).not.toHaveBeenCalled();
     }
   );
 

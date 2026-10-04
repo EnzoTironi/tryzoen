@@ -285,9 +285,12 @@ export async function transferLegacyPayloads(client: Client) {
   const connection = openPayloads();
   let transferred = 0;
   try {
-    for (const kind of PayloadScopeSchema.options.map(
-      (schema) => schema.shape.kind.value
-    )) {
+    for (const kind of [
+      PayloadScopeSchema.options[0].shape.kind.value,
+      PayloadScopeSchema.options[1].shape.kind.value,
+      PayloadScopeSchema.options[2].shape.kind.value,
+      PayloadScopeSchema.options[3].shape.kind.value,
+    ]) {
       for (;;) {
         operationSignal().throwIfAborted();
         const next = await selectLegacyPayload(client, kind);

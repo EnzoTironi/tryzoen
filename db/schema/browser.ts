@@ -11,8 +11,12 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { browserImageSourceKinds } from "@shared/browser/artifact";
+import {
+  browserImageSourceKinds,
+  maximumBrowserImageBytes,
+} from "@shared/browser/artifact";
 import { workspaceMemberships } from "./workspaces";
+import { payloadObjects } from "./payloads";
 
 export const browserSessions = pgTable(
   "browser_sessions",
@@ -160,7 +164,7 @@ export const browserImageArtifacts = pgTable(
     mediaType: text("media_type"),
     byteSize: integer("byte_size"),
     contentHash: text("content_hash"),
-    storagePathname: text("storage_pathname").notNull(),
+    payloadId: uuid("payload_object_id").references(() => payloadObjects.id),
     sourceKind: text("source_kind", {
       enum: browserImageSourceKinds,
     }).notNull(),
@@ -192,8 +196,15 @@ export const browserImageArtifacts = pgTable(
     ),
     check(
       "browser_image_artifacts_ready_fields_check",
-      sql`${table.status} = 'pending' OR (${table.filename} IS NOT NULL AND ${table.mediaType} IS NOT NULL AND ${table.byteSize} > 0 AND ${table.contentHash} IS NOT NULL)`
+      sql`(${table.status} = 'pending' AND ${table.payloadId} IS NULL AND ${table.filename} IS NULL AND ${table.mediaType} IS NULL AND ${table.byteSize} IS NULL AND ${table.contentHash} IS NULL)
+        OR (${table.status} = 'ready' AND ${table.payloadId} IS NOT NULL AND ${table.filename} IS NOT NULL
+          AND ${table.mediaType} IS NOT NULL AND ${table.mediaType} IN ('image/gif','image/jpeg','image/png','image/webp')
+          AND ${table.byteSize} IS NOT NULL AND ${table.byteSize} BETWEEN 1 AND ${maximumBrowserImageBytes}
+          AND ${table.contentHash} IS NOT NULL AND ${table.contentHash} ~ '^[a-f0-9]{64}$')`
     ),
+    index("browser_image_artifacts_payload_idx")
+      .on(table.payloadId)
+      .where(sql`${table.payloadId} IS NOT NULL`),
     uniqueIndex("browser_image_artifacts_workspace_idempotency_uidx").on(
       table.workspaceId,
       table.idempotencyKey

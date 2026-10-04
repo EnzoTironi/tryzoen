@@ -1,9 +1,6 @@
-import { get } from "@vercel/blob";
 import { z } from "zod";
 import { getAuthSession } from "@db/services/auth/session";
 import { readReadyBrowserImageArtifact } from "@db/services/browser-images";
-import { accessScopeForUser } from "@shared/identity/access-scope";
-import { env } from "@shared/environment";
 
 export const runtime = "nodejs";
 
@@ -14,52 +11,29 @@ export async function GET(
   const session = await getAuthSession(request.headers);
   const parsedId = z.uuid().safeParse((await context.params).artifactId);
   if (!session || !parsedId.success) return notFound();
-
-  const scope = accessScopeForUser(`better-auth:${session.user.id}`);
-  const opened = await openArtifact(scope, parsedId.data, {
-    ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
-    signal: request.signal,
-  });
-  if (!opened) return notFound();
-
-  const headers = privateImageHeaders();
-  headers.set("etag", opened.result.blob.etag);
-  if (opened.result.statusCode === 304) {
-    return new Response(null, { headers, status: 304 });
-  }
-
-  headers.set("content-length", String(opened.artifact.byteSize));
-  headers.set("content-type", opened.artifact.mediaType);
-  headers.set(
-    "content-disposition",
-    contentDisposition(opened.artifact.filename)
+  const artifact = await readReadyBrowserImageArtifact(
+    `better-auth:${session.user.id}`,
+    parsedId.data,
+    {
+      signal: request.signal,
+    }
   );
-  return new Response(opened.result.stream, { headers, status: 200 });
-}
-
-async function openArtifact(
-  scope: ReturnType<typeof accessScopeForUser>,
-  artifactId: string,
-  options: { readonly ifNoneMatch?: string; readonly signal?: AbortSignal }
-) {
-  const artifact = await readReadyBrowserImageArtifact(scope, artifactId);
-  const byteSize = artifact?.byteSize;
-  const filename = artifact?.filename;
-  const mediaType = artifact?.mediaType;
-  if (!artifact || !byteSize || !filename || !mediaType) return undefined;
-  if (!env.BLOB_STORE_ID && !env.BLOB_READ_WRITE_TOKEN) return undefined;
-  const result = await get(artifact.storagePathname, {
-    access: "private",
-    abortSignal: options.signal,
-    ifNoneMatch: options.ifNoneMatch,
-  });
-  if (!result) return undefined;
-  if (
-    result.statusCode === 200 &&
-    (result.blob.size !== byteSize || result.blob.contentType !== mediaType)
-  )
-    return undefined;
-  return { artifact: { ...artifact, byteSize, filename, mediaType }, result };
+  if (!artifact) return notFound();
+  const headers = privateImageHeaders();
+  const etag = `"${artifact.contentHash}"`;
+  headers.set("etag", etag);
+  const matches = request.headers
+    .get("if-none-match")
+    ?.split(",")
+    .some(
+      (value) =>
+        value.trim() === "*" || value.trim().replace(/^W\//u, "") === etag
+    );
+  if (matches) return new Response(null, { headers, status: 304 });
+  headers.set("content-length", String(artifact.byteSize));
+  headers.set("content-type", artifact.mediaType);
+  headers.set("content-disposition", contentDisposition(artifact.filename));
+  return new Response(new Uint8Array(artifact.bytes), { headers, status: 200 });
 }
 
 function notFound() {
@@ -71,7 +45,7 @@ function notFound() {
 
 function privateImageHeaders() {
   return new Headers({
-    "cache-control": "private, max-age=3600",
+    "cache-control": "private, no-store",
     "content-security-policy": "default-src 'none'; sandbox",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",

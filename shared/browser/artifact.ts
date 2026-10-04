@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const maximumBrowserImageBytes = 8 * 1024 * 1024;
 
-export const browserImageMediaTypeSchema = z.enum([
+const browserImageMediaTypeSchema = z.enum([
   "image/gif",
   "image/jpeg",
   "image/png",
@@ -27,7 +27,7 @@ export const browserImageArtifactReferenceSchema = z
     mediaType: browserImageMediaTypeSchema,
     url: z.string(),
   })
-  .refine((artifact) => artifact.url === browserImageArtifactUrl(artifact.id), {
+  .refine((artifact) => artifact.url === `/artifacts/${artifact.id}`, {
     message: "Artifact URL must match its id.",
     path: ["url"],
   });

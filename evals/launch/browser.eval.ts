@@ -1,4 +1,5 @@
 import { defineEval } from "eve/evals";
+import { z } from "zod";
 import { equals, includes } from "eve/evals/expect";
 import {
   requireStreamIndex,
@@ -7,15 +8,16 @@ import {
 import { readTaskCompletion } from "@evals/browser/worker-events";
 import { sendMessageToolResultSchema } from "@zoen/companion-ui/messages";
 import { reactToMessageToolResultSchema } from "@zoen/companion-ui/messages";
+import { browserImageArtifactReferenceSchema } from "@shared/browser/artifact";
 
 export default defineEval({
   description:
-    "Delegate a real browser task with native Eve tools and close its browser",
+    "Inspect a real page, save its private image through native Eve tools, and close its browser",
   tags: ["launch", "browser", "live-model", "live-provider", "synthetic-data"],
   timeoutMs: 240_000,
   async test(t) {
     const started = await t.send(
-      "Use the browser to visually inspect https://example.com and report its exact document title. Verify the title through the browser DOM. This requires a browser, not web_fetch. Close the browser after reading it. Do not log in, submit forms or send external messages."
+      "Use the browser to visually inspect https://example.com and report its exact document title. Verify the title through the browser DOM. This requires a browser, not web_fetch. Before closing the browser, use capture_browser_image to save one private viewport image with the label Example Domain. Close the browser after the image is saved. Do not log in, submit forms or send external messages."
     );
     const replyIndex = requireStreamIndex(started.session);
     const childId = await requireWorkerSessionId(t, started);
@@ -35,6 +37,16 @@ export default defineEval({
       count: 1,
       input: { action: "delete" },
     });
+    child
+      .calledTool("capture_browser_image", {
+        status: "completed",
+        count: 1,
+        output: (value) =>
+          z
+            .object({ image: browserImageArtifactReferenceSchema })
+            .safeParse(value).success,
+      })
+      .label("browser image is durably saved in private storage");
     t.check(
       child.events.some(
         (event) =>
