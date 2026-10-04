@@ -23,7 +23,7 @@ services:
       timeout: 3s
       retries: 60
   payloads:
-    image: rustfs/rustfs@sha256:42edb61d588775f9431ff436216d14392d2234d4eb2ed68321569fbf7245b36b
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
     environment:
       RUSTFS_ACCESS_KEY: synthetic-payload-publication
       RUSTFS_SECRET_KEY: synthetic-payload-publication-owned-fixture
