@@ -1,9 +1,15 @@
 import { Action } from "alchemy/Action";
+import { createHash } from "node:crypto";
 import * as Machines from "@distilled.cloud/fly-io/machines";
 import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import { Effect, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { quiesceWebForMigration, type WebMigration } from "./web-cutover.ts";
+import {
+  privatePayloadSecretNames,
+  privateStorageDigests,
+  privateStorageSecretNames,
+} from "./secrets.ts";
 
 interface ApplicationMigration {
   app: string;
@@ -12,6 +18,11 @@ interface ApplicationMigration {
   database: string;
   image: string;
   prepared: { host: string; release: string; credentialVersion: string };
+  storage: {
+    payloadVersion: string;
+    migrationJournalVersion: string;
+    webJournalVersion: string;
+  };
   web: WebMigration;
 }
 
@@ -19,6 +30,49 @@ interface ApplicationMigration {
 export const migrateApplication = Effect.fn("migrateApplication")(
   (input: ApplicationMigration) =>
     Effect.gen(function* () {
+      const storage = yield* Effect.all({
+        migration: privateStorageDigests(input.app, privateStorageSecretNames),
+        web: privateStorageDigests(input.web.app, privateStorageSecretNames),
+      });
+      const payloadCount = privatePayloadSecretNames.length;
+      const versions = {
+        payloadVersion: createHash("sha256")
+          .update(
+            JSON.stringify([
+              storage.migration.slice(0, payloadCount),
+              storage.web.slice(0, payloadCount),
+            ])
+          )
+          .digest("hex"),
+        migrationJournalVersion: createHash("sha256")
+          .update(
+            JSON.stringify(
+              storage.migration.slice(payloadCount).map(([, digest]) => digest)
+            )
+          )
+          .digest("hex"),
+        webJournalVersion: createHash("sha256")
+          .update(
+            JSON.stringify(
+              storage.web.slice(payloadCount).map(([, digest]) => digest)
+            )
+          )
+          .digest("hex"),
+      };
+      if (
+        versions.payloadVersion !== input.storage.payloadVersion ||
+        versions.migrationJournalVersion !==
+          input.storage.migrationJournalVersion ||
+        versions.webJournalVersion !== input.storage.webJournalVersion
+      )
+        return yield* Effect.fail(
+          new Error(
+            "Private storage secrets changed; prepare a new deployment before stopping web."
+          )
+        );
+      const privateStorageVersion = createHash("sha256")
+        .update(JSON.stringify(versions))
+        .digest("hex");
       const backup = yield* Machines.execMachine({
         app_name: input.app,
         machine_id: input.primary,
@@ -133,7 +187,7 @@ export const migrateApplication = Effect.fn("migrateApplication")(
             "Backup inventory verification failed; web remains stopped."
           )
         );
-      return { image: input.image, verified: true };
+      return { image: input.image, verified: true, privateStorageVersion };
     }).pipe(Effect.scoped)
 );
 

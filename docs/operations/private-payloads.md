@@ -10,13 +10,25 @@ bytea fallback, dual read or dual write after migration 109.
 
 Configure `ZOEN_PAYLOAD_ENDPOINT`, `ZOEN_PAYLOAD_BUCKET`,
 `ZOEN_PAYLOAD_ACCESS_KEY`, `ZOEN_PAYLOAD_SECRET_KEY` and `ZOEN_PAYLOAD_PREFIX`
-for both the application and the isolated migration process. Keep credentials in
-the deployment's secret manager. The runtime token needs object read, write,
+in the Fly vaults of both the application and PostgreSQL apps before deployment.
+The isolated migrator inherits only its own app vault. The deploy checks required
+payload and erasure-journal secret digests in both apps before taking its backup
+or stopping web; missing or ambiguous entries leave web serving. A fresh payload
+digest read and both managed journal versions enter the migration action's input.
+Changed vault digests between preparation and migration require a new deployment
+before web can stop. Metadata proves configuration presence and version only;
+actual bucket settings and consumer access still require provider qualification.
+Create the Fly apps and install their payload secrets before the first hosted plan.
+R2 credential
+values stay in Fly vaults and are not copied into the GitHub release configuration.
+The runtime token needs object read, write,
 list and delete only in the dedicated private bucket. Keep public domains,
 managed public access and unreviewed lifecycle deletion disabled.
 
 The erasure journal has a separate retained bucket and existing
-`ZOEN_ERASURE_JOURNAL_*` credentials. Do not collect, expire or rewind its
+`ZOEN_ERASURE_JOURNAL_*` credentials bound to both apps by the same provisioner.
+The existing web binding and retained bucket keep their identities. Do not collect,
+expire or rewind its
 immutable `erasures/` and `memory-erasures/` records when restoring PostgreSQL.
 The default journal endpoint is Tigris; selecting R2 for payloads does not change
 the journal's provider.
