@@ -85,7 +85,7 @@ export const appRouter = createTRPCRouter({
   googleWorkspace: {
     read: protectedProcedure.query(async ({ ctx }) =>
       readPersonalGoogleSettings(
-        await resolveWorkspaceActor(ctx.requestHeaders)
+        await resolveWorkspaceActor(ctx.requestHeaders, "personal")
       )
     ),
     update: protectedProcedure
@@ -112,7 +112,7 @@ export const appRouter = createTRPCRouter({
         }
         const activation = await withSignal(signal, async () => {
           return await Promise.try(async () =>
-            resolveWorkspaceActor(ctx.requestHeaders)
+            resolveWorkspaceActor(ctx.requestHeaders, "personal")
           ).then(activatePersonalGoogle);
         });
         if (!activation.authorize)
