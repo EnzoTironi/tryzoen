@@ -1,4 +1,5 @@
 import { defineEval } from "eve/evals";
+import { z } from "zod";
 import { equals, includes } from "eve/evals/expect";
 import {
   requireStreamIndex,
@@ -7,6 +8,7 @@ import {
 import { readTaskCompletion } from "@evals/browser/worker-events";
 import { sendMessageToolResultSchema } from "@zoen/companion-ui/messages";
 import { reactToMessageToolResultSchema } from "@zoen/companion-ui/messages";
+import { browserImageArtifactReferenceSchema } from "@shared/browser/artifact";
 
 export default defineEval({
   description:
@@ -39,6 +41,10 @@ export default defineEval({
       .calledTool("capture_browser_image", {
         status: "completed",
         count: 1,
+        output: (value) =>
+          z
+            .object({ image: browserImageArtifactReferenceSchema })
+            .safeParse(value).success,
       })
       .label("browser image is durably saved in private storage");
     t.check(

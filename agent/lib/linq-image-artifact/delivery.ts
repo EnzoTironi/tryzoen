@@ -29,7 +29,7 @@ export async function prepareLinqImageArtifactDelivery(
   const selected = references.slice(0, maximumWorkerCompletionImages);
   const loaded = await Promise.all(
     selected.map(async (reference) => ({
-      image: await readLinqImageArtifact(input.scope, reference.id, {
+      image: await readReadyBrowserImageArtifact(input.scope, reference.id, {
         rootSessionId: input.rootSessionId,
         signal: input.signal,
       }).catch(() => undefined),
@@ -60,26 +60,4 @@ export async function prepareLinqImageArtifactDelivery(
     files,
     text: stripImageArtifactMarkdownReferences(message),
   };
-}
-async function readLinqImageArtifact(
-  scope: AccessScope,
-  artifactId: string,
-  options: {
-    readonly rootSessionId: string;
-    readonly signal?: AbortSignal;
-  }
-) {
-  const artifact = await readReadyBrowserImageArtifact(
-    scope,
-    artifactId,
-    options
-  );
-  return artifact
-    ? {
-        bytes: artifact.bytes,
-        filename: artifact.filename,
-        id: artifact.id,
-        mediaType: artifact.mediaType,
-      }
-    : undefined;
 }

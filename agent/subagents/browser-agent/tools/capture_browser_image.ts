@@ -7,7 +7,6 @@ import { withVaultScreenshotMask } from "../lib/vault-screenshot-mask";
 import {
   finalizeBrowserImageArtifact,
   reserveBrowserImageArtifact,
-  type BrowserImageArtifactReservation,
 } from "@db/services/browser-images";
 import {
   browserImageArtifactReferenceSchema,
@@ -52,7 +51,7 @@ const outputSchema = z.object({
 type CaptureInput = z.infer<typeof inputSchema>;
 export default defineTool({
   description:
-    "Capture one durable, user-visible image from an owned browser. Use only when the assignment requests an image or one image materially improves the final result; never persist routine debugging screenshots. Supports viewport or region screenshots, full-page screenshots, rendered element screenshots, and original image resources selected from the current page. Original resource capture falls back to the rendered element when needed. Does not expose private Blob URLs or page credentials.",
+    "Capture one durable, user-visible image from an owned browser. Use only when the assignment requests an image or one image materially improves the final result; never persist routine debugging screenshots. Supports viewport or region screenshots, full-page screenshots, rendered element screenshots, and original image resources selected from the current page. Original resource capture falls back to the rendered element when needed. Returns an authenticated image reference without exposing page credentials.",
   inputSchema,
   outputSchema,
   async execute(input, context) {
@@ -80,7 +79,7 @@ export default defineTool({
         "The captured resource is not a supported browser image."
       );
     }
-    const image = await persistCapturedImage(
+    const result = await finalizeBrowserImageArtifact(
       scope,
       reserved.reservation,
       {
@@ -90,9 +89,7 @@ export default defineTool({
       },
       context.abortSignal
     );
-    return outputSchema.parse({
-      image,
-    });
+    return outputSchema.parse(result);
   },
   toModelOutput(output) {
     return toolOutput.json({
@@ -320,24 +317,6 @@ function safeBrowserImageFilename(
     .replace(/^\.+|\.+$/gu, "")
     .slice(0, 160);
   return `${stem || "browser-image"}.${extension}`;
-}
-async function persistCapturedImage(
-  scope: Awaited<ReturnType<typeof requireWorkerScope>>,
-  reservation: BrowserImageArtifactReservation,
-  input: {
-    readonly bytes: Uint8Array;
-    readonly filename: string;
-    readonly sourceKind: string;
-  },
-  signal?: AbortSignal
-) {
-  const finalized = await finalizeBrowserImageArtifact(
-    scope,
-    reservation,
-    input,
-    signal
-  );
-  return finalized.image;
 }
 async function readBoundedResponse(response: Response) {
   const contentLength = Number(response.headers.get("content-length"));
