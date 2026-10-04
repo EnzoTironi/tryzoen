@@ -10,7 +10,6 @@ import { authClient } from "@web/auth/client";
 import { useI18n } from "@zoen/companion-ui/i18n";
 import { LanguagePicker } from "@web/i18n/language-picker";
 import { ModelConnections } from "@app/(authenticated)/_components/model-connections";
-import { WorkspaceSwitcher } from "@app/(authenticated)/_components/workspace-switcher";
 import { AccountPrivacyWipeSection } from "@app/(authenticated)/account/(overview)/_components/privacy-wipe-section";
 import { ConnectedMemory } from "../agent-panel";
 import { SettingsConnections } from "./connections";
@@ -18,6 +17,7 @@ import { SettingsDevices } from "./devices";
 import { SettingsPermissions } from "./permissions";
 import { SettingsVault } from "./vault";
 import { ConnectedCreatorStudio } from "./creators";
+import { SettingsWorkspaces } from "./workspaces";
 
 export function ConnectedSettings({
   onClose,
@@ -74,7 +74,7 @@ function SettingsContent({
     case "general":
       return (
         <>
-          <WorkspaceSwitcher />
+          <SettingsWorkspaces />
           <LanguagePicker />
           <MessageGestureSettings />
           <ModelConnections />
