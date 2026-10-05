@@ -42,7 +42,7 @@
     "@workflow/world-postgres": "5.0.0-beta.44",
     "@zoen/companion-ui": "workspace:*",
     "ai": "7.0.107",
-    "better-auth": "1.7.6",
+    "better-auth": "1.7.7",
     "chat": "4.34.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
