@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
+import { SegmentedControl } from "./controls";
 import {
   radius,
   space,
@@ -193,12 +194,15 @@ export function Library({
                 />
               )}
               {!systemFiles && fileControls && hasItems && (
-                <IconButton
-                  icon={list ? LayoutGrid : List}
-                  label={list ? t("Grid view") : t("List view")}
-                  onPress={() => {
-                    setList(!list);
+                <SegmentedControl
+                  value={list ? "list" : "grid"}
+                  onChange={(next) => {
+                    setList(next === "list");
                   }}
+                  options={[
+                    { value: "grid", label: t("Grid view"), icon: LayoutGrid },
+                    { value: "list", label: t("List view"), icon: List },
+                  ]}
                 />
               )}
               {hasItems && (

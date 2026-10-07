@@ -38,7 +38,8 @@ import {
 import type { ConversationDraft } from "./session/input";
 import { IconButton } from "./icon-button";
 import type { MessageReply } from "./session/reply";
-import { systemFont, useAccessibilityPreferences, useColors } from "./theme";
+import { systemFont, useColors } from "./theme";
+import { glassSurface, useGlassMode, type GlassMode } from "./glass";
 
 export function Composer({
   onSend,
@@ -81,20 +82,13 @@ export function Composer({
 }) {
   const { t, errorText } = useI18n();
   const colors = useColors();
-  const preferences = useAccessibilityPreferences();
-  const increasedContrast =
-    preferences.increasedContrast || preferences.forcedColors;
-  const opaque =
-    preferences.reduceTransparency ||
-    increasedContrast ||
-    Platform.OS !== "web" ||
-    typeof CSS === "undefined" ||
-    !CSS.supports("backdrop-filter", "blur(1px)");
+  const glass = useGlassMode();
+  const { opaque, increasedContrast } = glass;
   const width = useWindowDimensions().width;
   const compact = width < 720;
   const styles = useMemo(
-    () => createStyles(colors, compact, opaque, increasedContrast),
-    [colors, compact, opaque, increasedContrast]
+    () => createStyles(colors, compact, glass),
+    [colors, compact, glass]
   );
   const [localDraft, setDraft] = useState(initialDraft?.text ?? "");
   const draft = value ?? localDraft;
@@ -513,11 +507,16 @@ function ReplyPreview({
   );
 }
 
+const solidGlass: GlassMode = {
+  opaque: true,
+  increasedContrast: false,
+  dark: false,
+};
+
 const createStyles = (
   palette: ReturnType<typeof useColors>,
   compact = true,
-  opaque = true,
-  increasedContrast = false
+  glass: GlassMode = solidGlass
 ) =>
   StyleSheet.create({
     attachments: { gap: 8 },
@@ -566,38 +565,19 @@ const createStyles = (
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 22,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? palette.ink
-        : opaque
-          ? palette.line
-          : `${palette.line}70`,
-      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
-        : {}),
+      ...glassSurface(palette, glass),
     },
-    pressed: { opacity: increasedContrast ? 1 : 0.6 },
+    pressed: { opacity: glass.increasedContrast ? 1 : 0.6 },
     field: {
       flex: 1,
       minWidth: 0,
       minHeight: compact ? 44 : 32,
-      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
-      ...(Platform.OS === "web"
-        ? {
-            color: palette.ink,
-            backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)",
-          }
-        : {}),
+      // The composer floats as a glass capsule over the conversation.
+      ...glassSurface(palette, glass),
+      ...(Platform.OS === "web" ? { color: palette.ink } : {}),
       flexDirection: "row",
       alignItems: "flex-end",
       gap: 6,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? palette.ink
-        : opaque
-          ? palette.line
-          : `${palette.line}70`,
       borderRadius: compact ? 22 : 20,
       paddingLeft: compact ? 12 : 10,
       paddingRight: 6,

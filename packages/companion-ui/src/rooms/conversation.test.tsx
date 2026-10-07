@@ -35,7 +35,18 @@ vi.mock("react-native", async () => {
     View: (props: ComponentProps<typeof import("react-native").View>) => {
       const style = native.StyleSheet.flatten(props.style);
       if (props.testID === "conversation-header") mocks.header = props;
-      if (props.style && style.backdropFilter && style.boxShadow)
+      // The composer field is also a floating glass capsule now; its material
+      // contract is covered in composer.test.tsx, so count header glass only.
+      const composerField =
+        style.flex === 1 &&
+        style.flexDirection === "row" &&
+        style.alignItems === "flex-end";
+      if (
+        props.style &&
+        style.backdropFilter &&
+        style.boxShadow &&
+        !composerField
+      )
         mocks.materials.push(style);
       return <native.View {...props} />;
     },

@@ -1,7 +1,8 @@
+import { Toggle } from "../controls";
 import { useI18n } from "./../i18n";
 import type { z } from "zod";
 import { ChevronRight } from "lucide-react-native";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { CompanionSheet } from "../sheet";
 import { usePageStyles } from "../page";
 import { useColors } from "../theme";
@@ -40,14 +41,13 @@ export function GoalOptions({
       ).map(([key, label]) => (
         <View key={key} style={pageStyles.row}>
           <Text style={[pageStyles.rowTitle, { flex: 1 }]}>{label}</Text>
-          <Switch
+          <Toggle
             accessibilityLabel={label}
             value={preferences[key]}
             disabled={pending}
             onValueChange={(value) => {
               onChange({ key, value });
             }}
-            trackColor={{ true: colors.accent }}
           />
         </View>
       ))}

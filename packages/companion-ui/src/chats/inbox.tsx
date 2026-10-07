@@ -39,6 +39,7 @@ import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
 import { EmptyState } from "../empty-state";
 import { systemFont, useColors } from "../theme";
+import { useShellChrome } from "../shell-chrome";
 import { CompanionSheet } from "../sheet";
 import { ConversationRow } from "./row";
 import { ConversationAvatar } from "./avatar";
@@ -145,6 +146,7 @@ export function ConversationInbox({
   const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
+  const chrome = useShellChrome();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [menu, setMenu] = useState<"options" | "filters">();
   const [saved, setSaved] = useState(false);
@@ -365,6 +367,7 @@ export function ConversationInbox({
       <FlatList
         onScroll={({ nativeEvent }) => {
           setNearHead(nativeEvent.contentOffset.y < 80);
+          chrome.onScroll?.(nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={100}
         data={rows}
@@ -460,7 +463,13 @@ export function ConversationInbox({
         }
       />
       {compact && (
-        <View style={styles.footer}>
+        <View
+          style={[
+            styles.footer,
+            // Sit above the floating tab bar rather than under it.
+            chrome.bottomInset > 0 && { marginBottom: chrome.bottomInset - 8 },
+          ]}
+        >
           {searchField}
           <IconButton
             icon={SquarePen}
@@ -863,7 +872,7 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       paddingBottom: 10,
       backgroundColor: palette.canvas,
     },
-    menu: { backgroundColor: palette.surface, gap: 2 },
+    menu: { gap: 2 },
     menuRow: {
       flexDirection: "row",
       alignItems: "center",

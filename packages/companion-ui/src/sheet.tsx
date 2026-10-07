@@ -18,14 +18,13 @@ import { CompanionOverlay } from "./overlay";
 import { IconButton } from "./icon-button";
 import { useSheetDrag, SheetGrabber } from "./sheet-drag";
 import {
-  elevation,
-  radius,
   space,
   systemFont,
   useTypeScale,
   useColors,
   type TypeScale,
 } from "./theme";
+import { glassSurface, useGlassMode, type GlassMode } from "./glass";
 
 /** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
 export function SheetSurface({
@@ -43,12 +42,21 @@ export function SheetSurface({
 }) {
   const colors = useColors();
   const type = useTypeScale();
-  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
+  const glass = useGlassMode();
+  const styles = useMemo(
+    () => createStyles(colors, type, glass),
+    [colors, type, glass]
+  );
   const compact = useWindowDimensions().width < 720;
   const drag = useSheetDrag(compact, onClose);
   return (
     <CompanionOverlay title={title} onClose={onClose}>
-      <View style={[styles.backdrop, !compact && styles.desktopBackdrop]}>
+      <View
+        style={[
+          styles.backdrop,
+          compact ? styles.compactBackdrop : styles.desktopBackdrop,
+        ]}
+      >
         <Pressable
           accessible={false}
           tabIndex={-1}
@@ -61,6 +69,7 @@ export function SheetSurface({
         <Animated.View
           style={[
             styles.sheet,
+            compact && styles.compactPanel,
             { transform: [{ translateY: drag.offset }] },
             panelStyle,
             !compact && [styles.desktopPanel, { maxWidth }],
@@ -90,7 +99,11 @@ export function CompanionSheet({
   const { t } = useI18n();
   const colors = useColors();
   const type = useTypeScale();
-  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
+  const glass = useGlassMode();
+  const styles = useMemo(
+    () => createStyles(colors, type, glass),
+    [colors, type, glass]
+  );
   return (
     <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
@@ -117,30 +130,46 @@ export function CompanionSheet({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
+function createStyles(
+  colors: ReturnType<typeof useColors>,
+  type: TypeScale,
+  glass: GlassMode
+) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
       justifyContent: "flex-end",
       alignItems: "center",
-      backgroundColor: "rgba(10,14,24,0.32)",
+      backgroundColor: "rgba(10,14,24,0.26)",
       ...(Platform.OS === "web" ? { backdropFilter: "blur(2px)" } : {}),
     },
+    // Sheets are part of the functional layer: thick glass, so long text
+    // stays legible, with Reduce Transparency falling back to the canvas.
     sheet: {
       width: "100%",
       maxHeight: "86%",
-      backgroundColor: colors.canvas,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
+      borderTopLeftRadius: 34,
+      borderTopRightRadius: 34,
       paddingTop: 12,
       overflow: "hidden",
+      ...glassSurface(colors, glass, {
+        thickness: "thick",
+        elevation: "floating",
+        fill: colors.canvas,
+      }),
+    },
+    // iOS 26 floats a sheet inset from the screen edges, its corners
+    // concentric with the display's own.
+    compactBackdrop: { paddingHorizontal: space.sm },
+    compactPanel: {
+      marginBottom: space.sm,
+      borderRadius: 34,
     },
     desktopBackdrop: { justifyContent: "center", padding: 32 },
     desktopPanel: {
-      borderRadius: radius.xl + 2,
+      borderRadius: 28,
       maxHeight: "90%",
       paddingTop: space.lg + 4,
-      boxShadow: elevation.floating,
     },
     header: {
       paddingHorizontal: 24,

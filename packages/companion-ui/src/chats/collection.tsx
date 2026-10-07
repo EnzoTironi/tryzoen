@@ -17,6 +17,7 @@ import {
 import { ActionButton } from "../button";
 import { EmptyState } from "../empty-state";
 import { systemFont, useColors } from "../theme";
+import { useShellChrome } from "../shell-chrome";
 import { Archive, MessagesSquare, SearchX } from "lucide-react-native";
 import { ConversationToolbar } from "./toolbar";
 import { ConversationRow } from "./row";
@@ -45,6 +46,7 @@ export function ConversationSearch({
 }) {
   const { t, errorText } = useI18n();
   const colors = useColors();
+  const chrome = useShellChrome();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
@@ -86,6 +88,15 @@ export function ConversationSearch({
         windowSize={5}
         keyboardShouldPersistTaps="handled"
         style={styles.list}
+        onScroll={({ nativeEvent }) => {
+          chrome.onScroll?.(nativeEvent.contentOffset.y);
+        }}
+        scrollEventThrottle={32}
+        contentContainerStyle={
+          chrome.bottomInset > 0
+            ? { paddingBottom: chrome.bottomInset }
+            : undefined
+        }
         renderItem={({ item }) => (
           <ConversationRow
             chat={item}

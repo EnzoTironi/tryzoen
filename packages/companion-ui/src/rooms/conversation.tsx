@@ -15,7 +15,6 @@ import { useMemo, useContext, useState, type ComponentProps } from "react";
 import { CompanionVisibility } from "../visibility";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -38,7 +37,8 @@ import { ActionButton } from "../button";
 import { IconButton } from "../icon-button";
 import { CompanionSheet } from "../sheet";
 import { ConversationAvatar } from "../chats/avatar";
-import { systemFont, useAccessibilityPreferences, useColors } from "../theme";
+import { systemFont, useColors } from "../theme";
+import { glassSurface, useGlassMode, type GlassMode } from "../glass";
 import { RoomMessages } from "./messages";
 import { RoomDetails } from "./details";
 import { ParticipantProfile } from "./profile";
@@ -818,18 +818,10 @@ function RoomThread({
 
 function useRoomStyles(compact: boolean) {
   const colors = useColors();
-  const preferences = useAccessibilityPreferences();
-  const increasedContrast =
-    preferences.increasedContrast || preferences.forcedColors;
-  const opaque =
-    preferences.reduceTransparency ||
-    increasedContrast ||
-    Platform.OS !== "web" ||
-    typeof CSS === "undefined" ||
-    !CSS.supports("backdrop-filter", "blur(1px)");
+  const glass = useGlassMode();
   const styles = useMemo(
-    () => createStyles(colors, compact, opaque, increasedContrast),
-    [colors, compact, opaque, increasedContrast]
+    () => createStyles(colors, compact, glass),
+    [colors, compact, glass]
   );
   return { colors, styles };
 }
@@ -837,8 +829,7 @@ function useRoomStyles(compact: boolean) {
 function createStyles(
   colors: ReturnType<typeof useColors>,
   compact: boolean,
-  opaque: boolean,
-  increasedContrast: boolean
+  glass: GlassMode
 ) {
   return StyleSheet.create({
     unavailable: {
@@ -902,17 +893,7 @@ function createStyles(
     headerSide: { width: 44, alignItems: "center" },
     headerControl: {
       borderRadius: 22,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? colors.ink
-        : opaque
-          ? colors.line
-          : `${colors.line}70`,
-      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
-        : {}),
-      boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+      ...glassSurface(colors, glass),
     },
     identity: { maxWidth: "70%", minWidth: 0, alignItems: "center", gap: 4 },
     nameCapsule: {
@@ -924,16 +905,7 @@ function createStyles(
       paddingHorizontal: 10,
       paddingVertical: 3,
       borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? colors.ink
-        : opaque
-          ? colors.line
-          : `${colors.line}70`,
-      backgroundColor: opaque ? colors.surface : `${colors.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
-        : {}),
+      ...glassSurface(colors, glass, { elevation: "none" }),
     },
     options: { gap: 2 },
     option: {

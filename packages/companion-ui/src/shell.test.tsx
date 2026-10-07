@@ -83,6 +83,9 @@ vi.mock("./conversation", async () => ({
   }),
 }));
 
+// Desktop renders the three conversation-header controls plus the glass
+// navigation rail; every one of them follows the same material contract.
+const desktopMaterials = 4;
 function render(
   open = true,
   section: ComponentProps<typeof CompanionShell>["section"] = "chat"
@@ -229,7 +232,7 @@ it.each([false, true])(
     state.dark = dark;
     render();
     const normal = state.materials;
-    expect(normal).toHaveLength(3);
+    expect(normal).toHaveLength(desktopMaterials);
     state.preferences.reduceMotion = true;
     render();
     expect(state.materials).toEqual(normal);
@@ -275,10 +278,10 @@ it.each(["increasedContrast", "forcedColors"] as const)(
     expect(state.preferences.reduceTransparency).toBe(false);
     expect(state.materials.map(geometry)).toEqual(normal);
     expect(state.materials.map((style) => style.borderColor)).toEqual(
-      Array(3).fill("#16181d")
+      Array(desktopMaterials).fill("#16181d")
     );
     expect(state.materials.map((style) => style.backgroundColor)).toEqual(
-      Array(3).fill("#ffffff")
+      Array(desktopMaterials).fill("#ffffff")
     );
   }
 );
@@ -290,9 +293,9 @@ it.each(["native", "unsupported-blur"])(
     const markup = render();
     expect(markup).toContain('aria-label="Detalhes da conversa"');
     const native = capability === "native";
-    expect(state.materials).toHaveLength(native ? 0 : 3);
+    expect(state.materials).toHaveLength(native ? 0 : desktopMaterials);
     expect(state.materials.map((style) => style.backdropFilter)).toEqual(
-      Array(native ? 0 : 3).fill("none")
+      Array(native ? 0 : desktopMaterials).fill("none")
     );
   }
 );

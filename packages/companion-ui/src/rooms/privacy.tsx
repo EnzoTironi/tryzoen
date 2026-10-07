@@ -1,14 +1,9 @@
+import { Toggle } from "../controls";
 import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Circle } from "lucide-react-native";
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { ActionButton } from "../button";
 import { systemFont, useColors } from "../theme";
 import type { RoomData } from "./schema";
@@ -109,15 +104,13 @@ function PrivacyPreference({
         </View>
         <Text style={styles.label}>{label}</Text>
         {preference.data !== undefined && !preference.isError ? (
-          <Switch
+          <Toggle
             accessibilityLabel={label}
             accessibilityHint={description}
             value={change.isPending ? change.variables : preference.data}
             onValueChange={(value) => {
               change.mutate(value);
             }}
-            trackColor={{ false: "#e5e5ea", true: "#34c759" }}
-            thumbColor="white"
           />
         ) : preference.isPending ? (
           <ActivityIndicator

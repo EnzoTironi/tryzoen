@@ -57,14 +57,15 @@
 }
 .card {
   overflow: hidden;
-  border: 1px solid #ffffff21;
+  border: 1px solid var(--glass-night-edge);
   border-radius: 32px;
-  /* Regular glass: the card carries forms and body copy, so the fill is
-     dense enough to keep text legible over the night scene behind it. */
-  background: linear-gradient(180deg, #1a2f4a8f 0%, #0a182cb3 100%);
+  /* Night glass, regular variant: the card carries forms and body copy, so
+     the fill is dense enough to keep text legible over the scene behind it. */
+  background: var(--glass-night-panel);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
   backdrop-filter: blur(28px) saturate(140%);
   box-shadow:
-    inset 0 1px 0 #ffffff1c,
+    var(--glass-night-highlight),
     0 1px 2px #0000001f,
     0 40px 100px -30px #000000a0;
   animation: enter var(--duration-slow) var(--ease-out-soft) both;
@@ -450,9 +451,16 @@
 
 /* Accessibility: glass falls back to opaque fills when the person asks for
    less transparency, and edges firm up when they ask for more contrast. */
+@supports not
+((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card {
+    background: var(--glass-night-solid);
+  }
+}
 @media (prefers-reduced-transparency: reduce) {
   .card {
-    background: #10223a;
+    background: var(--glass-night-solid);
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
   .eyebrow {
@@ -463,7 +471,7 @@
 @media (prefers-contrast: more) {
   .card,
   .eyebrow {
-    border-color: #ffffff70;
+    border-color: var(--glass-night-edge-strong);
   }
   .choiceList :global([data-slot="button"]):not(.continue) {
     border-color: #ffffff70;
