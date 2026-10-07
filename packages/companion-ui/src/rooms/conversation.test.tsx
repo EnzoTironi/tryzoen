@@ -35,7 +35,18 @@ vi.mock("react-native", async () => {
     View: (props: ComponentProps<typeof import("react-native").View>) => {
       const style = native.StyleSheet.flatten(props.style);
       if (props.testID === "conversation-header") mocks.header = props;
-      if (props.style && style.backdropFilter && style.boxShadow)
+      // The composer field is also a floating glass capsule now; its material
+      // contract is covered in composer.test.tsx, so count header glass only.
+      const composerField =
+        style.flex === 1 &&
+        style.flexDirection === "row" &&
+        style.alignItems === "flex-end";
+      if (
+        props.style &&
+        style.backdropFilter &&
+        style.boxShadow &&
+        !composerField
+      )
         mocks.materials.push(style);
       return <native.View {...props} />;
     },
@@ -520,7 +531,7 @@ it.each([false, true])(
     const opaque = headerMaterials();
     expect(opaque.map(geometry)).toEqual(normal);
     expect(opaque.map((style) => style.backgroundColor)).toEqual(
-      Array(3).fill(dark ? "#1c1c1e" : "#ffffff")
+      Array(3).fill(dark ? "#17191e" : "#ffffff")
     );
     expect(opaque.map((style) => style.backdropFilter)).toEqual(
       Array(3).fill("none")
@@ -542,7 +553,7 @@ it.each(["increasedContrast", "forcedColors"] as const)(
     expect(mocks.preferences.reduceTransparency).toBe(false);
     expect(strong.map(geometry)).toEqual(normal);
     expect(strong.map((style) => style.borderColor)).toEqual(
-      Array(3).fill("#1c1c1e")
+      Array(3).fill("#16181d")
     );
     expect(strong.map((style) => style.backgroundColor)).toEqual(
       Array(3).fill("#ffffff")

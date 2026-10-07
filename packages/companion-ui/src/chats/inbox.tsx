@@ -31,10 +31,15 @@ import {
   ListFilter,
   Check,
   ChevronRight,
+  MessagesSquare,
+  SearchX,
+  UsersRound,
 } from "lucide-react-native";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
+import { EmptyState } from "../empty-state";
 import { systemFont, useColors } from "../theme";
+import { useShellChrome } from "../shell-chrome";
 import { CompanionSheet } from "../sheet";
 import { ConversationRow } from "./row";
 import { ConversationAvatar } from "./avatar";
@@ -141,6 +146,7 @@ export function ConversationInbox({
   const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
+  const chrome = useShellChrome();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [menu, setMenu] = useState<"options" | "filters">();
   const [saved, setSaved] = useState(false);
@@ -361,6 +367,7 @@ export function ConversationInbox({
       <FlatList
         onScroll={({ nativeEvent }) => {
           setNearHead(nativeEvent.contentOffset.y < 80);
+          chrome.onScroll?.(nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={100}
         data={rows}
@@ -456,7 +463,13 @@ export function ConversationInbox({
         }
       />
       {compact && (
-        <View style={styles.footer}>
+        <View
+          style={[
+            styles.footer,
+            // Sit above the floating tab bar rather than under it.
+            chrome.bottomInset > 0 && { marginBottom: chrome.bottomInset - 8 },
+          ]}
+        >
           {searchField}
           <IconButton
             icon={SquarePen}
@@ -629,21 +642,21 @@ function InboxEmpty({
   readonly configured: boolean;
 }) {
   const { t } = useI18n();
-  const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>
-        {search
+    <EmptyState
+      compact
+      icon={search ? SearchX : groups ? UsersRound : MessagesSquare}
+      title={
+        search
           ? t("Nenhuma conversa encontrada")
           : groups
             ? t("Seus grupos aparecem aqui")
             : people
               ? t("Suas conversas aparecem aqui")
-              : t("Vamos conversar?")}
-      </Text>
-      <Text style={styles.caption}>
-        {groups
+              : t("Vamos conversar?")
+      }
+      body={
+        groups
           ? configured
             ? t("Crie um grupo no seu espaço compartilhado.")
             : t("O serviço de grupos ainda não está conectado neste ambiente.")
@@ -651,9 +664,9 @@ function InboxEmpty({
             ? t(
                 "Toque em nova conversa e busque alguém deste espaço pelo nome ou username."
               )
-            : t("Comece com o Zoen. Suas conversas ficam salvas aqui.")}
-      </Text>
-    </View>
+            : t("Comece com o Zoen. Suas conversas ficam salvas aqui.")
+      }
+    />
   );
 }
 
@@ -848,13 +861,6 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       fontSize: 15,
       lineHeight: 20,
     },
-    empty: { padding: 20, gap: 9 },
-    emptyTitle: {
-      fontFamily: systemFont,
-      color: palette.ink,
-      fontSize: 17,
-      fontWeight: "600",
-    },
     feedback: { padding: 14, gap: 10 },
     footer: {
       flexDirection: "row",
@@ -866,7 +872,7 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       paddingBottom: 10,
       backgroundColor: palette.canvas,
     },
-    menu: { backgroundColor: palette.surface, gap: 2 },
+    menu: { gap: 2 },
     menuRow: {
       flexDirection: "row",
       alignItems: "center",

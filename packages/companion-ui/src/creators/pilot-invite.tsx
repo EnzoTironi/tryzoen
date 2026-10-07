@@ -1,6 +1,7 @@
+import { Toggle } from "../controls";
 import { useI18n } from "./../i18n";
 import { useRef, useState } from "react";
-import { Switch, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import type { creatorReleaseSchema } from "./schema";
@@ -69,7 +70,7 @@ export function CreatorPilotInvite({
         }}
       />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Switch
+        <Toggle
           accessibilityLabel={t(
             "I have permission to share this playbook and every listed example with this person"
           )}

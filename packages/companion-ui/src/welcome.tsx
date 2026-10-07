@@ -1,10 +1,12 @@
 import { useI18n } from "./i18n";
 import {
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -16,7 +18,15 @@ import {
 import { useMemo, useCallback, useState, type ComponentProps } from "react";
 import type { ConversationDraft } from "./session/input";
 import { Composer } from "./composer";
-import { systemFont, useColors } from "./theme";
+import {
+  elevation,
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
 import {
   readReplyMessage,
   replyMessage,
@@ -64,7 +74,10 @@ export function Welcome({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
+  const wide = useWindowDimensions().width >= 1024;
+  const [hovered, setHovered] = useState<string>();
   const staged = readReplyMessage(initialDraft?.text ?? "");
   const [reply, setReply] = useState<MessageReply | undefined>(() =>
     staged
@@ -127,120 +140,180 @@ export function Welcome({
         />
         <View style={styles.suggestions}>
           <Text style={styles.eyebrow}>{t("SOMEWHERE TO START")}</Text>
-          {suggestions.map(({ title, detail, prompt, icon: Icon }) => (
-            <Pressable
-              key={title}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={t(title)}
-              onPress={() => {
-                setSuggestion((current) => ({
-                  draft: { ...current.draft, text: t(prompt) },
-                  revision: current.revision + 1,
-                }));
-              }}
-              style={({ pressed }) => [
-                styles.suggestion,
-                pressed && { opacity: 0.6 },
-              ]}
-            >
-              <View style={styles.suggestionIcon}>
-                <Icon size={20} strokeWidth={1.5} color={colors.accent} />
-              </View>
-              <View style={styles.suggestionCopy}>
-                <Text style={styles.suggestionTitle}>{t(title)}</Text>
-                <Text style={styles.suggestionDetail}>{t(detail)}</Text>
-              </View>
-              <ArrowUpRight size={17} color={colors.muted} strokeWidth={1.5} />
-            </Pressable>
-          ))}
+          <View style={[styles.suggestionList, wide && styles.suggestionGrid]}>
+            {suggestions.map(({ title, detail, prompt, icon: Icon }) => (
+              <Pressable
+                key={title}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityLabel={t(title)}
+                onHoverIn={() => {
+                  setHovered(title);
+                }}
+                onHoverOut={() => {
+                  setHovered(undefined);
+                }}
+                onPress={() => {
+                  setSuggestion((current) => ({
+                    draft: { ...current.draft, text: t(prompt) },
+                    revision: current.revision + 1,
+                  }));
+                }}
+                style={({ pressed }) => [
+                  styles.suggestion,
+                  wide && styles.suggestionCard,
+                  hovered === title &&
+                    (wide
+                      ? styles.suggestionCardHover
+                      : styles.suggestionHover),
+                  pressed && styles.suggestionPressed,
+                ]}
+              >
+                <View style={styles.suggestionIcon}>
+                  <Icon size={19} strokeWidth={1.7} color={colors.accent} />
+                </View>
+                <View style={styles.suggestionCopy}>
+                  <Text style={styles.suggestionTitle}>{t(title)}</Text>
+                  <Text style={styles.suggestionDetail}>{t(detail)}</Text>
+                </View>
+                {!wide && (
+                  <ArrowUpRight
+                    size={17}
+                    color={hovered === title ? colors.ink : colors.muted}
+                    strokeWidth={1.6}
+                  />
+                )}
+              </Pressable>
+            ))}
+          </View>
         </View>
       </View>
     </ScrollView>
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
+  const web = Platform.OS === "web";
   return StyleSheet.create({
     scroll: {
       flexGrow: 1,
-      paddingHorizontal: 24,
-      paddingTop: 28,
-      paddingBottom: 56,
+      paddingHorizontal: space.xl,
+      paddingTop: space.xxl,
+      paddingBottom: space.xxxl + space.sm,
       justifyContent: "center",
     },
-    page: { width: "100%", maxWidth: 690, alignSelf: "center" },
-    greeting: { alignItems: "center", marginBottom: 40 },
-    avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 24 },
+    page: { width: "100%", maxWidth: 720, alignSelf: "center" },
+    greeting: { alignItems: "center", marginBottom: space.xxl + space.sm },
+    avatar: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      marginBottom: space.xl,
+      borderWidth: 3,
+      borderColor: colors.surface,
+      ...(web
+        ? {
+            boxShadow: `0 0 0 1px ${colors.line}, 0 12px 32px -10px rgba(16,24,40,0.35)`,
+          }
+        : {}),
+    },
     monogram: {
-      width: 86,
-      height: 86,
-      borderRadius: 43,
-      backgroundColor: "#e5e8d8",
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: colors.accentSoft,
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 24,
+      marginBottom: space.xl,
     },
     monogramText: {
       fontFamily: systemFont,
-      fontSize: 48,
+      fontSize: 44,
       fontWeight: "500",
-      letterSpacing: -5,
+      letterSpacing: -4,
       color: colors.accent,
     },
     heading: {
       fontFamily: systemFont,
+      ...type.largeTitle,
+      fontSize: 34,
+      lineHeight: 40,
+      letterSpacing: -1.1,
       color: colors.ink,
-      fontSize: 32,
-      fontWeight: "500",
-      lineHeight: 41,
-      letterSpacing: -1.3,
       textAlign: "center",
     },
     subtitle: {
       fontFamily: systemFont,
+      ...type.body,
+      fontSize: 16,
+      lineHeight: 24,
       color: colors.muted,
-      fontSize: 15,
-      lineHeight: 23,
-      marginTop: 10,
+      marginTop: space.sm,
       textAlign: "center",
     },
-    suggestions: { marginTop: 38, gap: 6, paddingHorizontal: 6 },
+    suggestions: { marginTop: space.xxl + space.sm },
     eyebrow: {
       fontFamily: systemFont,
-      fontSize: 10,
-      letterSpacing: 1.7,
+      ...type.eyebrow,
       color: colors.muted,
-      marginBottom: 14,
+      marginBottom: space.md,
+      paddingHorizontal: space.xs,
     },
+    suggestionList: { gap: space.xxs },
+    suggestionGrid: { flexDirection: "row", gap: space.md },
     suggestion: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 16,
-      paddingVertical: 12,
+      gap: space.md + 2,
+      paddingVertical: space.md,
+      paddingHorizontal: space.sm,
+      borderRadius: radius.md,
+      ...(web
+        ? {
+            transitionProperty: "background-color, box-shadow, transform",
+            transitionDuration: "180ms",
+            transitionTimingFunction: "cubic-bezier(0.2, 0, 0, 1)",
+          }
+        : {}),
     },
+    suggestionCard: {
+      flex: 1,
+      flexDirection: "column",
+      alignItems: "flex-start",
+      gap: space.md,
+      padding: space.lg,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      ...(web
+        ? { boxShadow: elevation.card }
+        : { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line }),
+    },
+    suggestionHover: { backgroundColor: colors.wash },
+    suggestionCardHover: {
+      transform: [{ translateY: -2 }],
+      ...(web ? { boxShadow: elevation.raised } : {}),
+    },
+    suggestionPressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
     suggestionIcon: {
-      width: 42,
-      height: 42,
-      backgroundColor: "#f0f1e9",
-      borderRadius: 14,
+      width: 38,
+      height: 38,
+      backgroundColor: colors.accentSoft,
+      borderRadius: radius.md,
       alignItems: "center",
       justifyContent: "center",
     },
-    suggestionCopy: { flex: 1 },
+    suggestionCopy: { flex: 1, gap: space.xxs },
     suggestionTitle: {
       fontFamily: systemFont,
+      ...type.callout,
+      fontSize: 15,
+      fontWeight: "600",
       color: colors.ink,
-      fontSize: 14,
-      fontWeight: "500",
-      lineHeight: 21,
     },
     suggestionDetail: {
       fontFamily: systemFont,
+      ...type.footnote,
       color: colors.muted,
-      fontSize: 13,
-      lineHeight: 20,
-      marginTop: 2,
     },
   });
 }

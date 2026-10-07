@@ -131,7 +131,7 @@ export function MarketingShell({
               {t("Guia")}
             </Link>
             <OnboardingTrigger
-              className="font-normal hover:text-foreground"
+              className="type-caption text-muted-foreground hover:text-foreground"
               size="none"
               variant="quiet"
             >

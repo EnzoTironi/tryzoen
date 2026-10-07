@@ -36,14 +36,19 @@
 }
 .landing h1,
 .landing h2 {
-  font-family: var(--merit-family-text);
-  font-weight: 400;
-  letter-spacing: -0.045em;
+  font-family: var(--merit-family-display);
+  font-weight: 420;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
+/* The Zoen signature: a true serif italic inside a sans headline. */
 .landing em {
-  font-synthesis: style;
+  font-family: var(--zoen-family-serif);
   font-style: italic;
-  font-weight: 350;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  font-size: 1.08em;
+  line-height: 0.9;
   color: inherit;
 }
 .landing p {
@@ -62,19 +67,46 @@
   align-items: center;
   flex-direction: column;
 }
+.heroEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px 7px 12px;
+  border: 1px solid #ffffff1f;
+  border-radius: 999px;
+  /* Content, not chrome: a tinted fill instead of glass keeps blur on the
+     functional layer (the floating header) only. */
+  background: #0b1a3073;
+  color: #e6ecf5;
+  font-size: 0.8125rem;
+  letter-spacing: 0.005em;
+  box-shadow: inset 0 1px 0 #ffffff14;
+  animation: enter var(--duration-slow) var(--ease-out-soft) both;
+}
+.heroEyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #9fd38a;
+  box-shadow: 0 0 0 3px #9fd38a2e;
+}
 .heroTitle {
-  font-size: clamp(2.8rem, 5.1vw, 4.6rem);
-  line-height: 1.07;
+  font-size: clamp(2.9rem, 5.6vw, 5rem);
+  line-height: 1.04;
   max-width: 1000px;
-  margin: 28px 0 0;
+  margin: 30px 0 0;
+  animation: enter 700ms var(--ease-out-soft) 60ms both;
 }
 .heroReply {
-  font-family: var(--merit-family-text);
+  font-family: var(--merit-family-display);
   font-weight: 400;
-  letter-spacing: -0.045em;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  line-height: 1.15;
-  margin: 22px 0 0;
+  letter-spacing: -0.03em;
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  line-height: 1.2;
+  margin: 26px 0 0;
+  color: #dfe6f0;
+  animation: enter 700ms var(--ease-out-soft) 140ms both;
 }
 .heroTitle em {
   display: inline-block;
@@ -94,7 +126,8 @@
   align-items: center;
   justify-content: center;
   gap: 20px;
-  margin: 28px 0 8px;
+  margin: 34px 0 10px;
+  animation: enter 700ms var(--ease-out-soft) 220ms both;
 }
 .primaryButton,
 .glassButton {
@@ -111,15 +144,28 @@
     background 0.2s;
 }
 .primaryButton {
-  background: #f4f3ef;
-  color: #142033;
-  border-color: #f4f3ef;
-  box-shadow: 0 6px 24px #07172d1a;
+  background: #f6f5f0;
+  color: #101b2d;
+  border-color: #f6f5f0;
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 10px 30px -6px #02081880,
+    0 0 0 6px #ffffff0d;
 }
 .primaryButton:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   background: #fff;
-  color: #142033;
+  color: #101b2d;
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 14px 36px -6px #020818a0,
+    0 0 0 8px #ffffff12;
+}
+.primaryButton svg {
+  transition: transform var(--duration-normal) var(--ease-out-soft);
+}
+.primaryButton:hover svg {
+  transform: translate(2px, -2px);
 }
 .glassButton {
   background: #ffffff09;
@@ -659,8 +705,11 @@
     padding-top: 130px;
   }
   .heroContent > p:first-child {
-    font-size: 0.875rem;
-    max-width: 255px;
+    font-size: 0.75rem;
+    max-width: 100%;
+    gap: 8px;
+    padding: 6px 13px 6px 10px;
+    white-space: nowrap;
   }
   .heroTitle {
     font-size: clamp(2.4rem, 8.8vw, 3.6rem);

@@ -103,7 +103,7 @@ export function MarketingLanding() {
         <SkyBackdrop />
         <section className={styles.hero} data-sky="0">
           <MarketingFrame className={styles.heroContent}>
-            <p className="type-supporting-body">
+            <p className={cn("type-supporting-body", styles.heroEyebrow)}>
               {t("Seu dia, seu trabalho, suas pessoas. Um Zoen.")}
             </p>
             <h1 className={cn("type-signal", styles.heroTitle)}>

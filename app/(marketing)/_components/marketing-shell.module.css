@@ -1,8 +1,4 @@
 .landingShell {
-  --merit-family-text:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --merit-family-display:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --background: #1d1c23;
   --foreground: #fff;
   --muted-foreground: #c5c2ce;
@@ -15,6 +11,11 @@
   --logo-fill: #ffffff17;
   font-family: var(--merit-family-text);
 }
+/* The landing keeps its cream call to action instead of the app's blue fill. */
+.landingShell [data-slot="button"][data-variant="default"] {
+  --primary: #eeeef7;
+  --primary-foreground: #292a3a;
+}
 .landingShell > header {
   position: fixed;
   top: 20px;
@@ -22,11 +23,13 @@
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 30px);
-  border: 1px solid #ffffff14;
+  /* Night glass from app/styles/brand/glass.css. */
+  border: 1px solid var(--glass-night-edge);
   border-radius: 100px;
-  background: #17243b66;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 6px 24px #10112514;
+  background: var(--glass-night-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-night-highlight), var(--glass-night-shadow);
 }
 .landingShell > header > div:first-child {
   height: 60px;
@@ -128,5 +131,26 @@
   .landingShell > header [data-slot="dialog-trigger"] {
     padding-left: 14px;
     padding-right: 14px;
+  }
+}
+
+/* Accessibility: the floating glass header turns opaque when transparency is
+   reduced and gets a firmer edge when more contrast is requested. */
+@supports not
+((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .landingShell > header {
+    background: var(--glass-night-solid);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .landingShell > header {
+    background: var(--glass-night-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .landingShell > header {
+    border-color: var(--glass-night-edge-strong);
   }
 }

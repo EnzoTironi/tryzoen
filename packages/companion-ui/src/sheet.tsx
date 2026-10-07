@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react-native";
 import {
   Animated,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,14 @@ import {
 import { CompanionOverlay } from "./overlay";
 import { IconButton } from "./icon-button";
 import { useSheetDrag, SheetGrabber } from "./sheet-drag";
-import { systemFont, useColors } from "./theme";
+import {
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
+import { glassSurface, useGlassMode, type GlassMode } from "./glass";
 
 /** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
 export function SheetSurface({
@@ -33,12 +41,22 @@ export function SheetSurface({
   readonly maxWidth?: number;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const glass = useGlassMode();
+  const styles = useMemo(
+    () => createStyles(colors, type, glass),
+    [colors, type, glass]
+  );
   const compact = useWindowDimensions().width < 720;
   const drag = useSheetDrag(compact, onClose);
   return (
     <CompanionOverlay title={title} onClose={onClose}>
-      <View style={[styles.backdrop, !compact && styles.desktopBackdrop]}>
+      <View
+        style={[
+          styles.backdrop,
+          compact ? styles.compactBackdrop : styles.desktopBackdrop,
+        ]}
+      >
         <Pressable
           accessible={false}
           tabIndex={-1}
@@ -51,6 +69,7 @@ export function SheetSurface({
         <Animated.View
           style={[
             styles.sheet,
+            compact && styles.compactPanel,
             { transform: [{ translateY: drag.offset }] },
             panelStyle,
             !compact && [styles.desktopPanel, { maxWidth }],
@@ -79,7 +98,12 @@ export function CompanionSheet({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const glass = useGlassMode();
+  const styles = useMemo(
+    () => createStyles(colors, type, glass),
+    [colors, type, glass]
+  );
   return (
     <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
@@ -106,29 +130,46 @@ export function CompanionSheet({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(
+  colors: ReturnType<typeof useColors>,
+  type: TypeScale,
+  glass: GlassMode
+) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
       justifyContent: "flex-end",
       alignItems: "center",
-      backgroundColor: "rgba(0,0,0,0.24)",
+      backgroundColor: "rgba(10,14,24,0.26)",
+      ...(Platform.OS === "web" ? { backdropFilter: "blur(2px)" } : {}),
     },
+    // Sheets are part of the functional layer: thick glass, so long text
+    // stays legible, with Reduce Transparency falling back to the canvas.
     sheet: {
       width: "100%",
       maxHeight: "86%",
-      backgroundColor: colors.canvas,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
+      borderTopLeftRadius: 34,
+      borderTopRightRadius: 34,
       paddingTop: 12,
       overflow: "hidden",
+      ...glassSurface(colors, glass, {
+        thickness: "thick",
+        elevation: "floating",
+        fill: colors.canvas,
+      }),
+    },
+    // iOS 26 floats a sheet inset from the screen edges, its corners
+    // concentric with the display's own.
+    compactBackdrop: { paddingHorizontal: space.sm },
+    compactPanel: {
+      marginBottom: space.sm,
+      borderRadius: 34,
     },
     desktopBackdrop: { justifyContent: "center", padding: 32 },
     desktopPanel: {
       borderRadius: 28,
       maxHeight: "90%",
-      paddingTop: 20,
-      boxShadow: "0 8px 48px rgba(0,0,0,0.12)",
+      paddingTop: space.lg + 4,
     },
     header: {
       paddingHorizontal: 24,
@@ -141,8 +182,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     title: {
       fontFamily: systemFont,
       flex: 1,
-      fontSize: 23,
-      fontWeight: "600",
+      ...type.title,
       color: colors.ink,
     },
     content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },

@@ -69,6 +69,7 @@ export function DiscoverBots({
         <TextInput
           accessibilityLabel={t("Buscar bots")}
           placeholder={t("Buscar bots")}
+          placeholderTextColor={colors.muted}
           value={search}
           onChangeText={setSearch}
           maxLength={100}
@@ -207,7 +208,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
       alignItems: "center",
       gap: 10,
       borderRadius: 16,
-      backgroundColor: "#f2f2f4",
+      backgroundColor: colors.wash,
       paddingHorizontal: 16,
       maxWidth: 620,
       minHeight: 48,
@@ -233,7 +234,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
       flexGrow: 1,
       maxWidth: 340,
       borderWidth: 1,
-      borderColor: "#e9e9ee",
+      borderColor: colors.line,
       borderRadius: 24,
       padding: 24,
       gap: 14,
@@ -269,7 +270,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
       marginTop: 36,
       padding: 24,
       borderRadius: 24,
-      backgroundColor: "#edf4fd",
+      backgroundColor: colors.accentSoft,
       gap: 18,
       flexDirection: "row",
       alignItems: "center",
@@ -282,7 +283,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
       gap: 14,
       paddingVertical: 18,
       borderBottomWidth: 1,
-      borderBottomColor: "#ededf0",
+      borderBottomColor: colors.line,
     },
   });
 }

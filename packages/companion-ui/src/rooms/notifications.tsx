@@ -1,14 +1,9 @@
+import { Toggle } from "../controls";
 import { useI18n } from "./../i18n";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOff } from "lucide-react-native";
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { ActionButton } from "../button";
 import { systemFont, useColors } from "../theme";
 import type { RoomData } from "./schema";
@@ -57,7 +52,7 @@ export function RoomNotificationSettings({
         </View>
         <Text style={styles.label}>{t("Silenciar conversa")}</Text>
         {preference.data && !preference.isError ? (
-          <Switch
+          <Toggle
             accessibilityLabel={t("Silenciar conversa")}
             accessibilityHint={t(
               "Silencia novos alertas e menções desta conversa para você."
@@ -67,7 +62,6 @@ export function RoomNotificationSettings({
               change.mutate(muted);
             }}
             disabled={busy || preference.isError}
-            trackColor={{ false: "#e5e5ea", true: "#34c759" }}
           />
         ) : busy ? (
           <ActivityIndicator

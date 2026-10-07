@@ -15,6 +15,7 @@ import {
   Network,
   Plus,
   Search,
+  SearchX,
   Shapes,
   ShieldCheck,
   Braces,
@@ -31,7 +32,16 @@ import {
 } from "react-native";
 import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
-import { systemFont, useColors } from "./theme";
+import { SegmentedControl } from "./controls";
+import {
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
+import { EmptyState } from "./empty-state";
 import {
   KnowledgeProposals,
   type KnowledgeProposalData,
@@ -95,7 +105,8 @@ export function Library({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
     categories[1]
@@ -110,6 +121,9 @@ export function Library({
     category.label
   );
   const systemFiles = category.label === "System files";
+  // Sorting and layout toggles only earn their place once there is something to arrange.
+  const hasItems =
+    !fileControls || items.some((item) => category.pattern.test(item.id));
   return (
     <View style={[styles.layout, compact && styles.compact]}>
       {(!compact || showCategories) && (
@@ -140,11 +154,25 @@ export function Library({
                 }}
                 style={[
                   styles.category,
+                  compact && styles.compactCategory,
                   category.label === item.label && styles.selectedCategory,
                 ]}
               >
-                <item.icon size={19} color={colors.muted} strokeWidth={1.7} />
-                <Text style={styles.categoryLabel}>{t(item.label)}</Text>
+                <item.icon
+                  size={18}
+                  color={
+                    category.label === item.label ? colors.accent : colors.muted
+                  }
+                  strokeWidth={1.7}
+                />
+                <Text
+                  style={[
+                    styles.categoryLabel,
+                    category.label === item.label && styles.selectedLabel,
+                  ]}
+                >
+                  {t(item.label)}
+                </Text>
               </Pressable>
             </View>
           ))}
@@ -165,24 +193,29 @@ export function Library({
                   }}
                 />
               )}
-              {!systemFiles && fileControls && (
+              {!systemFiles && fileControls && hasItems && (
+                <SegmentedControl
+                  value={list ? "list" : "grid"}
+                  onChange={(next) => {
+                    setList(next === "list");
+                  }}
+                  options={[
+                    { value: "grid", label: t("Grid view"), icon: LayoutGrid },
+                    { value: "list", label: t("List view"), icon: List },
+                  ]}
+                />
+              )}
+              {hasItems && (
                 <IconButton
-                  icon={list ? LayoutGrid : List}
-                  label={list ? t("Grid view") : t("List view")}
+                  icon={descending ? ArrowUpAZ : ArrowDownAZ}
+                  label={
+                    descending ? t("Sort files A to Z") : t("Sort files Z to A")
+                  }
                   onPress={() => {
-                    setList(!list);
+                    setDescending(!descending);
                   }}
                 />
               )}
-              <IconButton
-                icon={descending ? ArrowUpAZ : ArrowDownAZ}
-                label={
-                  descending ? t("Sort files A to Z") : t("Sort files Z to A")
-                }
-                onPress={() => {
-                  setDescending(!descending);
-                }}
-              />
               {fileControls && (
                 <Pressable
                   accessibilityRole="button"
@@ -198,6 +231,7 @@ export function Library({
                         : "document"
                     );
                   }}
+                  hitSlop={4}
                   style={styles.create}
                 >
                   <Plus size={22} color="white" />
@@ -253,7 +287,8 @@ function LibraryFiles({
 }) {
   const { t, locale } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const pageStyles = usePageStyles();
   const matching = items
     .filter(
@@ -267,9 +302,13 @@ function LibraryFiles({
     );
   return (
     <>
-      <Text accessibilityRole="header" style={pageStyles.heading}>
-        {query ? t("Search results") : t("Your files")}
-      </Text>
+      {/* An empty state already says where you are; the section label only
+          earns its place once there are files under it. */}
+      {!(settled && matching.length === 0) && (
+        <Text accessibilityRole="header" style={pageStyles.heading}>
+          {query ? t("Search results") : t("Your files")}
+        </Text>
+      )}
       <View style={list ? styles.rows : styles.grid}>
         {matching.map((item) => (
           <Pressable
@@ -303,27 +342,34 @@ function LibraryFiles({
         ))}
       </View>
       {settled && matching.length === 0 && (
-        <Text style={pageStyles.copy}>
-          {query
-            ? t("No files match your search.")
-            : t("No {value1} yet. Create something with Zoen to add it here.", {
-                value1: t(category.label).toLocaleLowerCase(locale),
-              })}
-        </Text>
+        <EmptyState
+          icon={query ? SearchX : Shapes}
+          title={
+            query ? t("No files match your search.") : t("Nothing here yet")
+          }
+          body={
+            query
+              ? undefined
+              : t("Create something with Zoen and it will show up here.")
+          }
+        />
       )}
     </>
   );
 }
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     layout: { flex: 1, flexDirection: "row" },
     compact: { flexDirection: "column" },
     sidebar: {
-      width: 240,
+      width: 248,
       flexGrow: 0,
-      borderRightWidth: 1,
+      borderRightWidth: StyleSheet.hairlineWidth,
       borderRightColor: colors.line,
-      padding: 12,
+      backgroundColor: colors.sidebar,
+      paddingHorizontal: space.md,
+      paddingTop: space.xl,
+      paddingBottom: space.md,
     },
     mobileCategories: {
       maxHeight: 300,
@@ -335,12 +381,11 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     search: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      borderWidth: 1,
-      borderColor: colors.line,
-      borderRadius: 24,
-      paddingHorizontal: 12,
-      marginBottom: 12,
+      gap: space.sm,
+      backgroundColor: colors.wash,
+      borderRadius: radius.md,
+      paddingHorizontal: space.md,
+      marginBottom: space.md,
     },
     searchInput: {
       fontFamily: systemFont,
@@ -352,22 +397,30 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     categoryHeading: {
       fontFamily: systemFont,
+      ...type.eyebrow,
       color: colors.muted,
-      fontSize: 14,
-      marginTop: 8,
-      marginBottom: 8,
-      paddingHorizontal: 10,
+      marginTop: space.lg,
+      marginBottom: space.sm,
+      paddingHorizontal: space.sm + 2,
     },
     category: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
-      paddingHorizontal: 10,
-      minHeight: 38,
-      borderRadius: 20,
+      gap: space.sm + 2,
+      paddingHorizontal: space.sm + 2,
+      minHeight: 36,
+      borderRadius: radius.sm + 2,
     },
-    categoryLabel: { fontFamily: systemFont, color: colors.ink, fontSize: 14 },
-    selectedCategory: { backgroundColor: colors.wash },
+    categoryLabel: {
+      fontFamily: systemFont,
+      ...type.callout,
+      fontWeight: "400",
+      color: colors.ink,
+    },
+    // Phone rows meet the 44 pt default touch target.
+    compactCategory: { minHeight: 44 },
+    selectedCategory: { backgroundColor: colors.accentSoft },
+    selectedLabel: { fontWeight: "600" },
     actions: { flexDirection: "row", alignItems: "center", gap: 4 },
     create: {
       width: 36,

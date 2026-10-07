@@ -1,6 +1,6 @@
 import { useI18n } from "./i18n";
 import type { ComponentProps, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -30,7 +30,17 @@ import {
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
 import { ConversationChrome } from "./conversation";
-import { systemFont, useAccessibilityPreferences, useColors } from "./theme";
+import {
+  elevation,
+  radius,
+  space,
+  systemFont,
+  typeScale,
+  useAccessibilityPreferences,
+  useColors,
+} from "./theme";
+import { glassSurface, useGlass, type GlassMode } from "./glass";
+import { ShellChrome } from "./shell-chrome";
 import { AgentPanel, type AgentPanelTab } from "./agent-panel";
 import { ConversationNavigation } from "./chats/navigation";
 import { CompanionVisibility } from "./visibility";
@@ -96,8 +106,29 @@ export function CompanionShell({
   const { t } = useI18n();
   const compact = useWindowDimensions().width < 720;
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const glass = useGlass();
+  const { reduceMotion } = useAccessibilityPreferences();
+  const styles = useMemo(() => createStyles(colors, glass), [colors, glass]);
   const [showAgent, setShowAgent] = useState(false);
+  // The floating tab bar minimises to icons while people scroll down and
+  // returns as soon as they scroll back up or reach the top.
+  const [minimized, setMinimized] = useState(false);
+  const lastOffset = useRef(0);
+  const reportScroll = useCallback((offset: number) => {
+    const delta = offset - lastOffset.current;
+    lastOffset.current = offset;
+    if (offset < 48) setMinimized(false);
+    else if (delta > 6) setMinimized(true);
+    else if (delta < -6) setMinimized(false);
+  }, []);
+  const tabBarVisible = compact && !(section === "chat" && conversationOpen);
+  const chrome = useMemo(
+    () => ({
+      bottomInset: tabBarVisible ? tabBarClearance : 0,
+      onScroll: tabBarVisible ? reportScroll : undefined,
+    }),
+    [tabBarVisible, reportScroll]
+  );
   const [headerHeight, setHeaderHeight] = useState(compact ? 104 : 80);
   const [expanded, setExpanded] = useState(false);
   const navigate = (next: CompanionSection) => {
@@ -179,83 +210,64 @@ export function CompanionShell({
               contentVisible && !showMenu && (!showAgent || !renderAgentPanel)
             }
           >
-            <ConversationNavigation
-              active={section === "chat"}
-              renderConversations={renderConversations}
-              conversationOpen={conversationOpen}
-              onShowInbox={onShowInbox}
-            >
-              {(toggle) => (
-                <View style={styles.body}>
-                  {section === "chat" ? (
-                    !hideConversationHeader && (
-                      <CompanionHeader
-                        onLayout={({ nativeEvent }) => {
-                          setHeaderHeight(nativeEvent.layout.height);
-                        }}
-                        compact={compact}
-                        title={title}
-                        avatarUri={avatarUri}
-                        agentName={agentName}
-                        canGoBack={Boolean(renderConversations)}
-                        onOpenConversations={toggle}
-                        onOpenMenu={openMenu}
-                        onNewConversation={onNewConversation}
-                        onOpenAgent={
-                          renderAgentPanel
-                            ? () => {
-                                setShowAgent(true);
-                              }
-                            : undefined
-                        }
-                      />
-                    )
-                  ) : (
-                    <View style={styles.sectionHeader}>
-                      <IconButton
-                        icon={ChevronLeft}
-                        label={t("Voltar às conversas")}
-                        onPress={() => {
-                          onShowInbox?.();
-                          onNavigate("chat");
-                        }}
-                      />
-                      <Text
-                        accessibilityRole="header"
-                        style={styles.sectionTitle}
-                      >
-                        {t(
-                          sections.find(({ id }) => id === section)?.label ??
-                            "Conversas"
-                        )}
-                      </Text>
-                      <IconButton
-                        icon={Menu}
-                        label={t("Menu do Zoen")}
-                        onPress={openMenu}
-                      />
-                    </View>
-                  )}
-                  <ConversationChrome
-                    value={{
-                      compact,
-                      topInset:
-                        section === "chat" && !hideConversationHeader
-                          ? headerHeight
-                          : 0,
-                    }}
-                  >
-                    <View style={styles.content}>{children}</View>
-                  </ConversationChrome>
-                </View>
-              )}
-            </ConversationNavigation>
+            <ShellChrome value={chrome}>
+              <ConversationNavigation
+                active={section === "chat"}
+                renderConversations={renderConversations}
+                conversationOpen={conversationOpen}
+                onShowInbox={onShowInbox}
+              >
+                {(toggle) => (
+                  <View style={styles.body}>
+                    {section === "chat"
+                      ? !hideConversationHeader && (
+                          <CompanionHeader
+                            onLayout={({ nativeEvent }) => {
+                              setHeaderHeight(nativeEvent.layout.height);
+                            }}
+                            compact={compact}
+                            title={title}
+                            avatarUri={avatarUri}
+                            agentName={agentName}
+                            canGoBack={Boolean(renderConversations)}
+                            onOpenConversations={toggle}
+                            onOpenMenu={openMenu}
+                            onNewConversation={onNewConversation}
+                            onOpenAgent={
+                              renderAgentPanel
+                                ? () => {
+                                    setShowAgent(true);
+                                  }
+                                : undefined
+                            }
+                          />
+                        )
+                      : null}
+                    <ConversationChrome
+                      value={{
+                        compact,
+                        topInset:
+                          section === "chat" && !hideConversationHeader
+                            ? headerHeight
+                            : 0,
+                      }}
+                    >
+                      <View style={styles.content}>{children}</View>
+                    </ConversationChrome>
+                  </View>
+                )}
+              </ConversationNavigation>
+            </ShellChrome>
           </CompanionVisibility>
-          {compact && !(section === "chat" && conversationOpen) && (
+          {tabBarVisible && (
             <View
               testID="mobile-navigation"
               accessibilityLabel={t("Navegação do Zoen")}
-              style={styles.bottomNavigation}
+              style={[
+                styles.bottomNavigation,
+                minimized && styles.bottomNavigationMinimized,
+                !reduceMotion && styles.bottomNavigationMotion,
+              ]}
             >
               {sections
                 .filter(({ id }) =>
@@ -267,6 +279,7 @@ export function CompanionShell({
                     label={t(label)}
                     icon={icon}
                     mobile
+                    minimized={minimized}
                     selected={id === section}
                     onPress={() => {
                       navigate(id);
@@ -277,6 +290,7 @@ export function CompanionShell({
                 label={t("Mais")}
                 icon={Menu}
                 mobile
+                minimized={minimized}
                 selected={
                   !["chat", "feed", "library", "discover"].includes(section)
                 }
@@ -351,19 +365,29 @@ function NavigationItem({
   selected = false,
   expanded = false,
   mobile = false,
+  minimized = false,
 }: Pick<
   ComponentProps<typeof IconButton>,
   "label" | "icon" | "onPress" | "selected"
 > & {
   readonly expanded?: boolean;
   readonly mobile?: boolean;
+  readonly minimized?: boolean;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const glass = useGlass();
+  const styles = useMemo(() => createStyles(colors, glass), [colors, glass]);
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      onHoverIn={() => {
+        setHovered(true);
+      }}
+      onHoverOut={() => {
+        setHovered(false);
+      }}
       {...(Platform.OS === "web"
         ? { "aria-current": selected ? ("page" as const) : undefined }
         : { accessibilityState: { selected } })}
@@ -372,22 +396,28 @@ function NavigationItem({
         styles.navigationItem,
         expanded && styles.expandedItem,
         mobile && styles.mobileNavigationItem,
-        selected && styles.navigationSelected,
+        mobile && minimized && styles.mobileNavigationItemMinimized,
+        hovered && !selected && styles.navigationHovered,
+        selected &&
+          (mobile ? styles.mobileSelected : styles.navigationSelected),
         pressed && styles.navigationPressed,
       ]}
     >
       <Icon
-        size={mobile ? 22 : 21}
-        strokeWidth={1.8}
-        color={selected ? colors.accent : colors.muted}
+        size={mobile ? 22 : 20}
+        strokeWidth={selected ? 2 : 1.8}
+        color={selected ? colors.accent : hovered ? colors.ink : colors.muted}
       />
-      {(expanded || mobile) && (
+      {(expanded || (mobile && !minimized)) && (
         <Text
           numberOfLines={1}
           style={[
             styles.navigationLabel,
             mobile && styles.mobileNavigationLabel,
-            selected && styles.navigationSelectedLabel,
+            selected &&
+              (mobile
+                ? styles.mobileSelectedLabel
+                : styles.navigationSelectedLabel),
           ]}
         >
           {label}
@@ -421,19 +451,8 @@ function CompanionHeader({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const preferences = useAccessibilityPreferences();
-  const increasedContrast =
-    preferences.increasedContrast || preferences.forcedColors;
-  const opaque =
-    preferences.reduceTransparency ||
-    increasedContrast ||
-    Platform.OS !== "web" ||
-    typeof CSS === "undefined" ||
-    !CSS.supports("backdrop-filter", "blur(1px)");
-  const styles = useMemo(
-    () => createStyles(colors, opaque, increasedContrast),
-    [colors, opaque, increasedContrast]
-  );
+  const glass = useGlass();
+  const styles = useMemo(() => createStyles(colors, glass), [colors, glass]);
   return (
     <View
       testID="conversation-header"
@@ -499,10 +518,12 @@ function CompanionHeader({
   );
 }
 
+/** Room the floating tab bar takes, including its gap above the screen edge. */
+const tabBarClearance = 96;
+
 const createStyles = (
   palette: ReturnType<typeof useColors>,
-  opaque = true,
-  increasedContrast = false
+  glass: GlassMode & { readonly lens: string }
 ) =>
   StyleSheet.create({
     shell: { flex: 1, minHeight: 0, backgroundColor: palette.sidebar },
@@ -515,21 +536,30 @@ const createStyles = (
       backgroundColor: palette.canvas,
     },
     desktopFrame: {
-      marginVertical: 8,
-      marginRight: 8,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: palette.line,
-      borderRadius: 20,
+      marginVertical: space.sm,
+      marginRight: space.sm,
+      borderRadius: radius.xl,
       overflow: "hidden",
+      ...(Platform.OS === "web"
+        ? { boxShadow: elevation.raised }
+        : {
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: palette.line,
+          }),
     },
+    // macOS-style floating sidebar: a glass panel inset from the window edge
+    // with corners concentric with the content frame beside it.
     rail: {
       width: 64,
-      paddingHorizontal: 8,
-      paddingVertical: 12,
-      gap: 4,
+      margin: space.sm,
+      paddingHorizontal: 9,
+      paddingVertical: space.md - 2,
+      gap: space.xs,
       minHeight: 0,
+      borderRadius: radius.xl,
+      ...glassSurface(palette, glass, { elevation: "panel" }),
     },
-    expandedRail: { width: 200 },
+    expandedRail: { width: 216 },
     railHeader: {
       minHeight: 44,
       flexDirection: "row",
@@ -540,8 +570,9 @@ const createStyles = (
       flex: 1,
       marginLeft: 10,
       fontFamily: systemFont,
+      ...typeScale.headline,
       fontSize: 18,
-      fontWeight: "600",
+      letterSpacing: -0.4,
       color: palette.ink,
     },
     railControl: {
@@ -549,7 +580,8 @@ const createStyles = (
       height: 44,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 12,
+      borderRadius: radius.md,
+      outlineOffset: 2,
     },
     railDivider: {
       height: StyleSheet.hairlineWidth,
@@ -561,37 +593,94 @@ const createStyles = (
     railItemsContent: { gap: 4 },
     navigationItem: {
       minHeight: 44,
-      borderRadius: 12,
+      borderRadius: radius.md,
       alignItems: "center",
       justifyContent: "center",
       outlineOffset: 2,
+      ...(Platform.OS === "web"
+        ? {
+            transitionProperty: "background-color",
+            transitionDuration: "140ms",
+          }
+        : {}),
     },
     expandedItem: {
       flexDirection: "row",
       justifyContent: "flex-start",
-      paddingHorizontal: 12,
-      gap: 12,
+      paddingHorizontal: space.md,
+      gap: space.md,
     },
     navigationLabel: {
       fontFamily: systemFont,
-      fontSize: 14,
+      ...typeScale.callout,
+      fontWeight: "500",
       color: palette.ink,
     },
-    navigationSelected: { backgroundColor: palette.wash },
+    navigationHovered: { backgroundColor: palette.wash },
+    navigationSelected: { backgroundColor: palette.accentSoft },
+    // The selected tab sits in a glass lens: an opaque tint inside the bar
+    // that keeps the accent label at 4.6:1 (light) and 4.8:1 (dark).
+    mobileSelected: {
+      backgroundColor: glass.lens,
+      ...(Platform.OS === "web"
+        ? {
+            boxShadow: glass.dark
+              ? "inset 0 1px 0 rgba(255,255,255,0.08)"
+              : "inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 2px rgba(16,24,40,0.06)",
+          }
+        : {}),
+    },
+    mobileSelectedLabel: { color: palette.accent, fontWeight: "600" },
     navigationSelectedLabel: { color: palette.ink, fontWeight: "600" },
-    navigationPressed: { opacity: 0.65 },
+    navigationPressed: { opacity: 0.7 },
+    // iOS 26 tab bar: a floating capsule of thick glass, inset from the
+    // screen edges and above the home indicator, with content scrolling
+    // underneath. Thick glass keeps 10 pt labels legible over any content.
     bottomNavigation: {
+      position: "absolute",
+      left: space.md,
+      right: space.md,
+      // Hosts keep the companion inside the safe area (native wraps it, and
+      // the web page does not extend under the home indicator), so a fixed
+      // inset floats the bar just above the edge.
+      bottom: 10,
+      zIndex: 40,
       flexDirection: "row",
       alignItems: "center",
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: palette.line,
-      paddingHorizontal: 4,
-      paddingTop: 4,
-      paddingBottom: 6,
-      backgroundColor: palette.surface,
+      padding: space.xs,
+      borderRadius: 32,
+      ...glassSurface(palette, glass, {
+        thickness: "thick",
+        elevation: "floating",
+      }),
     },
-    mobileNavigationItem: { flex: 1, minHeight: 50, gap: 3, borderRadius: 16 },
-    mobileNavigationLabel: { fontSize: 10, color: palette.muted },
+    bottomNavigationMinimized: {
+      left: space.xxxl + space.lg,
+      right: space.xxxl + space.lg,
+    },
+    bottomNavigationMotion: {
+      zIndex: 40,
+      ...(Platform.OS === "web"
+        ? {
+            transitionProperty: "left, right",
+            transitionDuration: "260ms",
+            transitionTimingFunction: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+          }
+        : {}),
+    },
+    mobileNavigationItem: {
+      flex: 1,
+      minHeight: 54,
+      gap: 2,
+      // Concentric with the bar: its 32 pt radius minus the 4 pt inset.
+      borderRadius: 28,
+    },
+    mobileNavigationItemMinimized: { minHeight: 44, borderRadius: 22 },
+    mobileNavigationLabel: {
+      fontSize: 10,
+      fontWeight: "500",
+      color: palette.muted,
+    },
     body: { flex: 1, minWidth: 0, minHeight: 0 },
     header: {
       position: "absolute",
@@ -616,17 +705,7 @@ const createStyles = (
     headerSide: { width: 44, alignItems: "center" },
     headerControl: {
       borderRadius: 22,
-      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? palette.ink
-        : opaque
-          ? palette.line
-          : `${palette.line}70`,
-      boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-      ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
-        : {}),
+      ...glassSurface(palette, glass),
     },
     identity: {
       maxWidth: "70%",
@@ -645,16 +724,7 @@ const createStyles = (
       paddingHorizontal: 10,
       paddingVertical: 3,
       borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: increasedContrast
-        ? palette.ink
-        : opaque
-          ? palette.line
-          : `${palette.line}70`,
-      backgroundColor: opaque ? palette.surface : `${palette.surface}b8`,
-      ...(Platform.OS === "web"
-        ? { backdropFilter: opaque ? "none" : "blur(20px) saturate(180%)" }
-        : {}),
+      ...glassSurface(palette, glass, { elevation: "none" }),
     },
     title: {
       fontFamily: systemFont,
@@ -664,31 +734,20 @@ const createStyles = (
       flexShrink: 1,
     },
     content: { flex: 1, minHeight: 0 },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      minHeight: 56,
-      paddingHorizontal: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: palette.line,
-    },
-    sectionTitle: {
-      flex: 1,
-      fontFamily: systemFont,
-      fontSize: 17,
-      fontWeight: "600",
-      textAlign: "center",
-      color: palette.ink,
-    },
-    menu: { gap: 2, backgroundColor: palette.surface },
+    menu: { gap: space.xxs },
     menuRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
-      minHeight: 48,
-      paddingHorizontal: 12,
-      borderRadius: 10,
+      gap: space.md + 2,
+      minHeight: 50,
+      paddingHorizontal: space.md,
+      borderRadius: radius.md,
     },
-    menuText: { fontFamily: systemFont, fontSize: 17, color: palette.ink },
-    selected: { backgroundColor: palette.wash },
+    menuText: {
+      fontFamily: systemFont,
+      ...typeScale.body,
+      fontSize: 16,
+      color: palette.ink,
+    },
+    selected: { backgroundColor: palette.accentSoft },
   });

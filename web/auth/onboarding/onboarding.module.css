@@ -57,10 +57,18 @@
 }
 .card {
   overflow: hidden;
-  border: 1px solid #ffffff2a;
-  border-radius: 34px;
-  background: linear-gradient(155deg, #1d3a5238, #0b1d3430);
-  box-shadow: 0 24px 90px #00000028;
+  border: 1px solid var(--glass-night-edge);
+  border-radius: 32px;
+  /* Night glass, regular variant: the card carries forms and body copy, so
+     the fill is dense enough to keep text legible over the scene behind it. */
+  background: var(--glass-night-panel);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  backdrop-filter: blur(28px) saturate(140%);
+  box-shadow:
+    var(--glass-night-highlight),
+    0 1px 2px #0000001f,
+    0 40px 100px -30px #000000a0;
+  animation: enter var(--duration-slow) var(--ease-out-soft) both;
 }
 .story {
   touch-action: pan-y;
@@ -92,17 +100,18 @@
 }
 .eyebrow {
   position: absolute;
-  inset: 22px auto auto 24px;
-  max-width: calc(100% - 48px);
-  padding: 9px 13px;
-  border: 1px solid #ffffff38;
+  inset: 20px auto auto 20px;
+  max-width: calc(100% - 40px);
+  padding: 7px 12px;
+  border: 1px solid #ffffff2e;
   border-radius: 99px;
-  background: #1830444d;
+  background: #0d1d3266;
   backdrop-filter: blur(18px);
-  color: #fff;
-  font-size: 9px;
+  color: #f2f5f8;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
+  box-shadow: inset 0 1px 0 #ffffff17;
 }
 .copy {
   position: relative;
@@ -111,12 +120,13 @@
   text-align: center;
 }
 .title {
-  max-width: 310px;
+  max-width: 330px;
   margin: 0 auto;
-  font-size: clamp(38px, 5.5vw, 48px);
-  font-weight: 400;
-  line-height: 1.03;
-  letter-spacing: -0.035em;
+  font-family: var(--merit-family-display);
+  font-size: clamp(36px, 5.2vw, 46px);
+  font-weight: 420;
+  line-height: 1.04;
+  letter-spacing: -0.038em;
   min-height: 82px;
   align-content: center;
   text-wrap: balance;
@@ -181,14 +191,61 @@
   outline-offset: 2px;
 }
 .actions {
-  padding: 0 30px 26px;
+  padding: 4px 30px 28px;
 }
 .actions :global([data-slot="button"]:not([data-size="icon"])) {
-  min-height: 50px;
+  min-height: 52px;
   border-radius: 999px;
-  padding-inline: 20px;
-  font-size: 14px;
+  padding-inline: 22px;
+  font-size: 15px;
+  font-weight: 520;
   white-space: normal;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-normal) var(--ease-out-soft),
+    transform var(--duration-fast) var(--ease-standard);
+}
+/* Brand surfaces keep the cream call to action instead of the app's blue fill. */
+.shell :global([data-slot="button"][data-variant="default"]) {
+  --primary: #f6f5ef;
+  --primary-foreground: #1b3040;
+}
+.actions :global([data-slot="button"][data-variant="default"]) {
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 10px 28px -10px #000000b0;
+}
+.actions :global([data-slot="button"][data-variant="default"]:hover) {
+  background: #ffffff;
+}
+.actions :global([data-slot="button"][data-variant="outline"]) {
+  background: #ffffff0a;
+  border-color: #ffffff2b;
+  color: var(--foreground);
+}
+.actions :global([data-slot="button"][data-variant="outline"]:hover) {
+  background: #ffffff16;
+}
+.actions :global([data-slot="input"]) {
+  height: 50px;
+  border-radius: 16px;
+  padding-inline: 16px;
+  background: #ffffff0d;
+  border-color: #ffffff26;
+  font-size: 16px;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+.actions :global([data-slot="input"]:focus-visible) {
+  outline: none;
+  border-color: #ffffff70;
+  background: #ffffff14;
+  box-shadow: 0 0 0 4px #ffffff14;
+}
+.actions :global(.type-caption) {
+  color: var(--muted-foreground);
+  line-height: 1.5;
 }
 .actions :global([data-slot="alert"]) {
   margin-bottom: 16px;
@@ -226,7 +283,7 @@
   display: grid;
   gap: 10px;
 }
-.choiceList :global([data-slot="button"]) {
+.choiceList :global([data-slot="button"]):not(.continue) {
   justify-content: flex-start;
   border-radius: 20px !important;
   min-height: 64px !important;
@@ -236,7 +293,7 @@
   color: var(--foreground);
   gap: 14px;
 }
-.choiceList :global([data-slot="button"]:hover) {
+.choiceList :global([data-slot="button"]:hover):not(.continue) {
   background: #ffffff13;
 }
 .choiceList :global([data-slot="button"][aria-pressed="true"]) {
@@ -270,6 +327,13 @@
 .continue {
   width: 100%;
   margin-top: 18px;
+  gap: 10px;
+}
+.continue svg {
+  transition: transform var(--duration-normal) var(--ease-out-soft);
+}
+.continue:hover svg {
+  transform: translateX(3px);
 }
 .skip {
   width: 100%;
@@ -281,9 +345,9 @@
 .note {
   color: var(--muted-foreground);
   text-align: center;
-  font-size: 12px;
-  line-height: 1.5;
-  margin-top: 16px;
+  font-size: 13px;
+  line-height: 18px;
+  margin-top: 12px;
 }
 .deviceCard {
   padding: 30px;
@@ -349,7 +413,8 @@
   .eyebrow {
     top: 18px;
     left: 20px;
-    font-size: 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
   }
 }
 @media (max-height: 720px) and (max-width: 540px) {
@@ -375,5 +440,40 @@
   .step span {
     transition: none;
     transform: none;
+  }
+}
+.choiceList [role="alert"] {
+  color: var(--destructive);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* Accessibility: glass falls back to opaque fills when the person asks for
+   less transparency, and edges firm up when they ask for more contrast. */
+@supports not
+((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card {
+    background: var(--glass-night-solid);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .card {
+    background: var(--glass-night-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .eyebrow {
+    background: #0d1d32;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .card,
+  .eyebrow {
+    border-color: var(--glass-night-edge-strong);
+  }
+  .choiceList :global([data-slot="button"]):not(.continue) {
+    border-color: #ffffff70;
   }
 }

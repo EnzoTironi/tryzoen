@@ -1,0 +1,105 @@
+/*
+ * Liquid Glass tokens for the web functional layer: floating headers,
+ * menus, selects and the auth card. They mirror the companion's
+ * React Native tokens in packages/companion-ui/src/glass.ts so both stacks
+ * render the same material.
+ *
+ * Apple keeps glass off content. Use these only on controls and navigation
+ * that float above it. Fills stay dense enough for WCAG AA text over light
+ * and dark content; every surface has three fallbacks: no backdrop-filter
+ * support, Reduce Transparency, and Increase Contrast.
+ */
+:root {
+  --glass-blur: blur(20px) saturate(180%);
+  /* Regular glass for icon controls, thick glass for text-bearing panels. */
+  --glass-fill: rgb(255 255 255 / 72%);
+  --glass-fill-thick: rgb(255 255 255 / 88%);
+  --glass-solid: #ffffff;
+  --glass-edge: rgb(223 225 230 / 44%);
+  --glass-edge-strong: #16181d;
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 75%);
+  --glass-shadow:
+    0 10px 30px -8px rgb(16 24 40 / 22%), 0 2px 6px rgb(16 24 40 / 6%);
+  --glass-radius-control: 22px;
+  --glass-radius-panel: 28px;
+
+  /* Night glass floats over the landing and sign-in sky. */
+  --glass-night-fill: rgb(23 36 59 / 40%);
+  --glass-night-panel: linear-gradient(
+    180deg,
+    rgb(26 47 74 / 56%) 0%,
+    rgb(10 24 44 / 70%) 100%
+  );
+  --glass-night-solid: #12233a;
+  --glass-night-edge: rgb(255 255 255 / 12%);
+  --glass-night-edge-strong: rgb(255 255 255 / 44%);
+  --glass-night-highlight: inset 0 1px 0 rgb(255 255 255 / 11%);
+  --glass-night-shadow: 0 6px 24px rgb(16 17 37 / 8%);
+}
+
+.dark {
+  --glass-fill: rgb(23 25 30 / 72%);
+  --glass-fill-thick: rgb(23 25 30 / 88%);
+  --glass-solid: #17191e;
+  --glass-edge: rgb(44 47 54 / 44%);
+  --glass-edge-strong: #f3f4f6;
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 12%);
+  --glass-shadow: 0 12px 32px -8px rgb(0 0 0 / 60%), 0 2px 6px rgb(0 0 0 / 30%);
+}
+
+.glass,
+.glass-thick,
+:where([data-slot="dropdown-menu-content"], [data-slot="select-content"]) {
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+/* Menus and lists carry text, so they use the thick variant with
+   larger radii, concentric with the items inside them. Dialogs are left
+   alone: the companion uses a transparent full-screen dialog as its overlay
+   host and draws its own glass sheets. */
+.glass-thick,
+[data-slot="dropdown-menu-content"],
+[data-slot="select-content"] {
+  background: var(--glass-fill-thick);
+}
+[data-slot="dropdown-menu-content"],
+[data-slot="select-content"] {
+  border-radius: 14px;
+}
+
+@supports not
+((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-thick,
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"] {
+    background: var(--glass-solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-thick,
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"] {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass,
+  .glass-thick,
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"] {
+    background: var(--glass-solid);
+    border-color: var(--glass-edge-strong);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
