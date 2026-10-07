@@ -121,7 +121,8 @@ export function Library({
   );
   const systemFiles = category.label === "System files";
   // Sorting and layout toggles only earn their place once there is something to arrange.
-  const hasItems = !fileControls || items.length > 0;
+  const hasItems =
+    !fileControls || items.some((item) => category.pattern.test(item.id));
   return (
     <View style={[styles.layout, compact && styles.compact]}>
       {(!compact || showCategories) && (
