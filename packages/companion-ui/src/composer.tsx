@@ -598,10 +598,10 @@ const createStyles = (
         : opaque
           ? palette.line
           : `${palette.line}70`,
-      borderRadius: compact ? 22 : 18,
-      paddingLeft: 12,
-      paddingRight: 5,
-      paddingVertical: 4,
+      borderRadius: compact ? 22 : 20,
+      paddingLeft: compact ? 12 : 10,
+      paddingRight: 6,
+      paddingVertical: compact ? 4 : 5,
     },
     input: {
       flex: 1,
@@ -622,8 +622,8 @@ const createStyles = (
       paddingBottom: 1,
     },
     send: {
-      width: compact ? 32 : 24,
-      height: compact ? 32 : 24,
+      width: compact ? 32 : 30,
+      height: compact ? 32 : 30,
       borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",

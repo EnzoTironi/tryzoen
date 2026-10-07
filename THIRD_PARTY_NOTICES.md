@@ -10,6 +10,11 @@ licensed under the SIL Open Font License 1.1. The full license text ships
 alongside the font files in `public/fonts/OFL.txt`. The fonts are distributed
 here under a different family name, as the license requires.
 
+`public/fonts/instrument-serif-italic.woff2` is the Latin italic subset of
+[Instrument Serif](https://github.com/Instrument/instrument-serif), copyright
+2022 The Instrument Serif Project Authors, licensed under the SIL Open Font
+License 1.1. Its license text ships in `public/fonts/instrument-serif-OFL.txt`.
+
 ## Landing page reference assets
 
 The reference illustrations and channel icons under `public/marketing/`

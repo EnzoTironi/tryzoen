@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { ActionButton } from "./button";
-import { systemFont, useColors } from "./theme";
+import { radius, space, systemFont, typeScale, useColors } from "./theme";
 
 export function CompanionPage({
   title,
@@ -61,10 +61,7 @@ export function CompanionPage({
           <View style={styles.header}>
             <Text
               accessibilityRole="header"
-              style={[
-                styles.title,
-                compact && Platform.OS !== "web" && styles.compactTitle,
-              ]}
+              style={[styles.title, compact && styles.compactTitle]}
             >
               {title}
             </Text>
@@ -102,42 +99,43 @@ export function usePageStyles() {
         heading: {
           fontFamily: systemFont,
           color: colors.ink,
-          fontSize: 20,
-          fontWeight: "600",
-          marginBottom: 20,
+          ...typeScale.headline,
+          fontSize: 18,
+          marginBottom: space.lg,
         },
         copy: {
           fontFamily: systemFont,
           color: colors.muted,
+          ...typeScale.footnote,
           fontSize: 14,
           lineHeight: 20,
         },
         row: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 16,
-          paddingVertical: 16,
+          gap: space.lg,
+          paddingVertical: space.lg,
         },
-        rowCopy: { flex: 1, gap: 5 },
+        rowCopy: { flex: 1, gap: space.xs },
         rowTitle: {
           fontFamily: systemFont,
           color: colors.ink,
+          ...typeScale.body,
           fontSize: 16,
           fontWeight: "500",
-          lineHeight: 22,
         },
         field: {
           fontFamily: systemFont,
           backgroundColor: colors.wash,
           color: colors.ink,
-          borderRadius: 16,
-          padding: 14,
+          borderRadius: radius.md,
+          paddingVertical: space.md,
+          paddingHorizontal: space.lg - 2,
           fontSize: 16,
-          marginBottom: 24,
+          marginBottom: space.xl,
           outlineWidth: 0,
         },
-        section: { marginTop: 32 },
-        empty: { gap: 20, paddingVertical: 24, alignItems: "flex-start" },
+        section: { marginTop: space.xxl },
       }),
     [colors]
   );
@@ -146,36 +144,45 @@ function createStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
     scroll: {
       flexGrow: 1,
-      paddingHorizontal: 64,
-      paddingTop: 44,
-      paddingBottom: 60,
+      paddingHorizontal: space.xxxl + space.lg,
+      paddingTop: space.xxxl,
+      paddingBottom: space.xxxl + space.md,
     },
-    compact: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
-    compactWeb: { paddingTop: 44 },
+    compact: {
+      paddingHorizontal: space.lg + 2,
+      paddingTop: space.lg,
+      paddingBottom: space.xxl,
+    },
+    compactWeb: { paddingTop: space.xl + space.xs },
     compactTitle: {
       fontFamily: systemFont,
-      fontSize: 24,
-      lineHeight: 30,
-      letterSpacing: -0.6,
+      fontSize: 28,
+      lineHeight: 34,
+      letterSpacing: -0.7,
     },
-    page: { width: "100%", maxWidth: 1000, alignSelf: "flex-start" },
+    page: { width: "100%", maxWidth: 880, alignSelf: "center" },
     header: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 16,
-      marginBottom: 32,
+      gap: space.lg,
+      marginBottom: space.xxl,
+      minHeight: 44,
     },
     title: {
       fontFamily: systemFont,
-      fontSize: 34,
-      lineHeight: 40,
-      fontWeight: "600",
-      letterSpacing: -1.1,
+      ...typeScale.largeTitle,
       color: colors.ink,
       flexShrink: 1,
     },
-    error: { gap: 12, marginBottom: 20, alignItems: "flex-start" },
+    error: {
+      gap: space.md,
+      marginBottom: space.xl,
+      alignItems: "flex-start",
+      padding: space.lg,
+      borderRadius: radius.md,
+      backgroundColor: colors.wash,
+    },
     errorText: {
       fontFamily: systemFont,
       color: colors.danger,

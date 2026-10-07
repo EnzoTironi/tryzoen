@@ -1,8 +1,4 @@
 .landingShell {
-  --merit-family-text:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --merit-family-display:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --background: #1d1c23;
   --foreground: #fff;
   --muted-foreground: #c5c2ce;
@@ -14,6 +10,11 @@
   --logo-outline: #fff;
   --logo-fill: #ffffff17;
   font-family: var(--merit-family-text);
+}
+/* The landing keeps its cream call to action instead of the app's blue fill. */
+.landingShell [data-slot="button"][data-variant="default"] {
+  --primary: #eeeef7;
+  --primary-foreground: #292a3a;
 }
 .landingShell > header {
   position: fixed;

@@ -520,7 +520,7 @@ it.each([false, true])(
     const opaque = headerMaterials();
     expect(opaque.map(geometry)).toEqual(normal);
     expect(opaque.map((style) => style.backgroundColor)).toEqual(
-      Array(3).fill(dark ? "#1c1c1e" : "#ffffff")
+      Array(3).fill(dark ? "#17191e" : "#ffffff")
     );
     expect(opaque.map((style) => style.backdropFilter)).toEqual(
       Array(3).fill("none")
@@ -542,7 +542,7 @@ it.each(["increasedContrast", "forcedColors"] as const)(
     expect(mocks.preferences.reduceTransparency).toBe(false);
     expect(strong.map(geometry)).toEqual(normal);
     expect(strong.map((style) => style.borderColor)).toEqual(
-      Array(3).fill("#1c1c1e")
+      Array(3).fill("#16181d")
     );
     expect(strong.map((style) => style.backgroundColor)).toEqual(
       Array(3).fill("#ffffff")

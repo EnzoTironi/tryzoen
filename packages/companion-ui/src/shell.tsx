@@ -30,7 +30,15 @@ import {
 } from "lucide-react-native";
 import { IconButton } from "./icon-button";
 import { ConversationChrome } from "./conversation";
-import { systemFont, useAccessibilityPreferences, useColors } from "./theme";
+import {
+  elevation,
+  radius,
+  space,
+  systemFont,
+  typeScale,
+  useAccessibilityPreferences,
+  useColors,
+} from "./theme";
 import { AgentPanel, type AgentPanelTab } from "./agent-panel";
 import { ConversationNavigation } from "./chats/navigation";
 import { CompanionVisibility } from "./visibility";
@@ -210,7 +218,7 @@ export function CompanionShell({
                         }
                       />
                     )
-                  ) : (
+                  ) : !compact ? null : (
                     <View style={styles.sectionHeader}>
                       <IconButton
                         icon={ChevronLeft}
@@ -360,10 +368,17 @@ function NavigationItem({
 }) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      onHoverIn={() => {
+        setHovered(true);
+      }}
+      onHoverOut={() => {
+        setHovered(false);
+      }}
       {...(Platform.OS === "web"
         ? { "aria-current": selected ? ("page" as const) : undefined }
         : { accessibilityState: { selected } })}
@@ -372,14 +387,16 @@ function NavigationItem({
         styles.navigationItem,
         expanded && styles.expandedItem,
         mobile && styles.mobileNavigationItem,
-        selected && styles.navigationSelected,
+        hovered && !selected && styles.navigationHovered,
+        selected &&
+          (mobile ? styles.mobileSelected : styles.navigationSelected),
         pressed && styles.navigationPressed,
       ]}
     >
       <Icon
-        size={mobile ? 22 : 21}
-        strokeWidth={1.8}
-        color={selected ? colors.accent : colors.muted}
+        size={mobile ? 22 : 20}
+        strokeWidth={selected ? 2 : 1.8}
+        color={selected ? colors.accent : hovered ? colors.ink : colors.muted}
       />
       {(expanded || mobile) && (
         <Text
@@ -515,21 +532,25 @@ const createStyles = (
       backgroundColor: palette.canvas,
     },
     desktopFrame: {
-      marginVertical: 8,
-      marginRight: 8,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: palette.line,
-      borderRadius: 20,
+      marginVertical: space.sm,
+      marginRight: space.sm,
+      borderRadius: radius.lg,
       overflow: "hidden",
+      ...(Platform.OS === "web"
+        ? { boxShadow: elevation.raised }
+        : {
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: palette.line,
+          }),
     },
     rail: {
       width: 64,
-      paddingHorizontal: 8,
-      paddingVertical: 12,
-      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: space.md,
+      gap: space.xs,
       minHeight: 0,
     },
-    expandedRail: { width: 200 },
+    expandedRail: { width: 216 },
     railHeader: {
       minHeight: 44,
       flexDirection: "row",
@@ -540,8 +561,9 @@ const createStyles = (
       flex: 1,
       marginLeft: 10,
       fontFamily: systemFont,
+      ...typeScale.headline,
       fontSize: 18,
-      fontWeight: "600",
+      letterSpacing: -0.4,
       color: palette.ink,
     },
     railControl: {
@@ -549,7 +571,8 @@ const createStyles = (
       height: 44,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 12,
+      borderRadius: radius.md,
+      outlineOffset: 2,
     },
     railDivider: {
       height: StyleSheet.hairlineWidth,
@@ -561,37 +584,58 @@ const createStyles = (
     railItemsContent: { gap: 4 },
     navigationItem: {
       minHeight: 44,
-      borderRadius: 12,
+      borderRadius: radius.md,
       alignItems: "center",
       justifyContent: "center",
       outlineOffset: 2,
+      ...(Platform.OS === "web"
+        ? {
+            transitionProperty: "background-color",
+            transitionDuration: "140ms",
+          }
+        : {}),
     },
     expandedItem: {
       flexDirection: "row",
       justifyContent: "flex-start",
-      paddingHorizontal: 12,
-      gap: 12,
+      paddingHorizontal: space.md,
+      gap: space.md,
     },
     navigationLabel: {
       fontFamily: systemFont,
-      fontSize: 14,
+      ...typeScale.callout,
+      fontWeight: "500",
       color: palette.ink,
     },
-    navigationSelected: { backgroundColor: palette.wash },
+    navigationHovered: { backgroundColor: palette.wash },
+    navigationSelected: { backgroundColor: palette.accentSoft },
+    mobileSelected: { backgroundColor: palette.wash },
     navigationSelectedLabel: { color: palette.ink, fontWeight: "600" },
-    navigationPressed: { opacity: 0.65 },
+    navigationPressed: { opacity: 0.7 },
     bottomNavigation: {
       flexDirection: "row",
       alignItems: "center",
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: palette.line,
-      paddingHorizontal: 4,
-      paddingTop: 4,
-      paddingBottom: 6,
+      paddingHorizontal: space.xs,
+      paddingTop: space.xs + 2,
+      paddingBottom: space.sm,
       backgroundColor: palette.surface,
+      ...(Platform.OS === "web"
+        ? { boxShadow: "0 -8px 24px -16px rgba(16,24,40,0.18)" }
+        : {}),
     },
-    mobileNavigationItem: { flex: 1, minHeight: 50, gap: 3, borderRadius: 16 },
-    mobileNavigationLabel: { fontSize: 10, color: palette.muted },
+    mobileNavigationItem: {
+      flex: 1,
+      minHeight: 52,
+      gap: 3,
+      borderRadius: radius.lg,
+    },
+    mobileNavigationLabel: {
+      fontSize: 10,
+      fontWeight: "500",
+      color: palette.muted,
+    },
     body: { flex: 1, minWidth: 0, minHeight: 0 },
     header: {
       position: "absolute",
@@ -667,28 +711,32 @@ const createStyles = (
     sectionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      minHeight: 56,
-      paddingHorizontal: 12,
+      minHeight: 52,
+      paddingHorizontal: space.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: palette.line,
     },
     sectionTitle: {
       flex: 1,
       fontFamily: systemFont,
-      fontSize: 17,
-      fontWeight: "600",
+      ...typeScale.headline,
       textAlign: "center",
       color: palette.ink,
     },
-    menu: { gap: 2, backgroundColor: palette.surface },
+    menu: { gap: space.xxs, backgroundColor: palette.surface },
     menuRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
-      minHeight: 48,
-      paddingHorizontal: 12,
-      borderRadius: 10,
+      gap: space.md + 2,
+      minHeight: 50,
+      paddingHorizontal: space.md,
+      borderRadius: radius.md,
     },
-    menuText: { fontFamily: systemFont, fontSize: 17, color: palette.ink },
-    selected: { backgroundColor: palette.wash },
+    menuText: {
+      fontFamily: systemFont,
+      ...typeScale.body,
+      fontSize: 16,
+      color: palette.ink,
+    },
+    selected: { backgroundColor: palette.accentSoft },
   });

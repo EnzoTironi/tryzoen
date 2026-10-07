@@ -209,7 +209,7 @@ it("keeps transparency independent of reduced motion and preserves field geometr
   render(send());
   expect(material()).toMatchObject({
     backgroundColor: "#ffffff",
-    borderColor: "#d1d1d6",
+    borderColor: "#dfe1e6",
     backdropFilter: "none",
   });
   for (const key of [
@@ -229,11 +229,11 @@ it.each(["increasedContrast", "forcedColors"] as const)(
     state.dark = true;
     render(send());
     expect(material()).toMatchObject({
-      backgroundColor: "#1c1c1e",
-      borderColor: "#f5f5f7",
+      backgroundColor: "#17191e",
+      borderColor: "#f3f4f6",
       backdropFilter: "none",
     });
-    expect(state.input?.placeholderTextColor).toBe("#f5f5f7");
+    expect(state.input?.placeholderTextColor).toBe("#f3f4f6");
   }
 );
 it.each(["ios", "android", "web"])(
@@ -352,7 +352,7 @@ it.each([false, true])(
           />
         </ComposerEditorProvider>
       );
-      expect(material()).toHaveProperty("color", dark ? "#f5f5f7" : "#1c1c1e");
+      expect(material()).toHaveProperty("color", dark ? "#f3f4f6" : "#16181d");
       expect(state.input).toBeUndefined();
       expect(Editor.mock.calls.at(-1)?.[0]).toMatchObject({
         value: "Rascunho çã 😀",
@@ -378,7 +378,7 @@ it.each(["ios", "android"])(
     render(send());
     expect(material()).not.toHaveProperty("color");
     expect(StyleSheet.flatten(state.input?.style)).toMatchObject({
-      color: "#f5f5f7",
+      color: "#f3f4f6",
     });
   }
 );

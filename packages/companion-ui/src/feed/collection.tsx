@@ -8,11 +8,11 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import type { z } from "zod";
-import { SlidersHorizontal } from "lucide-react-native";
-import { Text, View } from "react-native";
-import { CompanionPage, usePageStyles } from "../page";
+import { Newspaper, SlidersHorizontal } from "lucide-react-native";
+import { CompanionPage } from "../page";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
+import { EmptyState } from "../empty-state";
 import { FeedCard } from "./card";
 import { FeedOptions } from "./options";
 import { feedLikeSchema } from "./schema";
@@ -46,7 +46,6 @@ export function FeedCollection({
   readonly onPrompt: (prompt: string) => void;
 }) {
   const { t } = useI18n();
-  const pageStyles = usePageStyles();
   const client = useQueryClient();
   const [likeError, setLikeError] = useState<string>();
   const [selected, setSelected] = useState<string>();
@@ -163,19 +162,14 @@ export function FeedCollection({
           />
         ))}
         {!feed.isPending && !feed.isError && items.length === 0 && (
-          <View style={pageStyles.empty}>
-            <Text style={pageStyles.heading}>
-              {t("A feed shaped around you")}
-            </Text>
-            <Text style={pageStyles.copy}>
-              {t(
-                "Thoughtful updates on the things you care about, with sources and room to explore."
-              )}
-            </Text>
-            <ActionButton onPress={customize}>
-              {t("Set up my feed")}
-            </ActionButton>
-          </View>
+          <EmptyState
+            icon={Newspaper}
+            title={t("A feed shaped around you")}
+            body={t(
+              "Thoughtful updates on the things you care about, with sources and room to explore."
+            )}
+            action={{ label: t("Set up my feed"), onPress: customize }}
+          />
         )}
         {feed.hasNextPage && (
           <ActionButton

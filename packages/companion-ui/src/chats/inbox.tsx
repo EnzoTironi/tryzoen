@@ -31,9 +31,13 @@ import {
   ListFilter,
   Check,
   ChevronRight,
+  MessagesSquare,
+  SearchX,
+  UsersRound,
 } from "lucide-react-native";
 import { IconButton } from "../icon-button";
 import { ActionButton } from "../button";
+import { EmptyState } from "../empty-state";
 import { systemFont, useColors } from "../theme";
 import { CompanionSheet } from "../sheet";
 import { ConversationRow } from "./row";
@@ -629,21 +633,21 @@ function InboxEmpty({
   readonly configured: boolean;
 }) {
   const { t } = useI18n();
-  const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>
-        {search
+    <EmptyState
+      compact
+      icon={search ? SearchX : groups ? UsersRound : MessagesSquare}
+      title={
+        search
           ? t("Nenhuma conversa encontrada")
           : groups
             ? t("Seus grupos aparecem aqui")
             : people
               ? t("Suas conversas aparecem aqui")
-              : t("Vamos conversar?")}
-      </Text>
-      <Text style={styles.caption}>
-        {groups
+              : t("Vamos conversar?")
+      }
+      body={
+        groups
           ? configured
             ? t("Crie um grupo no seu espaço compartilhado.")
             : t("O serviço de grupos ainda não está conectado neste ambiente.")
@@ -651,9 +655,9 @@ function InboxEmpty({
             ? t(
                 "Toque em nova conversa e busque alguém deste espaço pelo nome ou username."
               )
-            : t("Comece com o Zoen. Suas conversas ficam salvas aqui.")}
-      </Text>
-    </View>
+            : t("Comece com o Zoen. Suas conversas ficam salvas aqui.")
+      }
+    />
   );
 }
 
@@ -847,13 +851,6 @@ const createStyles = (palette: ReturnType<typeof useColors>) =>
       color: palette.muted,
       fontSize: 15,
       lineHeight: 20,
-    },
-    empty: { padding: 20, gap: 9 },
-    emptyTitle: {
-      fontFamily: systemFont,
-      color: palette.ink,
-      fontSize: 17,
-      fontWeight: "600",
     },
     feedback: { padding: 14, gap: 10 },
     footer: {

@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, StyleSheet } from "react-native";
 import type { LucideProps } from "lucide-react-native";
 import { useColors } from "./theme";
 
@@ -19,6 +20,7 @@ export function IconButton({
   readonly quiet?: boolean;
 }) {
   const colors = useColors();
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
@@ -27,15 +29,22 @@ export function IconButton({
       disabled={disabled}
       hitSlop={2}
       onPress={onPress}
+      onHoverIn={() => {
+        setHovered(true);
+      }}
+      onHoverOut={() => {
+        setHovered(false);
+      }}
       style={({ pressed }) => [
         styles.icon,
-        selected && { backgroundColor: colors.wash },
+        hovered && !disabled && { backgroundColor: colors.wash },
+        selected && { backgroundColor: colors.accentSoft },
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
       <Icon
-        size={quiet ? 19 : 24}
+        size={quiet ? 19 : 22}
         strokeWidth={1.8}
         color={selected ? colors.accent : quiet ? colors.muted : colors.ink}
       />
@@ -51,7 +60,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     outlineOffset: 2,
+    ...(Platform.OS === "web"
+      ? {
+          transitionProperty: "background-color, transform",
+          transitionDuration: "140ms",
+        }
+      : {}),
   },
-  pressed: { opacity: 0.65 },
+  pressed: { opacity: 0.65, transform: [{ scale: 0.94 }] },
   disabled: { opacity: 0.35 },
 });

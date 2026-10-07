@@ -7,19 +7,8 @@
 @source "../web/components/**/*.{ts,tsx}";
 @source "../node_modules/streamdown/dist/*.js";
 
-:root {
-  --primary: #007aff;
-  --primary-foreground: #fff;
-  --ring: #007aff;
-}
-
-.dark {
-  --primary: #0a84ff;
-  --primary-foreground: #fff;
-  --ring: #0a84ff;
-}
-
-/* Filled buttons need a darker blue than accent-colored links. */
+/* Filled buttons keep one tested blue with white text in either appearance. */
 [data-slot="button"][data-variant="default"] {
-  --primary: #0071eb;
+  --primary: #0a5fd6;
+  --primary-foreground: #ffffff;
 }

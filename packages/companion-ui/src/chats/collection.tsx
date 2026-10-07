@@ -13,9 +13,11 @@ import {
   Text,
   View,
 } from "react-native";
-import { usePageStyles } from "../page";
+
 import { ActionButton } from "../button";
+import { EmptyState } from "../empty-state";
 import { systemFont, useColors } from "../theme";
+import { Archive, MessagesSquare, SearchX } from "lucide-react-native";
 import { ConversationToolbar } from "./toolbar";
 import { ConversationRow } from "./row";
 import type { ChatData } from "./schema";
@@ -44,7 +46,6 @@ export function ConversationSearch({
   const { t, errorText } = useI18n();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const pageStyles = usePageStyles();
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [width, setWidth] = useState(0);
@@ -97,17 +98,31 @@ export function ConversationSearch({
         )}
         ListEmptyComponent={
           !chats.isPending && !chats.error ? (
-            <Text style={pageStyles.copy}>
-              {search
-                ? t("No conversations match your search.")
-                : archived
-                  ? t(
-                      "No archived conversations. Conversations you archive will appear here."
-                    )
+            <EmptyState
+              compact={Boolean(panel)}
+              icon={search ? SearchX : archived ? Archive : MessagesSquare}
+              title={
+                search
+                  ? t("No conversations match your search.")
+                  : archived
+                    ? t(
+                        "No archived conversations. Conversations you archive will appear here."
+                      )
+                    : t("Vamos conversar?")
+              }
+              body={
+                search || archived
+                  ? undefined
                   : t(
                       "Start a conversation. You can return to it here anytime."
-                    )}
-            </Text>
+                    )
+              }
+              action={
+                !search && !archived && onCreate
+                  ? { label: t("Começar uma conversa"), onPress: onCreate }
+                  : undefined
+              }
+            />
           ) : null
         }
         ListFooterComponent={

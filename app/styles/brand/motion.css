@@ -5,6 +5,32 @@
   --duration-slow: 360ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.2, 0, 0, 1.2);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --distance-enter: 8px;
+}
+
+@theme inline {
+  --animate-enter: enter var(--duration-slow) var(--ease-out-soft) both;
+}
+
+/* One entrance for surfaces that appear: a short rise and fade. */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--distance-enter));
+  }
+}
+
+/*
+ * Keyboard focus is always visible and always the same shape. Kept in the
+ * base layer so components with their own focus ring (outline-none plus a
+ * ring utility) still win.
+ */
+@layer base {
+  :where(a, button, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 @theme inline {
@@ -30,5 +56,6 @@
     --duration-fast: 0ms;
     --duration-normal: 0ms;
     --duration-slow: 0ms;
+    --distance-enter: 0px;
   }
 }

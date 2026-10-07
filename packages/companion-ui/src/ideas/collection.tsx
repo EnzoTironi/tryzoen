@@ -2,11 +2,12 @@ import { useI18n } from "./../i18n";
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
-import { Ellipsis, Sparkles } from "lucide-react-native";
+import { Ellipsis, Lightbulb, Sparkles } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { CompanionPage, usePageStyles } from "../page";
 import { CompanionSheet } from "../sheet";
 import { ActionButton } from "../button";
+import { EmptyState } from "../empty-state";
 import { IconButton } from "../icon-button";
 import { systemFont, useColors } from "../theme";
 import { IdeaDetail } from "./detail";
@@ -101,17 +102,14 @@ export function IdeaCollection({
         }
       >
         {!ideas.isPending && !ideas.isError && items.length === 0 && (
-          <View style={pageStyles.empty}>
-            <Text style={pageStyles.heading}>
-              {t("What could I take off your plate?")}
-            </Text>
-            <Text style={pageStyles.copy}>
-              {t(
-                "Share what you’re working toward. Your personal suggestions will appear here, ready when you are."
-              )}
-            </Text>
-            <ActionButton onPress={ask}>{t("Ask for ideas")}</ActionButton>
-          </View>
+          <EmptyState
+            icon={Lightbulb}
+            title={t("What could I take off your plate?")}
+            body={t(
+              "Share what you’re working toward. Your personal suggestions will appear here, ready when you are."
+            )}
+            action={{ label: t("Ask for ideas"), onPress: ask }}
+          />
         )}
         {categories.map((category, index) => (
           <View key={category} style={index > 0 && pageStyles.section}>

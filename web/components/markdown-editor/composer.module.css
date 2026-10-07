@@ -1,23 +1,46 @@
+/* The formatting toggle sits inline with the text; its toolbar, link form and
+   errors take their own row only while they are open. */
 .root {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   color: inherit;
+}
+.root > * {
+  flex-basis: 100%;
+}
+.root > .tools:not(:has(.toolbar)) {
+  flex-basis: auto;
+}
+.root > .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.root:has(.toolbar) > .input {
+  flex-basis: 100%;
 }
 .tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding-bottom: 2px;
 }
 .tools button {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   border-radius: 10px;
-  color: #6c7075;
+  color: var(--muted-foreground);
 }
-.tools button[aria-pressed="true"] {
-  color: #0866c9;
-  background: #e8f1ff;
+.tools button:hover {
+  color: var(--foreground);
+}
+.tools button[aria-pressed="true"],
+.tools button[aria-expanded="true"] {
+  color: var(--primary);
+  background: var(--accent);
 }
 .toolbar {
   display: flex;
@@ -28,11 +51,11 @@
   font: inherit;
   font-size: 16px;
   line-height: 1.5;
-  min-height: 44px;
+  min-height: 38px;
   max-height: 192px;
   overflow-y: auto;
   outline: none;
-  padding: 6px 4px 12px;
+  padding: 7px 4px;
   overflow-wrap: anywhere;
 }
 .input p {
@@ -56,18 +79,19 @@
   border-radius: 5px;
   padding: 1px 4px;
 }
+.input :global(.tiptap):empty::before,
 .input :global(.tiptap):has(> p:only-child > br:only-child)::before {
   content: attr(data-placeholder);
-  color: inherit;
+  color: color-mix(in srgb, currentColor 48%, transparent);
   pointer-events: none;
   position: absolute;
 }
 .input a {
-  color: #0866c9;
+  color: var(--primary);
 }
 .input a[href^="zoen-reference:"] {
   text-decoration: none;
-  background: #e8f1ff;
+  background: var(--accent);
   border-radius: 6px;
   padding: 2px 5px;
   box-decoration-break: clone;
@@ -88,7 +112,7 @@
   content: "↻ ";
 }
 .error {
-  color: #a34437;
+  color: var(--destructive);
   font-size: 12px;
 }
 
@@ -109,7 +133,7 @@
 .linkForm input {
   min-width: 100px;
   flex: 1;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--input);
   border-radius: 10px;
   padding: 8px;
   font-size: 16px;

@@ -255,7 +255,7 @@ it.each([false, true])(
     const markup = render();
     expect(state.materials.map(geometry)).toEqual(normal);
     expect(state.materials.map((style) => style.backgroundColor)).toEqual(
-      Array(3).fill(dark ? "#1c1c1e" : "#ffffff")
+      Array(3).fill(dark ? "#17191e" : "#ffffff")
     );
     expect(state.materials.map((style) => style.backdropFilter)).toEqual(
       Array(3).fill("none")
@@ -275,7 +275,7 @@ it.each(["increasedContrast", "forcedColors"] as const)(
     expect(state.preferences.reduceTransparency).toBe(false);
     expect(state.materials.map(geometry)).toEqual(normal);
     expect(state.materials.map((style) => style.borderColor)).toEqual(
-      Array(3).fill("#1c1c1e")
+      Array(3).fill("#16181d")
     );
     expect(state.materials.map((style) => style.backgroundColor)).toEqual(
       Array(3).fill("#ffffff")
