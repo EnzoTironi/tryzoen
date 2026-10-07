@@ -131,3 +131,17 @@
     padding-right: 14px;
   }
 }
+
+/* Accessibility: the floating glass header turns opaque when transparency is
+   reduced and gets a firmer edge when more contrast is requested. */
+@media (prefers-reduced-transparency: reduce) {
+  .landingShell > header {
+    background: #17243b;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .landingShell > header {
+    border-color: #ffffff70;
+  }
+}

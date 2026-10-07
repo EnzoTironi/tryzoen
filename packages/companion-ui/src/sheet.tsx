@@ -22,8 +22,9 @@ import {
   radius,
   space,
   systemFont,
-  typeScale,
+  useTypeScale,
   useColors,
+  type TypeScale,
 } from "./theme";
 
 /** One stable tree preserves drafts when a sheet becomes a desktop dialog. */
@@ -41,7 +42,8 @@ export function SheetSurface({
   readonly maxWidth?: number;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const compact = useWindowDimensions().width < 720;
   const drag = useSheetDrag(compact, onClose);
   return (
@@ -87,7 +89,8 @@ export function CompanionSheet({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   return (
     <SheetSurface title={title} onClose={onClose} maxWidth={maxWidth}>
       <View style={styles.header}>
@@ -114,7 +117,7 @@ export function CompanionSheet({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -150,7 +153,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     title: {
       fontFamily: systemFont,
       flex: 1,
-      ...typeScale.title,
+      ...type.title,
       color: colors.ink,
     },
     content: { paddingHorizontal: 24, paddingBottom: 32, gap: 16 },

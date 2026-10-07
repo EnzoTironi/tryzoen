@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { AccessibilityInfo, Platform, useColorScheme } from "react-native";
+import {
+  AccessibilityInfo,
+  Platform,
+  useColorScheme,
+  useWindowDimensions,
+} from "react-native";
 
 // Zoen palette. Neutrals carry a faint night-sky blue so the product reads as
 // one family with the landing and sign-in. Text pairings clear WCAG AA.
@@ -97,6 +102,12 @@ export const typeScale = {
     fontWeight: "500",
     letterSpacing: 0,
   },
+  subhead: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "400",
+    letterSpacing: 0,
+  },
   footnote: {
     fontSize: 13,
     lineHeight: 18,
@@ -117,6 +128,77 @@ export const typeScale = {
     textTransform: "uppercase",
   },
 } as const;
+
+/**
+ * Compact widths follow Apple's default iOS text styles (Large Title 34/41,
+ * Title 2 22/28, Headline and Body 17/22, Callout 16/21, Subhead 15/20, Footnote 13/18,
+ * Caption 12/16) so phone text sits at the 17 pt reading default and never
+ * drops below the 11 pt minimum. Regular widths keep the denser desktop scale.
+ */
+const compactTypeScale = {
+  largeTitle: {
+    fontSize: 34,
+    lineHeight: 41,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+  },
+  title: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  headline: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "600",
+    letterSpacing: -0.4,
+  },
+  body: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "400",
+    letterSpacing: -0.4,
+  },
+  callout: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: "500",
+    letterSpacing: -0.3,
+  },
+  subhead: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "400",
+    letterSpacing: -0.2,
+  },
+  footnote: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "400",
+    letterSpacing: -0.1,
+  },
+  caption: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    letterSpacing: 0,
+  },
+  eyebrow: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+} as const satisfies Record<keyof typeof typeScale, object>;
+
+export type TypeScale = typeof typeScale | typeof compactTypeScale;
+
+/** The text styles for the space available: iOS sizes when compact. */
+export function useTypeScale(): TypeScale {
+  return useWindowDimensions().width < 720 ? compactTypeScale : typeScale;
+}
 
 /** Elevation as web box shadows; native renders the same flat surface. */
 export const elevation = {

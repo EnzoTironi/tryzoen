@@ -59,7 +59,9 @@
   overflow: hidden;
   border: 1px solid #ffffff21;
   border-radius: 32px;
-  background: linear-gradient(180deg, #1c33503d 0%, #0a182c66 100%);
+  /* Regular glass: the card carries forms and body copy, so the fill is
+     dense enough to keep text legible over the night scene behind it. */
+  background: linear-gradient(180deg, #1a2f4a8f 0%, #0a182cb3 100%);
   backdrop-filter: blur(28px) saturate(140%);
   box-shadow:
     inset 0 1px 0 #ffffff1c,
@@ -105,9 +107,9 @@
   background: #0d1d3266;
   backdrop-filter: blur(18px);
   color: #f2f5f8;
-  font-size: 10px;
-  font-weight: 560;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   box-shadow: inset 0 1px 0 #ffffff17;
 }
 .copy {
@@ -342,8 +344,8 @@
 .note {
   color: var(--muted-foreground);
   text-align: center;
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 18px;
   margin-top: 12px;
 }
 .deviceCard {
@@ -410,7 +412,8 @@
   .eyebrow {
     top: 18px;
     left: 20px;
-    font-size: 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
   }
 }
 @media (max-height: 720px) and (max-width: 540px) {
@@ -443,4 +446,26 @@
   font-size: 13px;
   line-height: 1.45;
   text-align: center;
+}
+
+/* Accessibility: glass falls back to opaque fills when the person asks for
+   less transparency, and edges firm up when they ask for more contrast. */
+@media (prefers-reduced-transparency: reduce) {
+  .card {
+    background: #10223a;
+    backdrop-filter: none;
+  }
+  .eyebrow {
+    background: #0d1d32;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-contrast: more) {
+  .card,
+  .eyebrow {
+    border-color: #ffffff70;
+  }
+  .choiceList :global([data-slot="button"]):not(.continue) {
+    border-color: #ffffff70;
+  }
 }

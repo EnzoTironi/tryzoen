@@ -3,7 +3,14 @@ import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import type { LucideProps } from "lucide-react-native";
 import { ActionButton } from "./button";
-import { radius, space, systemFont, typeScale, useColors } from "./theme";
+import {
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
 
 /**
  * The one empty state for companion collections: a tinted symbol, a short
@@ -28,7 +35,8 @@ export function EmptyState({
   readonly compact?: boolean;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   return (
     <View
       testID="empty-state"
@@ -66,7 +74,7 @@ export function EmptyState({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     empty: {
       alignItems: "center",
@@ -104,20 +112,20 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     title: {
       fontFamily: systemFont,
-      ...typeScale.title,
+      ...type.title,
       color: colors.ink,
       textAlign: "center",
     },
-    compactTitle: { ...typeScale.headline, textAlign: "left" },
+    compactTitle: { ...type.headline, textAlign: "left" },
     body: {
       fontFamily: systemFont,
-      ...typeScale.body,
+      ...type.body,
       color: colors.muted,
       textAlign: "center",
       marginTop: space.sm,
     },
     compactBody: {
-      ...typeScale.footnote,
+      ...type.footnote,
       textAlign: "left",
       marginTop: space.xs,
     },

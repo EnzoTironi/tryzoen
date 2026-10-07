@@ -2,7 +2,6 @@ import { useI18n } from "./i18n";
 import { useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +9,14 @@ import {
   View,
 } from "react-native";
 import { ActionButton } from "./button";
-import { radius, space, systemFont, typeScale, useColors } from "./theme";
+import {
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
 
 export function CompanionPage({
   title,
@@ -33,7 +39,8 @@ export function CompanionPage({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const window = useWindowDimensions();
   const [width, setWidth] = useState(window.width);
   const compact = width < 720;
@@ -43,11 +50,7 @@ export function CompanionPage({
         setWidth(nativeEvent.layout.width);
       }}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[
-        styles.scroll,
-        compact && styles.compact,
-        compact && Platform.OS === "web" && styles.compactWeb,
-      ]}
+      contentContainerStyle={[styles.scroll, compact && styles.compact]}
     >
       <View
         style={[
@@ -57,17 +60,24 @@ export function CompanionPage({
             : undefined,
         ]}
       >
-        {(!hideTitle || actions) && (
-          <View style={styles.header}>
-            <Text
-              accessibilityRole="header"
-              style={[styles.title, compact && styles.compactTitle]}
-            >
-              {title}
-            </Text>
-            {actions}
-          </View>
-        )}
+        {(!hideTitle || actions) &&
+          (compact ? (
+            // iOS large-title layout: trailing bar items on their own row,
+            // the title below at full width so long names never wrap.
+            <View style={styles.compactHeader}>
+              <View style={styles.compactActions}>{actions}</View>
+              <Text accessibilityRole="header" style={styles.title}>
+                {title}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.header}>
+              <Text accessibilityRole="header" style={styles.title}>
+                {title}
+              </Text>
+              {actions}
+            </View>
+          ))}
         {loading && (
           <ActivityIndicator
             accessibilityLabel={t("Loading {value1}", { value1: title })}
@@ -93,22 +103,20 @@ export function CompanionPage({
 }
 export function usePageStyles() {
   const colors = useColors();
+  const type = useTypeScale();
   return useMemo(
     () =>
       StyleSheet.create({
         heading: {
           fontFamily: systemFont,
           color: colors.ink,
-          ...typeScale.headline,
-          fontSize: 18,
+          ...type.headline,
           marginBottom: space.lg,
         },
         copy: {
           fontFamily: systemFont,
           color: colors.muted,
-          ...typeScale.footnote,
-          fontSize: 14,
-          lineHeight: 20,
+          ...type.subhead,
         },
         row: {
           flexDirection: "row",
@@ -120,8 +128,7 @@ export function usePageStyles() {
         rowTitle: {
           fontFamily: systemFont,
           color: colors.ink,
-          ...typeScale.body,
-          fontSize: 16,
+          ...type.body,
           fontWeight: "500",
         },
         field: {
@@ -137,10 +144,10 @@ export function usePageStyles() {
         },
         section: { marginTop: space.xxl },
       }),
-    [colors]
+    [colors, type]
   );
 }
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     scroll: {
       flexGrow: 1,
@@ -150,15 +157,16 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     compact: {
       paddingHorizontal: space.lg + 2,
-      paddingTop: space.lg,
+      paddingTop: space.sm,
       paddingBottom: space.xxl,
     },
-    compactWeb: { paddingTop: space.xl + space.xs },
-    compactTitle: {
-      fontFamily: systemFont,
-      fontSize: 28,
-      lineHeight: 34,
-      letterSpacing: -0.7,
+    compactHeader: { marginBottom: space.xl },
+    compactActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      minHeight: 44,
+      marginRight: -space.sm,
     },
     page: { width: "100%", maxWidth: 880, alignSelf: "center" },
     header: {
@@ -171,7 +179,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     title: {
       fontFamily: systemFont,
-      ...typeScale.largeTitle,
+      ...type.largeTitle,
       color: colors.ink,
       flexShrink: 1,
     },

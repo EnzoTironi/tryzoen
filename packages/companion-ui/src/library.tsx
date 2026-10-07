@@ -32,7 +32,14 @@ import {
 } from "react-native";
 import { CompanionPage, usePageStyles } from "./page";
 import { IconButton } from "./icon-button";
-import { radius, space, systemFont, typeScale, useColors } from "./theme";
+import {
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
 import { EmptyState } from "./empty-state";
 import {
   KnowledgeProposals,
@@ -97,7 +104,8 @@ export function Library({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const compact = useWindowDimensions().width < 720;
   const [category, setCategory] = useState<(typeof categories)[number]>(
     categories[1]
@@ -144,6 +152,7 @@ export function Library({
                 }}
                 style={[
                   styles.category,
+                  compact && styles.compactCategory,
                   category.label === item.label && styles.selectedCategory,
                 ]}
               >
@@ -182,7 +191,7 @@ export function Library({
                   }}
                 />
               )}
-              {!systemFiles && fileControls && hasItems && !compact && (
+              {!systemFiles && fileControls && hasItems && (
                 <IconButton
                   icon={list ? LayoutGrid : List}
                   label={list ? t("Grid view") : t("List view")}
@@ -217,6 +226,7 @@ export function Library({
                         : "document"
                     );
                   }}
+                  hitSlop={4}
                   style={styles.create}
                 >
                   <Plus size={22} color="white" />
@@ -272,7 +282,8 @@ function LibraryFiles({
 }) {
   const { t, locale } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const pageStyles = usePageStyles();
   const matching = items
     .filter(
@@ -286,9 +297,13 @@ function LibraryFiles({
     );
   return (
     <>
-      <Text accessibilityRole="header" style={pageStyles.heading}>
-        {query ? t("Search results") : t("Your files")}
-      </Text>
+      {/* An empty state already says where you are; the section label only
+          earns its place once there are files under it. */}
+      {!(settled && matching.length === 0) && (
+        <Text accessibilityRole="header" style={pageStyles.heading}>
+          {query ? t("Search results") : t("Your files")}
+        </Text>
+      )}
       <View style={list ? styles.rows : styles.grid}>
         {matching.map((item) => (
           <Pressable
@@ -337,7 +352,7 @@ function LibraryFiles({
     </>
   );
 }
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     layout: { flex: 1, flexDirection: "row" },
     compact: { flexDirection: "column" },
@@ -377,7 +392,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     categoryHeading: {
       fontFamily: systemFont,
-      ...typeScale.eyebrow,
+      ...type.eyebrow,
       color: colors.muted,
       marginTop: space.lg,
       marginBottom: space.sm,
@@ -393,10 +408,12 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     categoryLabel: {
       fontFamily: systemFont,
-      ...typeScale.callout,
+      ...type.callout,
       fontWeight: "400",
       color: colors.ink,
     },
+    // Phone rows meet the 44 pt default touch target.
+    compactCategory: { minHeight: 44 },
     selectedCategory: { backgroundColor: colors.accentSoft },
     selectedLabel: { fontWeight: "600" },
     actions: { flexDirection: "row", alignItems: "center", gap: 4 },

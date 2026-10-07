@@ -23,8 +23,9 @@ import {
   radius,
   space,
   systemFont,
-  typeScale,
+  useTypeScale,
   useColors,
+  type TypeScale,
 } from "./theme";
 import {
   readReplyMessage,
@@ -73,7 +74,8 @@ export function Welcome({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const wide = useWindowDimensions().width >= 1024;
   const [hovered, setHovered] = useState<string>();
   const staged = readReplyMessage(initialDraft?.text ?? "");
@@ -190,7 +192,7 @@ export function Welcome({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   const web = Platform.OS === "web";
   return StyleSheet.create({
     scroll: {
@@ -233,7 +235,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     heading: {
       fontFamily: systemFont,
-      ...typeScale.largeTitle,
+      ...type.largeTitle,
       fontSize: 34,
       lineHeight: 40,
       letterSpacing: -1.1,
@@ -242,7 +244,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     },
     subtitle: {
       fontFamily: systemFont,
-      ...typeScale.body,
+      ...type.body,
       fontSize: 16,
       lineHeight: 24,
       color: colors.muted,
@@ -252,7 +254,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     suggestions: { marginTop: space.xxl + space.sm },
     eyebrow: {
       fontFamily: systemFont,
-      ...typeScale.eyebrow,
+      ...type.eyebrow,
       color: colors.muted,
       marginBottom: space.md,
       paddingHorizontal: space.xs,
@@ -303,14 +305,14 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     suggestionCopy: { flex: 1, gap: space.xxs },
     suggestionTitle: {
       fontFamily: systemFont,
-      ...typeScale.callout,
+      ...type.callout,
       fontSize: 15,
       fontWeight: "600",
       color: colors.ink,
     },
     suggestionDetail: {
       fontFamily: systemFont,
-      ...typeScale.footnote,
+      ...type.footnote,
       color: colors.muted,
     },
   });

@@ -195,55 +195,30 @@ export function CompanionShell({
             >
               {(toggle) => (
                 <View style={styles.body}>
-                  {section === "chat" ? (
-                    !hideConversationHeader && (
-                      <CompanionHeader
-                        onLayout={({ nativeEvent }) => {
-                          setHeaderHeight(nativeEvent.layout.height);
-                        }}
-                        compact={compact}
-                        title={title}
-                        avatarUri={avatarUri}
-                        agentName={agentName}
-                        canGoBack={Boolean(renderConversations)}
-                        onOpenConversations={toggle}
-                        onOpenMenu={openMenu}
-                        onNewConversation={onNewConversation}
-                        onOpenAgent={
-                          renderAgentPanel
-                            ? () => {
-                                setShowAgent(true);
-                              }
-                            : undefined
-                        }
-                      />
-                    )
-                  ) : !compact ? null : (
-                    <View style={styles.sectionHeader}>
-                      <IconButton
-                        icon={ChevronLeft}
-                        label={t("Voltar às conversas")}
-                        onPress={() => {
-                          onShowInbox?.();
-                          onNavigate("chat");
-                        }}
-                      />
-                      <Text
-                        accessibilityRole="header"
-                        style={styles.sectionTitle}
-                      >
-                        {t(
-                          sections.find(({ id }) => id === section)?.label ??
-                            "Conversas"
-                        )}
-                      </Text>
-                      <IconButton
-                        icon={Menu}
-                        label={t("Menu do Zoen")}
-                        onPress={openMenu}
-                      />
-                    </View>
-                  )}
+                  {section === "chat"
+                    ? !hideConversationHeader && (
+                        <CompanionHeader
+                          onLayout={({ nativeEvent }) => {
+                            setHeaderHeight(nativeEvent.layout.height);
+                          }}
+                          compact={compact}
+                          title={title}
+                          avatarUri={avatarUri}
+                          agentName={agentName}
+                          canGoBack={Boolean(renderConversations)}
+                          onOpenConversations={toggle}
+                          onOpenMenu={openMenu}
+                          onNewConversation={onNewConversation}
+                          onOpenAgent={
+                            renderAgentPanel
+                              ? () => {
+                                  setShowAgent(true);
+                                }
+                              : undefined
+                          }
+                        />
+                      )
+                    : null}
                   <ConversationChrome
                     value={{
                       compact,
@@ -404,7 +379,10 @@ function NavigationItem({
           style={[
             styles.navigationLabel,
             mobile && styles.mobileNavigationLabel,
-            selected && styles.navigationSelectedLabel,
+            selected &&
+              (mobile
+                ? styles.mobileSelectedLabel
+                : styles.navigationSelectedLabel),
           ]}
         >
           {label}
@@ -609,7 +587,10 @@ const createStyles = (
     },
     navigationHovered: { backgroundColor: palette.wash },
     navigationSelected: { backgroundColor: palette.accentSoft },
-    mobileSelected: { backgroundColor: palette.wash },
+    // Tab bars tint the selected tab instead of boxing it: accent icon and
+    // label on the bar's own surface (5.3:1 light, 5.9:1 dark).
+    mobileSelected: { backgroundColor: palette.surface },
+    mobileSelectedLabel: { color: palette.accent, fontWeight: "600" },
     navigationSelectedLabel: { color: palette.ink, fontWeight: "600" },
     navigationPressed: { opacity: 0.7 },
     bottomNavigation: {
@@ -621,9 +602,6 @@ const createStyles = (
       paddingTop: space.xs + 2,
       paddingBottom: space.sm,
       backgroundColor: palette.surface,
-      ...(Platform.OS === "web"
-        ? { boxShadow: "0 -8px 24px -16px rgba(16,24,40,0.18)" }
-        : {}),
     },
     mobileNavigationItem: {
       flex: 1,
@@ -708,21 +686,6 @@ const createStyles = (
       flexShrink: 1,
     },
     content: { flex: 1, minHeight: 0 },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      minHeight: 52,
-      paddingHorizontal: space.sm,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: palette.line,
-    },
-    sectionTitle: {
-      flex: 1,
-      fontFamily: systemFont,
-      ...typeScale.headline,
-      textAlign: "center",
-      color: palette.ink,
-    },
     menu: { gap: space.xxs, backgroundColor: palette.surface },
     menuRow: {
       flexDirection: "row",

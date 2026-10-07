@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet } from "react-native";
 import type { LucideProps } from "lucide-react-native";
-import { useColors } from "./theme";
+import { useAccessibilityPreferences, useColors } from "./theme";
 
 export function IconButton({
   label,
@@ -20,6 +20,7 @@ export function IconButton({
   readonly quiet?: boolean;
 }) {
   const colors = useColors();
+  const { reduceMotion } = useAccessibilityPreferences();
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
@@ -40,6 +41,7 @@ export function IconButton({
         hovered && !disabled && { backgroundColor: colors.wash },
         selected && { backgroundColor: colors.accentSoft },
         pressed && styles.pressed,
+        pressed && !reduceMotion && styles.pressedScale,
         disabled && styles.disabled,
       ]}
     >
@@ -67,6 +69,7 @@ const styles = StyleSheet.create({
         }
       : {}),
   },
-  pressed: { opacity: 0.65, transform: [{ scale: 0.94 }] },
+  pressed: { opacity: 0.65 },
+  pressedScale: { transform: [{ scale: 0.94 }] },
   disabled: { opacity: 0.35 },
 });

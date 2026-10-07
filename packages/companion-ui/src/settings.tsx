@@ -20,7 +20,14 @@ import {
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SheetSurface } from "./sheet";
 import { IconButton } from "./icon-button";
-import { radius, space, systemFont, typeScale, useColors } from "./theme";
+import {
+  radius,
+  space,
+  systemFont,
+  useTypeScale,
+  useColors,
+  type TypeScale,
+} from "./theme";
 
 const pages = [
   { id: "general", label: "General", icon: Cog, group: 0 },
@@ -75,7 +82,8 @@ export function SettingsPanel({
 }) {
   const { t } = useI18n();
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const type = useTypeScale();
+  const styles = useMemo(() => createStyles(colors, type), [colors, type]);
   const [hovered, setHovered] = useState<string>();
   const title = t(pages.find((item) => item.id === page)?.label ?? "Settings");
   return (
@@ -192,7 +200,7 @@ export function SettingsPanel({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useColors>) {
+function createStyles(colors: ReturnType<typeof useColors>, type: TypeScale) {
   return StyleSheet.create({
     panel: { height: "85%", maxHeight: 780 },
     header: {
@@ -206,7 +214,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     title: {
       fontFamily: systemFont,
       flex: 1,
-      ...typeScale.title,
+      ...type.title,
       color: colors.ink,
     },
     content: {
@@ -256,7 +264,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     label: {
       fontFamily: systemFont,
       flex: 1,
-      ...typeScale.body,
+      ...type.body,
       fontSize: 16,
       color: colors.ink,
     },
@@ -264,7 +272,7 @@ function createStyles(colors: ReturnType<typeof useColors>) {
     pressed: { opacity: 0.6 },
     error: {
       fontFamily: systemFont,
-      ...typeScale.footnote,
+      ...type.footnote,
       fontSize: 14,
       color: colors.danger,
       marginTop: space.md,

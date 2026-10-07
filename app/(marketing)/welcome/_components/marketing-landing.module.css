@@ -74,8 +74,9 @@
   padding: 7px 16px 7px 12px;
   border: 1px solid #ffffff1f;
   border-radius: 999px;
-  background: #0b1a3040;
-  backdrop-filter: blur(14px);
+  /* Content, not chrome: a tinted fill instead of glass keeps blur on the
+     functional layer (the floating header) only. */
+  background: #0b1a3073;
   color: #e6ecf5;
   font-size: 0.8125rem;
   letter-spacing: 0.005em;
