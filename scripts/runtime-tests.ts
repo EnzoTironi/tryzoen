@@ -106,6 +106,7 @@ The reset command deletes only the zoen-runtime-tests Compose project's data.`);
       WORKFLOW_POSTGRES_URL: fixture.DATABASE_URL_UNPOOLED,
     }
   );
+  run(process.execPath, ["--import", "tsx", "scripts/mastra-pilot-setup.ts"]);
   run("docker", [
     ...compose,
     "exec",

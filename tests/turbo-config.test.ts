@@ -13,6 +13,10 @@ const applicationEnvironment = [
   "SECRET_ENCRYPTION_KEY",
   "VERCEL_*",
 ];
+const pilotEnvironment = [
+  "ZOEN_MASTRA_PILOT_ENABLED",
+  "ZOEN_MASTRA_PILOT_MODEL",
+];
 const runtimeEnvironment = [
   "AI_GATEWAY_API_KEY",
   "COMPANION_*",
@@ -45,19 +49,25 @@ describe("Turbo configuration", () => {
     expect(turbo.tasks["//#build:app"].env).toEqual(
       expect.arrayContaining([
         ...applicationEnvironment,
+        ...pilotEnvironment,
         "EVE_NEXT_*",
         "OPEN_INSTINCT_LOW_MEM_BUILD",
       ])
     );
     expect(turbo.tasks["//#build:app"].env).toHaveLength(
-      applicationEnvironment.length + 2
+      applicationEnvironment.length + 4
     );
-    expect(turbo.tasks["//#build:vercel"].env).toEqual(applicationEnvironment);
-    expect(turbo.tasks["//#dev:app"].passThroughEnv).toEqual(
-      runtimeEnvironment
-    );
-    expect(turbo.tasks["//#start:app"].passThroughEnv).toEqual(
-      runtimeEnvironment
-    );
+    expect(turbo.tasks["//#build:vercel"].env).toEqual([
+      ...applicationEnvironment,
+      ...pilotEnvironment,
+    ]);
+    expect(turbo.tasks["//#dev:app"].passThroughEnv).toEqual([
+      ...runtimeEnvironment,
+      ...pilotEnvironment,
+    ]);
+    expect(turbo.tasks["//#start:app"].passThroughEnv).toEqual([
+      ...runtimeEnvironment,
+      ...pilotEnvironment,
+    ]);
   });
 });

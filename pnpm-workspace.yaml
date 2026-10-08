@@ -4,6 +4,10 @@ packages:
 minimumReleaseAgeStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
+  # Stable Mastra pilot cohort, qualified together against native PostgreSQL.
+  - "@mastra/core@1.75.0"
+  - "@mastra/memory@1.36.0"
+  - "@mastra/pg@1.30.0"
   # Registry security release; the local patch also closes its reproduced stale bypass.
   - http-cache-semantics@4.3.0
   # Expo's current SDK 57 compatibility cohort, verified against its npm releases.

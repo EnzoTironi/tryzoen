@@ -56,6 +56,8 @@ export default {
         "eslint-plugin-turbo",
         "oxlint-tailwindcss",
       ],
+      // The local pilot resolves the existing Codex CLI login, outside npm.
+      ignoreBinaries: ["codex"],
       project: [
         "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,css}!",
         "!infrastructure/**",
