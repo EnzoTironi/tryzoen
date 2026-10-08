@@ -13,6 +13,7 @@ const client = new Client({ connectionString: env.DATABASE_URL_UNPOOLED });
 try {
   await storage.init();
   await client.connect();
+  await client.query("BEGIN");
   // Native writes share the lifetime of their authenticated product owners.
   // FK checks also fence a model/checkpoint write arriving after deletion.
   for (const [table, column, owner, ownerColumn] of [
@@ -46,6 +47,7 @@ try {
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA mastra_pilot TO zoen_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA mastra_pilot GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO zoen_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA mastra_pilot GRANT USAGE,SELECT ON SEQUENCES TO zoen_app;`);
+  await client.query("COMMIT");
   console.log("Mastra pilot PostgreSQL schema ready.");
 } finally {
   await client.end();
