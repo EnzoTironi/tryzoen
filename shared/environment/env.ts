@@ -3,6 +3,7 @@ import { r2QualificationEnvironmentShape } from "./env/r2-qualification";
 import { privatePayloadEnvironmentShape } from "./env/private-payloads";
 import { erasureJournalEnvironmentShape } from "./env/erasure-journal";
 import { nativeProcessEnvironmentShape } from "./env/native-process";
+import { mastraPilotEnvironmentShape } from "./env/mastra-pilot";
 import { Secret } from "@shared/environment/secret";
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
@@ -101,6 +102,7 @@ export const env = createEnv({
       .optional(),
     // Required
     DATABASE_URL: databaseUrlSchema,
+    ...mastraPilotEnvironmentShape,
     KERNEL_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: requiredValue
       .refine((value) => value === value.trim(), "Expected an unpadded API key")

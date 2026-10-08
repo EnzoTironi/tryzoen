@@ -109,6 +109,7 @@ async function fixture(mode = "ready", args: string[] = []) {
         PORT: String(webPort),
         EVE_NEXT_PRODUCTION_PORT: String(evePort),
         TEST_START_MODE: mode,
+        ZOEN_MASTRA_PILOT_ENABLED: mode === "mastra" ? "true" : undefined,
         TEST_PROCESS_LOG: log,
       },
     }
@@ -131,7 +132,9 @@ async function fixture(mode = "ready", args: string[] = []) {
 test("help is available without application credentials or a build", async () => {
   const f = await fixture("ready", ["--help"]);
   expect(await f.closed).toBe(0);
-  expect(f.output()).toContain("Run the built Zoen app and Eve runtime.");
+  expect(f.output()).toContain(
+    "Run the built Zoen app with its selected runtime."
+  );
 });
 
 test("starts Next only after Eve is healthy and shuts both down on interruption", async () => {
@@ -144,6 +147,17 @@ test("starts Next only after Eve is healthy and shuts both down on interruption"
   expect(lines[1]).toContain("web-started start --hostname 127.0.0.1 --port");
   expect(lines).toContain("eve-stopped");
   expect(lines).toContain("web-stopped");
+});
+
+test("the isolated Mastra pilot starts and stops only Next", async () => {
+  const f = await fixture("mastra");
+  await waitForSupervisorLogEntry(f.log, "web-started");
+  f.child.kill("SIGTERM");
+  expect(await f.closed).toBe(0);
+  const lines = (await readFile(f.log, "utf8")).trim().split("\n");
+  expect(lines[0]).toContain("web-started start --hostname 127.0.0.1 --port");
+  expect(lines).toContain("web-stopped");
+  expect(lines.some((line) => line.startsWith("eve-"))).toBe(false);
 });
 
 test("interruption during readiness stops Eve without launching Next", async () => {

@@ -36,7 +36,7 @@ function launch(args: string[], environment: NodeJS.ProcessEnv) {
 
 try {
   if (values.help) {
-    console.log(`Run the built Zoen app and Eve runtime.
+    console.log(`Run the built Zoen app with its selected runtime.
 
 Options:
   --port <number>      Web port (PORT or 3000)
@@ -47,7 +47,8 @@ Examples:
   pnpm start --port 3000
   pnpm start --hostname 0.0.0.0
 
-Run database migrations and pnpm build before starting.`);
+Run database migrations and pnpm build before starting.
+ZOEN_MASTRA_PILOT_ENABLED=true starts the isolated Mastra pilot.`);
   } else {
     const { env } = await import("../shared/environment/env.ts");
     // The supervisor forwards the configured environment to its owned processes.
@@ -58,37 +59,42 @@ Run database migrations and pnpm build before starting.`);
     const evePort = portSchema.parse(
       values["eve-port"] ?? env.EVE_NEXT_PRODUCTION_PORT
     );
-    if (port === evePort)
-      throw new Error(
-        "Web and Eve ports must differ. Use --port 3000 --eve-port 4274."
-      );
     const origin = `http://127.0.0.1:${evePort}`;
-    const routes = z
-      .object({
-        rewrites: z.object({
-          beforeFiles: z.array(
-            z.object({ source: z.string(), destination: z.string() })
-          ),
-        }),
-      })
-      .parse(JSON.parse(await readFile(".next/routes-manifest.json", "utf8")));
-    for (const [source, path] of [
-      ["/eve/v1/:path+", "/eve/v1/:path+"],
-      ["/api/channels/telegram", "/channels/telegram"],
-      ["/api/channels/kapso", "/channels/kapso"],
-    ] as const) {
-      if (
-        !routes.rewrites.beforeFiles.some(
-          (route) =>
-            route.source === source && route.destination === `${origin}${path}`
-        )
-      ) {
+    if (!env.ZOEN_MASTRA_PILOT_ENABLED) {
+      if (port === evePort)
         throw new Error(
-          "Eve port does not match the built routes. Rebuild with EVE_NEXT_PRODUCTION_PORT set to this port."
+          "Web and Eve ports must differ. Use --port 3000 --eve-port 4274."
         );
+      const routes = z
+        .object({
+          rewrites: z.object({
+            beforeFiles: z.array(
+              z.object({ source: z.string(), destination: z.string() })
+            ),
+          }),
+        })
+        .parse(
+          JSON.parse(await readFile(".next/routes-manifest.json", "utf8"))
+        );
+      for (const [source, path] of [
+        ["/eve/v1/:path+", "/eve/v1/:path+"],
+        ["/api/channels/telegram", "/channels/telegram"],
+        ["/api/channels/kapso", "/channels/kapso"],
+      ] as const) {
+        if (
+          !routes.rewrites.beforeFiles.some(
+            (route) =>
+              route.source === source &&
+              route.destination === `${origin}${path}`
+          )
+        ) {
+          throw new Error(
+            "Eve port does not match the built routes. Rebuild with EVE_NEXT_PRODUCTION_PORT set to this port."
+          );
+        }
       }
+      await requireServerPort("127.0.0.1", evePort);
     }
-    await requireServerPort("127.0.0.1", evePort);
     await requireServerPort(values.hostname, port);
     if (env.ZOEN_ERASURE_JOURNAL_BUCKET) {
       if (
@@ -103,43 +109,49 @@ Run database migrations and pnpm build before starting.`);
       }
       children.clear();
     }
-    const eveExited = launch([".output/server/index.mjs"], {
-      ...inherited,
-      NODE_ENV: "production",
-      HOST: "127.0.0.1",
-      NITRO_HOST: "127.0.0.1",
-      NITRO_PORT: String(evePort),
-      PORT: String(evePort),
-      WORKFLOW_LOCAL_BASE_URL: origin,
-      // Keep the session inbox available while native steps run model calls.
-      WORKFLOW_MAX_INLINE_STEPS: "0",
-      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(
-        env.WORKFLOW_POSTGRES_WORKER_CONCURRENCY
-      ),
-      WORKFLOW_POSTGRES_MAX_POOL_SIZE: String(
-        env.WORKFLOW_POSTGRES_MAX_POOL_SIZE
-      ),
-    });
-    await Promise.race([
-      (async () => {
-        const signal = AbortSignal.any([
-          stopping.signal,
-          AbortSignal.timeout(30_000),
-        ]);
-        for (;;) {
-          signal.throwIfAborted();
-          try {
-            if ((await fetch(`${origin}/eve/v1/health`, { signal })).ok) return;
-          } catch {
+    let eveExited: Promise<number | null> | undefined;
+    if (!env.ZOEN_MASTRA_PILOT_ENABLED) {
+      eveExited = launch([".output/server/index.mjs"], {
+        ...inherited,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        NITRO_HOST: "127.0.0.1",
+        NITRO_PORT: String(evePort),
+        PORT: String(evePort),
+        WORKFLOW_LOCAL_BASE_URL: origin,
+        // Keep the session inbox available while native steps run model calls.
+        WORKFLOW_MAX_INLINE_STEPS: "0",
+        WORKFLOW_POSTGRES_WORKER_CONCURRENCY: String(
+          env.WORKFLOW_POSTGRES_WORKER_CONCURRENCY
+        ),
+        WORKFLOW_POSTGRES_MAX_POOL_SIZE: String(
+          env.WORKFLOW_POSTGRES_MAX_POOL_SIZE
+        ),
+      });
+      await Promise.race([
+        (async () => {
+          const signal = AbortSignal.any([
+            stopping.signal,
+            AbortSignal.timeout(30_000),
+          ]);
+          for (;;) {
             signal.throwIfAborted();
+            try {
+              if ((await fetch(`${origin}/eve/v1/health`, { signal })).ok)
+                return;
+            } catch {
+              signal.throwIfAborted();
+            }
+            await delay(100, undefined, { signal });
           }
-          await delay(100, undefined, { signal });
-        }
-      })(),
-      eveExited.then((code) => {
-        throw new Error(`Eve exited before readiness (code ${String(code)}).`);
-      }),
-    ]);
+        })(),
+        eveExited.then((code) => {
+          throw new Error(
+            `Eve exited before readiness (code ${String(code)}).`
+          );
+        }),
+      ]);
+    }
     const webExited = launch(
       [
         fileURLToPath(import.meta.resolve("next/dist/bin/next")),
@@ -167,11 +179,13 @@ Run database migrations and pnpm build before starting.`);
             { once: true }
           );
       }),
-      Promise.race([eveExited, webExited]).then((code) => {
-        throw new Error(
-          `A server exited (code ${String(code)}); stopping Zoen.`
-        );
-      }),
+      Promise.race(eveExited ? [eveExited, webExited] : [webExited]).then(
+        (code) => {
+          throw new Error(
+            `A server exited (code ${String(code)}); stopping Zoen.`
+          );
+        }
+      ),
     ]);
   }
 } catch (error) {

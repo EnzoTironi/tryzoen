@@ -1,8 +1,10 @@
 import { withEve, type EveNextRewriteSections } from "eve/next";
 import type { NextConfig } from "next";
 import { openInstinctLowMemBuild } from "@shared/environment/env/low-mem-build";
+import { mastraPilotEnvironment } from "./shared/environment/env/mastra-pilot";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@mastra/core", "@mastra/memory", "@mastra/pg"],
   skipProxyUrlNormalize: true,
   transpilePackages: ["@zoen/companion-ui", "react-native-svg"],
   turbopack: {
@@ -44,6 +46,7 @@ const eveRoute = "/eve/v1/:path+";
 export default async function companionConfig(
   ...args: Parameters<typeof frameworkConfig>
 ) {
+  if (mastraPilotEnvironment().ZOEN_MASTRA_PILOT_ENABLED) return nextConfig;
   const resolved = await frameworkConfig(...args);
   const frameworkRewrites = resolved.rewrites;
   return {

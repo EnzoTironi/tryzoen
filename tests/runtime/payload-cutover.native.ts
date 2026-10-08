@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { sql } from "drizzle-orm";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { query } from "@db/queries";
@@ -242,7 +243,9 @@ test("native staged cutover preserves all four payload owners, survives a reject
       );
     }
     const completed = await migrateApplication(migrationUrl.toString());
-    expect(completed.applicationMigrations).toBe(114);
+    expect(completed.applicationMigrations).toBe(
+      readMigrationFiles({ migrationsFolder: "db/migrations" }).length
+    );
     expect(await migrateApplication(migrationUrl.toString())).toEqual(
       completed
     );

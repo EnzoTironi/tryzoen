@@ -10,7 +10,7 @@ import { privateMemoryArchiveLimits } from "../../packages/companion-ui/src/lear
 
 export const sessionSourceSchema = z.object({
   version: z.literal(2),
-  source: z.literal("eve"),
+  source: z.enum(["eve", "mastra"]),
   sessionId: z.string().min(1).max(256),
   eventId: z.string().min(1).max(256),
   occurredAt: z.string().max(32).pipe(z.iso.datetime()).nullable(),
