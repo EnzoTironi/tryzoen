@@ -191,7 +191,10 @@ async function initialize() {
         tools: { proposeNote, proposeMemory },
       });
       const response = await agent.stream(inputData.text, {
-        memory: { thread: inputData.conversationId, resource: actor.userId },
+        memory: {
+          thread: inputData.conversationId,
+          resource: actor.workspaceId,
+        },
         requestContext,
         maxSteps: 3,
         abortSignal: AbortSignal.any([abortSignal, AbortSignal.timeout(90000)]),
