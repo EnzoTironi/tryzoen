@@ -208,7 +208,7 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Download all runtime shard reports
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           pattern: runtime-report-*
           path: .eve/runtime-reports
