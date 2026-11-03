@@ -47,7 +47,7 @@
     "react-native-safe-area-context": "5.7.0",
     "react-native-web": "0.21.3",
     "react-native-webview": "13.16.1",
-    "zod": "4.5.4"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@babel/plugin-transform-explicit-resource-management": "7.29.7",
