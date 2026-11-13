@@ -19,7 +19,7 @@ importers:
     dependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: 2.0.0-beta.76
-        version: 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
+        version: 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.16)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@distilled.cloud/fly-io':
         specifier: 1.0.0-rc.8
         version: 1.0.0-rc.8(effect@4.0.0-rc.112)
@@ -28,13 +28,13 @@ importers:
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
       alchemy:
         specifier: 2.0.0-beta.76
-        version: 2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3)
+        version: 2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.16)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3)
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
       hono:
-        specifier: 4.13.7
-        version: 4.13.7
+        specifier: 4.13.16
+        version: 4.13.16
     devDependencies:
       '@types/node':
         specifier: 24.10.4
@@ -1113,6 +1113,9 @@ packages:
   '@smithy/core@3.33.3':
     resolution: {integrity: sha512-CsOeKq/9kA3y6VJHt+/+VTCtBaxJ4OTFpgrjIUhPpDIKxBci1k2bJaQASF2h/ELWrulGp+t97DZ0mevfAD8idg==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -1474,6 +1477,10 @@ packages:
 
   graphmatch@1.1.1:
     resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
+
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
+    engines: {node: '>=16.9.0'}
 
   hono@4.13.7:
     resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
@@ -2114,7 +2121,7 @@ snapshots:
     dependencies:
       effect: 4.0.0-rc.112
 
-  '@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))':
+  '@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.16)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))':
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.76(@distilled.cloud/cloudflare@1.0.0-rc.8(effect@4.0.0-rc.112))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(rolldown@1.2.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@distilled.cloud/cloudflare': 1.0.0-rc.8(effect@4.0.0-rc.112)
@@ -2124,7 +2131,7 @@ snapshots:
       rolldown: 1.2.5
     optionalDependencies:
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
-      hono: 4.13.7
+      hono: 4.13.16
       vite: 8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@types/node'
@@ -3101,7 +3108,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  alchemy@2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3):
+  alchemy@2.0.0-beta.76(patch_hash=65a4cf8cb78c45afe455372419739b63a201eadb5d6981e739d4d2c87d9e0bdc)(@alchemy.run/frontend-frameworks@2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.16)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))(vitest@4.1.11(@types/node@24.10.4)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)))(ws@8.21.3):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.76(@distilled.cloud/cloudflare@1.0.0-rc.8(effect@4.0.0-rc.112))(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(rolldown@1.2.5)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@alchemy.run/floci': 2.0.0-beta.76(effect@4.0.0-rc.112)
@@ -3143,7 +3150,7 @@ snapshots:
       undici: 7.29.1
       yaml: 2.9.0
     optionalDependencies:
-      '@alchemy.run/frontend-frameworks': 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.7)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
+      '@alchemy.run/frontend-frameworks': 2.0.0-beta.76(@effect/platform-node@4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1))(@types/node@24.10.4)(effect@4.0.0-rc.112)(hono@4.13.16)(vite@8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0))
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
       vite: 8.2.2(@types/node@24.10.4)(esbuild@0.28.2)(yaml@2.9.0)
       ws: 8.21.3
@@ -3362,6 +3369,8 @@ snapshots:
   grammex@3.1.13: {}
 
   graphmatch@1.1.1: {}
+
+  hono@4.13.16: {}
 
   hono@4.13.7: {}
 
